@@ -181,6 +181,7 @@ struct ShaderPixelInputInfo {
     bool psOrderedPixelShader = false;
     bool psAlphaToCoverage = false;
     bool psDitheredAlphaToCoverage = false;
+    std::uint8_t quadPixelMask = 0xf;
     ShaderStageRuntime stage;
 
     bool HasPositionInput() const {
