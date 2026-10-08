@@ -1375,7 +1375,22 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
         const auto bottom = ext(f32, GLSLstd450FMix, {compareTexel(x0, y1), compareTexel(x1, y1), weightU});
         return ext(f32, GLSLstd450FMix, {top, bottom, weightV});
     });
-    ctx.Define(access.inst, TableResult(ctx, access, ResultVector(ctx, access, result, setup.numericClass, true, false)));
+    const auto channelResult = [&](std::uint32_t channel) {
+        const auto selector = RuntimeImageSwizzle(state, mem.resource, channel);
+        return Select(state, f32, equal(selector, 0u), zero, Select(state, f32, equal(selector, 1u), one, result));
+    };
+    const auto dmask = EffectiveDmask(mem);
+    const auto channels = static_cast<std::uint32_t>(std::popcount(dmask));
+    if (mem.dataBits == 16u) {
+        if (channels != 1u) ctx.Fail(access.inst, "compares against a color texture into several packed 16-bit channels, which is not implemented");
+        ctx.Define(access.inst, TableResult(ctx, access, ResultVector(ctx, access, channelResult(DmaskComponent(dmask, 0u)), setup.numericClass, true, false)));
+        return;
+    }
+    std::uint32_t component[4] = {};
+    for (std::uint32_t index = 0; index < 4u; ++index) component[index] = index < channels ? F32BitsToU32(ctx, channelResult(DmaskComponent(dmask, index))) : ConstantU32(state, 0u);
+    const auto vector = state.module.AllocateId();
+    state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 4), vector, component[0], component[1], component[2], component[3]);
+    ctx.Define(access.inst, TableResult(ctx, access, vector));
 }
 
 void EmitSampleOp(SpirvValueEmitContext& ctx, const ImageEmitAccess& access, const SampleSetup& setup) {

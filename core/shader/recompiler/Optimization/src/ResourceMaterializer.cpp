@@ -528,7 +528,10 @@ std::uint32_t emulatedCompareState(const ShaderInfo& info, const ResourceSnapsho
     const auto reference = colorCompareReference(format);
     const auto type = rawImageType(descriptor);
     if (type != ImageType::Color2D && type != ImageType::Color2DArray && type != ImageType::Cube) throw std::runtime_error("comparison sampling of a color texture is implemented only for 2D, 2D array and cube views");
-    if ((descriptorImageSwizzle(descriptor) & 0x7u) != 4u) throw std::runtime_error("comparison sampling of a color texture is implemented only when the view's X channel is red");
+    for (std::uint32_t channel = 0u; channel < 4u; ++channel) {
+        const auto select = (descriptorImageSwizzle(descriptor) >> (channel * 3u)) & 0x7u;
+        if (select == 2u || select == 3u) throw std::runtime_error("comparison sampling of a color texture is implemented only when every view channel is a constant or a color channel");
+    }
     std::optional<std::uint32_t> samplerState;
     for (const auto& pair : info.sampledPairs) {
         if (pair.image != index) continue;
