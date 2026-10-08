@@ -662,6 +662,7 @@ Pthread APS5_VABI scePthreadSelf() {
         adoptedThread->_adopted = true;
         BindHostCpuClock(adoptedThread.get());
         adoptedThread->threadId = std::this_thread::get_id();
+        adoptedThread->hostThread = pthread_self();
         SetStackFromHost(adoptedThread.get());
         CurrentGuestState().current = adoptedThread.get();
     }
