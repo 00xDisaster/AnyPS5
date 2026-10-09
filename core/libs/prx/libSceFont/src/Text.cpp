@@ -63,10 +63,11 @@ struct FontWritingData {
     bool hasCurrentStep = false;
     bool maskFormatCharacters = true;
     bool ownsStorage = false;
+    bool hasRawGlyphMetrics = false;
     FontWritingStep step{};
     FontWritingMetrics metrics{};
     FontGlyphMetrics rawGlyphMetrics{};
-    bool hasRawGlyphMetrics = false;
+    FontWritingLetterStep letterStep{};
 };
 
 static_assert(sizeof(FontWritingData) <= sizeof(FontWriting));
@@ -596,21 +597,22 @@ const FontWritingStep* APS5_VABI sceFontWritingRefersRenderStep(FontWriting* fon
     return &writing->step;
 }
 
-FontTextCharacter* APS5_VABI sceFontWritingRefersRenderStepCharacter(FontWriting* fontWriting, FontWritingLetterStep* letterStep) {
-    if (letterStep) std::memset(letterStep, 0, sizeof(*letterStep));
+FontTextCharacter* APS5_VABI sceFontWritingRefersRenderStepCharacter(FontWriting* fontWriting, const FontWritingLetterStep** pLetterStep) {
+    if (pLetterStep) *pLetterStep = nullptr;
     auto* writing = GetWritingData(fontWriting);
     if (!writing || !writing->hasCurrentStep || !writing->storage || writing->currentIndex >= writing->storage->characters.size()) return nullptr;
-    if (letterStep) {
-        letterStep->x = writing->step.x;
-        letterStep->y = writing->step.y;
-        letterStep->advanceX = writing->step.advanceX;
-        letterStep->advanceY = writing->step.advanceY;
-        letterStep->Components.textsCount = 1;
-        letterStep->Components.textsIndex = static_cast<std::uint32_t>(writing->currentIndex);
-        letterStep->Components.glyphsCount = 1;
-        letterStep->Components.glyphsIndex = static_cast<std::uint32_t>(writing->currentIndex);
-        letterStep->Components.characterTextCount = static_cast<std::uint8_t>(std::max<std::uint32_t>(writing->step.Profile.characterCount, 1));
-    }
+    auto& letterStep = writing->letterStep;
+    letterStep = {};
+    letterStep.x = writing->step.x;
+    letterStep.y = writing->step.y;
+    letterStep.advanceX = writing->step.advanceX;
+    letterStep.advanceY = writing->step.advanceY;
+    letterStep.Components.textsCount = 1;
+    letterStep.Components.textsIndex = static_cast<std::uint32_t>(writing->currentIndex);
+    letterStep.Components.glyphsCount = 1;
+    letterStep.Components.glyphsIndex = static_cast<std::uint32_t>(writing->currentIndex);
+    letterStep.Components.characterTextCount = static_cast<std::uint8_t>(std::max<std::uint32_t>(writing->step.Profile.characterCount, 1));
+    if (pLetterStep) *pLetterStep = &letterStep;
     return &writing->storage->characters[writing->currentIndex];
 }
 
