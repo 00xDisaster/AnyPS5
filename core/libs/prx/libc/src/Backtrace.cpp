@@ -7,7 +7,7 @@
 
 #include "prx/libc/include/General.hpp"
 
-#ifndef _WIN32
+#ifdef __linux__
 #include <dlfcn.h>
 #include <execinfo.h>
 
@@ -29,7 +29,7 @@ struct FrameRecord {
 };
 static_assert(sizeof(FrameRecord) == NameOffset);
 
-std::vector<Frame> CaptureFrames(int limit) {
+[[gnu::noinline]] std::vector<Frame> CaptureFrames(int limit) {
     void* addresses[MaxFrames];
     const int captured = backtrace(addresses, MaxFrames);
     std::vector<Frame> frames;
