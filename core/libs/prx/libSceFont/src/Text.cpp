@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <stdexcept>
 #include <vector>
 
 #include "prx/libSceFont/include/FontInternal.hpp"
@@ -488,6 +489,16 @@ const FontTextCharacter* APS5_VABI sceFontStringRefersRenderCharacters(FontStrin
 int APS5_VABI sceFontCharacterGetBidiLevel(const FontTextCharacter* textCharacter, int* bidiLevel) {
     if (!textCharacter || !bidiLevel) return SCE_FONT_ERROR_INVALID_PARAMETER;
     *bidiLevel = static_cast<int>(LevelOf(textCharacter));
+    return SCE_FONT_OK;
+}
+
+int APS5_VABI sceFontCharacterGetSyllableStringState(const FontTextCharacter* textCharacter, int* syllableStringState) {
+    if (!textCharacter || !syllableStringState) {
+        if (syllableStringState) *syllableStringState = 0;
+        return SCE_FONT_ERROR_INVALID_PARAMETER;
+    }
+    if (textCharacter->characterCode >= 0x0E00 && textCharacter->characterCode <= 0x0E7F) throw std::runtime_error("libSceFont: sceFontCharacterGetSyllableStringState for Thai syllable clusters is not implemented");
+    *syllableStringState = 0;
     return SCE_FONT_OK;
 }
 
