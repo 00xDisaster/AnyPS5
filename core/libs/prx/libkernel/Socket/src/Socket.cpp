@@ -31,6 +31,7 @@ struct GuestTimeval {
 };
 
 std::atomic<KernelSocketPoll::Poller> g_socketPoller{nullptr};
+std::atomic<KernelSocketPoll::Closer> g_socketCloser{nullptr};
 
 bool DescriptorSet(const void* set, int descriptor) {
     return set != nullptr && ((static_cast<const std::uint64_t*>(set)[descriptor / 64] >> (descriptor % 64)) & 1u) != 0;
@@ -103,6 +104,15 @@ int* APS5_VABI __error_nid_postfix();
 
 void KernelSetSocketPoller_nid_no_patch(KernelSocketPoll::Poller poller) {
     g_socketPoller.store(poller);
+}
+
+void KernelSetSocketCloser_nid_no_patch(KernelSocketPoll::Closer closer) {
+    g_socketCloser.store(closer);
+}
+
+bool KernelCloseSocket_nid_no_patch(int descriptor, int* error) {
+    const auto closer = g_socketCloser.load();
+    return closer != nullptr && closer(descriptor, error);
 }
 
 int APS5_VABI select_nid_postfix(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout) {
