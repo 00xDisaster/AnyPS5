@@ -193,19 +193,22 @@ void RunUnmappedGapTests() {
     Require(mmap(guest, 2 * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == guest, "cannot map the arena page test pages");
     {
         GuestAllocations::Mutation mutation;
-        mutation.Add(guest, 2 * page, true, true);
+        mutation.Add(guest, 2 * page, true, true, true);
     }
     Require(GuestMemory::Accessible(guest, page, true), "a mapped arena page is not writable");
+    Require(mprotect(guest, page, PROT_NONE) == 0, "cannot revoke the arena test page behind the registry");
+    Require(GuestMemory::Accessible(guest, page, true), "a checked arena page was queried again instead of read from the page table");
+    Require(mprotect(guest, page, PROT_READ | PROT_WRITE) == 0, "cannot restore the arena test page behind the registry");
     Require(mprotect(guest + page, page, PROT_READ) == 0, "cannot protect the arena test's second page");
     Require(!GuestMemory::Accessible(guest + page, page, true), "a check stored arena pages outside its range");
     {
         GuestAllocations::Mutation mutation;
-        mutation.Protect(guest + page, page, true, true, [&] { Require(mprotect(guest + page, page, PROT_READ | PROT_WRITE) == 0, "cannot restore the arena test's second page"); });
+        mutation.Protect(guest + page, page, true, true, true, [&] { Require(mprotect(guest + page, page, PROT_READ | PROT_WRITE) == 0, "cannot restore the arena test's second page"); });
     }
     Require(GuestMemory::Accessible(guest, 2 * page, true), "mapped arena pages are not writable");
     {
         GuestAllocations::Mutation mutation;
-        mutation.Protect(guest, page, true, false, [&] { Require(mprotect(guest, page, PROT_READ) == 0, "cannot protect the arena test page"); });
+        mutation.Protect(guest, page, true, false, true, [&] { Require(mprotect(guest, page, PROT_READ) == 0, "cannot protect the arena test page"); });
     }
     Require(!GuestMemory::Accessible(guest, page, true) && GuestMemory::Accessible(guest, page) && GuestMemory::Accessible(guest + page, page, true), "an arena page protected through the registry kept its old access");
     {
