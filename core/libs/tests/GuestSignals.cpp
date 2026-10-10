@@ -157,4 +157,18 @@ int main() {
     Require(GuestAlarm_nid_no_patch(1) == 0);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     Require(GuestAlarm_nid_no_patch(0) == 0);
+    for (int unmapped : {1, 13, 30, 31, 32, 128}) {
+        *__error_nid_postfix() = 0;
+        Require(signal_nid_postfix(unmapped, ignore) == nullptr);
+        Require(sigaction_nid_postfix(unmapped, nullptr, &current) == 0 && current.handler == 1 && current.flags == 0x2);
+        Require(signal_nid_postfix(unmapped, Callback) == ignore);
+        Require(sigaction_nid_postfix(unmapped, nullptr, &current) == 0 && current.handler == callback && current.flags == 0x2);
+        Require(signal_nid_postfix(unmapped, nullptr) == Callback);
+    }
+    for (int rejected : {0, 17, 129}) {
+        *__error_nid_postfix() = 0;
+        Require(signal_nid_postfix(rejected, Callback) == invalid && *__error_nid_postfix() == 22);
+    }
+    Require(signal_nid_postfix(13, invalid) == invalid);
+    Require(sigaction_nid_postfix(13, nullptr, &current) == 0 && current.handler == 0);
 }
