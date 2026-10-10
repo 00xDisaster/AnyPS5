@@ -23,6 +23,7 @@
 #include <cerrno>
 #include <csetjmp>
 #include <pthread.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #endif
 
@@ -72,6 +73,7 @@ static GuestThreadState& CurrentGuestState() {
 }
 static std::mutex stackLock;
 static std::map<PthreadPrivate*, std::pair<std::uintptr_t, std::uintptr_t>> liveStacks;
+static std::map<std::uintptr_t, std::size_t> protectedStackPages;
 
 static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
 #ifdef _WIN32
@@ -122,8 +124,38 @@ static void RegisterStack(PthreadPrivate* self) {
     liveStacks[self] = {low, high};
 }
 
+static void RestoreStackPages(std::uintptr_t start, std::size_t bytes) {
+#ifdef _WIN32
+    DWORD previous = 0;
+    if (!VirtualProtect(reinterpret_cast<void*>(start), bytes, PAGE_READWRITE, &previous))
+        throw std::runtime_error("Cannot restore a guest thread stack's protection");
+#else
+    if (::mprotect(reinterpret_cast<void*>(start), bytes, PROT_READ | PROT_WRITE) != 0)
+        throw std::system_error(errno, std::generic_category(), "Cannot restore a guest thread stack's protection");
+#endif
+}
+
+void NoteGuestStackProtection(std::uintptr_t start, std::size_t bytes, bool readWrite) {
+    std::lock_guard lock(stackLock);
+    auto it = protectedStackPages.upper_bound(start);
+    if (it != protectedStackPages.begin() && std::prev(it)->first + std::prev(it)->second > start) --it;
+    while (it != protectedStackPages.end() && it->first < start + bytes) it = protectedStackPages.erase(it);
+    if (!readWrite) protectedStackPages[start] = bytes;
+}
+
 static void UnregisterStack(PthreadPrivate* self) {
     std::lock_guard lock(stackLock);
+    if (const auto found = liveStacks.find(self); found != liveStacks.end()) {
+        const auto [low, high] = found->second;
+        for (auto it = protectedStackPages.begin(); it != protectedStackPages.end();) {
+            if (it->first < high && it->first + it->second > low) {
+                RestoreStackPages(it->first, it->second);
+                it = protectedStackPages.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
     liveStacks.erase(self);
 }
 

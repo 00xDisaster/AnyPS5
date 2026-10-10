@@ -41,9 +41,37 @@ static void* APS5_VABI Worker(void* arg) {
     guard[0] = 1;
     guard[GuardBytes - 1] = 2;
     Require(guard[0] == 1 && guard[GuardBytes - 1] == 2);
+    Require(mprotect_nid_postfix(start, GuardBytes, 0) == 0);
+    Require(mprotect_nid_postfix(start, GuardBytes, 3) == 0);
+    static_cast<volatile unsigned char*>(start)[0] = 3;
     const auto outside = reinterpret_cast<std::uintptr_t>(start) & ~(Page - 1);
     if (outside >= Page) Require(mprotect_nid_postfix(reinterpret_cast<void*>(outside - Page), 2 * Page, 3) == -1);
     passed.store(true);
+    return nullptr;
+}
+
+static std::atomic<std::uintptr_t> leftGuard{0};
+
+static void* APS5_VABI LeaveGuard(void*) {
+    int local = 0;
+    void* start = nullptr;
+    void* end = nullptr;
+    Require(sceKernelIsStack(&local, &start, &end) == SCE_OK);
+    const auto low = (reinterpret_cast<std::uintptr_t>(start) + Page - 1) & ~(Page - 1);
+    Require(mprotect_nid_postfix(reinterpret_cast<void*>(low), GuardBytes, 0) == 0);
+    leftGuard.store(low);
+    return nullptr;
+}
+
+static void* APS5_VABI WriteLeftGuard(void*) {
+    int local = 0;
+    void* start = nullptr;
+    void* end = nullptr;
+    Require(sceKernelIsStack(&local, &start, &end) == SCE_OK);
+    const auto guard = leftGuard.load();
+    if (guard >= reinterpret_cast<std::uintptr_t>(start) && guard + GuardBytes <= reinterpret_cast<std::uintptr_t>(&local)) {
+        reinterpret_cast<volatile unsigned char*>(guard)[0] = 4;
+    }
     return nullptr;
 }
 
@@ -53,4 +81,8 @@ int main() {
     Require(scePthreadCreate(&thread, nullptr, Worker, &passed, nullptr) == SCE_OK);
     Require(scePthreadJoin(thread, nullptr) == SCE_OK);
     Require(passed.load());
+    Require(scePthreadCreate(&thread, nullptr, LeaveGuard, nullptr, nullptr) == SCE_OK);
+    Require(scePthreadJoin(thread, nullptr) == SCE_OK);
+    Require(scePthreadCreate(&thread, nullptr, WriteLeftGuard, nullptr, nullptr) == SCE_OK);
+    Require(scePthreadJoin(thread, nullptr) == SCE_OK);
 }
