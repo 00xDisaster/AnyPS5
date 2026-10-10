@@ -1111,6 +1111,12 @@ void DepthBoundsBiasTests() {
     queue.context[0x205] = 0x00003a46u;
     state = AgcDriver::Graphics::DecodeState(queue);
     Require(state.depthBias && state.depthBiasConstant == 4.0f && state.cullMode == VK_CULL_MODE_BACK_BIT, "a triangle draw with the point and line offset enable lost its depth bias");
+    queue.context[0x205] = 0x00013a46u;
+    state = AgcDriver::Graphics::DecodeState(queue);
+    Require(state.depthBias && state.depthBiasConstant == 4.0f && state.cullMode == VK_CULL_MODE_BACK_BIT, "the window offset enable bit changed the raster decode while the window offset is zero");
+    queue.context[0x80] = 1;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "window offset");
+    queue.context[0x80] = 0;
     queue.userConfig[0x242] = 2;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "polygon mode, depth bias or nonstandard rasterization");
     queue.userConfig[0x242] = 4;
