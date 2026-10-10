@@ -106,6 +106,10 @@ bool isFreeBsdConversion(char specifier) {
     return specifier == 'k' || specifier == 'l' || specifier == 's' || specifier == 'v' || specifier == '+';
 }
 
+bool isModifiedPercent(const char* afterPercent) {
+    return (afterPercent[0] == 'E' || afterPercent[0] == 'O') && afterPercent[1] == '%';
+}
+
 std::size_t freeBsdConversionLength(const char* afterPercent, char& conversion) {
     const char* cursor = afterPercent;
     if ((*cursor == 'E' || *cursor == 'O') && isFreeBsdConversion(cursor[1])) ++cursor;
@@ -119,7 +123,7 @@ bool hasFreeBsdConversion(const char* format) {
         if (*format++ != '%' || *format == '\0') continue;
         char conversion = 0;
         if (freeBsdConversionLength(format, conversion) != 0) return true;
-        ++format;
+        format += isModifiedPercent(format) ? 2 : 1;
     }
     return false;
 }
@@ -139,6 +143,12 @@ std::string expandFreeBsdConversions(const char* format, const GuestTm& guest) {
         const char next = *format++;
         if (next != '%' || *format == '\0') {
             result += next;
+            continue;
+        }
+        if (isModifiedPercent(format)) {
+            result += '%';
+            result += *format++;
+            result += *format++;
             continue;
         }
         char conversion = 0;
