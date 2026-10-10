@@ -2483,6 +2483,11 @@ void staleGenerationTests(const Device& device, Recorder& recorder) {
         recorder.Submit();
         device.WaitQueue();
         recorder.Sync();
+        Require(StorageTexture::FindPending(address, surfaceBytes) == image, "(s) the image is not pending after the refresh");
+        Require(StorageTexture::FlushPending(address, surfaceBytes, nullptr, "stale generation test"), "(s) the pending image was not flushed");
+        recorder.Submit();
+        device.WaitQueue();
+        recorder.Sync();
         const auto pixels = readback.Bytes();
         constexpr std::array<std::uint8_t, 4> expected{255, 0, 0, 255};
         for (std::size_t i = 0; i < pixels.size(); ++i) Require(std::to_integer<std::uint8_t>(pixels[i]) == expected[i % 4], "(s) results pending when their memory left the watch were dropped");
@@ -3230,9 +3235,9 @@ void importWindowTests(const Device& device, Recorder& recorder) {
         RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
         context.Function<PFN_vkCmdClearColorImage>("vkCmdClearColorImage")(commands, image->Image(), VK_IMAGE_LAYOUT_GENERAL, &red, 1, &range);
         RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
-        image->MarkDirty();
         const auto cached = CollectWritesUncached(address, surfaceBytes);
         Require(cached != 0 && UnchangedSince(address, surfaceBytes, cached), "(w) the cache's generation is not current before the import");
+        image->MarkDirty();
         const auto* import = HostImportFor(base, address, bytes);
         if (import == nullptr) {
             std::cout << "host import of the import window block refused: the import window not tested\n";
