@@ -14,7 +14,9 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/Shutdown.hpp"
 #include "prx/libkernel/DirectMemory/DirectMemory.hpp"
+#include "prx/libkernel/KernelErrors.hpp"
 #include "prx/libkernel/Pthread/include/Pthread.hpp"
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -23,7 +25,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <limits>
+#include <string>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -195,6 +199,28 @@ int APS5_VABI getpid_nid_postfix(void) {
     if (pid == 0 || static_cast<std::uint64_t>(pid) > static_cast<std::uint64_t>(std::numeric_limits<int>::max()))
         throw std::runtime_error("Process identifier is outside the guest range");
     return static_cast<int>(pid);
+}
+
+int APS5_VABI sceKernelGetAppInfo(int pid, void* info) {
+    if (info == nullptr) return SCE_KERNEL_ERROR_EFAULT;
+    if (pid != getpid_nid_postfix()) return SCE_KERNEL_ERROR_ESRCH;
+    constexpr std::size_t TitleIdOffset = 0x10;
+    constexpr std::size_t TitleIdBytes = 10;
+    char titleId[TitleIdBytes] = {};
+    std::ifstream param(ResolvePath_nid_no_patch("/app0/sce_sys/param.json"), std::ios::binary);
+    if (param) {
+        const std::string text((std::istreambuf_iterator<char>(param)), std::istreambuf_iterator<char>());
+        const auto key = text.find("\"titleId\"");
+        const auto colon = key == std::string::npos ? std::string::npos : text.find(':', key);
+        const auto open = colon == std::string::npos ? std::string::npos : text.find('"', colon);
+        const auto close = open == std::string::npos ? std::string::npos : text.find('"', open + 1);
+        if (close != std::string::npos) text.copy(titleId, std::min(close - open - 1, TitleIdBytes - 1), open + 1);
+    }
+    auto* bytes = static_cast<std::uint8_t*>(info);
+    const std::uint32_t appId = 1;
+    std::memcpy(bytes, &appId, sizeof(appId));
+    std::memcpy(bytes + TitleIdOffset, titleId, TitleIdBytes);
+    return 0;
 }
 
 int APS5_VABI getuid_nid_postfix(void) {
