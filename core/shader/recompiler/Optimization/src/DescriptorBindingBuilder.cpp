@@ -250,7 +250,7 @@ void DescriptorBindingBuilder::Populate(BindingAllocationResult& allocation, con
     allocation.specialization = std::move(plan.specialization);
 }
 
-DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& layout, const ShaderInfo& info, IrShaderStage stage, const ResourceSnapshot& snapshot, std::span<const std::uint8_t> exportMappings) const {
+DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& layout, const ShaderInfo& info, IrShaderStage stage, const ResourceSnapshot& snapshot, std::span<const std::uint8_t> exportMappings, bool registrationModules) const {
     if (stage == IrShaderStage::Pixel && exportMappings.size() != 8u) fail("fragment runtime export mappings are missing");
     if (info.images.size() > ShaderInfo::MaxImages) fail("runtime image count exceeds the static capacity");
     DescriptorBindingPlan plan;
@@ -280,11 +280,13 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         auto alignment = static_cast<std::uint32_t>(buffer.typedAlignment);
         if (buffer.descriptorFormatted && format != 0u) alignment = std::max(alignment, std::min(GetFormatInfo(static_cast<IrBufferFormat>(format)).byteSize, 4u));
         if (alignment == 0u || misalignment % alignment != 0u) fail("is a formatted buffer access through a V# whose base is not aligned to its element");
-        const auto first = PipelineSpecialization::BufferBase + index * PipelineSpecialization::BufferWords;
-        plan.specialization.push_back({first, descriptor.dwords[1] & 0xffff0000u});
-        plan.specialization.push_back({first + 1u, descriptor.dwords[3]});
-        plan.specialization.push_back({first + 2u, present ? 1u : 0u});
-        plan.specialization.push_back({first + 3u, misalignment});
+        if (!registrationModules) {
+            const auto first = PipelineSpecialization::BufferBase + index * PipelineSpecialization::BufferWords;
+            plan.specialization.push_back({first, descriptor.dwords[1] & 0xffff0000u});
+            plan.specialization.push_back({first + 1u, descriptor.dwords[3]});
+            plan.specialization.push_back({first + 2u, present ? 1u : 0u});
+            plan.specialization.push_back({first + 3u, misalignment});
+        }
         if (buffer.formattedReadMask != 0u) {
             for (std::uint32_t component = 0; component < 4u; ++component) {
                 if ((buffer.formattedReadMask & (1u << component)) == 0u) continue;
