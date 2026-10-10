@@ -15,4 +15,9 @@ int APS5_VABI sceSharePlayTerminate(void) {
     return 0;
 }
 
+int APS5_VABI sceSharePlayGetCurrentConnectionInfoA(void* info) {
+    if (info == nullptr) APS5_INVALID_ARG_EX;
+    return 0;
+}
+
 }

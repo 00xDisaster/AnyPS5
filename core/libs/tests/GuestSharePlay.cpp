@@ -6,6 +6,7 @@
 extern "C" {
 int APS5_VABI sceSharePlayInitialize(void*, std::size_t);
 int APS5_VABI sceSharePlayTerminate(void);
+int APS5_VABI sceSharePlayGetCurrentConnectionInfoA(void*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -28,4 +29,7 @@ int main() {
     Require(sceSharePlayTerminate() == 0);
     Require(Throws([&] { sceSharePlayInitialize(heap, 0); }));
     Require(Throws([&] { sceSharePlayInitialize(nullptr, 0); }));
+    unsigned char info[0x100] = {};
+    Require(sceSharePlayGetCurrentConnectionInfoA(info) == 0);
+    Require(Throws([&] { sceSharePlayGetCurrentConnectionInfoA(nullptr); }));
 }
