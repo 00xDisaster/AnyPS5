@@ -4,6 +4,8 @@
 #include <elfpatcher/windows/WindowsGuestStartup.hpp>
 #include <io/BufferUtils.hpp>
 #include <algorithm>
+#include <cctype>
+#include <set>
 #include <optional>
 #include <filesystem>
 
@@ -33,7 +35,7 @@ std::string normalizeRunPath(std::string path) {
 
 }
 
-WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, const std::uint32_t entryRva, const WindowsImports& nativeImports, const std::vector<std::string>& libraries, const std::vector<PeImport>& imports, const std::string& runPath, const bool lazyBinding, const bool dependencyDiagnostics, const std::vector<Domain::GuestRuntime>& guestModules) const {
+WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, const std::uint32_t entryRva, const WindowsImports& nativeImports, const std::vector<std::string>& libraries, const std::vector<PeImport>& imports, const std::string& runPath, const bool lazyBinding, const bool dependencyDiagnostics, const std::vector<Domain::GuestRuntime>& guestModules, const std::set<std::string>& unmatchedImportModules) const {
     if (!imports.empty() && libraries.empty())
         throw Domain::RelinkerException("ELF imports have no DT_NEEDED libraries");
     const auto path = normalizeRunPath(runPath);
@@ -122,8 +124,23 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         searchCounts.push_back(CheckedRva(order.size()));
         for (const auto index : order) {
             Io::AppendU32(data, index);
-            imported[index] = true;
+            if (!import.Library.empty()) imported[index] = true;
         }
+    }
+
+    const auto stem = [](const std::string& name) {
+        auto result = std::filesystem::path(name).filename().string();
+        result.resize(std::min(result.size(), result.find('.')));
+        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+        return result;
+    };
+    std::set<std::string> unmatched;
+    for (const auto& module : unmatchedImportModules) unmatched.insert(stem(module));
+    for (const auto& guest : guestModules) {
+        for (const auto& module : guest.UnmatchedImportModules) unmatched.insert(stem(module));
+    }
+    for (std::size_t index = guestModules.size(); index < libraries.size(); ++index) {
+        if (unmatched.contains(stem(libraries[index]))) imported[index] = true;
     }
 
     const auto lastError = reserve(4);

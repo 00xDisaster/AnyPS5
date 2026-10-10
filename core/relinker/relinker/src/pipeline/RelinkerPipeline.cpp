@@ -293,6 +293,10 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
         pltCount = compacted.SlotCount;
     }
     auto dynSection = _dynamicSectionBuilder->BuildDynamicSection(dynamicRefs, neededLibraries, dynJmpRelOffset, pltCount);
+    for (const auto& ref : dynamicRefs) {
+        if (!ref.Library.empty()) continue;
+        if (auto declared = Domain::DeclaredImportModule(ref.Nid, importModules); !declared.empty()) dynSection.UnmatchedImportModules.insert(std::move(declared));
+    }
 
     auto appendRela = [&](std::vector<std::uint8_t>& buf, std::uint64_t offset, std::uint64_t info, std::int64_t addend) {
         std::size_t pos = buf.size();
