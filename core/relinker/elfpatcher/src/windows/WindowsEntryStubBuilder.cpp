@@ -89,6 +89,7 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
     std::vector<std::uint32_t> searchTables;
     std::vector<std::uint32_t> searchCounts;
     std::vector<bool> platformTlsResolvers;
+    std::vector<bool> imported(libraries.size());
     for (const auto& import : imports) {
         std::vector<std::uint32_t> order;
         for (std::size_t index = 0; index < libraries.size(); ++index) {
@@ -119,7 +120,10 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         }));
         searchTables.push_back(CheckedRva(dataRva + data.size()));
         searchCounts.push_back(CheckedRva(order.size()));
-        for (const auto index : order) Io::AppendU32(data, index);
+        for (const auto index : order) {
+            Io::AppendU32(data, index);
+            imported[index] = true;
+        }
     }
 
     const auto lastError = reserve(4);
@@ -129,6 +133,7 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
     const auto loaded = addString(" -> OK\n");
     const auto loadFailed = addString(" -> FAILED\n");
     const auto failedModule = addString("Failed to load module: ");
+    const auto skippedModule = addString(" -> not found; nothing is imported from it, continuing without it\n");
     const auto errorPrefix = addString("GetLastError: ");
     const auto messageSeparator = addString(" - ");
     const auto newline = addString("\n");
@@ -313,6 +318,12 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         code.Emit({0x48, 0x85, 0xc0});
         const auto loadSucceeded = code.Branch({0x0f, 0x85});
         captureLastError();
+        std::optional<std::size_t> unusedMissing;
+        if (index >= guestModules.size() && !imported[index]) {
+            code.Rip({0x8b, 0x05}, lastError);
+            code.Emit({0x83, 0xf8, 0x7e});
+            unusedMissing = code.Branch({0x0f, 0x84});
+        }
         writeString(loadFailed, true);
         writeString(failedModule, true);
         writeString(resolvedPaths[index], true);
@@ -329,6 +340,13 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
 
         if (dependencyDiagnostics) {
             writeString(loaded);
+        }
+        if (unusedMissing) {
+            const auto next = code.Branch({0xe9});
+            code.PatchBranch(*unusedMissing, code.GetRva());
+            if (!dependencyDiagnostics) writeString(resolvedPaths[index], true);
+            writeString(skippedModule, true);
+            code.PatchBranch(next, code.GetRva());
         }
     }
 

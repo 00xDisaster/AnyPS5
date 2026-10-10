@@ -330,6 +330,19 @@ def main():
             run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
             assert run.returncode != 0 and 'Failed to load module:' in run.stderr and 'missing.prx' in run.stderr, (run.returncode, run.stderr)
 
+        case = work / 'missing-unused-dependency'
+        modules = case / 'prx'
+        modules.mkdir(parents=True)
+        (modules / 'a.prx').write_bytes(provider(11))
+        source = case / 'input.elf'
+        source.write_bytes(executable('a.prx', extra_dependencies=('unused.prx',)))
+        output = case / 'output.exe'
+        result = subprocess.run([str(relinker), '--windows', str(source), str(output)], capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        if os.name == 'nt':
+            run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+            assert run.returncode == 11 and 'unused.prx -> not found; nothing is imported from it' in run.stderr, (run.returncode, run.stdout, run.stderr)
+
     print('Windows module-scoped import tests passed')
 
 
