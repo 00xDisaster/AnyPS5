@@ -11,6 +11,67 @@ from test_guest_intel_trampolines import main_fixture
 from test_guest_module_directories import module_with_symbol, needed_libraries
 
 
+def check_native_load_paths(output, libraries):
+    """Check the emitted loader on every host, including hosts that cannot run PE files."""
+    pe = output.read_bytes()
+    header = struct.unpack_from('<I', pe, 0x3c)[0]
+    optional = header + 24
+    section_table = optional + struct.unpack_from('<H', pe, header + 20)[0]
+    sections = {}
+    for index in range(struct.unpack_from('<H', pe, header + 6)[0]):
+        offset = section_table + index * 40
+        name = pe[offset:offset + 8].rstrip(b'\0')
+        size, rva, raw_size, raw = struct.unpack_from('<IIII', pe, offset + 8)
+        sections[name] = (rva, pe[raw:raw + min(size, raw_size)])
+
+    def file_offset(rva):
+        for index in range(struct.unpack_from('<H', pe, header + 6)[0]):
+            offset = section_table + index * 40
+            size, start, raw_size, raw = struct.unpack_from('<IIII', pe, offset + 8)
+            if start <= rva < start + min(size, raw_size):
+                return raw + rva - start
+        raise AssertionError(f'RVA {rva:#x} has no file data')
+
+    descriptor = file_offset(struct.unpack_from('<I', pe, optional + 112 + 8)[0])
+    load_library_iat = None
+    while any(pe[descriptor:descriptor + 20]):
+        lookup, _, _, _, iat = struct.unpack_from('<IIIII', pe, descriptor)
+        index = 0
+        while (name_rva := struct.unpack_from('<Q', pe, file_offset((lookup or iat) + index * 8))[0]):
+            if not name_rva & (1 << 63):
+                name_offset = file_offset(name_rva) + 2
+                name = pe[name_offset:pe.index(b'\0', name_offset)]
+                if name == b'LoadLibraryExW':
+                    load_library_iat = iat + index * 8
+            index += 1
+        descriptor += 20
+    assert load_library_iat is not None, 'LoadLibraryExW is not imported'
+
+    data_rva, data = sections[b'.startup']
+    code_rva, code = sections[b'.entry']
+    # Associate each UTF-16 path with its RIP-relative copy instruction and
+    # the following call through the actual LoadLibraryExW IAT slot. Merely
+    # finding strings or the API import also succeeds when providers are skipped.
+    path_loads = []
+    for library in libraries:
+        path = ('libs\\' + library + '\0').encode('utf-16le')
+        path_rva = data_rva + data.index(path)
+        references = [offset for offset in range(len(code) - 6)
+                      if code[offset:offset + 3] == b'\x48\x8d\x35'
+                      and code_rva + offset + 7 + struct.unpack_from('<i', code, offset + 3)[0] == path_rva]
+        assert len(references) == 1, f'{library}: expected a loader path reference, found {len(references)}'
+        path_loads.append((references[0], library))
+    path_loads.sort()
+    for index, (start, library) in enumerate(path_loads):
+        end = path_loads[index + 1][0] if index + 1 < len(path_loads) else len(code)
+        calls = [offset for offset in range(start, end - 5)
+                 if code[offset:offset + 2] == b'\xff\x15'
+                 and code_rva + offset + 6 + struct.unpack_from('<i', code, offset + 2)[0] == load_library_iat]
+        assert calls, f'{library}: loader path does not reach a LoadLibraryExW call'
+        # RCX receives the constructed path, RDX is null, R8D is 0x1100.
+        assert code[calls[0] - 11:calls[0]] == b'\x48\x89\xf1\x31\xd2\x41\xb8\x00\x11\x00\x00', library
+
+
 def dynamic(image, offset, phoff, tags):
     for index, tag in enumerate(tags + [(0, 0)]):
         struct.pack_into('<qQ', image, offset + index * 16, *tag)
@@ -242,6 +303,7 @@ def main():
         output = case / 'output.exe'
         result = subprocess.run([str(relinker), '--windows', str(source), str(output)], capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, result.stderr
+        check_native_load_paths(output, ('available.prx', 'unused.prx'))
         if os.name == 'nt':
             run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
             assert run.returncode == 22 and 'unused.prx' not in run.stderr, (run.returncode, run.stdout, run.stderr)
