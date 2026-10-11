@@ -444,7 +444,11 @@ void VideoOutDriver::triggerEvents(VideoOutConfig& cfg, int eventKind, void* tri
 }
 
 bool VideoOutDriver::SupportsHighFrameRate() {
-    return displayRefreshRate.load() >= 120;
+    return GetDisplayRefreshRate() >= 120;
+}
+
+int VideoOutDriver::GetDisplayRefreshRate() {
+    return displayRefreshRate.load();
 }
 
 void VideoOutDriver::updateDisplayRefreshRate() {

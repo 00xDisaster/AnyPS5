@@ -215,6 +215,7 @@ public:
     bool IsOpen(int handle);
     bool HasConfig(int handle);
     bool SupportsHighFrameRate();
+    int GetDisplayRefreshRate();
 
     // 0, or VIDEO_OUT_ERROR_FLIP_QUEUE_FULL when the title has VIDEO_OUT_FLIP_QUEUE_CAPACITY flips pending.
     int SubmitFlip(int handle, int index, int flipMode, int64_t flipArg);

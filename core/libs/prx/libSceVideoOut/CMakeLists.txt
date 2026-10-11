@@ -33,6 +33,17 @@ target_link_libraries(video_out_flip_tests PRIVATE libSceVideoOut libSceAgcDrive
 set_target_properties(video_out_flip_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(video_out_flip_tests)
 if(BUILD_TESTING)
+    add_test_executable(video_out_output_mode_policy_tests tests/OutputModePolicy.cpp)
+    target_include_directories(video_out_output_mode_policy_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_SDL2_INCLUDE_DIR})
+    target_link_libraries(video_out_output_mode_policy_tests PRIVATE libSceVideoOut libc libkernel)
+    configure_windows_unwind(video_out_output_mode_policy_tests)
+    add_test(NAME video_out_output_mode_policy COMMAND video_out_output_mode_policy_tests)
+    set_tests_properties(video_out_output_mode_policy PROPERTIES TIMEOUT 20)
+    if(WIN32)
+        set_tests_properties(video_out_output_mode_policy PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+
     add_test_executable(guest_video_out_high_frame_rate_tests ${LIBS_INCLUDE_DIR}/tests/GuestVideoOutHighFrameRate.cpp)
     target_include_directories(guest_video_out_high_frame_rate_tests PRIVATE ${LIBS_INCLUDE_DIR})
     target_link_libraries(guest_video_out_high_frame_rate_tests PRIVATE libSceVideoOut libSceAgcDriver libkernel libc)

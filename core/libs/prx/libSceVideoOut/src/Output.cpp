@@ -16,14 +16,12 @@
 static constexpr std::uint32_t VIDEO_OUT_OUTPUT_OPTIONS_FIRST_WORD = 0x00FF0000;
 static constexpr std::size_t VIDEO_OUT_OUTPUT_OPTIONS_FREE_WORD = 3;
 
-static int validateOutputConfig(int handle, uint64_t mode, const VideoOutOutputOptions* options, void* reservedPtr, uint64_t reserved) {
-    if (!VideoOutDriver::Get().HasConfig(handle) || !VideoOutDriver::Get().IsOpen(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
-    if (reservedPtr != nullptr || reserved != 0) return VIDEO_OUT_ERROR_INVALID_VALUE;
+int ValidateVideoOutOutputMode_nid_no_patch(uint64_t mode, const VideoOutOutputOptions* options, int displayRefreshRate) {
     switch (mode) {
     case VIDEO_OUT_OUTPUT_MODE_DEFAULT:
         break;
     case VIDEO_OUT_OUTPUT_MODE_119_88HZ:
-        if (!VideoOutDriver::Get().SupportsHighFrameRate()) return VIDEO_OUT_ERROR_UNSUPPORTED_OUTPUT_MODE;
+        if (displayRefreshRate < 120) return VIDEO_OUT_ERROR_UNSUPPORTED_OUTPUT_MODE;
         break;
     case 0x4: case 0x7: case 0x8: case 0xC: case 0xD: case 0xE: case 0x10: case 0x11: case 0x13:
         return VIDEO_OUT_ERROR_UNSUPPORTED_OUTPUT_MODE;
@@ -39,6 +37,12 @@ static int validateOutputConfig(int handle, uint64_t mode, const VideoOutOutputO
         }
     }
     return 0;
+}
+
+static int validateOutputConfig(int handle, uint64_t mode, const VideoOutOutputOptions* options, void* reservedPtr, uint64_t reserved) {
+    if (!VideoOutDriver::Get().HasConfig(handle) || !VideoOutDriver::Get().IsOpen(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    if (reservedPtr != nullptr || reserved != 0) return VIDEO_OUT_ERROR_INVALID_VALUE;
+    return ValidateVideoOutOutputMode_nid_no_patch(mode, options, VideoOutDriver::Get().GetDisplayRefreshRate());
 }
 
 static void validateOpenParam(const void* param) {
