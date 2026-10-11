@@ -155,6 +155,10 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
     Require(snprintf_nid_postfix(buffer, 1, "%d", 123) == 3 && buffer[0] == 0);
     Require(sprintf_nid_postfix(buffer, "%hhd %hhu %hd %hu %%", 255, 257, 65535, 65537) == 11);
     Require(std::strcmp(buffer, "-1 1 -1 1 %") == 0);
+    Require(sprintf_nid_postfix(buffer, "[%#.0o][%#.o][%#5.0o][%-#4.0o][%#.*o][%#.0o][%.0o][%#o][%#.3o]", 0u, 0u, 0u, 0u, 0, 0u, 8u, 0u, 0u, 0u) == 37);
+    Require(std::strcmp(buffer, "[0][0][    0][0   ][0][010][][0][000]") == 0);
+    Require(FormatList(buffer, sizeof(buffer), "[%#.0lo][%#.0hho][%#.0x]", 0ull, 0u, 0u) == 8 && std::strcmp(buffer, "[0][0][]") == 0);
+    Require(FormatList(buffer, sizeof(buffer), "[%#.0o][%ls]", 0u, u"x") == 6 && std::strcmp(buffer, "[0][x]") == 0);
     Require(sprintf_nid_postfix(buffer, "%d %d %d %d %d %d", 1, 2, 3, 4, 5, 6) == 11);
     Require(std::strcmp(buffer, "1 2 3 4 5 6") == 0);
     int first = 0, second = 0, third = 0, fourth = 0, fifth = 0, sixth = 0;
