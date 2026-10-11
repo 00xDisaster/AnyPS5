@@ -120,6 +120,19 @@ int main() {
                 }
             }
         }
+        ShaderSpecialRegs disabledVgprSpecial = special;
+        disabledVgprSpecial.ge_user_vgpr_en = {GE_USER_VGPR1, 0};
+        vertex.specials = &disabledVgprSpecial;
+        preparations = 0;
+        std::array<ShaderRegister, 3> normalizedPrimitive{};
+        Require(sceAgcCreatePrimState(nullptr, normalizedPrimitive.data(), nullptr, &vertex, 7) == 0);
+        Require(preparations == 1 && preparedPrimitive[1].offset == GE_USER_VGPR_EN && preparedPrimitive[1].value == 0);
+        disabledVgprSpecial.ge_user_vgpr_en.value = 1;
+        bool rejectedEnabledVgprAlias = false;
+        try { static_cast<void>(sceAgcCreatePrimState(nullptr, normalizedPrimitive.data(), nullptr, &vertex, 7)); }
+        catch (const std::runtime_error&) { rejectedEnabledVgprAlias = true; }
+        Require(rejectedEnabledVgprAlias);
+        vertex.specials = &special;
         preparations = 0;
         std::array<ShaderRegister, 2> patchContext{};
         std::array<ShaderRegister, 3> patchPrimitive{};

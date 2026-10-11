@@ -29,7 +29,13 @@ int APS5_VABI sceAgcCreatePrimState(ShaderRegister* cx_regs, ShaderRegister* uc_
     if (!validStages(gs) || (hs != nullptr && !validStages(hs))) {
         throw std::runtime_error(std::string(__func__) + ": invalid context register offsets");
     }
-    if (gs->specials->ge_cntl.offset != ShaderRegs::GE_CNTL || gs->specials->ge_user_vgpr_en.offset != ShaderRegs::GE_USER_VGPR_EN || (hs != nullptr && hs->specials->ge_user_vgpr_en.offset != ShaderRegs::GE_USER_VGPR_EN)) {
+    const auto normalizeUserVgprEnable = [](ShaderRegister reg) {
+        if (reg.offset == ShaderRegs::GE_USER_VGPR1 && reg.value == 0) reg.offset = ShaderRegs::GE_USER_VGPR_EN;
+        return reg;
+    };
+    const auto gsUserVgprEnable = normalizeUserVgprEnable(gs->specials->ge_user_vgpr_en);
+    const auto hsUserVgprEnable = hs != nullptr ? normalizeUserVgprEnable(hs->specials->ge_user_vgpr_en) : gsUserVgprEnable;
+    if (gs->specials->ge_cntl.offset != ShaderRegs::GE_CNTL || gsUserVgprEnable.offset != ShaderRegs::GE_USER_VGPR_EN || (hs != nullptr && hsUserVgprEnable.offset != ShaderRegs::GE_USER_VGPR_EN)) {
         throw std::runtime_error(std::string(__func__) + ": invalid user configuration register offsets");
     }
     std::array<ShaderRegister, 2> contextValues{gs->specials->vgt_shader_stages_en, gs->specials->vgt_gs_out_prim_type};
@@ -44,7 +50,7 @@ int APS5_VABI sceAgcCreatePrimState(ShaderRegister* cx_regs, ShaderRegister* uc_
     } else {
         contextValues[1] = {ShaderRegs::VGT_GS_OUT_PRIM_TYPE, GraphicsPrimTypeToGsOut(prim_type)};
     }
-    std::array<ShaderRegister, 3> primitiveValues{gs->specials->ge_cntl, hs != nullptr ? hs->specials->ge_user_vgpr_en : gs->specials->ge_user_vgpr_en, ShaderRegister{ShaderRegs::VGT_PRIMITIVE_TYPE, prim_type}};
+    std::array<ShaderRegister, 3> primitiveValues{gs->specials->ge_cntl, hsUserVgprEnable, ShaderRegister{ShaderRegs::VGT_PRIMITIVE_TYPE, prim_type}};
     const std::array<const Shader*, 2> stages{hs, gs};
     const bool patch = prim_type == static_cast<std::uint32_t>(ShaderRegs::PrimitiveType::Patch);
     if (patch == ((contextValues[0].value & ShaderRegs::VGT_SHADER_STAGES_HS_BIT) != 0)) {
