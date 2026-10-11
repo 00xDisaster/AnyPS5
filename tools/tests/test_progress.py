@@ -37,6 +37,18 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(group["done_names"], ["sceExampleBlock", "sceExampleOpen", "sceExampleQuote", "sceExampleReady"])
             self.assertEqual(group["todo_names"], ["sceExampleClose", "sceExampleNoted", "sceExampleWrapped"])
 
+    def test_apostrophe_in_a_comment_does_not_pair_with_a_later_literal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            library = Path(directory) / "libSceExample"
+            library.mkdir()
+            (library / "Export.cpp").write_text(
+                "int APS5_VABI sceExamplePending() {\n    /* it's */ log('}');\n"
+                "    NotImplemented_nid_no_patch(__func__);\n    return 0;\n}\n"
+                "int APS5_VABI sceExampleReady() { return 0; }\n")
+            group = progress.scan_library(library)
+            self.assertEqual(group["done_names"], ["sceExampleReady"])
+            self.assertEqual(group["todo_names"], ["sceExamplePending"])
+
     def test_test_sources_do_not_change_library_progress(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "tests" / "prx"

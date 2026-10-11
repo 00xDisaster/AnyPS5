@@ -16,8 +16,7 @@ STUB = "NotImplemented_nid_no_patch"
 CMAKE_SHARED = re.compile(r'^\s*include\(\s*"?\$\{CMAKE_CURRENT_SOURCE_DIR\}/\.\./([\w.-]+)/[\w.-]+\.cmake"?\s*\)', re.M)
 SOURCE_SHARED = re.compile(r'^\s*#\s*include\s*"prx/([\w.-]+)/[\w./-]+\.cpp"', re.M)
 STUB_WRAPPER = re.compile(r"\bstatic\s+(?:\[\[noreturn\]\]\s+)?[\w:<>,\s*&]+?\s+(\w+)\s*\([^;{]*\)\s*\{")
-LITERAL = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'')
-COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
+NON_CODE = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|//[^\n]*|/\*.*?\*/', re.S)
 FLAT_SEGMENTS = ("GLOBAL_", "SCRATCH_")
 OPCODE_SENTINELS = {"Invalid", "Count", "Unknown", "Unsupported"}
 OPCODE_ALIASES = {
@@ -69,7 +68,7 @@ def blank(match):
 
 
 def code(text):
-    return COMMENT.sub(blank, LITERAL.sub(blank, text))
+    return NON_CODE.sub(blank, text)
 
 
 def body_end(text, start):
