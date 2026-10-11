@@ -1242,6 +1242,7 @@ std::shared_ptr<const RecompileResult> RegistrationResult(const RecompileRequest
     snapshot.images.assign(info.images.size(), {{}, 8u});
     snapshot.samplers.assign(info.samplers.size(), {{}, 4u});
     snapshot.userData.assign(RuntimeAbi::UserDataCapacity, 0u);
+    snapshot.flattenedSrt.assign(1u, 0u);
     return std::make_shared<RecompileResult>(materializeResult(*handle.artifact, request, snapshot, true));
 }
 
