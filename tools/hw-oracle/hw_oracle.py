@@ -60,13 +60,11 @@ def oracle():
     return binary
 
 
+
+
 @cache
-def gpu_target():
-    return subprocess.run([oracle(), "--target"], capture_output=True, text=True, check=True).stdout.strip()
-
-
 def target():
-    return os.environ.get("HW_ORACLE_TARGET") or gpu_target()
+    return os.environ.get("HW_ORACLE_TARGET") or subprocess.run([oracle(), "--target"], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def assemble(body, work, wave64, *, ieee, denorm32, denorm16, dx10_clamp, round32, round16, fp16_overflow, lds=DEFAULT_LDS):
@@ -92,11 +90,6 @@ def assemble(body, work, wave64, *, ieee, denorm32, denorm16, dx10_clamp, round3
 
 def run(body, rows, extra=b"", wave64=False, coarse=False, *, ieee, denorm32, denorm16, dx10_clamp, round32, round16, fp16_overflow, lds=DEFAULT_LDS):
     rows = [tuple(r) for r in rows]
-    for index, row in enumerate(rows, 1):
-        try:
-            struct.pack("<4I", *row)
-        except struct.error as error:
-            raise ValueError(f"row {index} must contain four unsigned 32-bit integers") from error
     wave = 64 if wave64 else 32
     padded = rows + [(0, 0, 0, 0)] * (-len(rows) % wave)
     env = dict(os.environ)

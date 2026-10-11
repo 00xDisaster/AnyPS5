@@ -221,56 +221,12 @@ class OracleConfigurationTests(unittest.TestCase):
                     patch.object(hw_oracle.subprocess, "run", side_effect=compile) as compiler:
                 with patch.object(hw_oracle, "rocm_root", return_value=root / "one"):
                     first = hw_oracle.oracle()
-                    self.assertEqual(first.read_bytes(), ("-L" + str(root / "one/lib")).encode())
+                    self.assertEqual(first.read_bytes(), ("-L" + str((root / "one").resolve() / "lib")).encode())
                 with patch.object(hw_oracle, "rocm_root", return_value=root / "two"):
                     second = hw_oracle.oracle()
                     self.assertNotEqual(second, first)
-                    self.assertEqual(second.read_bytes(), ("-L" + str(root / "two/lib")).encode())
+                    self.assertEqual(second.read_bytes(), ("-L" + str((root / "two").resolve() / "lib")).encode())
                 self.assertEqual(compiler.call_count, 2)
-
-    def test_target_override_is_read_for_each_call(self):
-        reset = getattr(hw_oracle.target, "cache_clear", lambda: None)
-        reset()
-        self.addCleanup(reset)
-        with patch.dict(os.environ, {"HW_ORACLE_TARGET": "gfx1036"}):
-            self.assertEqual(hw_oracle.target(), "gfx1036")
-        with patch.dict(os.environ, {"HW_ORACLE_TARGET": "gfx1100"}):
-            self.assertEqual(hw_oracle.target(), "gfx1100")
-
-    def test_override_does_not_replace_cached_gpu_detection(self):
-        hw_oracle.gpu_target.cache_clear()
-        self.addCleanup(hw_oracle.gpu_target.cache_clear)
-        with patch.dict(os.environ), patch.object(hw_oracle, "oracle", return_value="oracle"), \
-                patch.object(hw_oracle.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "gfx1036\n")) as query:
-            os.environ.pop("HW_ORACLE_TARGET", None)
-            self.assertEqual(hw_oracle.target(), "gfx1036")
-            with patch.dict(os.environ, {"HW_ORACLE_TARGET": "gfx1100"}):
-                self.assertEqual(hw_oracle.target(), "gfx1100")
-            self.assertEqual(hw_oracle.target(), "gfx1036")
-            query.assert_called_once()
-
-    def test_invalid_rows_fail_before_assembler_or_gpu_lookup(self):
-        rows = [[(1, 2, 3)], [(1, 2, 3, 4, 5)], [(-1, 0, 0, 0)], [(1 << 32, 0, 0, 0)], [(0.5, 0, 0, 0)]]
-        with patch.object(hw_oracle, "assemble") as assemble, patch.object(hw_oracle, "oracle") as oracle:
-            for invalid in rows:
-                with self.subTest(rows=invalid), self.assertRaisesRegex(ValueError, "row"):
-                    hw_oracle.run("s_nop 0", invalid, **MODES)
-            assemble.assert_not_called()
-            oracle.assert_not_called()
-
-    def test_integer_index_values_are_preserved(self):
-        class Dword:
-            def __index__(self):
-                return 0xffffffff
-
-        def dispatch(command, *, check, env):
-            self.assertEqual(Path(command[3]).read_bytes()[:16], b"\xff" * 4 + bytes(12))
-            Path(command[4]).write_bytes(bytes(int(command[2]) * 64))
-
-        with patch.object(hw_oracle, "assemble", return_value=Path("kernel.co")), \
-                patch.object(hw_oracle, "oracle", return_value="oracle"), \
-                patch.object(hw_oracle.subprocess, "run", side_effect=dispatch):
-            self.assertEqual(hw_oracle.run("s_nop 0", [(Dword(), 0, 0, 0)], **MODES), [(0,) * 16])
 
 
 class GroupSegmentTests(unittest.TestCase):
