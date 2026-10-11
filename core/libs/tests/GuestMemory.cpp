@@ -178,6 +178,21 @@ static void CheckInternalNamedFlexibleMapping() {
     Require(sceKernelAvailableFlexibleMemorySize(&available) == 0 && available == before);
 }
 
+static void CheckGuestModuleUsesFlexibleMemory() {
+    constexpr std::size_t moduleData = 0x10000;
+    const auto path = std::filesystem::relative(GUEST_MEMORY_MODULE).generic_string();
+    std::size_t before = 0;
+    std::size_t available = 0;
+    Require(sceKernelAvailableFlexibleMemorySize(&before) == 0);
+    void* module = dlopen_nid_postfix(path.c_str(), 2);
+    Require(module != nullptr);
+    Require(sceKernelAvailableFlexibleMemorySize(&available) == 0 && available + moduleData <= before);
+    void* mapped = nullptr;
+    Require(sceKernelMapFlexibleMemory(&mapped, before, 3, 0) == SCE_KERNEL_ERROR_ENOMEM && mapped == nullptr);
+    Require(dlclose_nid_postfix(module) == 0);
+    Require(sceKernelAvailableFlexibleMemorySize(&available) == 0 && available == before);
+}
+
 static void CheckBatchMapStopsAtInvalidEntry() {
     constexpr std::size_t page = 0x4000;
     constexpr int mapFlexible = 3;
@@ -1695,6 +1710,7 @@ int main() {
     CheckVirtualQueryPartialMunmap();
     CheckNamedAndHintedMappings();
     CheckInternalNamedFlexibleMapping();
+    CheckGuestModuleUsesFlexibleMemory();
     CheckBatchMapStopsAtInvalidEntry();
     CheckCheckedReleaseDirectMemory();
     CheckAudioCoprocessorProtection();
