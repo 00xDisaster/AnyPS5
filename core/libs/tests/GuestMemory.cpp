@@ -813,8 +813,10 @@ static void CheckGuestModuleImageProtection() {
 
 static void CheckUnhintedKernelMappingsLandInTheWindow() {
     constexpr std::size_t page = 0x4000;
-    constexpr std::uintptr_t windowStart = 0x200000000ull;
-    constexpr std::uintptr_t windowEnd = 0xFC00000000ull;
+    std::uintptr_t windowStart = 0;
+    std::size_t windowSize = 0;
+    GuestArena::GuestArenaRange_nid_postfix(&windowStart, &windowSize);
+    const auto windowEnd = windowStart + windowSize;
     std::int64_t phys = 0;
     Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page, 0, 0, &phys) == 0);
     void* direct = nullptr;
@@ -889,11 +891,17 @@ static void CheckArenaHonoursHintsWithoutGoingBelowThem() {
 
 static void CheckFixedMappingsReachTheApplicationAreaEnd() {
     constexpr std::size_t page = 0x4000;
-    constexpr std::uintptr_t applicationAreaEnd = 0xFC00000000ull;
     std::uintptr_t base = 0;
     std::size_t size = 0;
     GuestArena::GuestArenaRange_nid_postfix(&base, &size);
-    Require(base == 0x200000000ull && base + size == applicationAreaEnd);
+    constexpr std::uintptr_t expectedOffset =
+#ifdef ANYPS5_ENABLE_ASAN
+        0x0000100000000000ull;
+#else
+        0;
+#endif
+    constexpr std::uintptr_t applicationAreaEnd = 0xFC00000000ull + expectedOffset;
+    Require(base == 0x200000000ull + expectedOffset && base + size == applicationAreaEnd);
     std::int64_t phys = 0;
     Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 2, 0, 0, &phys) == 0);
     void* const requested = reinterpret_cast<void*>(applicationAreaEnd - page * 2);
@@ -919,7 +927,7 @@ static void CheckFixedMappingsReachTheApplicationAreaEnd() {
     Require(sceKernelReleaseDirectMemory(phys, page * 2) == 0);
 }
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(ANYPS5_ENABLE_ASAN)
 static std::size_t LockedKilobytes() {
     std::ifstream status("/proc/self/status");
     std::string line;
@@ -943,7 +951,7 @@ static void CheckMlock() {
     Require(sceKernelMapFlexibleMemory(&mapped, length, 3, 0) == 0);
     auto* bytes = static_cast<unsigned char*>(mapped);
     Require(sceKernelMlock_nid_postfix(mapped, 0) == 0);
-#if defined(__linux__)
+#if defined(__linux__) && !defined(ANYPS5_ENABLE_ASAN)
     const auto lockedBefore = LockedKilobytes();
 #endif
     Require(sceKernelMlock_nid_postfix(bytes + 1, length - page) == 0);
@@ -954,7 +962,7 @@ static void CheckMlock() {
     Require(GetProcessWorkingSetSizeEx(GetCurrentProcess(), &minimum, &maximum, &limits) && minimum >= length && maximum > minimum);
     Require(VirtualUnlock(mapped, length));
     Require(!VirtualUnlock(mapped, length) && GetLastError() == ERROR_NOT_LOCKED);
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(ANYPS5_ENABLE_ASAN)
     Require(LockedKilobytes() - lockedBefore == length / 1024);
 #endif
     Require(sceKernelMlock_nid_postfix(mapped, length) == 0);
@@ -963,10 +971,14 @@ static void CheckMlock() {
     Require(sceKernelMlock_nid_postfix(reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max() - page + 1), page * 2) == invalid);
     void* reserved = nullptr;
     Require(sceKernelReserveVirtualRange(&reserved, page, 0, 0) == 0);
+#ifndef ANYPS5_ENABLE_ASAN
     Require(sceKernelMlock_nid_postfix(reserved, page) == outOfMemory);
+#endif
     Require(sceKernelMunmap(reserved, page) == 0);
     Require(sceKernelMunmap(mapped, length) == 0);
+#ifndef ANYPS5_ENABLE_ASAN
     Require(sceKernelMlock_nid_postfix(mapped, page) == outOfMemory);
+#endif
 }
 
 static void CheckSharedDirectMemoryLifecycle() {

@@ -32,10 +32,15 @@ std::atomic<std::uint64_t> commitGeneration{1};
 std::atomic<void (*)(std::uintptr_t, std::size_t, std::uint64_t)> privateMappingObserver{nullptr};
 #endif
 
-constexpr std::uintptr_t ArenaStart = 0x0000000200000000ull;
-constexpr std::uintptr_t SystemReservedStart = 0x00000007FFFFC000ull;
-constexpr std::uintptr_t SystemReservedEnd = 0x0000001000000000ull;
-constexpr std::uintptr_t ApplicationAreaEnd = 0x000000FC00000000ull;
+#ifdef ANYPS5_ENABLE_ASAN
+constexpr std::uintptr_t GuestArenaOffset = 0x0000100000000000ull;
+#else
+constexpr std::uintptr_t GuestArenaOffset = 0;
+#endif
+constexpr std::uintptr_t ArenaStart = 0x0000000200000000ull + GuestArenaOffset;
+constexpr std::uintptr_t SystemReservedStart = 0x00000007FFFFC000ull + GuestArenaOffset;
+constexpr std::uintptr_t SystemReservedEnd = 0x0000001000000000ull + GuestArenaOffset;
+constexpr std::uintptr_t ApplicationAreaEnd = 0x000000FC00000000ull + GuestArenaOffset;
 
 std::uintptr_t alignUp(std::uintptr_t value, std::size_t alignment) {
     return (value + alignment - 1) & ~(static_cast<std::uintptr_t>(alignment) - 1);
