@@ -15,6 +15,10 @@ int APS5_VABI sceHttp2SendRequest(int, const void*, std::size_t);
 int APS5_VABI sceHttp2SendRequestAsync(int, const void*, std::size_t, Http2AsyncOption*, void*);
 int APS5_VABI sceHttp2WaitAsync(int, Http2AsyncResult*, std::uint32_t*, void*);
 int APS5_VABI sceHttp2DeleteRequest(int);
+int APS5_VABI sceHttp2DeleteTemplate(int);
+int APS5_VABI sceHttp2SetMinSslVersion(int, std::uint32_t);
+int APS5_VABI sceHttp2SslEnableOption(int, std::uint32_t);
+int APS5_VABI sceHttp2SslDisableOption(int, std::uint32_t);
 int APS5_VABI sceHttp2Term(int);
 int APS5_VABI sceKernelCreateEqueue(KernelEqueue* eq, const char* name);
 int APS5_VABI sceKernelDeleteEqueue(KernelEqueue eq);
@@ -39,6 +43,14 @@ int APS5_VABI sceHttp2WebSocketSetPingInterval();
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
+
+static constexpr int InvalidId = static_cast<int>(0x817B1100);
+
+static void RequireSslSetters(int id, int expected) {
+    Require(sceHttp2SetMinSslVersion(id, 0) == expected);
+    Require(sceHttp2SslEnableOption(id, 0) == expected);
+    Require(sceHttp2SslDisableOption(id, 0) == expected);
+}
 
 template <typename TCall>
 static bool Throws(TCall call) {
@@ -71,6 +83,50 @@ int main() {
     Require(Throws([] { sceHttp2WebSocketSetPingInterval(); }));
     Require(sceHttp2CookieFlush(context) == 0);
     Require(sceHttp2SendRequest(request, nullptr, 0) == static_cast<int>(0x80436063));
+
+    RequireSslSetters(0, InvalidId);
+    RequireSslSetters(-1, InvalidId);
+    RequireSslSetters(0x7fffffff, InvalidId);
+    RequireSslSetters(context, 0);
+    RequireSslSetters(box, 0);
+    RequireSslSetters(other, 0);
+    RequireSslSetters(tmpl, 0);
+    RequireSslSetters(request, 0);
+
+    const int doomedRequest = sceHttp2CreateRequestWithURL(tmpl, "GET", "https://example.com/doomed", 0);
+    Require(doomedRequest > 0);
+    Require(sceHttp2DeleteRequest(doomedRequest) == 0);
+    RequireSslSetters(doomedRequest, InvalidId);
+    Require(sceHttp2DeleteRequest(doomedRequest) == InvalidId);
+
+    const int doomedTemplate = sceHttp2CreateTemplate(context, "agent", 2, 0);
+    Require(doomedTemplate > 0);
+    const int doomedTemplateRequest = sceHttp2CreateRequestWithURL(doomedTemplate, "GET", "https://example.com/child", 0);
+    Require(doomedTemplateRequest > 0);
+    Require(sceHttp2DeleteTemplate(doomedTemplate) == 0);
+    RequireSslSetters(doomedTemplate, InvalidId);
+    RequireSslSetters(doomedTemplateRequest, InvalidId);
+    Require(sceHttp2DeleteTemplate(doomedTemplate) == InvalidId);
+
+    const int doomedContext = sceHttp2Init(1, 1, 0x2000, 4);
+    Require(doomedContext > 0);
+    const int doomedContextBox = sceHttp2CreateCookieBox(doomedContext);
+    const int doomedContextTemplate = sceHttp2CreateTemplate(doomedContext, "agent", 2, 0);
+    Require(doomedContextBox > 0 && doomedContextTemplate > 0);
+    const int doomedContextRequest = sceHttp2CreateRequestWithURL(doomedContextTemplate, "GET", "https://example.com/descendant", 0);
+    Require(doomedContextRequest > 0);
+    RequireSslSetters(doomedContext, 0);
+    Require(sceHttp2Term(doomedContext) == 0);
+    RequireSslSetters(doomedContext, InvalidId);
+    RequireSslSetters(doomedContextBox, InvalidId);
+    RequireSslSetters(doomedContextTemplate, InvalidId);
+    RequireSslSetters(doomedContextRequest, InvalidId);
+    Require(sceHttp2Term(doomedContext) == InvalidId);
+
+    const int freshContext = sceHttp2Init(1, 1, 0x2000, 4);
+    Require(freshContext > 0);
+    RequireSslSetters(freshContext, 0);
+    Require(sceHttp2Term(freshContext) == 0);
 
     KernelEqueue eq = 0;
     Require(sceKernelCreateEqueue(&eq, "http2") == 0);
