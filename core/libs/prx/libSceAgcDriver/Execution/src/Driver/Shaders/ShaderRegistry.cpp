@@ -385,8 +385,6 @@ std::vector<std::uint32_t> ReadUserDataCallee(std::uint64_t address, std::uint32
     throw std::runtime_error("its callee at " + hexText(address) + " does not return within " + std::to_string(limitWords * 4u) + " bytes");
 }
 
-// A compute shader that calls a user-data pointer gets one copy of each callee after its code, read at
-// the address the call's user data holds now; the prepared key follows the linked code.
 std::vector<std::uint32_t> LinkUserDataCallees(const ShaderRecompiler::RecompileRequest& request) {
     if (request.shader.stage != ShaderRecompiler::ShaderStage::Compute) return {};
     const auto code = request.shader.code;
