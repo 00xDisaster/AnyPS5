@@ -742,10 +742,37 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
         reject([&] { tail.Descriptor(address + 58, 4, adjustment); }, "exceeds its GPU owner");
     }
     {
+        void* plain = GuestHeap::GuestHeapAllocate_nid_postfix(64);
+        void* gpu = GuestHeap::GuestHeapAlignForGpu_nid_postfix(16, 64);
+        const auto lookup = [](const void* pointer) {
+            GuestAllocations::Mutation mutation;
+            return mutation.Find(pointer);
+        };
+        Require(!lookup(plain).gpu && lookup(gpu).gpu, "a guest heap block's GPU access does not follow how it was allocated");
+        gpu = GuestHeap::GuestHeapReallocate_nid_postfix(gpu, 128);
+        plain = GuestHeap::GuestHeapRealign_nid_postfix(plain, 128, 64);
+        Require(!lookup(plain).gpu && lookup(gpu).gpu, "a reallocated guest heap block changed its GPU access");
+        {
+            GuestBufferMemory leased(context);
+            leased.AcquireRegistered();
+            leased.Upload(true);
+            const auto ranges = leased.AddressRanges();
+            const auto listed = [&](const void* pointer) {
+                const auto address = reinterpret_cast<std::uintptr_t>(pointer);
+                return std::any_of(ranges.begin(), ranges.end(), [&](const auto& range) { return range.begin <= address && address < range.end; });
+            };
+            Require(!listed(plain), "a guest heap block without GPU access is in an address-based build");
+            Require(listed(gpu), "a guest heap block with GPU access is missing from an address-based build");
+            leased.WriteBack();
+        }
+        GuestHeap::GuestHeapFree_nid_postfix(plain);
+        GuestHeap::GuestHeapFree_nid_postfix(gpu);
+    }
+    {
         // The cached address space: a second build in an unchanged registry takes the first one's
         // space, and a guest free of a range pinned only by the cache goes through the pin waiter's
         // drop (no GPU work to wait for) and empties the registry of it.
-        void* block = GuestHeap::GuestHeapAllocate_nid_postfix(64);
+        void* block = GuestHeap::GuestHeapAlignForGpu_nid_postfix(16, 64);
         const auto blockAddress = reinterpret_cast<std::uintptr_t>(block);
         std::memset(block, 0x5a, 64);
         const auto registered = [&] {
