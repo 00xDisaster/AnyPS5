@@ -20,6 +20,8 @@ int APS5_VABI tcsetpgrp_nid_postfix(int, int);
 int APS5_VABI open_nid_postfix(const char*, int, int);
 int APS5_VABI pipe_nid_postfix(int*);
 int APS5_VABI socket_nid_postfix(int, int, int);
+int APS5_VABI socketpair_nid_postfix(int, int, int, int*);
+int APS5_VABI mkdir_nid_postfix(const char*, unsigned short);
 int APS5_VABI close_nid_postfix(int);
 int* APS5_VABI __error_nid_postfix();
 }
@@ -41,6 +43,7 @@ constexpr int BadDescriptor = 9;
 constexpr int InvalidArgument = 22;
 constexpr int BadAddress = 14;
 constexpr int AddressNotAvailable = 49;
+constexpr int OperationNotSupported = 45;
 
 static bool Fails(int result, int error) { return result == -1 && *__error_nid_postfix() == error; }
 
@@ -124,6 +127,25 @@ int main() {
     Require(Fails(tcsetattr_nid_postfix(socket, Flush, probe), AddressNotAvailable));
     RequireControlFails(socket, AddressNotAvailable);
     RequireProcessGroupFails(socket, AddressNotAvailable);
+
+    int pair[2] = {-1, -1};
+    Require(socketpair_nid_postfix(1, 1, 0, pair) == 0);
+    for (const int end : pair) {
+        Require(Fails(tcgetattr_nid_postfix(end, probe), OperationNotSupported));
+        RequireControlFails(end, OperationNotSupported);
+        RequireProcessGroupFails(end, OperationNotSupported);
+    }
+    Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0);
+
+    const auto directoryName = name + "-directory";
+    Require(mkdir_nid_postfix(directoryName.c_str(), 0755) == 0);
+    const int directory = open_nid_postfix(directoryName.c_str(), 0x00020000, 0);
+    Require(directory >= 0);
+    RequireNotTerminal(directory);
+    RequireProcessGroupFails(directory, NotTerminal);
+    Require(close_nid_postfix(directory) == 0);
+    RequireControlFails(directory, BadDescriptor);
+    std::filesystem::remove(directoryName);
 
     unsigned char attributes[44]{};
     Require(Fails(tcsetattr_nid_postfix(file, 3, attributes), InvalidArgument));
