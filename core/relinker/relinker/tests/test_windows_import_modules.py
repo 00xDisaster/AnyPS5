@@ -12,7 +12,6 @@ from test_guest_module_directories import module_with_symbol, needed_libraries
 
 
 def check_native_load_paths(output, libraries):
-    """Check the emitted loader on every host, including hosts that cannot run PE files."""
     pe = output.read_bytes()
     header = struct.unpack_from('<I', pe, 0x3c)[0]
     optional = header + 24
