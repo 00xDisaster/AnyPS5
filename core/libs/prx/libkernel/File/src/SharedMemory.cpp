@@ -231,7 +231,17 @@ public:
         struct stat originalStatus{};
         if (::fstat(value, &originalStatus) != 0) { shared = true; error = errno; return; }
 #endif
-        if (!IsHostSharedMemoryDescriptor(value)) return;
+        if (!IsHostSharedMemoryDescriptor(value)) {
+#ifdef __linux__
+            struct stat currentStatus{};
+            if (::fstat(value, &currentStatus) != 0) { shared = true; error = errno; return; }
+            if (currentStatus.st_dev != originalStatus.st_dev || currentStatus.st_ino != originalStatus.st_ino) {
+                shared = true;
+                error = EBADF;
+            }
+#endif
+            return;
+        }
         shared = true;
         hostLock.emplace();
         if (hostLock->Error() != 0) { error = hostLock->Error(); return; }
