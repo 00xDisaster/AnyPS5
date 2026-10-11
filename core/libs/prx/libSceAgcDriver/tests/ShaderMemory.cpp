@@ -9,6 +9,8 @@
 #include "Optimization/SrtWalker/SrtEvaluator.hpp"
 #include "Optimization/SrtWalker/SrtInstructionPredicates.hpp"
 #include "Optimization/SrtWalker/SrtFlatSlotClasses.hpp"
+#include "Optimization/SrtWalker.hpp"
+#include "IntermediateRepresentation/IrBuilder.hpp"
 #include "SpirvBackend/SpirvAnalysis.hpp"
 #if ANYPS5_ENABLE_SPIRV_TOOLS
 #include "SpirvBackend/SpirvOptimizer.hpp"
@@ -2750,6 +2752,36 @@ void verifyFunctionLdsBound() {
     require(unsized == FunctionLdsDwordLimit, "function LDS: an access without a known width must keep the full array");
 }
 
+void verifySrtReadPatching() {
+    using namespace ShaderRecompiler;
+    IrProgram program;
+    program.Resources().stage = IrShaderStage::Compute;
+    MemoryInfo memory;
+    memory.kind = ResourceKind::ScalarAddress;
+    program.Resources().memoryInfo.push_back(memory);
+
+    auto& block = program.CreateBlock();
+    program.SetEntryBlock(block);
+    program.BlockOrder().push_back(&block);
+    IrBuilder builder(program);
+    builder.SetInsertionPoint(block);
+    auto& address = builder.Emit(IrOpcode::GetAddressResource, IrType::AddressResource, {&builder.Constant(0u), &builder.Constant(0u)});
+    auto& active = program.CreateValue(IrOpcode::Void, IrType::U1);
+    active.SetImmediateBool(true);
+    auto& read = builder.Emit(IrOpcode::LoadAddressU32, IrType::U32, {&address, &builder.Constant(0u), &builder.Constant(0u), &active}, MemoryFlags{0u, 0u});
+    auto& repeatedUse = builder.Emit(IrOpcode::IAdd32, IrType::U32, {&read, &read});
+    auto& secondUser = builder.Emit(IrOpcode::IMul32, IrType::U32, {&read, &builder.Constant(2u)});
+
+    SrtWalker{}.BuildPlan(program);
+
+    require(program.Resources().srtReads.size() == 1u, "SRT read patching: the scalar read was not planned");
+    const auto* replacement = repeatedUse.Argument(0);
+    require(replacement->Opcode() == IrOpcode::ReadConst, "SRT read patching: the uses do not reference a flat read");
+    require(repeatedUse.Argument(1) == replacement && secondUser.Argument(0) == replacement, "SRT read patching: not every operand uses the same replacement");
+    const auto& remainingUses = read.OperandUses();
+    require(remainingUses.size() == 1u && remainingUses.front().user->Opcode() == IrOpcode::ReferenceU32, "SRT read patching: the original read retains non-planning uses");
+}
+
 struct NestedRequest {
     std::vector<std::uint32_t> code;
     std::array<std::uint32_t, 2> userData{};
@@ -3038,6 +3070,11 @@ int main(int argc, char** argv) {
             std::cout << "Bindless mapping, indexing capabilities and strict validation passed\n";
             return 0;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--srt-read-patching") {
+            verifySrtReadPatching();
+            std::cout << "SRT read patching replaces repeated and multiple uses\n";
+            return 0;
+        }
         require(argc == 1, "unknown shader memory test arguments");
         verifyRegisterSources();
         verifyEvaluatedValues();
@@ -3070,6 +3107,7 @@ int main(int argc, char** argv) {
         verifyTwoLaneUniformValues();
         verifyBdaReadFallbackFunctions();
         verifyFunctionLdsBound();
+        verifySrtReadPatching();
         verifyGuardedNullPointers();
         verifyCubeDepthCompareMode();
         verifySrgbDepthCompareModes();
