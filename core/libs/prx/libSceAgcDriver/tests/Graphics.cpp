@@ -2106,6 +2106,7 @@ void descriptorSnapshotTests() {
             const auto state = AgcDriver::Graphics::DecodeState(makeState());
             ShaderResources resources(context, vertex, fragment, state.color, 0, 0);
             const auto original = findWrite(0).buffers;
+            const auto originalThird = findWrite(4).buffers;
             std::vector<ShaderResources::MovedBuffer> moved;
             for (std::size_t index = 0; index < 2; ++index) {
                 if ((selected & (1u << index)) == 0) continue;
@@ -2115,9 +2116,11 @@ void descriptorSnapshotTests() {
             mock.writes.clear();
             const auto snapshots = resources.PrepareDrawBindings(recorder, moved);
             Require(snapshots != nullptr && snapshots->snapshots.size() == moved.size(), "draw snapshots are missing");
-            Require(mock.copies.size() == 2 && mock.copies[0].descriptorCount == 2 && mock.copies[1].descriptorCount == 1, "snapshot descriptor set did not copy every original binding");
-            Require(mock.writes.size() == 1, "snapshot updates must rewrite one complete affected array");
+            Require(mock.copies.empty(), "snapshot descriptor set must be written without descriptor copies");
+            Require(mock.writes.size() == 2, "snapshot update must write every binding once");
             const auto& write = mock.writes.front();
+            const auto& untouched = mock.writes.back();
+            Require(untouched.binding == 4 && untouched.count == 1 && untouched.buffers[0].buffer == originalThird[0].buffer && untouched.buffers[0].offset == originalThird[0].offset && untouched.buffers[0].range == originalThird[0].range, "snapshot update changed a binding without snapshots");
             Require(write.binding == 0 && write.arrayElement == 0 && write.count == 2, "snapshot update did not start from array element zero");
             std::size_t snapshot = 0;
             for (std::size_t index = 0; index < 2; ++index) {
