@@ -318,4 +318,10 @@ int APS5_VABI sceHttp2WebSocketSendDataMessageAsync() {
     return 0;
 }
 
+int APS5_VABI sceHttp2WebSocketSetPingInterval(int req_id, uint32_t interval_ms) {
+    (void)req_id;
+    (void)interval_ms;
+    return 0;
+}
+
 }
