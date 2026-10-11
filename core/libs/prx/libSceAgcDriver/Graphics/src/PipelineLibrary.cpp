@@ -8,6 +8,7 @@
 #include <thread>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string_view>
 
 namespace AgcDriver::Graphics {
@@ -111,12 +112,22 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
         device.destroyLayout = context.Function<PFN_vkDestroyPipelineLayout>("vkDestroyPipelineLayout");
         device.destroyModule = context.Function<PFN_vkDestroyShaderModule>("vkDestroyShaderModule");
     }
-    auto pipelineLayout = device.layouts.find(keys.layout);
-    if (pipelineLayout == device.layouts.end()) {
+    const auto layoutFor = [&](const Key& key, std::optional<std::uint32_t> set) {
+        auto found = device.layouts.find(key);
+        if (found != device.layouts.end()) return found->second;
+        auto info = layout;
+        std::array<VkDescriptorSetLayout, 2> sets{VK_NULL_HANDLE, VK_NULL_HANDLE};
+        if (set) {
+            sets.at(*set) = layout.pSetLayouts[*set];
+            info.pSetLayouts = sets.data();
+        }
         VkPipelineLayout handle = VK_NULL_HANDLE;
-        Check(context.Function<PFN_vkCreatePipelineLayout>("vkCreatePipelineLayout")(context.device, &layout, nullptr, &handle), "vkCreatePipelineLayout library");
-        pipelineLayout = device.layouts.emplace(keys.layout, handle).first;
-    }
+        Check(context.Function<PFN_vkCreatePipelineLayout>("vkCreatePipelineLayout")(context.device, &info, nullptr, &handle), "vkCreatePipelineLayout library");
+        return device.layouts.emplace(key, handle).first->second;
+    };
+    const bool split = (layout.flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT) != 0;
+    const auto fullLayout = layoutFor(keys.layout, std::nullopt);
+    const std::array<VkPipelineLayout, 4> partLayouts{VK_NULL_HANDLE, split ? layoutFor(keys.preRasterizationLayout, 0u) : fullLayout, split ? layoutFor(keys.fragmentLayout, 1u) : fullLayout, VK_NULL_HANDLE};
     std::vector<VkPipelineShaderStageCreateInfo> preRasterization;
     const VkPipelineShaderStageCreateInfo* fragment = nullptr;
     bool mesh = false;
@@ -135,7 +146,7 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
     };
     const std::array<const Key*, 4> partKeys{&keys.vertexInput, &keys.preRasterization, &keys.fragmentShader, &keys.fragmentOutput};
     const Key none;
-    const std::array<const Key*, 4> contextKeys{&none, &keys.layout, &keys.layout, &keys.renderPass};
+    const std::array<const Key*, 4> contextKeys{&none, &keys.preRasterizationLayout, &keys.fragmentLayout, &keys.renderPass};
     const VkPipelineRenderingCreateInfoKHR shaderRendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
     VkPipelineDepthStencilStateCreateInfo dynamicDepth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     static const bool backgroundLinking = std::getenv("APS5_NO_PIPELINE_LTO") == nullptr;
@@ -155,7 +166,7 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
         VkGraphicsPipelineCreateInfo create{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &library};
         create.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT;
         create.pDynamicState = info.pDynamicState;
-        create.layout = pipelineLayout->second;
+        create.layout = partLayouts[part];
         switch (flags[part]) {
         case VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT:
             create.pVertexInputState = info.pVertexInputState;
@@ -212,7 +223,7 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
         *optimized = slot;
         const auto createPipelines = context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines");
         const auto cache = context.pipelineCache;
-        const auto libraryLayout = pipelineLayout->second;
+        const auto libraryLayout = fullLayout;
         enqueue(store, context.device, [slot, createPipelines, cache, libraryLayout, libraries, &store, devicePointer = &device] {
             if (slot->released.load()) return;
             VkPipelineLibraryCreateInfoKHR linked{VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR};

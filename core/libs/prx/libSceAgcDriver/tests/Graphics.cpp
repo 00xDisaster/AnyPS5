@@ -4388,7 +4388,7 @@ void validationTests() {
     {
         auto vertex = pushed({.push = true, .bufferArray = 2});
         vertex.bindings.front().descriptorSet = 1;
-        expectFailure([&] { validate(vertex, 8); }, "descriptor set other than zero");
+        expectFailure([&] { validate(vertex, 8); }, "descriptor set other than its stage's");
     }
     {
         auto vertex = pushed({.push = true, .bufferArray = 2});

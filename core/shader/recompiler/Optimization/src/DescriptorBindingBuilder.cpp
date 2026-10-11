@@ -257,11 +257,8 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
     if (info.images.size() > ShaderInfo::MaxImages) fail("runtime image count exceeds the static capacity");
     DescriptorBindingPlan plan;
     const auto unnormalized = ProveUnnormalized(info, snapshot);
-    std::uint32_t unnormalizedSamplers = 0u;
     for (std::uint32_t index = 0; index < info.samplers.size(); ++index) {
-        if (!FoldsTexelOffsets(info.samplers[index])) continue;
-        if (!registrationModules) plan.specialization.push_back({PipelineSpecialization::FoldOffsetBase + index, unnormalized.samplers[index] ? 1u : 0u});
-        else if (unnormalized.samplers[index]) unnormalizedSamplers |= 1u << index;
+        if (FoldsTexelOffsets(info.samplers[index])) plan.specialization.push_back({PipelineSpecialization::FoldOffsetBase + index, unnormalized.samplers[index] ? 1u : 0u});
     }
     std::vector<std::uint32_t> compareStates(info.images.size());
     for (std::uint32_t index = 0; index < info.images.size(); ++index) {
@@ -382,7 +379,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         if ((imageHeap || samplerHeap) && compact.resources.empty()) continue;
         PreparedDescriptorBinding entry{};
         auto& physical = entry.descriptor;
-        physical.descriptorSet = RuntimeAbi::DescriptorSet;
+        physical.descriptorSet = registrationModules && stage == IrShaderStage::Pixel ? RuntimeAbi::FragmentDescriptorSet : RuntimeAbi::DescriptorSet;
         physical.binding = NativeBinding(stage, compact.kind);
         physical.count = compact.resources.empty() ? 1u : static_cast<std::uint32_t>(compact.resources.size());
         physical.kind = PhysicalKindFor(compact.kind);
@@ -459,7 +456,6 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
     }
     if (layout.runtimeStateDwords != 0u) {
         plan.runtimeState.assign(layout.runtimeStateDwords, 0u);
-        plan.runtimeState.at(RuntimeAbi::StateUnnormalizedSamplers) = unnormalizedSamplers;
         for (std::uint32_t target = 0; target < exportMappings.size(); ++target) plan.runtimeState.at(RuntimeAbi::StateExportMappings + target / 4u) |= static_cast<std::uint32_t>(exportMappings[target]) << (target % 4u * 8u);
     }
     std::vector<std::uint32_t> samplerMasks(info.samplers.size());

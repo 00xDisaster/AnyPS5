@@ -11,6 +11,7 @@ namespace ShaderRecompiler::RuntimeAbi {
 
 inline constexpr std::uint32_t Version = 11u;
 inline constexpr std::uint32_t DescriptorSet = 0u;
+inline constexpr std::uint32_t FragmentDescriptorSet = 1u;
 inline constexpr std::uint32_t StageCount = 4u;
 inline constexpr std::uint32_t PushConstantDwords = 32u;
 inline constexpr std::uint32_t FirstImageBinding = 1u;
@@ -39,9 +40,8 @@ inline constexpr std::uint32_t BindlessTableSlots = 16u;
 inline constexpr std::uint32_t StorageMipSlots = 4u;
 inline constexpr std::uint32_t StorageHeapCapacity = 16u;
 inline constexpr std::uint32_t SamplerHeapCapacity = 32u;
-inline constexpr std::uint32_t StateUnnormalizedSamplers = 0u;
-inline constexpr std::uint32_t StateExportMappings = 1u;
-inline constexpr std::uint32_t StateDwords = 3u;
+inline constexpr std::uint32_t StateExportMappings = 0u;
+inline constexpr std::uint32_t StateDwords = 2u;
 inline constexpr std::uint32_t ImageModeMask = 0xffu;
 inline constexpr std::uint32_t CompareStateShift = 9u;
 inline constexpr std::uint32_t CompareStateMask = 0x1fffu;

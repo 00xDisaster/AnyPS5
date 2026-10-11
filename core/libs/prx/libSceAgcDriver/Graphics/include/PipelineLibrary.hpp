@@ -19,6 +19,8 @@ struct PipelineLibraryKeys {
     std::vector<std::byte> fragmentOutput;
     std::vector<std::byte> renderPass;
     std::vector<std::byte> layout;
+    std::vector<std::byte> preRasterizationLayout;
+    std::vector<std::byte> fragmentLayout;
 };
 
 std::span<const VkDynamicState> PipelineLibraryDynamicStates();
