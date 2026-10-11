@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import re
 import sys
 import tempfile
@@ -177,6 +178,8 @@ def same_file(left, right):
 
 def write_outputs(outputs):
     staged = []
+    umask = os.umask(0)
+    os.umask(umask)
     try:
         for filename, content in outputs:
             path = Path(filename).resolve()
@@ -188,6 +191,8 @@ def write_outputs(outputs):
                 handle.write(content)
             if path.exists():
                 temporary.chmod(path.stat().st_mode & 0o7777)
+            else:
+                temporary.chmod(0o666 & ~umask)
         for temporary, path in staged:
             temporary.replace(path)
     finally:

@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import tempfile
 from pathlib import Path
 import sys
@@ -113,6 +114,10 @@ class StubGeneratorTests(unittest.TestCase):
             self.assertEqual(stubgen.main(arguments), 0)
             self.assertIn('APS5_EXPORT("AAAAAAAAAAA",', code.read_text(encoding="utf-8"))
             self.assertIn("unknown name, signature", debt.read_text(encoding="utf-8"))
+            if sys.platform != "win32":
+                mask = os.umask(0o022)
+                os.umask(mask)
+                self.assertEqual(code.stat().st_mode & 0o777, 0o666 & ~mask)
 
 
 if __name__ == "__main__":
