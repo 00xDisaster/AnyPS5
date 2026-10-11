@@ -53,8 +53,9 @@ void Run(AgcDriver::VulkanDevice& device) {
         std::uint32_t format;
         bool moved;
         std::uint32_t offset;
+        bool specializedPixel = false;
     };
-    constexpr std::array<Case, 4> cases{{{16u, 77u, false, 1u}, {32u, 77u, true, 0u}, {8u, 71u, false, 1u}, {16u, 71u, true, 0u}}};
+    constexpr std::array<Case, 5> cases{{{16u, 77u, false, 1u}, {32u, 77u, true, 0u}, {8u, 71u, false, 1u}, {16u, 71u, true, 0u}, {16u, 77u, false, 1u, true}}};
     for (const auto& value : cases) {
         auto& storage = value.moved ? movedVertices : vertices;
         storage.fill(std::byte{0});
@@ -86,7 +87,9 @@ void Run(AgcDriver::VulkanDevice& device) {
         pixelInfo.targetOutputMode[0] = 9u;
         pixelInfo.targetExportMapping.fill(0xe4u);
         ShaderRecompiler::RecompileRequest pixelRequest{{ShaderStage::Fragment, reinterpret_cast<std::uintptr_t>(pixelCode.data()), pixelCode, 0, {}}, {32u, 0u, {}, std::nullopt, pixelInfo, std::nullopt, {}}, device.Target(), PixelPushLayout(pushBytes, device.Target())};
+        if (value.specializedPixel) pixelRequest.target.registrationWordLimit = 1u;
         const auto pixel = ShaderRecompiler::Recompile(pixelRequest);
+        if (device.Target().registrationModules) Require(vertex.registrationModule && pixel.registrationModule != value.specializedPixel, "registration modules: the word limit did not choose the module mode");
         const std::array<AgcDriver::Graphics::CompiledShader, 2> shaders{{{ShaderStage::Vertex, &vertex, 0u}, {ShaderStage::Fragment, &pixel, PixelPushOffset(pushBytes, device.Target())}}};
         AgcDriver::Graphics::State state{};
         state.stages = {AgcDriver::Graphics::ShaderPath::Vertex, 0u, 32u, 32u, std::nullopt, std::nullopt};

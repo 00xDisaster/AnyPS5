@@ -755,6 +755,7 @@ std::string RequestSerializer::Serialize(const RecompileRequest& request) const 
     writer.WriteBool(request.target.narrowSubgroupClock);
     writer.WriteBool(request.target.float64DenormPreserve);
     writer.WriteBool(request.target.registrationModules);
+    writer.WriteU32(request.target.registrationWordLimit);
     return base64Encode(buffer);
 }
 
@@ -785,6 +786,7 @@ DeserializedRequest RequestSerializer::Deserialize(std::string_view text) const 
     if (version >= 12u) result.request.target.narrowSubgroupClock = reader.ReadBool();
     if (version >= 16u) result.request.target.float64DenormPreserve = reader.ReadBool();
     if (version >= 17u) result.request.target.registrationModules = reader.ReadBool();
+    if (version >= 17u) result.request.target.registrationWordLimit = reader.ReadU32();
     return result;
 }
 

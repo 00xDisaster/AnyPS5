@@ -3220,7 +3220,9 @@ int main(int argc, char** argv) {
         require(RequestSerializer{}.Deserialize(RequestSerializer{}.Serialize(float64Denormals)).request.target.float64DenormPreserve, "f64 denormal preservation was lost in serialization");
         auto registrationModules = uncached;
         registrationModules.target.registrationModules = true;
-        require(RequestSerializer{}.Deserialize(RequestSerializer{}.Serialize(registrationModules)).request.target.registrationModules, "registration modules were lost in serialization");
+        registrationModules.target.registrationWordLimit = 1234u;
+        const auto roundTrip = RequestSerializer{}.Deserialize(RequestSerializer{}.Serialize(registrationModules)).request.target;
+        require(roundTrip.registrationModules && roundTrip.registrationWordLimit == 1234u, "registration modules were lost in serialization");
         std::vector<std::uint64_t> plainKey;
         std::vector<std::uint64_t> registrationKey;
         RecompileCacheKey::Build(uncached, plainKey);

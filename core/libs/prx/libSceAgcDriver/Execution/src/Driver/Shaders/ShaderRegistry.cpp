@@ -673,8 +673,8 @@ std::unique_ptr<RegisteredPreparation> PlanRegistered(const ShaderSnapshot& snap
 }
 
 void PrebuildStageLibrary(const std::shared_ptr<VulkanDevice>& device, const Graphics::ShaderStages& stages, ShaderRecompiler::ShaderStage stage, std::shared_ptr<const ShaderRecompiler::RecompileResult> result, std::uint32_t pushOffset) {
-    if (stage != ShaderRecompiler::ShaderStage::Vertex && stage != ShaderRecompiler::ShaderStage::Fragment) return;
-    SubmitRegistrationPreparation([device, stages, stage, result = std::move(result), pushOffset] {
+    if (result == nullptr || (stage != ShaderRecompiler::ShaderStage::Vertex && stage != ShaderRecompiler::ShaderStage::Fragment)) return;
+    SubmitLibraryPrebuild([device, stages, stage, result = std::move(result), pushOffset] {
         const std::array<Graphics::CompiledShader, 1> shaders{{{stage, result.get(), pushOffset}}};
         try {
             static_cast<void>(device->PrebuildGraphicsLibraries(stages, shaders));
@@ -696,7 +696,8 @@ std::vector<PreparedShaders::Entry> PrepareRegistered(RegisteredPreparation& pla
     if (plan.prebuildDevice != nullptr && request.target.registrationModules && request.shader.stage == ShaderRecompiler::ShaderStage::Fragment) {
         try {
             PrebuildStageLibrary(plan.prebuildDevice, {Graphics::ShaderPath::Vertex, 0u, 32u, request.context.waveSize, {}, {}}, request.shader.stage, ShaderRecompiler::RegistrationResult(request, *entries.front().handle), request.layout.pushConstantOffsetBytes);
-        } catch (const std::exception&) {
+        } catch (const std::exception& error) {
+            APS5_LOG_OUT("shader library prebuild skipped: %s", error.what());
         }
     }
     if (request.context.compute) {
@@ -717,7 +718,15 @@ std::vector<PreparedShaders::Entry> PrepareRegistered(const ShaderSnapshot& snap
 class RegistrationPreparePool {
 public:
     static RegistrationPreparePool& Instance() {
-        static auto* pool = new RegistrationPreparePool();
+        static auto* pool = new RegistrationPreparePool(std::max(2u, std::thread::hardware_concurrency() / 2u));
+        return *pool;
+    }
+
+    static RegistrationPreparePool& Prebuild() {
+        static auto* pool = new RegistrationPreparePool([] {
+            const char* text = std::getenv("APS5_PREBUILD_THREADS");
+            return text != nullptr ? std::max(1u, static_cast<unsigned>(std::strtoul(text, nullptr, 10))) : 1u;
+        }());
         return *pool;
     }
 
@@ -741,8 +750,7 @@ public:
     }
 
 private:
-    RegistrationPreparePool() {
-        const auto count = std::max(2u, std::thread::hardware_concurrency() / 2u);
+    explicit RegistrationPreparePool(unsigned count) {
         pthread_attr_t attributes;
         pthread_attr_init(&attributes);
         pthread_attr_setstacksize(&attributes, 64u << 20u);
@@ -823,8 +831,13 @@ void SubmitRegistrationPreparation(std::function<void()> task) {
     RegistrationPreparePool::Instance().Submit(std::move(task));
 }
 
+void SubmitLibraryPrebuild(std::function<void()> task) {
+    RegistrationPreparePool::Prebuild().Submit(std::move(task));
+}
+
 void CloseRegistrationPreparation() {
     RegistrationPreparePool::Instance().Close();
+    RegistrationPreparePool::Prebuild().Close();
 }
 
 std::vector<PreparedGraphicsStage> PrepareGraphicsStages(const DrawDecode& decoded, const ShaderRecompiler::SpirvTarget& target) {
@@ -885,7 +898,8 @@ std::vector<PreparedGraphicsStage> PrepareGraphicsStages(const DrawDecode& decod
         if (target.registrationModules) {
             try {
                 registration = ShaderRecompiler::RegistrationResult(request, *handle);
-            } catch (const std::exception&) {
+            } catch (const std::exception& error) {
+                APS5_LOG_OUT("shader library prebuild skipped: %s", error.what());
             }
         }
         prepared.push_back({program.snapshot, {program.codeOffset, handle}, program.binary.stage, offset, std::move(registration)});

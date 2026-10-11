@@ -230,6 +230,7 @@ struct SpirvTarget {
     bool fixedPushSlots = false;
     bool float64DenormPreserve = false;
     bool registrationModules = false;
+    std::uint32_t registrationWordLimit = 200000u;
 };
 
 struct BindingLayout {
@@ -476,6 +477,7 @@ struct CompiledShaderArtifact {
     std::uint32_t imageMetadataDword = 0;
     std::uint32_t runtimeImageCount = 0;
     std::vector<std::uint32_t> runtimeImageResources;
+    bool registrationModule = false;
     std::uint32_t bdaAbiVersion = 0;
     std::uint32_t runtimeAbiVersion = RuntimeAbi::Version;
     std::vector<VertexInput> vertexInputs;

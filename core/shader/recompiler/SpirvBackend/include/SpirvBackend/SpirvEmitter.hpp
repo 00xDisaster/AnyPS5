@@ -22,6 +22,7 @@ struct SpirvTargetOptions {
     bool narrowSubgroupClock = false;
     bool float64DenormPreserve = false;
     bool registrationModules = false;
+    bool fragmentDescriptorSet = false;
 };
 
 class SpirvEmitter {
