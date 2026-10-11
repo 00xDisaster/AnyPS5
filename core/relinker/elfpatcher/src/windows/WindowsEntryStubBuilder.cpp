@@ -301,6 +301,7 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
     requireNonzero(directoryError, 0xc000000du);
 
     for (std::size_t index = 0; index < libraries.size(); ++index) {
+        if (index >= guestModules.size() && !imported[index]) continue;
         if (absolutePath && index >= guestModules.size()) {
             code.Rip({0x48, 0x8d, 0x0d}, libraryPaths[index]);
         } else {
@@ -335,12 +336,6 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         code.Emit({0x48, 0x85, 0xc0});
         const auto loadSucceeded = code.Branch({0x0f, 0x85});
         captureLastError();
-        std::optional<std::size_t> unusedMissing;
-        if (index >= guestModules.size() && !imported[index]) {
-            code.Rip({0x8b, 0x05}, lastError);
-            code.Emit({0x83, 0xf8, 0x7e});
-            unusedMissing = code.Branch({0x0f, 0x84});
-        }
         writeString(loadFailed, true);
         writeString(failedModule, true);
         writeString(resolvedPaths[index], true);
@@ -357,13 +352,6 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
 
         if (dependencyDiagnostics) {
             writeString(loaded);
-        }
-        if (unusedMissing) {
-            const auto next = code.Branch({0xe9});
-            code.PatchBranch(*unusedMissing, code.GetRva());
-            if (!dependencyDiagnostics) writeString(resolvedPaths[index], true);
-            writeString(skippedModule, true);
-            code.PatchBranch(next, code.GetRva());
         }
     }
 
@@ -480,9 +468,10 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         for (const auto branch : unresolvedBranches)
             code.PatchBranch(branch, code.GetRva());
         writeString(searched, true);
-        for (const auto resolvedPath : resolvedPaths) {
+        for (std::size_t index = 0; index < resolvedPaths.size(); ++index) {
+            if (index >= guestModules.size() && !imported[index]) continue;
             writeString(indent, true);
-            writeString(resolvedPath, true);
+            writeString(resolvedPaths[index], true);
             writeString(newline, true);
         }
         writeLastError();

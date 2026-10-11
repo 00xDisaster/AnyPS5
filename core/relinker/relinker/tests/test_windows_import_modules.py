@@ -342,7 +342,7 @@ def main():
             assert result.returncode == 0, (symbol, module_name, result.stdout, result.stderr)
             if os.name == 'nt':
                 run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
-                assert run.returncode == 11 and 'unused.prx -> not found; nothing is imported from it' in run.stderr, (symbol, module_name, run.returncode, run.stdout, run.stderr)
+                assert run.returncode == 11 and 'unused.prx' not in run.stderr, (symbol, module_name, run.returncode, run.stdout, run.stderr)
 
     print('Windows module-scoped import tests passed')
 
