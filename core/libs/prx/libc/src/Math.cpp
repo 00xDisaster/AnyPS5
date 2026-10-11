@@ -1,6 +1,7 @@
 #include <mutex>
 #include <bit>
 #include <cstdint>
+#include <cerrno>
 #include <cfenv>
 #include <cmath>
 #include <cstdlib>
