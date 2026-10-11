@@ -73,7 +73,7 @@ int APS5_VABI scePadGetControllerInformation(int handle, PadControllerInformatio
 }
 
 int APS5_VABI scePadGetHandle(int user_id, int type, int index) {
- if (!g_opened || !ValidPort(user_id, type, index)) return PAD_ERROR_DEVICE_NO_HANDLE;
+ if (!g_opened || !ValidPort(user_id, type, index) || type == PAD_PORT_TYPE_SPECIAL) return PAD_ERROR_DEVICE_NO_HANDLE;
  return PAD_HANDLE;
 }
 
@@ -136,6 +136,7 @@ int APS5_VABI scePadOpen_nid_postfix(int userId, int type, int index, const void
  if (!ValidPort(userId, type, index)) {
   return PAD_ERROR_INVALID_ARG;
  }
+ if (type == PAD_PORT_TYPE_SPECIAL) return PAD_ERROR_DEVICE_NOT_CONNECTED;
  g_opened = true;
  return PAD_HANDLE;
 }
