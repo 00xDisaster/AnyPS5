@@ -4321,8 +4321,8 @@ void multisampleGuestAccessTests(const Device& device, Recorder& recorder) {
         return;
     }
     constexpr std::uint32_t side = 64;
-    constexpr std::size_t targetBytes = side * side * 4u;
-    constexpr std::size_t bytes = 4u * 65536u;
+    constexpr std::size_t targetBytes = 65536u;
+    constexpr std::size_t bytes = 5u * 65536u;
 #ifdef _WIN32
     void* block = VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
@@ -4410,7 +4410,8 @@ void multisampleGuestAccessTests(const Device& device, Recorder& recorder) {
         std::lock_guard gpu(GpuMutex());
         ShaderResources resources(context, compute);
     }, "a texture read", "a texture read");
-    AgcDriver::GuestMemory::Read(address + 2u * 65536u, texels);
+    refused([&] { AgcDriver::GuestMemory::Read(address + 3u * 65536u + 256u, texels); }, "a CPU read", "a CPU read in the padding of a later sample plane");
+    AgcDriver::GuestMemory::Read(address + 4u * 65536u, texels);
     ClearMultisampleTargets(context.device);
     AgcDriver::GuestMemory::Read(address + 256u, texels);
     std::cout << "Multisampled target guest access tests passed\n";

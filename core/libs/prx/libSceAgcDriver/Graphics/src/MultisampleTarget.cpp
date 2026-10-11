@@ -193,7 +193,7 @@ void guardReads(std::uint64_t address, std::size_t bytes) {
 }
 
 void guard(const Context& context, const ColorTarget& target) {
-    const auto bytes = std::max<std::uint64_t>(target.bytes, static_cast<std::uint64_t>(target.extent.width) * target.extent.height * target.elementBytes * target.samples);
+    const auto bytes = std::max<std::uint64_t>(target.bytes * target.samples, static_cast<std::uint64_t>(target.extent.width) * target.extent.height * target.elementBytes * target.samples);
     std::unique_lock lock(guardedMutex());
     guarded().push_back({context.device, target.address, bytes, target.samples});
     anyGuarded().store(true, std::memory_order_release);
