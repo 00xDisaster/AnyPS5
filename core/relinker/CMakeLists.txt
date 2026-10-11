@@ -393,6 +393,13 @@ if(BUILD_TESTING)
     )
     add_test(NAME entry_stub COMMAND entry_stub_tests)
 
+    add_test_executable(param_json_utf8_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/../libs/tests/ParamJsonParser.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../libs/prx/libkernel/AppMetadata/src/ParamJsonParser.cpp)
+    target_include_directories(param_json_utf8_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../libs)
+    add_test(NAME param_json_utf8 COMMAND param_json_utf8_tests)
+    set_tests_properties(param_json_utf8 PROPERTIES TIMEOUT 20)
+
     add_test_executable(strict_nid_filter_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/StrictNidFilterTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/relinker/src/analysis/UnusedNidFilter/StrictNidFilter.cpp
