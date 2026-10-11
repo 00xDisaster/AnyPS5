@@ -101,6 +101,11 @@ int APS5_VABI sceRudpEnableInternalIOThread(uint32_t stack_size, uint32_t priori
     return g_inited ? 0 : RUDP_ERROR_NOT_INITIALIZED;
 }
 
+int APS5_VABI sceRudpEnableInternalIOThread2() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 int APS5_VABI sceRudpSetEventHandler(GuestRudpEventHandler handler, void* arg) {
     std::lock_guard<std::mutex> lk(g_mutex);
     g_handler = handler;
@@ -150,6 +155,11 @@ int APS5_VABI sceRudpSetOption(int ctx_id, int option, const void* value, uint32
     return valid_ctx(ctx_id) ? 0 : RUDP_ERROR_INVALID_CONTEXT_ID;
 }
 
+int APS5_VABI sceRudpGetOption() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 int APS5_VABI sceRudpInitiate(int ctx_id, const void* to, uint32_t tolen, uint16_t vport) {
     (void)to;
     (void)tolen;
@@ -175,6 +185,11 @@ int APS5_VABI sceRudpGetContextStatus(int ctx_id, void* status, uint32_t size) {
     if (status != nullptr && size != 0) {
         std::memset(status, 0, size);  // state 0 = idle, nothing pending
     }
+    return 0;
+}
+
+int APS5_VABI sceRudpGetRemoteInfo() {
+    NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
