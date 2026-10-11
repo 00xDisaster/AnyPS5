@@ -676,70 +676,64 @@ struct AprQueue {
     struct Work {
         std::vector<std::uint8_t> commands;
         Deferred resume;
-        std::uint32_t aprId = 0;
-        std::uint32_t ammId = 0;
+        std::uint32_t id = 0;
     };
     std::deque<Work> pending;
     bool running = false;
-    std::uint32_t aprSubmitted = 0;
-    std::uint32_t aprCompleted = 0;
-    std::uint32_t ammSubmitted = 0;
-    std::uint32_t ammCompleted = 0;
+    std::uint32_t submitted = 0;
+    std::uint32_t completed = 0;
 };
 
-void _complete(AprQueue& queue, std::uint32_t aprId, std::uint32_t ammId) {
-    if (aprId != 0) queue.aprCompleted = std::max(queue.aprCompleted, aprId);
-    if (ammId != 0) queue.ammCompleted = std::max(queue.ammCompleted, ammId);
+AprQueue* _startQueue() {
+    auto* created = new AprQueue();
+    std::thread([created] {
+        for (;;) {
+            AprQueue::Work work;
+            {
+                std::unique_lock lock(created->mutex);
+                created->ready.wait(lock, [&] { return !created->pending.empty(); });
+                work = std::move(created->pending.front());
+                created->pending.pop_front();
+                created->running = true;
+            }
+            try {
+                const auto bytes = static_cast<std::uint32_t>(work.commands.size());
+                _execute(Apr::CommandBufferObject{Apr::BufferType::Generic, 0, bytes, 0, bytes, work.commands.data()}, work.resume.cursor, work.resume.read);
+            } catch (const std::exception& error) {
+                std::fprintf(stderr, "APR: %s\n", error.what());
+                std::fflush(stderr);
+                std::abort();
+            }
+            {
+                std::lock_guard lock(created->mutex);
+                created->running = false;
+                created->completed = std::max(created->completed, work.id);
+            }
+            created->done.notify_all();
+        }
+    }).detach();
+    return created;
 }
 
-AprQueue& _queue() {
-    static AprQueue* queue = [] {
-        auto* created = new AprQueue();
-        std::thread([created] {
-            for (;;) {
-                AprQueue::Work work;
-                {
-                    std::unique_lock lock(created->mutex);
-                    created->ready.wait(lock, [&] { return !created->pending.empty(); });
-                    work = std::move(created->pending.front());
-                    created->pending.pop_front();
-                    created->running = true;
-                }
-                try {
-                    const auto bytes = static_cast<std::uint32_t>(work.commands.size());
-                    _execute(Apr::CommandBufferObject{Apr::BufferType::Generic, 0, bytes, 0, bytes, work.commands.data()}, work.resume.cursor, work.resume.read);
-                } catch (const std::exception& error) {
-                    std::fprintf(stderr, "APR: %s\n", error.what());
-                    std::fflush(stderr);
-                    std::abort();
-                }
-                {
-                    std::lock_guard lock(created->mutex);
-                    created->running = false;
-                    _complete(*created, work.aprId, work.ammId);
-                }
-                created->done.notify_all();
-            }
-        }).detach();
-        return created;
-    }();
-    return *queue;
+AprQueue& _queue(bool amm) {
+    static AprQueue* const queues[2] = {_startQueue(), _startQueue()};
+    return *queues[amm ? 1 : 0];
 }
 
 std::uint32_t _submit(const std::uint8_t* base, std::uint32_t bytes, bool amm) {
-    auto& queue = _queue();
+    auto& queue = _queue(amm);
     std::lock_guard submitLock(queue.submit);
     std::uint32_t id;
     bool queued;
     {
         std::lock_guard lock(queue.mutex);
-        id = amm ? ++queue.ammSubmitted : ++queue.aprSubmitted;
+        id = ++queue.submitted;
         queued = queue.running || !queue.pending.empty();
     }
     const auto enqueue = [&](Deferred resume) {
         {
             std::lock_guard lock(queue.mutex);
-            queue.pending.push_back({std::vector<std::uint8_t>(base, base + bytes), resume, amm ? 0u : id, amm ? id : 0u});
+            queue.pending.push_back({std::vector<std::uint8_t>(base, base + bytes), resume, id});
         }
         queue.ready.notify_one();
     };
@@ -753,16 +747,16 @@ std::uint32_t _submit(const std::uint8_t* base, std::uint32_t bytes, bool amm) {
     }
     {
         std::lock_guard lock(queue.mutex);
-        _complete(queue, amm ? 0u : id, amm ? id : 0u);
+        queue.completed = std::max(queue.completed, id);
     }
     queue.done.notify_all();
     return id;
 }
 
 void _waitSubmitted(std::uint32_t id, bool amm) {
-    auto& queue = _queue();
+    auto& queue = _queue(amm);
     std::unique_lock lock(queue.mutex);
-    queue.done.wait(lock, [&] { return amm ? queue.ammCompleted >= id || id > queue.ammSubmitted : queue.aprCompleted >= id || id > queue.aprSubmitted; });
+    queue.done.wait(lock, [&] { return queue.completed >= id || id > queue.submitted; });
 }
 
 std::uint32_t AmmSubmit_nid_no_patch(void* base, std::uint32_t bytes) {

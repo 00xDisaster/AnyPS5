@@ -329,6 +329,28 @@ void TestWaitSatisfiedAfterSubmission() {
     Require(sceKernelAprWaitCommandBuffer(firstId) == 0);
 }
 
+void TestAmmNotBehindAprWait() {
+    Recorder reader;
+    Recorder maps;
+    alignas(8) std::uint64_t flag = 0;
+    alignas(8) std::uint64_t done = 0;
+    Require(sceAmprCommandBufferWaitOnAddress(&reader.buffer, &flag, 1, 0, 0) == 0);
+    Require(sceAmprCommandBufferWriteAddressOnCompletion(&reader.buffer, &done, 1) == 0);
+    Require(sceAmprAmmCommandBufferConstructor(&maps.buffer) == 0);
+    Require(sceAmprCommandBufferWriteAddressOnCompletion(&maps.buffer, &flag, 1) == 0);
+    std::uint32_t readerId = 0;
+    Require(sceKernelAprSubmitCommandBufferAndGetId(&reader.buffer, 0, &readerId) == 0 && readerId != 0);
+    std::uint32_t mapsId = 0;
+    Require(sceAmprAmmSubmitCommandBuffer3(maps.memory.data(), maps.Offset(), 0, &mapsId) == 0 && mapsId != 0);
+    auto completed = std::async(std::launch::async, [&]() { return sceAmprAmmWaitCommandBufferCompletion(mapsId); });
+    const bool returned = completed.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+    if (!returned) std::atomic_ref<std::uint64_t>(flag).store(1, std::memory_order_release);
+    Require(returned);
+    Require(completed.get() == 0);
+    Require(sceKernelAprWaitCommandBuffer(readerId) == 0);
+    Require(done == 1);
+}
+
 void TestCounters() {
     Recorder recorder;
     alignas(8) std::uint64_t single = 0;
@@ -1074,6 +1096,7 @@ int main() {
     TestKernelEventQueue();
     TestWaits();
     TestWaitSatisfiedAfterSubmission();
+    TestAmmNotBehindAprWait();
     TestCounters();
     TestRejectedWaitsAndCounters();
     TestNops();
