@@ -179,6 +179,13 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
     Require(sscanf_nid_postfix("", "%*d", &scanned) == EOF);
     Require(sscanf_nid_postfix("  ", "%*d%d", &scanned) == EOF);
     Require(sscanf_nid_postfix("", "%d", &scanned) == EOF);
+#else
+    char16_t wide[4] = {u'!', u'!', u'!', u'!'};
+    const auto rejects = [&](const char* format) {
+        try { sscanf_nid_postfix("ab cd", format, wide); } catch (const std::runtime_error&) { return wide[0] == u'!'; }
+        return false;
+    };
+    Require(rejects("%ls") && rejects("%*s %3lc") && rejects("%l[a-z]") && rejects("%S") && rejects("%2$C"));
 #endif
     long long count = -1;
     int smallCount = -1;
