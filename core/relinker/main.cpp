@@ -113,7 +113,7 @@ int Run(const int argc, char* argv[]) {
         }
 
         const Elfpatcher::Linux::LinuxDesktopEntryWriter desktopEntryWriter;
-        const auto desktopEntry = args.toWindows ? std::nullopt : desktopEntryWriter.Prepare(std::filesystem::path(args.inputPath).parent_path() / "sce_sys", absPath);
+        const auto desktopEntry = args.toWindows || args.toMacos ? std::nullopt : desktopEntryWriter.Prepare(Io::NativePath(args.inputPath).parent_path() / "sce_sys", Io::NativePath(absPath));
 
         if (args.writeRegistry) {
             const std::filesystem::path outFsPath = Io::NativePath(absPath);
@@ -158,7 +158,7 @@ int Run(const int argc, char* argv[]) {
             std::cout << "Guest module: " << Io::Utf8Path(artifact.Path) << '\n';
         }
         fileWriter.Write(absPath, executableBytes);
-        if (desktopEntry) std::cout << "Desktop entry: " << desktopEntryWriter.Write(*desktopEntry).string() << '\n';
+        if (desktopEntry) std::cout << "Desktop entry: " << Io::Utf8Path(desktopEntryWriter.Write(*desktopEntry)) << '\n';
         std::cout << "External prx references: " << result.RegistryEntries.size() << "\nOutput file: " << absPath << '\n';
         std::cout << "Expected runtime layout (relative to the output executable):\n"
                   << Io::Utf8Path(Io::NativePath(absPath).filename()) << "\n"

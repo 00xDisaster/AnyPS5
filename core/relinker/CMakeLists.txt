@@ -180,10 +180,12 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/LinuxDesktopEntryTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/linux/LinuxDesktopEntryWriter.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/../libs/prx/libkernel/AppMetadata/src/ParamJsonParser.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/src/NativePath.cpp
         )
         target_include_directories(linux_desktop_entry_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
             ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/include
             ${CMAKE_CURRENT_SOURCE_DIR}/../libs
         )
         add_test(NAME linux_desktop_entry COMMAND linux_desktop_entry_tests)
@@ -291,6 +293,8 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_bss.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_icon COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_icon.py $<TARGET_FILE:relinker>)
+        add_test(NAME linux_desktop_entry_output COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_desktop_entry_output.py $<TARGET_FILE:relinker>)
         add_test(NAME guest_intel_trampolines COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_intel_trampolines.py $<TARGET_FILE:relinker>)
         add_test(NAME guest_tls COMMAND ${Python3_EXECUTABLE}
