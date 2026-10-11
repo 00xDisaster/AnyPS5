@@ -1333,6 +1333,12 @@ void DepthStencilTests() {
     Require(plainRange.color.address == plain.color.address && plainRange.color.bytes == plain.color.bytes && plainRange.color.arrayLastSlice == plain.color.arrayLastSlice, "a color view of slices 0 to 35 of a target with no array slices did not render into its only slice");
     queue.context[0x31b] = 1u;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "ends before its first slice");
+    queue.context[0x31b] = 1u << 13u;
+    const auto firstSlice = AgcDriver::Graphics::DecodeState(queue);
+    Require(firstSlice.color.address == reinterpret_cast<std::uintptr_t>(colorMemory.data()), "a color view of several slices did not retain its first slice");
+    queue.context[0x207] = 1u << 18u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "layered draws into a color view of several array slices");
+    queue.context[0x207] = 0;
     const auto sliced = reinterpret_cast<std::uintptr_t>(sliceMemory.data());
     queue.context[0x318] = static_cast<std::uint32_t>(sliced >> 8u);
     queue.context[0x390] = static_cast<std::uint32_t>(sliced >> 40u);
