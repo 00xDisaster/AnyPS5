@@ -1,5 +1,6 @@
 #include <mutex>
 #include <cstdint>
+#include <cfenv>
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
@@ -7,6 +8,20 @@
 #include <stdexcept>
 
 #include "prx/libc/include/General.hpp"
+
+namespace {
+
+template<typename TFloat>
+std::int64_t RoundToInt64(TFloat value) {
+    const TFloat rounded = std::round(value);
+    if (!(rounded >= static_cast<TFloat>(INT64_MIN) && rounded < static_cast<TFloat>(INT64_MAX))) {
+        std::feraiseexcept(FE_INVALID);
+        return INT64_MIN;
+    }
+    return static_cast<std::int64_t>(rounded);
+}
+
+}
 
 extern "C" {
 
@@ -34,10 +49,10 @@ float APS5_VABI scalbnf_nid_postfix(float x, int exponent) { return std::scalbn(
 double APS5_VABI frexp_nid_postfix(double x, int* exponent) { return std::frexp(x, exponent); }
 float APS5_VABI frexpf_nid_postfix(float x, int* exponent) { return std::frexp(x, exponent); }
 // Guest long is 64-bit, including on Windows where native long is 32-bit.
-std::int64_t APS5_VABI lround_nid_postfix(double x) { return std::llround(x); }
-std::int64_t APS5_VABI lroundf_nid_postfix(float x) { return std::llround(x); }
-std::int64_t APS5_VABI llround_nid_postfix(double x) { return std::llround(x); }
-std::int64_t APS5_VABI llroundf_nid_postfix(float x) { return std::llround(x); }
+std::int64_t APS5_VABI lround_nid_postfix(double x) { return RoundToInt64(x); }
+std::int64_t APS5_VABI lroundf_nid_postfix(float x) { return RoundToInt64(x); }
+std::int64_t APS5_VABI llround_nid_postfix(double x) { return RoundToInt64(x); }
+std::int64_t APS5_VABI llroundf_nid_postfix(float x) { return RoundToInt64(x); }
 int APS5_VABI __isfinitef_nid_postfix(float x) { return std::isfinite(x) ? 1 : 0; }
 int APS5_VABI __isnormal_nid_postfix(double x) { return std::isnormal(x) ? 1 : 0; }
 int APS5_VABI __isnormalf_nid_postfix(float x) { return std::isnormal(x) ? 1 : 0; }
