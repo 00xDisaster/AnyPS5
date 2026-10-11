@@ -18,6 +18,7 @@ static_assert(sizeof(SceKernelProsperoSystemSwVersion) == 0x28);
 extern "C" {
 int* APS5_VABI __error_nid_postfix();
 int APS5_VABI sceKernelGetProsperoSystemSwVersion_nid_postfix(SceKernelProsperoSystemSwVersion*);
+int APS5_VABI sceKernelGetAllowedSdkVersionOnSystem_nid_postfix(std::uint32_t*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -44,7 +45,20 @@ static void CheckProsperoSystemSwVersion() {
     Require(*__error_nid_postfix() == 13);
 }
 
+static void CheckAllowedSdkVersionOnSystem() {
+    *__error_nid_postfix() = 13;
+    Require(sceKernelGetAllowedSdkVersionOnSystem_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    std::uint32_t allowed = 0xaaaaaaaa;
+    Require(sceKernelGetAllowedSdkVersionOnSystem_nid_postfix(&allowed) == 0);
+    SceKernelProsperoSystemSwVersion system{};
+    system.size = sizeof(system);
+    Require(sceKernelGetProsperoSystemSwVersion_nid_postfix(&system) == 0);
+    Require(allowed == (system.version | 0xfff) && allowed >> 16 == system.version >> 16);
+    Require(*__error_nid_postfix() == 13);
+}
+
 int main() {
     CheckProsperoSystemSwVersion();
+    CheckAllowedSdkVersionOnSystem();
     return 0;
 }
