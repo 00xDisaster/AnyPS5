@@ -168,6 +168,22 @@ if(BUILD_TESTING)
     target_include_directories(autorun_exit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/cli/include ${CMAKE_CURRENT_SOURCE_DIR}/io/include ${CMAKE_CURRENT_SOURCE_DIR}/domain/include)
     add_test(NAME autorun_exit_status COMMAND autorun_exit_tests)
     set_tests_properties(autorun_exit_status PROPERTIES TIMEOUT 20)
+    add_test_executable(rewrite_boundaries_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/tests/RewriteBoundaryTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionRewriter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/InstructionScanner.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionDecoder.cpp
+    )
+    target_include_directories(rewrite_boundaries_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/include
+    )
+    add_test(NAME rewrite_boundaries COMMAND rewrite_boundaries_tests)
+    set_tests_properties(rewrite_boundaries PROPERTIES TIMEOUT 20)
+
     add_test_executable(cli_args_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/tests/CliArgsTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/src/CliArgs.cpp
