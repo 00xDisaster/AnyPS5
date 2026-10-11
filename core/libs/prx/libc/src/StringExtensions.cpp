@@ -37,28 +37,38 @@ char* APS5_VABI __inet_ntoa_nid_postfix(unsigned int address) {
     return buffer;
 }
 
-char* APS5_VABI dirname_nid_postfix(char* path) {
-    thread_local char dot[] = ".";
-    thread_local char slash[] = "/";
+char* APS5_VABI dirname_nid_postfix(const char* path) {
+    thread_local char buffer[1024];
     if (path == nullptr || *path == '\0') {
-        dot[0] = '.';
-        return dot;
+        buffer[0] = '.';
+        buffer[1] = '\0';
+        return buffer;
     }
 
     auto length = std::strlen(path);
-    while (length > 0 && path[length - 1] == '/') --length;
-    if (length == 0) return slash;
-    path[length] = '\0';
+    if (length >= sizeof(buffer)) {
+        errno = 63;
+        return nullptr;
+    }
+    std::memcpy(buffer, path, length + 1);
+    while (length > 0 && buffer[length - 1] == '/') --length;
+    if (length == 0) {
+        buffer[0] = '/';
+        buffer[1] = '\0';
+        return buffer;
+    }
+    buffer[length] = '\0';
 
     auto separator = length;
-    while (separator > 0 && path[separator - 1] != '/') --separator;
+    while (separator > 0 && buffer[separator - 1] != '/') --separator;
     if (separator == 0) {
-        dot[0] = '.';
-        return dot;
+        buffer[0] = '.';
+        buffer[1] = '\0';
+        return buffer;
     }
-    while (separator > 1 && path[separator - 1] == '/') --separator;
-    path[separator] = '\0';
-    return path;
+    while (separator > 1 && buffer[separator - 1] == '/') --separator;
+    buffer[separator] = '\0';
+    return buffer;
 }
 
 std::size_t APS5_VABI strnlen_nid_postfix(const char* text, std::size_t limit) {

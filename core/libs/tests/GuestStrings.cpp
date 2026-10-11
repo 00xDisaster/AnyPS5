@@ -9,7 +9,7 @@
 extern "C" {
 char* APS5_VABI basename_nid_postfix(const char*);
 char* APS5_VABI __inet_ntoa_nid_postfix(unsigned int);
-char* APS5_VABI dirname_nid_postfix(char*);
+char* APS5_VABI dirname_nid_postfix(const char*);
 int* APS5_VABI __error_nid_postfix();
 std::size_t APS5_VABI strnlen_nid_postfix(const char*, std::size_t);
 std::size_t APS5_VABI strnlen_s_nid_postfix(const char*, std::size_t);
@@ -118,10 +118,9 @@ int main() {
     Require(std::strcmp(dirname_nid_postfix(nullptr), ".") == 0);
     char emptyPath[] = "";
     Require(std::strcmp(dirname_nid_postfix(emptyPath), ".") == 0);
-    char leaf[] = "file";
-    Require(std::strcmp(dirname_nid_postfix(leaf), ".") == 0);
-    char nested[] = "one/two///";
-    Require(std::strcmp(dirname_nid_postfix(nested), "one") == 0 && std::strcmp(nested, "one") == 0);
+    Require(std::strcmp(dirname_nid_postfix("file"), ".") == 0);
+    const char nested[] = "one/two///";
+    Require(std::strcmp(dirname_nid_postfix(nested), "one") == 0 && std::strcmp(nested, "one/two///") == 0);
     char repeatedSeparators[] = "one//two";
     Require(std::strcmp(dirname_nid_postfix(repeatedSeparators), "one") == 0);
     char absoluteRepeatedSeparators[] = "/one//two";
@@ -136,6 +135,8 @@ int main() {
     Require(std::strcmp(dirname_nid_postfix(rootChild), "/") == 0);
     char onlySlashes[] = "////";
     Require(std::strcmp(dirname_nid_postfix(onlySlashes), "/") == 0);
+    const std::string longDirnamePath(1024, 'x');
+    Require(dirname_nid_postfix(longDirnamePath.c_str()) == nullptr && *__error_nid_postfix() == 63);
     Require(std::strcmp(basename_nid_postfix(nullptr), ".") == 0);
     Require(std::strcmp(basename_nid_postfix(""), ".") == 0);
     Require(std::strcmp(basename_nid_postfix("////"), "/") == 0);
