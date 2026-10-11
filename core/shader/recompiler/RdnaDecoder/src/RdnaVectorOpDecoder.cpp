@@ -723,7 +723,6 @@ bool hasDppForm(RdnaOpcode opcode) {
 
 bool acceptsDpp8(RdnaOpcode opcode) {
     switch (opcode) {
-        case RdnaOpcode::VPkFmacF16:
         case RdnaOpcode::VMovrelsB32:
         case RdnaOpcode::VMovrelsdB32:
         case RdnaOpcode::VMovrelsd2B32:
