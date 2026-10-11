@@ -174,7 +174,8 @@ inline int FormatWindows(char* buffer, size_t size, const char* format, const vo
             continue;
         }
         std::string spec = "%";
-        while (*format && std::strchr("-+ #0", *format)) spec += *format++;
+        for (; *format && std::strchr("-+ #0'", *format); ++format)
+            if (*format != '\'') spec += *format;
         if (*format == '*') {
             ++format;
             const int width = args.Next<int>();
