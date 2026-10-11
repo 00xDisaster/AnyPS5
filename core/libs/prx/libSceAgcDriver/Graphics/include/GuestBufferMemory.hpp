@@ -249,7 +249,7 @@ public:
     bool HoldsLease() const { return !lease.empty() || space != nullptr; }
     std::size_t CopiedBytes() const {
         std::size_t bytes = 0;
-        for (const auto& region : regions) if (region.buffer != nullptr) bytes += static_cast<std::size_t>(region.end - region.begin);
+        for (const auto& region : regions) if (region.buffer != nullptr) bytes += static_cast<std::size_t>((region.bufferEnd != 0 ? region.bufferEnd : region.end) - region.begin);
         return bytes;
     }
     // Every uploaded region as [begin, end) when all of them are served by host imports, in place or
@@ -283,6 +283,8 @@ private:
         // memory; the rest reads as zeros and is never stored.
         bool sparse = false;
         std::vector<std::pair<std::uint64_t, std::uint64_t>> backed {};
+        std::uint64_t lastView = 0;
+        std::uint64_t bufferEnd = 0;
         // Set when the region is served by an image mirror: nothing is copied; writable mirrors are
         // written back by comparing with the mirror's shadow. Kept alive here for recorded work.
         std::shared_ptr<ImageMirror> mirror {};
