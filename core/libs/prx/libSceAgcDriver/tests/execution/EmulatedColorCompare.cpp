@@ -353,11 +353,13 @@ int main() {
         RunChannels(*device, QuadCode, {1, 1, 1, 1}, 4, 0, "view 1,1,1,1");
         RunChannels(*device, QuadCode, {0, 4, 1, 5}, 4, 0, "view 0,R,1,G");
         RunChannels(*device, QuadCode, {4, 0, 0, 1}, 4, 0, "view R,0,0,1");
-        RunChannels(*device, QuadCode, {5, 5, 5, 5}, 4, 0, "view G,G,G,G");
+        RunChannels(*device, QuadCode, {5, 4, 5, 6}, 4, 0, "view G,R,B,A");
         RunChannels(*device, QuadCode, {7, 4, 4, 4}, 4, 0, "view A,R,R,R");
         RunChannels(*device, PairCode, {0, 4, 4, 4}, 2, 1, "view 0,R,R,R, dmask 6");
         Swizzle = Select(4, 2, 4, 4);
         Reject(*device, Format8888UNorm, {ClampEdge, FilterPoint}, "every view channel is a constant or a color channel");
+        Swizzle = Select(5, 5, 5, 5);
+        Reject(*device, Format8888UNorm, {ClampEdge, FilterPoint}, "a view channel selects red");
         Swizzle = 0xfacu;
         Reject(*device, Format8888UInt, {ClampEdge, FilterPoint}, "unsupported format");
         Reject(*device, Format8888UNorm, {ClampMirror, FilterPoint}, "wrap, clamp-to-edge or clamp-to-border");
