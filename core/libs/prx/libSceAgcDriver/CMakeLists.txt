@@ -364,7 +364,7 @@ set_target_properties(agc_structurizer_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_structurizer_tests)
 
 add_test_executable(agc_fragment_barycentric_tests EXCLUDE_FROM_ALL tests/FragmentBarycentric.cpp)
-target_include_directories(agc_fragment_barycentric_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_fragment_barycentric_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 set_target_properties(agc_fragment_barycentric_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_fragment_barycentric_tests)
 if(BUILD_TESTING)
@@ -509,7 +509,7 @@ if(BUILD_TESTING)
 endif()
 
 add_test_executable(agc_pass_hazards_tests EXCLUDE_FROM_ALL tests/PassHazards.cpp Graphics/src/PassHazards.cpp)
-target_include_directories(agc_pass_hazards_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_pass_hazards_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_pass_hazards_tests PRIVATE libc)
 set_target_properties(agc_pass_hazards_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_pass_hazards_tests)
@@ -676,7 +676,7 @@ target_include_directories(agc_driver_cmask_fast_clear_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${agcTestShaderGeneratedRoot}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
 )
 
 target_link_libraries(agc_driver_cmask_fast_clear_tests PRIVATE
@@ -1199,7 +1199,7 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test_executable(linear_display_buffer_tests ${LIBS_INCLUDE_DIR}/tests/LinearDisplayBuffer.cpp)
-    target_include_directories(linear_display_buffer_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+    target_include_directories(linear_display_buffer_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
     target_link_libraries(linear_display_buffer_tests PRIVATE libSceAgcDriver libc)
     configure_windows_unwind(linear_display_buffer_tests)
     add_test(NAME linear_display_buffer COMMAND linear_display_buffer_tests)
