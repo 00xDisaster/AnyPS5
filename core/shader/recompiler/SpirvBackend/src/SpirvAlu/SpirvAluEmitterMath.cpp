@@ -1114,7 +1114,7 @@ std::uint32_t EmitFPOrdLessThan32(SpirvEmitterState& state, std::uint32_t arg0, 
 }
 
 std::uint32_t EmitFPUnordLessThan32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
-    return EmitNative<spv::OpFUnordLessThan, IrType::U1>(state, arg0, arg1);
+    return EmitNative<spv::OpLogicalNot, IrType::U1>(state, EmitNative<spv::OpFOrdGreaterThanEqual, IrType::U1>(state, arg0, arg1));
 }
 
 std::uint32_t EmitFPOrdGreaterThan32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
@@ -1122,7 +1122,7 @@ std::uint32_t EmitFPOrdGreaterThan32(SpirvEmitterState& state, std::uint32_t arg
 }
 
 std::uint32_t EmitFPUnordGreaterThan32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
-    return EmitNative<spv::OpFUnordGreaterThan, IrType::U1>(state, arg0, arg1);
+    return EmitNative<spv::OpLogicalNot, IrType::U1>(state, EmitNative<spv::OpFOrdLessThanEqual, IrType::U1>(state, arg0, arg1));
 }
 
 std::uint32_t EmitFPOrdLessThanEqual32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
@@ -1130,7 +1130,7 @@ std::uint32_t EmitFPOrdLessThanEqual32(SpirvEmitterState& state, std::uint32_t a
 }
 
 std::uint32_t EmitFPUnordLessThanEqual32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
-    return EmitNative<spv::OpFUnordLessThanEqual, IrType::U1>(state, arg0, arg1);
+    return EmitNative<spv::OpLogicalNot, IrType::U1>(state, EmitNative<spv::OpFOrdGreaterThan, IrType::U1>(state, arg0, arg1));
 }
 
 std::uint32_t EmitFPOrdGreaterThanEqual32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
@@ -1138,7 +1138,7 @@ std::uint32_t EmitFPOrdGreaterThanEqual32(SpirvEmitterState& state, std::uint32_
 }
 
 std::uint32_t EmitFPUnordGreaterThanEqual32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
-    return EmitNative<spv::OpFUnordGreaterThanEqual, IrType::U1>(state, arg0, arg1);
+    return EmitNative<spv::OpLogicalNot, IrType::U1>(state, EmitNative<spv::OpFOrdLessThan, IrType::U1>(state, arg0, arg1));
 }
 
 std::uint32_t EmitFPAdd32(SpirvEmitterState& state, std::uint32_t arg0, std::uint32_t arg1) {
