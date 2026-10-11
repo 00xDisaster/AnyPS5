@@ -10,7 +10,6 @@
 #include <fstream>
 #include <limits>
 #include <set>
-#include <stdexcept>
 #include <string>
 
 extern "C" {
@@ -28,15 +27,6 @@ static void Check(bool value, int line) {
 }
 #define Require(value) Check((value), __LINE__)
 
-template <typename TFunction>
-static bool ThrowsRuntimeError(TFunction function) {
-    try {
-        function();
-    } catch (const std::runtime_error&) {
-        return true;
-    }
-    return false;
-}
 
 static std::set<std::string> ReadAll(int directory) {
     std::set<std::string> names;
@@ -90,11 +80,11 @@ int main() {
     Require(ReadAll(directory) == rest);
 
     Require(sceKernelLseek(directory, 3, 0) == 3);
-    Require(ThrowsRuntimeError([&] { sceKernelLseek(directory, -1, 0); }));
-    Require(ThrowsRuntimeError([&] { sceKernelLseek(directory, -4, 1); }));
+    Require(sceKernelLseek(directory, -1, 0) == static_cast<int>(0x80020016u));
+    Require(sceKernelLseek(directory, -4, 1) == static_cast<int>(0x80020016u));
     Require(sceKernelLseek(directory, 0, 1) == 3);
     Require(sceKernelLseek(directory, std::numeric_limits<std::int64_t>::max(), 0) == std::numeric_limits<std::int64_t>::max());
-    Require(ThrowsRuntimeError([&] { sceKernelLseek(directory, 1, 1); }));
+    Require(sceKernelLseek(directory, 1, 1) == static_cast<int>(0x80020054u));
     Require(sceKernelLseek(directory, 0, 1) == std::numeric_limits<std::int64_t>::max());
 
     Require(sceKernelLseek(directory, 0, 0) == 0);
