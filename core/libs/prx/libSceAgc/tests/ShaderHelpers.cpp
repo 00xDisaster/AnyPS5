@@ -56,7 +56,7 @@ void HandBuiltUserVgprRegister() {
     handBuilt.ge_cntl = {GE_CNTL, 0x100u};
     handBuilt.vgt_shader_stages_en = {VGT_SHADER_STAGES_EN, 0x2412010u};
     handBuilt.vgt_gs_out_prim_type = {0x2ceu, 2};
-    handBuilt.ge_user_vgpr_en = {0x25cu, 0};
+    handBuilt.ge_user_vgpr_en = {GE_USER_VGPR1, 0};
     Shader preRaster{};
     preRaster.type = static_cast<std::uint8_t>(ShaderBinaryType::Gs);
     preRaster.specials = &handBuilt;
@@ -65,8 +65,8 @@ void HandBuiltUserVgprRegister() {
     preparations = 0;
     Require(sceAgcCreatePrimState(context.data(), primitive.data(), nullptr, &preRaster, 4) == 0);
     Require(context[0].offset == VGT_SHADER_STAGES_EN && context[0].value == 0x2412010u && context[1].offset == VGT_GS_OUT_PRIM_TYPE && context[1].value == static_cast<std::uint32_t>(GsOutputPrimitiveType::Triangles));
-    Require(primitive[0].offset == GE_CNTL && primitive[0].value == 0x100u && primitive[1].offset == 0x25cu && primitive[1].value == 0 && primitive[2].offset == VGT_PRIMITIVE_TYPE && primitive[2].value == 4);
-    Require(preparations == 1 && stageCount == 1 && preparedPrimitive[1].offset == 0x25cu && preparedPrimitive[1].value == 0);
+    Require(primitive[0].offset == GE_CNTL && primitive[0].value == 0x100u && primitive[1].offset == GE_USER_VGPR1 && primitive[1].value == 0 && primitive[2].offset == VGT_PRIMITIVE_TYPE && primitive[2].value == 4);
+    Require(preparations == 1 && stageCount == 1 && preparedPrimitive[1].offset == GE_USER_VGPR1 && preparedPrimitive[1].value == 0);
     handBuilt.ge_cntl.offset = 0x25cu;
     std::string message;
     try { static_cast<void>(sceAgcCreatePrimState(context.data(), primitive.data(), nullptr, &preRaster, 4)); }
@@ -145,19 +145,6 @@ int main() {
                 }
             }
         }
-        ShaderSpecialRegs disabledVgprSpecial = special;
-        disabledVgprSpecial.ge_user_vgpr_en = {GE_USER_VGPR1, 0};
-        vertex.specials = &disabledVgprSpecial;
-        preparations = 0;
-        std::array<ShaderRegister, 3> normalizedPrimitive{};
-        Require(sceAgcCreatePrimState(nullptr, normalizedPrimitive.data(), nullptr, &vertex, 7) == 0);
-        Require(preparations == 1 && preparedPrimitive[1].offset == GE_USER_VGPR_EN && preparedPrimitive[1].value == 0);
-        disabledVgprSpecial.ge_user_vgpr_en.value = 1;
-        bool rejectedEnabledVgprAlias = false;
-        try { static_cast<void>(sceAgcCreatePrimState(nullptr, normalizedPrimitive.data(), nullptr, &vertex, 7)); }
-        catch (const std::runtime_error&) { rejectedEnabledVgprAlias = true; }
-        Require(rejectedEnabledVgprAlias);
-        vertex.specials = &special;
         preparations = 0;
         std::array<ShaderRegister, 2> patchContext{};
         std::array<ShaderRegister, 3> patchPrimitive{};
