@@ -589,5 +589,11 @@ if(MINGW)
         set_target_properties(windows_exception_tests PROPERTIES EXCLUDE_FROM_ALL FALSE)
         add_test(NAME windows_exceptions COMMAND windows_exception_tests)
         set_tests_properties(windows_exceptions PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        add_test_executable(windows_backtrace_report_tests ${LIBS_INCLUDE_DIR}/tests/WindowsBacktraceReport.cpp)
+        target_link_libraries(windows_backtrace_report_tests PRIVATE libc)
+        add_test(NAME windows_backtrace_report COMMAND windows_backtrace_report_tests)
+        set_tests_properties(windows_backtrace_report PROPERTIES TIMEOUT 20
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>"
+            PASS_REGULAR_EXPRESSION "aborting[^~]*SIGABRT. on thread[^~]*stack return address candidates:[^~]*rsp[+]0x")
     endif()
 endif()
