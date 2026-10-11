@@ -230,6 +230,21 @@ int main() {
     Require(mkdir_nid_postfix(nullptr, 0700) == -1 && *__error_nid_postfix() == 14);
     const auto file = root / "file.txt";
     { std::ofstream stream(file); stream << "retained until removal"; }
+    const auto held = root / "held.txt";
+    const auto heldName = held.string();
+    { std::ofstream stream(held); stream << "held"; }
+    const int heldDescriptor = sceKernelOpen(heldName.c_str(), 2, 0);
+    Require(heldDescriptor >= 0 && sceKernelUnlink(heldName.c_str()) == 0 && !std::filesystem::exists(held));
+    char heldBytes[4]{};
+    Require(read_nid_postfix(heldDescriptor, heldBytes, sizeof(heldBytes)) == sizeof(heldBytes) && std::memcmp(heldBytes, "held", 4) == 0);
+    const int recreated = sceKernelOpen(heldName.c_str(), 0x0a01, 0644);
+    Require(recreated >= 0 && sceKernelClose(heldDescriptor) == 0 && std::filesystem::file_size(held) == 0);
+    const auto moved = root / "moved.txt";
+    Require(rename_nid_postfix(heldName.c_str(), moved.string().c_str()) == 0 && !std::filesystem::exists(held));
+    Require(write_nid_postfix(recreated, "moved", 5) == 5 && sceKernelClose(recreated) == 0 && std::filesystem::file_size(moved) == 5);
+    const int removing = open_nid_postfix(moved.string().c_str(), 0, 0);
+    Require(removing >= 0 && remove_nid_postfix(moved.string().c_str()) == 0 && !std::filesystem::exists(moved));
+    Require(close_nid_postfix(removing) == 0);
     Require(remove_nid_postfix(root.string().c_str()) == -1);
     Require(*__error_nid_postfix() == 66);
     Require(std::filesystem::is_regular_file(file));
