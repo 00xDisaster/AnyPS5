@@ -148,10 +148,14 @@ void Device() {
         Require(sceUsbdReleaseInterface(handle, interfaceNumber) == 0, "releasing an interface failed");
     }
     Require(sceUsbdReleaseInterface(handle, 0) == static_cast<std::int32_t>(0x80240005), "releasing an unclaimed interface did not report not found");
+    Require(sceUsbdGetConfigDescriptor(device, 0, &config) == 0, "config descriptor 0 for the endpoint scan failed");
     const std::uint8_t* config0 = static_cast<const std::uint8_t*>(config);
     const std::uint8_t* interfaceArray = *reinterpret_cast<const std::uint8_t* const*>(config0 + 16);
     std::uint8_t interruptAddress = 0;
     std::uint16_t interruptMax = 0;
+    if (interfaceArray == nullptr) {
+        Require(false, "the active config descriptor has no interface array");
+    }
     for (std::uint8_t index = 0; index < interfaces && interruptAddress == 0; ++index) {
         const std::uint8_t* alternate = *reinterpret_cast<const std::uint8_t* const*>(interfaceArray + index * 16);
         if (alternate == nullptr) continue;
