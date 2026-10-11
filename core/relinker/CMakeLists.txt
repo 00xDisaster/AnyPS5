@@ -215,6 +215,22 @@ if(BUILD_TESTING)
         add_test(NAME linux_desktop_entry COMMAND linux_desktop_entry_tests)
     endif()
 
+    add_test_executable(section_header_ranges_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/SectionRangeTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/general/SectionHeaderTableBuilder.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/ByteWriter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/BufferUtils.cpp
+    )
+    target_include_directories(section_header_ranges_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/include
+    )
+    add_test(NAME section_header_ranges COMMAND section_header_ranges_tests)
+    set_tests_properties(section_header_ranges PROPERTIES TIMEOUT 20)
+
     add_test_executable(amd64_only_converter_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/tests/Amd64OnlyConverterTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/Amd64OnlyConverter.cpp
