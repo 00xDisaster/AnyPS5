@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <optional>
+#include <deque>
+#include <condition_variable>
 #include <cstdint>
 #include <cstddef>
 #include "SceTypes.hpp"
@@ -523,9 +527,13 @@ void _readResolved(Apr::Opcode opcode, Apr::ReadFileCommand command, ReadCursor&
     read = {true, command.fileId, command.destination + command.size, command.offset + command.size};
 }
 
-void _execute(const Apr::CommandBufferObject& buffer) {
+struct Deferred {
     std::uint32_t cursor = 0;
     ReadCursor read;
+};
+
+std::optional<Deferred> _execute(const Apr::CommandBufferObject& buffer, std::uint32_t start = 0, ReadCursor read = {}, bool defer = false) {
+    std::uint32_t cursor = start;
     while (cursor < buffer.offset) {
         if (cursor + sizeof(Apr::CommandHeader) > buffer.offset) throw std::runtime_error("APR: truncated command buffer");
         Apr::CommandHeader header;
@@ -604,6 +612,7 @@ void _execute(const Apr::CommandBufferObject& buffer) {
                 return std::atomic_ref<std::uint64_t>(*reinterpret_cast<std::uint64_t*>(command.address)).load(std::memory_order_acquire);
             };
             const std::uint64_t reference = (command.reference & command.mask) << unused;
+            if (defer && !_waitSatisfied(command.compare, (current() & command.mask) << unused, reference)) return Deferred{cursor, read};
             while (!_waitSatisfied(command.compare, (current() & command.mask) << unused, reference)) PreciseSleepUs(50);
             break;
         }
@@ -630,6 +639,7 @@ void _execute(const Apr::CommandBufferObject& buffer) {
         }
         cursor += header.bytes;
     }
+    return std::nullopt;
 }
 
 }
@@ -658,16 +668,113 @@ void AmmVirtualAddressRanges_nid_no_patch(std::uint64_t* start, std::uint64_t* e
     if (multimapEnd) *multimapEnd = base + 2 * AmmRangeBytes;
 }
 
+struct AprQueue {
+    std::mutex submit;
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::condition_variable done;
+    struct Work {
+        std::vector<std::uint8_t> commands;
+        Deferred resume;
+        std::uint32_t aprId = 0;
+        std::uint32_t ammId = 0;
+    };
+    std::deque<Work> pending;
+    bool running = false;
+    std::uint32_t aprSubmitted = 0;
+    std::uint32_t aprCompleted = 0;
+    std::uint32_t ammSubmitted = 0;
+    std::uint32_t ammCompleted = 0;
+};
+
+void _complete(AprQueue& queue, std::uint32_t aprId, std::uint32_t ammId) {
+    if (aprId != 0) queue.aprCompleted = std::max(queue.aprCompleted, aprId);
+    if (ammId != 0) queue.ammCompleted = std::max(queue.ammCompleted, ammId);
+}
+
+AprQueue& _queue() {
+    static AprQueue* queue = [] {
+        auto* created = new AprQueue();
+        std::thread([created] {
+            for (;;) {
+                AprQueue::Work work;
+                {
+                    std::unique_lock lock(created->mutex);
+                    created->ready.wait(lock, [&] { return !created->pending.empty(); });
+                    work = std::move(created->pending.front());
+                    created->pending.pop_front();
+                    created->running = true;
+                }
+                try {
+                    const auto bytes = static_cast<std::uint32_t>(work.commands.size());
+                    _execute(Apr::CommandBufferObject{Apr::BufferType::Generic, 0, bytes, 0, bytes, work.commands.data()}, work.resume.cursor, work.resume.read);
+                } catch (const std::exception& error) {
+                    std::fprintf(stderr, "APR: %s\n", error.what());
+                    std::fflush(stderr);
+                    std::abort();
+                }
+                {
+                    std::lock_guard lock(created->mutex);
+                    created->running = false;
+                    _complete(*created, work.aprId, work.ammId);
+                }
+                created->done.notify_all();
+            }
+        }).detach();
+        return created;
+    }();
+    return *queue;
+}
+
+std::uint32_t _submit(const std::uint8_t* base, std::uint32_t bytes, bool amm) {
+    auto& queue = _queue();
+    std::lock_guard submitLock(queue.submit);
+    std::uint32_t id;
+    bool queued;
+    {
+        std::lock_guard lock(queue.mutex);
+        id = amm ? ++queue.ammSubmitted : ++queue.aprSubmitted;
+        queued = queue.running || !queue.pending.empty();
+    }
+    const auto enqueue = [&](Deferred resume) {
+        {
+            std::lock_guard lock(queue.mutex);
+            queue.pending.push_back({std::vector<std::uint8_t>(base, base + bytes), resume, amm ? 0u : id, amm ? id : 0u});
+        }
+        queue.ready.notify_one();
+    };
+    if (queued) {
+        enqueue({});
+        return id;
+    }
+    if (const auto deferred = _execute(Apr::CommandBufferObject{Apr::BufferType::Generic, 0, bytes, 0, bytes, const_cast<std::uint8_t*>(base)}, 0, {}, true)) {
+        enqueue(*deferred);
+        return id;
+    }
+    {
+        std::lock_guard lock(queue.mutex);
+        _complete(queue, amm ? 0u : id, amm ? id : 0u);
+    }
+    queue.done.notify_all();
+    return id;
+}
+
+void _waitSubmitted(std::uint32_t id, bool amm) {
+    auto& queue = _queue();
+    std::unique_lock lock(queue.mutex);
+    queue.done.wait(lock, [&] { return amm ? queue.ammCompleted >= id || id > queue.ammSubmitted : queue.aprCompleted >= id || id > queue.aprSubmitted; });
+}
+
 std::uint32_t AmmSubmit_nid_no_patch(void* base, std::uint32_t bytes) {
-    _execute(Apr::CommandBufferObject{Apr::BufferType::Generic, 0, bytes, 0, bytes, static_cast<std::uint8_t*>(base)});
-    auto& last = _amm().lastSubmit;
-    std::uint32_t id = last.fetch_add(1) + 1;
-    while (id == 0) id = last.fetch_add(1) + 1;
+    const auto id = _submit(static_cast<const std::uint8_t*>(base), bytes, true);
+    _amm().lastSubmit.store(id);
     return id;
 }
 
 bool AmmSubmitted_nid_no_patch(std::uint32_t id) {
-    return id != 0 && id <= _amm().lastSubmit.load();
+    if (id == 0 || id > _amm().lastSubmit.load()) return false;
+    _waitSubmitted(id, true);
+    return true;
 }
 
 
@@ -729,16 +836,15 @@ int APS5_VABI sceKernelAprGetFileStat(uint32_t id, FileStat* stat) {
 int APS5_VABI sceKernelAprSubmitCommandBuffer(const Apr::CommandBufferObject* buffer, uint32_t priority) {
     (void)priority;
     if (!buffer) return _fail(GUEST_EINVAL);
-    _execute(*buffer);
+    _submit(buffer->base, buffer->offset, false);
     return 0;
 }
 
 int APS5_VABI sceKernelAprSubmitCommandBufferAndGetId(const Apr::CommandBufferObject* buffer, uint32_t priority, uint32_t* id) {
     if (!id) return _fail(GUEST_EINVAL);
-    const int result = sceKernelAprSubmitCommandBuffer(buffer, priority);
-    if (result != 0) return result;
-    static std::atomic<uint32_t> nextId{1};
-    *id = nextId.fetch_add(1);
+    (void)priority;
+    if (!buffer) return _fail(GUEST_EINVAL);
+    *id = _submit(buffer->base, buffer->offset, false);
     return 0;
 }
 
@@ -751,7 +857,7 @@ int APS5_VABI sceKernelAprSubmitCommandBufferAndGetResult(const Apr::CommandBuff
 }
 
 int APS5_VABI sceKernelAprWaitCommandBuffer(uint32_t id) {
-    (void)id;
+    _waitSubmitted(id, false);
     return 0;
 }
 
