@@ -1,5 +1,7 @@
 # Project technical debt
 
+- Linux [shm_open](../../core/libs/prx/libkernel/File/src/SharedMemory.cpp) maps slash-prefixed guest names of up to 1023 bytes to `/anyps5-shm-` plus the existing SHA-1 digest. The namespace is shared across AnyPS5 processes in the host mount namespace; digest collisions are not detected. Named objects persist until host unlink or reboot because guest `shm_unlink` is absent. Named objects on Windows still throw. File-backed guest `mmap` is unsupported; descriptor sharing is tested with native Linux mappings. Guest invalid pointers other than null cannot be reported safely as `EFAULT`. Console behaviour and title compatibility remain unverified.
+
 ### Build
 
 - Building on Windows requires a specific version of mingw - MinGW-w64 GCC 15.2.0 (`winlibs-gcc15`, `x86_64-ucrt-posix-seh`)

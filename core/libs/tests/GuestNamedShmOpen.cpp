@@ -1,9 +1,9 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "nid/Sha1.hpp"
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <stdexcept>
 #include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -15,8 +15,7 @@ extern "C" int* APS5_VABI __error_nid_postfix();
 
 static void Require(bool value, const char* message) {
     if (!value) {
-        std::fprintf(stderr, "%s (guest errno=%d)\n", message, *__error_nid_postfix());
-        std::exit(1);
+        throw std::runtime_error(std::string(message) + " (guest errno=" + std::to_string(*__error_nid_postfix()) + ")");
     }
 }
 
@@ -41,7 +40,7 @@ static void RequireError(const char* name, int flags, int error) {
     Require(*__error_nid_postfix() == error, "incorrect guest errno");
 }
 
-int main() {
+static void Run() {
     constexpr int readWrite = 2, create = 0x200, exclusive = 0x800, truncate = 0x400;
     Object object("/nested");
     RequireError(object.name.c_str(), readWrite, 2);
@@ -64,6 +63,12 @@ int main() {
     Require(pread(reader, bytes, sizeof(bytes), 0) == sizeof(bytes) && std::memcmp(bytes, "shared", 7) == 0, "reopened object has different contents");
     Require(pwrite(reader, bytes, sizeof(bytes), 0) == -1, "read-only descriptor accepted a write");
     Require(::mmap(nullptr, 0x4000, PROT_READ | PROT_WRITE, MAP_SHARED, reader, 0) == MAP_FAILED, "read-only descriptor accepted a writable shared mapping");
+    Object separate("/different");
+    const int different = separate.Open(readWrite | create | exclusive, 0400);
+    Require(different >= 0 && fstat(different, &info) == 0 && info.st_size == 0, "different names share an object");
+    Require(ftruncate(different, 0x4000) == 0 && pwrite(different, "y", 1, 0) == 1, "creation permissions incorrectly restrict the new descriptor");
+    Require(mapped[0] == 's', "different object write changed the first object");
+    Require(close(different) == 0, "different object close failed");
     const auto child = fork();
     Require(child >= 0, "fork failed");
     if (child == 0) {
@@ -87,12 +92,35 @@ int main() {
     RequireError(object.name.c_str(), readWrite | 8, 22);
     const std::string tooLong(1024, '/');
     RequireError(tooLong.c_str(), readWrite, 63);
-    Object longName(std::string(900, 'x'));
+    const auto prefixLength = std::string("/anyps5-test-").size() + std::to_string(getpid()).size();
+    Object longName(std::string(1023 - prefixLength, 'x'));
+    Require(longName.name.size() == 1023, "incorrect boundary test length");
     const auto previousMask = umask(0077);
     const int longDescriptor = longName.Open(create | readWrite, 07777);
     umask(previousMask);
     Require(longDescriptor >= 0 && fstat(longDescriptor, &info) == 0, "long name creation failed");
     Require((info.st_mode & 07777) == 0700, "mode or umask was not applied");
     Require(close(longDescriptor) == 0, "long name close failed");
+    const int longReader = longName.Open(0);
+    Require(longReader >= 0 && close(longReader) == 0, "maximum-length name reopen failed");
+    const auto* anonymous = reinterpret_cast<const char*>(1);
+    const int anonymousFirst = shm_open_nid_postfix(anonymous, readWrite, 0);
+    const int anonymousSecond = shm_open_nid_postfix(anonymous, readWrite | create | exclusive | truncate, 0400);
+    Require(anonymousFirst >= 0 && anonymousSecond >= 0, "anonymous creation regressed");
+    Require(ftruncate(anonymousFirst, 0x4000) == 0 && pwrite(anonymousFirst, "x", 1, 0) == 1, "anonymous write failed");
+    Require(pread(anonymousSecond, bytes, 1, 0) == 0, "anonymous objects share contents");
+    Require(close(anonymousFirst) == 0 && close(anonymousSecond) == 0, "anonymous close failed");
+    RequireError(anonymous, 0, 22);
+    RequireError(anonymous, 3, 22);
     std::puts("named shared-memory checks passed");
+}
+
+int main() {
+    try {
+        Run();
+        return 0;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s\n", error.what());
+        return 1;
+    }
 }

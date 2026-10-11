@@ -14,6 +14,8 @@
 #include <filesystem>
 #include <random>
 #else
+#include "nid/Sha1.hpp"
+#include <fcntl.h>
 #include <sys/mman.h>
 #endif
 
@@ -48,6 +50,56 @@ int GuestError(int error) {
     }
 }
 
+#ifndef _WIN32
+int NamedGuestError(int error) {
+    switch (error) {
+    case ENOENT:
+        return 2;
+    case EINTR:
+        return 4;
+    case EACCES:
+        return 13;
+    case EFAULT:
+        return 14;
+    case EEXIST:
+        return 17;
+    case EINVAL:
+        return GuestInvalid;
+    case ENOSPC:
+        return 28;
+    case EROFS:
+        return 30;
+    case ENAMETOOLONG:
+        return 63;
+    default:
+        return GuestError(error);
+    }
+}
+
+int OpenNamedFile(const char* path, int flags, int mode) {
+    if (path == nullptr) return Fail(14);
+    std::size_t length = 0;
+    while (length < 1024 && path[length] != '\0') ++length;
+    if (length == 1024) return Fail(63);
+    if (length == 0 || path[0] != '/') return Fail(GuestInvalid);
+    const auto digest = Nid::Sha1(std::vector<std::uint8_t>(path, path + length));
+    std::string hostName = "/anyps5-shm-";
+    for (const auto byte : digest) {
+        hostName += "0123456789abcdef"[byte >> 4];
+        hostName += "0123456789abcdef"[byte & 15];
+    }
+    int hostFlags = (flags & SCE_KERNEL_O_ACCMODE) == SCE_KERNEL_O_RDWR ? O_RDWR : O_RDONLY;
+    if (flags & SCE_KERNEL_O_CREAT) hostFlags |= O_CREAT;
+    if (flags & SCE_KERNEL_O_EXCL) hostFlags |= O_EXCL;
+    if ((flags & SCE_KERNEL_O_TRUNC) && (flags & SCE_KERNEL_O_ACCMODE) == SCE_KERNEL_O_RDWR) hostFlags |= O_TRUNC;
+    const int descriptor = ::shm_open(hostName.c_str(), hostFlags | O_CLOEXEC, mode & 0777);
+    if (descriptor >= 0) return descriptor;
+    const int error = errno;
+    if (const int guest = NamedGuestError(error)) return Fail(guest);
+    throw std::runtime_error("shm_open: opening the host named object failed, errno=" + std::to_string(error));
+}
+#endif
+
 int CreateAnonymousFile() {
 #ifdef _WIN32
     static std::atomic<unsigned> sequence{0};
@@ -74,11 +126,17 @@ int CreateAnonymousFile() {
 
 }
 
-extern "C" int APS5_VABI shm_open_nid_postfix(const char* path, int flags, int) {
+extern "C" int APS5_VABI shm_open_nid_postfix(const char* path, int flags, int mode) {
     const int accessMode = flags & SCE_KERNEL_O_ACCMODE;
     if (accessMode != SCE_KERNEL_O_RDONLY && accessMode != SCE_KERNEL_O_RDWR) return Fail(GuestInvalid);
     if ((flags & ~AcceptedFlags) != 0) return Fail(GuestInvalid);
-    if (path != anonymousObject) NotImplemented_nid_no_patch("shm_open of a named object");
+    if (path != anonymousObject) {
+#ifdef _WIN32
+        NotImplemented_nid_no_patch("shm_open of a named object");
+#else
+        return OpenNamedFile(path, flags, mode);
+#endif
+    }
     if (accessMode == SCE_KERNEL_O_RDONLY) return Fail(GuestInvalid);
     const int descriptor = CreateAnonymousFile();
     if (descriptor >= 0) return descriptor;

@@ -47,6 +47,7 @@ int main() {
     RequireInvalid(anonymous, 0x2 | 0x4);
     RequireInvalid("/anyps5-shm", 0x1);
     RequireInvalid("/anyps5-shm", 0x202 | 0x8);
+#ifdef _WIN32
     bool threw = false;
     try {
         shm_open_nid_postfix("/anyps5-shm", 0x202, 0600);
@@ -54,4 +55,7 @@ int main() {
         threw = true;
     }
     Require(threw);
+#else
+    RequireInvalid("", 0x202);
+#endif
 }
