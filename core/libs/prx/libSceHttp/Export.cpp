@@ -1,5 +1,9 @@
 #include <cstdint>
 #include <cstddef>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceHttp/src/HttpErrors.hpp"
@@ -27,9 +31,68 @@ struct RequestStatusRegistration {
 static std::mutex g_statusMutex;
 static std::map<int, RequestStatusRegistration> g_statusCallbacks;
 
+#ifdef _WIN32
+struct HostMutex {
+    SRWLOCK native = SRWLOCK_INIT;
+
+    HostMutex() = default;
+    HostMutex(const HostMutex&) = delete;
+    HostMutex& operator=(const HostMutex&) = delete;
+
+    void lock() { AcquireSRWLockExclusive(&native); }
+    void unlock() { ReleaseSRWLockExclusive(&native); }
+};
+#else
+using HostMutex = std::mutex;
+#endif
+
+class HostCondition {
+public:
+    HostCondition() = default;
+    HostCondition(const HostCondition&) = delete;
+    HostCondition& operator=(const HostCondition&) = delete;
+
+    void NotifyAll() {
+#ifdef _WIN32
+        WakeAllConditionVariable(&native);
+#else
+        native.notify_all();
+#endif
+    }
+
+    void Wait(std::unique_lock<HostMutex>& lock) {
+#ifdef _WIN32
+        if (!SleepConditionVariableSRW(&native, &lock.mutex()->native, INFINITE, 0))
+            throw std::runtime_error("libSceHttp: native condition wait failed");
+#else
+        native.wait(lock);
+#endif
+    }
+
+    void WaitUntil(std::unique_lock<HostMutex>& lock, std::chrono::steady_clock::time_point deadline) {
+#ifdef _WIN32
+        const auto now = std::chrono::steady_clock::now();
+        if (deadline <= now) return;
+        const auto milliseconds = std::chrono::ceil<std::chrono::milliseconds>(deadline - now).count();
+        if (!SleepConditionVariableSRW(&native, &lock.mutex()->native, static_cast<DWORD>(milliseconds), 0) &&
+            GetLastError() != ERROR_TIMEOUT)
+            throw std::runtime_error("libSceHttp: native condition wait failed");
+#else
+        native.wait_until(lock, deadline);
+#endif
+    }
+
+private:
+#ifdef _WIN32
+    CONDITION_VARIABLE native = CONDITION_VARIABLE_INIT;
+#else
+    std::condition_variable native;
+#endif
+};
+
 struct HttpEpoll {
-    std::mutex mutex;
-    std::condition_variable wake;
+    HostMutex mutex;
+    HostCondition wake;
     bool aborted = false;
     bool destroyed = false;
 };
@@ -46,7 +109,7 @@ static std::shared_ptr<HttpEpoll> FindEpoll(HttpEpollHandle eh) {
 static void MarkDestroyed(HttpEpoll& epoll) {
     std::lock_guard lock(epoll.mutex);
     epoll.destroyed = true;
-    epoll.wake.notify_all();
+    epoll.wake.NotifyAll();
 }
 
 extern "C" {
@@ -319,8 +382,12 @@ int APS5_VABI sceHttpWaitRequest(HttpEpollHandle eh, HttpNBEvent* nbev, int maxe
     }
     std::unique_lock lock(epoll->mutex);
     const auto woken = [&] { return epoll->aborted || epoll->destroyed; };
-    if (timeout < 0) epoll->wake.wait(lock, woken);
-    else epoll->wake.wait_for(lock, std::chrono::microseconds(timeout), woken);
+    if (timeout < 0) {
+        while (!woken()) epoll->wake.Wait(lock);
+    } else {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(timeout);
+        while (!woken() && std::chrono::steady_clock::now() < deadline) epoll->wake.WaitUntil(lock, deadline);
+    }
     return epoll->aborted ? ERROR_ABORTED : 0;
 }
 
@@ -505,7 +572,7 @@ int APS5_VABI sceHttpAbortWaitRequest(HttpEpollHandle eh) {
     }
     std::lock_guard lock(epoll->mutex);
     epoll->aborted = true;
-    epoll->wake.notify_all();
+    epoll->wake.NotifyAll();
     return 0;
 }
 }
