@@ -6,6 +6,7 @@
 #include "prx/libkernel/KernelErrors.hpp"
 #include "prx/libc/include/CpuTopology.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -124,15 +125,14 @@ static void RegisterStack(PthreadPrivate* self) {
     liveStacks[self] = {low, high};
 }
 
-static void RestoreStackPages(std::uintptr_t start, std::size_t bytes) {
+static void RestoreStackPages(std::uintptr_t start, std::size_t bytes) noexcept {
 #ifdef _WIN32
     DWORD previous = 0;
-    if (!VirtualProtect(reinterpret_cast<void*>(start), bytes, PAGE_READWRITE, &previous))
-        throw std::runtime_error("Cannot restore a guest thread stack's protection");
+    const bool restored = VirtualProtect(reinterpret_cast<void*>(start), bytes, PAGE_READWRITE, &previous) != 0;
 #else
-    if (::mprotect(reinterpret_cast<void*>(start), bytes, PROT_READ | PROT_WRITE) != 0)
-        throw std::system_error(errno, std::generic_category(), "Cannot restore a guest thread stack's protection");
+    const bool restored = ::mprotect(reinterpret_cast<void*>(start), bytes, PROT_READ | PROT_WRITE) == 0;
 #endif
+    if (!restored) std::fprintf(stderr, "[thread] cannot restore the protection of guest stack pages 0x%llx+0x%zx at thread exit\n", static_cast<unsigned long long>(start), bytes);
 }
 
 void NoteGuestStackProtection(std::uintptr_t start, std::size_t bytes, bool readWrite) {

@@ -7,6 +7,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#else
+#include <cstdio>
 #endif
 
 extern "C" {
@@ -21,6 +23,36 @@ static constexpr std::uintptr_t Page = 0x4000;
 static constexpr std::size_t GuardBytes = 0x10000;
 
 static void Require(bool value) { if (!value) std::abort(); }
+
+struct PageState {
+    bool mapped;
+    bool writable;
+    std::uint64_t raw;
+};
+
+static PageState QueryPage(std::uintptr_t address) {
+#ifdef _WIN32
+    MEMORY_BASIC_INFORMATION memory{};
+    Require(VirtualQuery(reinterpret_cast<const void*>(address), &memory, sizeof(memory)) == sizeof(memory));
+    const bool mapped = memory.State == MEM_COMMIT;
+    return {mapped, mapped && (memory.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE)) != 0, (static_cast<std::uint64_t>(memory.State) << 32) | memory.Protect};
+#else
+    std::FILE* maps = std::fopen("/proc/self/maps", "r");
+    Require(maps != nullptr);
+    PageState state{false, false, 0};
+    char line[512];
+    while (std::fgets(line, sizeof(line), maps) != nullptr) {
+        unsigned long long low = 0;
+        unsigned long long high = 0;
+        char permissions[5] = {};
+        if (std::sscanf(line, "%llx-%llx %4s", &low, &high, permissions) != 3 || address < low || address >= high) continue;
+        state = {true, permissions[0] == 'r' && permissions[1] == 'w', 1ull | (permissions[0] == 'r' ? 2ull : 0) | (permissions[1] == 'w' ? 4ull : 0) | (permissions[2] == 'x' ? 8ull : 0)};
+        break;
+    }
+    std::fclose(maps);
+    return state;
+#endif
+}
 
 static void* APS5_VABI Worker(void* arg) {
     auto& passed = *static_cast<std::atomic<bool>*>(arg);
@@ -41,8 +73,12 @@ static void* APS5_VABI Worker(void* arg) {
     guard[0] = 1;
     guard[GuardBytes - 1] = 2;
     Require(guard[0] == 1 && guard[GuardBytes - 1] == 2);
+    const auto below = reinterpret_cast<std::uintptr_t>(start) - 1;
+    const auto belowBefore = QueryPage(below).raw;
     Require(mprotect_nid_postfix(start, GuardBytes, 0) == 0);
+    Require(QueryPage(below).raw == belowBefore);
     Require(mprotect_nid_postfix(start, GuardBytes, 3) == 0);
+    Require(QueryPage(below).raw == belowBefore);
     static_cast<volatile unsigned char*>(start)[0] = 3;
     const auto outside = reinterpret_cast<std::uintptr_t>(start) & ~(Page - 1);
     if (outside >= Page) Require(mprotect_nid_postfix(reinterpret_cast<void*>(outside - Page), 2 * Page, 3) == -1);
@@ -83,6 +119,10 @@ int main() {
     Require(passed.load());
     Require(scePthreadCreate(&thread, nullptr, LeaveGuard, nullptr, nullptr) == SCE_OK);
     Require(scePthreadJoin(thread, nullptr) == SCE_OK);
+    for (std::uintptr_t offset = 0; offset < GuardBytes; offset += Page) {
+        const auto left = QueryPage(leftGuard.load() + offset);
+        Require(!left.mapped || left.writable);
+    }
     Require(scePthreadCreate(&thread, nullptr, WriteLeftGuard, nullptr, nullptr) == SCE_OK);
     Require(scePthreadJoin(thread, nullptr) == SCE_OK);
 }
