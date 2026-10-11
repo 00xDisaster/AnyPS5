@@ -85,15 +85,32 @@ def collect_real_names():
     return names
 
 
-def nid_arguments(arguments):
-    options = {"--db", "--json", "--nid", "-h", "--help"}
+def option_name(argument, options):
+    if not argument.startswith("-") or argument == "-":
+        return None
+    name = argument.split("=", 1)[0]
+    if name in options:
+        return name
+    if not name.startswith("--"):
+        return None
+    matches = [option for option in options if option.startswith(name)]
+    if len(matches) == 1:
+        return matches[0]
+    return name if matches else None
+
+
+def nid_arguments(arguments, options):
     normalized = []
     collecting = False
-    for argument in arguments:
-        if argument == "--nid":
+    for index, argument in enumerate(arguments):
+        if argument == "--":
+            normalized.extend(arguments[index:])
+            break
+        name = option_name(argument, options)
+        if name == "--nid" and "=" not in argument:
             collecting = True
             continue
-        if collecting and argument not in options and not argument.startswith("--db="):
+        if collecting and name is None:
             normalized.append("--nid=" + argument)
             continue
         collecting = False
@@ -110,7 +127,8 @@ def main():
                         help="resolve only these NIDs instead of scanning the tree")
     parser.add_argument("--json", action="store_true",
                         help="emit machine-readable JSON")
-    args = parser.parse_args(nid_arguments(sys.argv[1:]))
+    options = [option for action in parser._actions for option in action.option_strings]
+    args = parser.parse_args(nid_arguments(sys.argv[1:], options))
 
     db_path = Path(args.db) if args.db else DEFAULT_CACHE
     db = load_db(db_path)
