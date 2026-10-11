@@ -40,7 +40,8 @@ int APS5_VABI sceNpTrophy2GetRewardIcon(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTrophy2ShowTrophyList(void) {
+int APS5_VABI sceNpTrophy2ShowTrophyList(int context) {
+    (void)context;
     return SCE_NP_TROPHY2_OK;
 }
 
