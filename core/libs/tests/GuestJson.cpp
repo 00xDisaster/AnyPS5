@@ -371,6 +371,24 @@ static void ValueAccess() {
     alignas(16) std::uint8_t parameter[40];
     std::memset(parameter, 0xff, sizeof(parameter));
     _ZN3sce4Json14InitParameter2C1Ev(parameter);
+    int allocator = 0;
+    int userData = 0;
+    _ZN3sce4Json14InitParameter212setAllocatorEPNS0_12MemAllocatorEPv(parameter, &allocator, &userData);
+    _ZN3sce4Json14InitParameter217setFileBufferSizeEm(parameter, 4096);
+    void* stored[3]{};
+    std::memcpy(stored, parameter, sizeof(stored));
+    Require(stored[0] == &allocator && stored[1] == &userData && reinterpret_cast<std::uintptr_t>(stored[2]) == 4096);
+    alignas(16) std::uint8_t initializer[16]{};
+    Require(_ZN3sce4Json11InitializerC1Ev(initializer) == 0);
+    Require(_ZN3sce4Json11Initializer10initializeEPKNS0_14InitParameter2E(initializer, parameter) == 0);
+    Require(_ZN3sce4Json11Initializer9terminateEv(initializer) == 0);
+    Require(_ZN3sce4Json11InitializerD1Ev(initializer) == 0);
+}
+
+static void InitParameter2BaseConstructor() {
+    alignas(16) std::uint8_t parameter[40];
+    std::memset(parameter, 0xff, sizeof(parameter));
+    _ZN3sce4Json14InitParameter2C1Ev(parameter);
     alignas(16) std::uint8_t baseStorage[72];
     std::memset(baseStorage, 0xff, sizeof(baseStorage));
     auto* baseParameter = baseStorage + 16;
@@ -383,16 +401,20 @@ static void ValueAccess() {
     std::memcpy(&defaultUserData, baseParameter + sizeof(void*), sizeof(defaultUserData));
     std::memcpy(&defaultFileBufferSize, baseParameter + 2 * sizeof(void*), sizeof(defaultFileBufferSize));
     Require(defaultAllocator == nullptr && defaultUserData == nullptr && defaultFileBufferSize == 0);
-    for (std::size_t i = 0; i < 16; ++i) Require(baseStorage[i] == 0xff);
-    for (std::size_t i = 16 + 2 * sizeof(void*) + sizeof(std::size_t); i < sizeof(baseStorage); ++i)
-        Require(baseStorage[i] == 0xff);
     int allocator = 0;
     int userData = 0;
     _ZN3sce4Json14InitParameter212setAllocatorEPNS0_12MemAllocatorEPv(baseParameter, &allocator, &userData);
     _ZN3sce4Json14InitParameter217setFileBufferSizeEm(baseParameter, 4096);
-    void* stored[3]{};
-    std::memcpy(stored, baseParameter, sizeof(stored));
-    Require(stored[0] == &allocator && stored[1] == &userData && reinterpret_cast<std::uintptr_t>(stored[2]) == 4096);
+    void* storedAllocator;
+    void* storedUserData;
+    std::size_t storedFileBufferSize;
+    std::memcpy(&storedAllocator, baseParameter, sizeof(storedAllocator));
+    std::memcpy(&storedUserData, baseParameter + sizeof(void*), sizeof(storedUserData));
+    std::memcpy(&storedFileBufferSize, baseParameter + 2 * sizeof(void*), sizeof(storedFileBufferSize));
+    Require(storedAllocator == &allocator && storedUserData == &userData && storedFileBufferSize == 4096);
+    for (std::size_t i = 0; i < 16; ++i) Require(baseStorage[i] == 0xff);
+    for (std::size_t i = 16 + sizeof(parameter); i < sizeof(baseStorage); ++i)
+        Require(baseStorage[i] == 0xff);
     alignas(16) std::uint8_t initializer[16]{};
     Require(_ZN3sce4Json11InitializerC1Ev(initializer) == 0);
     Require(_ZN3sce4Json11Initializer10initializeEPKNS0_14InitParameter2E(initializer, baseParameter) == 0);
@@ -475,6 +497,7 @@ int main() {
     NullAccess(_ZN3sce4Json11Initializer27setGlobalNullAccessCallBackEPFRKNS0_5ValueENS0_9ValueTypeEPS3_PvES7_);
     NullAccess(_ZN3sce4Json11Initializer27setGlobalNullAccessCallbackEPFRKNS0_5ValueENS0_9ValueTypeEPS3_PvES7_);
     ValueAccess();
+    InitParameter2BaseConstructor();
     ValueClear();
     StreamParse();
 }
