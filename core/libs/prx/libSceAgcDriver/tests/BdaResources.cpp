@@ -698,6 +698,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
         const std::array<GuestMemorySnapshot, 1> unusedSnapshots{{{0, source}}};
         ShaderResources resources(disabled, stages, ColorTarget{}, 0, 0, 0, unusedSnapshots);
         Require(ShaderResources::NeverReusable(stages) && !resources.Reusable(), "a fault-buffer build is reusable");
+        Require(resources.NeedsCompletion() && !resources.UsesAddressTable(), "a fault-buffer build reaches guest memory through the BDA table");
         const auto fault = access.bytes(access.descriptor(5).buffer);
         for (const auto byte : fault) Require(byte == std::byte{}, "rect-list fault buffer was not initialized");
         const ShaderRecompiler::BdaAbi::Fault report{ShaderRecompiler::BdaAbi::FaultState::Ready, ShaderRecompiler::BdaAbi::FaultReason::InvalidRectangle, 0, 0, 0, 0, 0};
@@ -712,6 +713,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     {
         ShaderResources resources(context, compiled, snapshots);
         Require(ShaderResources::NeverReusable(std::span<const CompiledShader>(&compiled, 1)) && !resources.Reusable(), "an address-based build is reusable");
+        Require(resources.UsesAddressTable(), "an address-based build does not use the BDA table");
         ShaderRecompiler::RecompileResult plain;
         plain.bindings = {binding(Role::GuestBuffers, 6)};
         const CompiledShader plainStage{ShaderRecompiler::ShaderStage::Compute, &plain, 0};
