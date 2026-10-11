@@ -143,6 +143,7 @@ struct PthreadPrivate {
 };
 
 bool GuestThreadStack(std::uintptr_t address, std::uintptr_t* start, std::uintptr_t* end);
+void NoteGuestStackProtection(std::uintptr_t start, std::size_t bytes, bool readWrite);
 int GuestThreadCpuClockId(const PthreadPrivate* thread);
 bool GuestThreadCpuNanos(int cpuClockThread, std::uint64_t* nanos);
 
