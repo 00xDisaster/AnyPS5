@@ -2,6 +2,7 @@
 #include <cstddef>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <regex>
@@ -32,11 +33,27 @@ struct ChunkTable {
     bool defined = false;
 };
 
+static bool ReadPackageChunks(ChunkTable& table) {
+    constexpr std::size_t CountOffset = 0x0A;
+    std::ifstream file(ResolvePath_nid_no_patch("/app0/sce_sys/playgo-chunk.dat"), std::ios::binary);
+    char header[CountOffset + sizeof(uint16_t)]{};
+    if (!file.read(header, sizeof(header)) || std::memcmp(header, "plgx", 4) != 0) return false;
+    uint16_t count = 0;
+    std::memcpy(&count, header + CountOffset, sizeof(count));
+    if (count == 0) return false;
+    for (uint32_t id = 0; id < count; ++id) table.ids.insert(static_cast<uint16_t>(id));
+    table.defined = true;
+    return true;
+}
+
 static const ChunkTable& Chunks() {
     static const ChunkTable chunks = [] {
         ChunkTable table;
         std::ifstream file(ResolvePath_nid_no_patch("/app0/playgo-chunkdefs.xml"));
-        if (!file) return table;
+        if (!file) {
+            ReadPackageChunks(table);
+            return table;
+        }
         table.defined = true;
         auto& result = table.ids;
         const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
