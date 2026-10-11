@@ -49,9 +49,6 @@ def check_native_load_paths(output, libraries):
 
     data_rva, data = sections[b'.startup']
     code_rva, code = sections[b'.entry']
-    # Associate each UTF-16 path with its RIP-relative copy instruction and
-    # the following call through the actual LoadLibraryExW IAT slot. Merely
-    # finding strings or the API import also succeeds when providers are skipped.
     path_loads = []
     for library in libraries:
         path = ('libs\\' + library + '\0').encode('utf-16le')
@@ -68,7 +65,6 @@ def check_native_load_paths(output, libraries):
                  if code[offset:offset + 2] == b'\xff\x15'
                  and code_rva + offset + 6 + struct.unpack_from('<i', code, offset + 2)[0] == load_library_iat]
         assert calls, f'{library}: loader path does not reach a LoadLibraryExW call'
-        # RCX receives the constructed path, RDX is null, R8D is 0x1100.
         assert code[calls[0] - 11:calls[0]] == b'\x48\x89\xf1\x31\xd2\x41\xb8\x00\x11\x00\x00', library
 
 
