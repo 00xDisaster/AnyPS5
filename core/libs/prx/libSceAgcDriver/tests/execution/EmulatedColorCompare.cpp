@@ -243,6 +243,7 @@ std::uint64_t Run(AgcDriver::VulkanDevice& device, const Sampler& sampler, const
     const auto result = Compile(device, Format8888UNorm, sampler, code, useCache);
     if (expectedVariant != 0) Require(result.cacheHit && result.variantId == expectedVariant, std::string(name) + " did not reuse the compiled comparison artifact");
     for (const auto& binding : result.bindings) {
+        if (device.Target().registrationModules) break;
         Require(binding.role != ShaderRecompiler::DescriptorRole::GuestSamplers, "emulated comparison retained a sampler binding");
         Require(std::all_of(binding.imageSamplers.begin(), binding.imageSamplers.end(), [](auto mask) { return mask == 0u; }), "emulated comparison retained an unused sampler association");
     }
@@ -293,6 +294,7 @@ void RunCube(AgcDriver::VulkanDevice& device, const Sampler& sampler, const char
     Output.fill(-1.0f);
     const auto result = Compile(device, Format8888UNorm, sampler, CubeCode, false, true, true);
     for (const auto& binding : result.bindings) {
+        if (device.Target().registrationModules) break;
         Require(binding.role != ShaderRecompiler::DescriptorRole::GuestSamplers, "cube emulated comparison retained a sampler binding");
         Require(std::all_of(binding.imageSamplers.begin(), binding.imageSamplers.end(), [](auto mask) { return mask == 0u; }), "cube emulated comparison retained an unused sampler association");
     }

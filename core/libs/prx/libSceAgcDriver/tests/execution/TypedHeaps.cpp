@@ -30,7 +30,7 @@ ShaderRecompiler::RecompileResult Compile(AgcDriver::VulkanDevice& device, std::
     const auto instructions = store ? std::span<const std::uint32_t>(storeCode) : std::span<const std::uint32_t>(code);
     ShaderRecompiler::RecompileRequest request{{ShaderStage::Compute, reinterpret_cast<std::uintptr_t>(instructions.data()), instructions, 0u, {}}, {32u, 0u, userData, compute, std::nullopt, std::nullopt, {}}, device.Target(), {0u, 0u, 0u, 128u}};
     auto result = ShaderRecompiler::Recompile(request);
-    Require(result.runtimeImageCount == 0u, "direct image allocated runtime image metadata");
+    Require(result.runtimeImageCount == (request.target.registrationModules ? 1u : 0u), "direct image runtime metadata does not follow the module mode");
     Require(result.shaderDataDwords < ShaderRecompiler::RuntimeAbi::ShaderDataDwords, "shader data was not compacted");
     for (const auto& binding : result.bindings) {
         if (binding.role == ShaderRecompiler::DescriptorRole::GuestImages) Require(binding.count == 1u, "single image expanded into unused descriptor slots");
@@ -48,6 +48,7 @@ void Run(AgcDriver::VulkanDevice& device) {
         device.Dispatch(shaders.back(), 1u, 1u, 1u);
         device.SubmitRecorded();
     }
+    if (device.Target().registrationModules) Require(shaders[0].spirv == shaders[1].spirv && shaders[0].spirv == shaders[2].spirv, "registration modules: a present or a null image specialized the module");
     shaders.clear();
     device.WaitIdle();
     for (std::uint32_t batch = 0u; batch < outputs.size(); ++batch) {

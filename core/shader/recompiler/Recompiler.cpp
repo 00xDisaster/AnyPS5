@@ -406,7 +406,7 @@ CompiledVariant compileVariant(const RecompileRequest& request, IrProgram progra
     shaderInfoCollector.Collect(program, inputInfo);
 
     constexpr BindingAllocator bindingAllocator;
-    auto bindings = bindingAllocator.Allocate(program, request.layout);
+    auto bindings = bindingAllocator.Allocate(program, request.layout, request.target.registrationModules);
 
     SpirvTargetOptions targetOptions {};
     targetOptions.vulkanVersion = request.target.vulkanVersion;

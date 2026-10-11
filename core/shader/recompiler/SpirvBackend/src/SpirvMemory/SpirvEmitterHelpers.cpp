@@ -398,7 +398,7 @@ void DefineDescriptors(SpirvEmitterState& state) {
         const auto ArrayType = [&](std::uint32_t type) {
             const bool heap = binding.kind == DescriptorBindingKind::Samplers || ImageBindingResourceClass(binding.kind) != ImageResourceClass::None;
             const auto count = static_cast<std::uint32_t>(binding.resources.size());
-            const auto length = heap ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::HeapCountBase + static_cast<std::uint32_t>(binding.kind), count) : ConstantU32(state, count);
+            const auto length = heap && !state.registrationModules ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::HeapCountBase + static_cast<std::uint32_t>(binding.kind), count) : ConstantU32(state, count);
             return state.module.Type(spv::OpTypeArray, type, length);
         };
         switch (binding.kind) {

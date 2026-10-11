@@ -4,6 +4,7 @@
 #include "SpirvBackend/SpirvBda.hpp"
 #include "SpirvBackend/SpirvBufferFormat.hpp"
 #include "SpirvBackend/SpirvEmitterInstructions.hpp"
+#include "SpirvBackend/SpirvMemory/SpirvDescriptors.hpp"
 #include "RdnaDecoder/RdnaDescriptorFormat.hpp"
 #include "RdnaDecoder/RdnaImageOpDecoder.hpp"
 #include <span>
@@ -46,18 +47,8 @@ struct SampleSetup {
     std::uint32_t coord;
 };
 
-std::uint32_t RuntimeImageDword(SpirvEmitterState& state, std::uint32_t resource, std::uint32_t member) {
-    const auto index = state.runtimeImageMetadata != 0u ? state.runtimeImageMetadata : ConstantU32(state, resource);
-    const auto dword = Binary(state, spv::OpIAdd, TypeU32(state), ConstantU32(state, state.program.Metadata().bindings.ImageMetadataDword() + member), Binary(state, spv::OpIMul, TypeU32(state), index, ConstantU32(state, sizeof(RuntimeAbi::ResourceMetadata) / sizeof(std::uint32_t))));
-    const auto pointer = state.module.AllocateId();
-    state.module.AddFunction(spv::OpAccessChain, TypeStorageBufferElementPointer(state), pointer, state.shaderDataStorageVariable, ConstantU32(state, 0u), dword);
-    const auto value = state.module.AllocateId();
-    state.module.AddFunction(spv::OpLoad, TypeU32(state), value, pointer);
-    return value;
-}
-
 std::uint32_t RuntimeImageSwizzle(SpirvEmitterState& state, std::uint32_t resource, std::uint32_t component) {
-    if (state.program.Info().images.at(resource).indirectRoot == ImageResource::NoIndirectImage) return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + resource * PipelineSpecialization::ImageWords + 1u + component, component + 4u);
+    if (state.program.Info().images.at(resource).indirectRoot == ImageResource::NoIndirectImage && !state.registrationModules) return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + resource * PipelineSpecialization::ImageWords + 1u + component, component + 4u);
     const auto descriptor = RuntimeImageDword(state, resource, offsetof(RuntimeAbi::ResourceMetadata, descriptor) / sizeof(std::uint32_t) + 3u);
     return Binary(state, spv::OpBitwiseAnd, TypeU32(state), Binary(state, spv::OpShiftRightLogical, TypeU32(state), descriptor, ConstantU32(state, component * 3u)), ConstantU32(state, 7u));
 }
@@ -1653,7 +1644,7 @@ void EmitImage(SpirvValueEmitContext& ctx, const IrValue& inst) {
         state.runtimeImageMetadata = 0u;
         return;
     }
-    const auto selector = base.indirectRoot == ImageResource::NoIndirectImage ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + memory.resource * PipelineSpecialization::ImageWords, 0u) : Binary(state, spv::OpShiftRightLogical, TypeU32(state), RuntimeImageDword(state, memory.resource, offsetof(RuntimeAbi::ResourceMetadata, flags) / sizeof(std::uint32_t)), ConstantU32(state, 1u));
+    const auto selector = base.indirectRoot == ImageResource::NoIndirectImage && !state.registrationModules ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + memory.resource * PipelineSpecialization::ImageWords, 0u) : Binary(state, spv::OpShiftRightLogical, TypeU32(state), RuntimeImageDword(state, memory.resource, offsetof(RuntimeAbi::ResourceMetadata, flags) / sizeof(std::uint32_t)), ConstantU32(state, 1u));
     const bool returnsValue = inst.Opcode() != IrOpcode::ImageWrite;
     const auto resultId = returnsValue ? ctx.Result(inst) : 0u;
     ctx.definitions.erase(&inst);
@@ -1677,7 +1668,7 @@ void EmitImage(SpirvValueEmitContext& ctx, const IrValue& inst) {
     for (std::uint32_t index = 0u; index < modes.size(); ++index) {
         EmitLabel(state, labels[index]);
         std::uint32_t modeMerge = 0u;
-        if (base.indirectRoot != ImageResource::NoIndirectImage) {
+        if (base.indirectRoot != ImageResource::NoIndirectImage && !state.registrationModules) {
             const auto enabled = state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageModeBase + memory.resource * PipelineSpecialization::ImageModeStride + index, 1u);
             const auto active = Binary(state, spv::OpINotEqual, TypeBool(state), enabled, ConstantU32(state, 0u));
             const auto activeLabel = state.module.AllocateId();
