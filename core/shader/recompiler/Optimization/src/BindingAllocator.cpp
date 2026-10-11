@@ -103,6 +103,7 @@ BindingAllocationResult BindingAllocator::Allocate(IrProgram& program, const Bin
     if (info.buffers.size() > RuntimeAbi::BufferCapacity || info.images.size() > RuntimeAbi::ImageCapacity || info.samplers.size() > RuntimeAbi::SamplerHeapCapacity) fail("shader binding layout exceeds runtime metadata capacity");
     if (std::ranges::any_of(next.userDataRegisters, [](auto reg) { return reg >= RuntimeAbi::UserDataCapacity; })) fail("shader user data exceeds runtime ABI capacity");
     if (registrationModules || std::ranges::any_of(info.images, [](const auto& image) { return image.indirectRoot != ImageResource::NoIndirectImage; })) next.runtimeImageCount = static_cast<std::uint32_t>(info.images.size());
+    if (registrationModules && (program.Resources().stage == IrShaderStage::Pixel || std::ranges::any_of(info.samplers, [](const auto& sampler) { return FoldsTexelOffsets(sampler); }))) next.runtimeStateDwords = RuntimeAbi::StateDwords;
     const auto pushSize = layout.pushConstantSizeBytes / 4u;
     next.pushDataStartDword = next.runtimeImageCount == 0u && next.ShaderDataDwords() != 0u && next.ShaderDataDwords() <= pushSize ? layout.pushConstantOffsetBytes / 4u : PushData::NoStart;
 

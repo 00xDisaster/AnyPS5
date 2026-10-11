@@ -416,6 +416,7 @@ void encodeLayout(Writer& writer, const IrBindingLayout& layout) {
     writer.Value(layout.memoryOffsetCount);
     writer.Value(layout.dispatchThreadLimit);
     writer.Value(layout.runtimeImageCount);
+    writer.Value(layout.runtimeStateDwords);
     writer.Values(std::span<const std::uint32_t>(layout.userDataRegisters));
     writer.List(layout.descriptors, [](Writer& out, const IrDescriptorBinding& descriptor) {
         out.Value(descriptor.kind);
@@ -429,6 +430,7 @@ void decodeLayout(Reader& reader, IrBindingLayout& layout) {
     reader.Value(layout.memoryOffsetCount);
     reader.Value(layout.dispatchThreadLimit);
     reader.Value(layout.runtimeImageCount);
+    reader.Value(layout.runtimeStateDwords);
     reader.Values(layout.userDataRegisters);
     reader.List(layout.descriptors, 12, [](Reader& in, IrDescriptorBinding& descriptor) {
         in.Value(descriptor.kind);

@@ -29,6 +29,7 @@ struct DescriptorBindingPlan {
     std::vector<PreparedDescriptorBinding> bindings;
     std::vector<PreparedImageMetadata> imageMetadata;
     std::vector<PipelineSpecializationConstant> specialization;
+    std::vector<std::uint32_t> runtimeState;
     bool storageData = false;
 };
 

@@ -208,7 +208,7 @@ UnnormalizedProof ProveUnnormalized(const ShaderInfo& info, const ResourceSnapsh
     return proof;
 }
 
-std::vector<std::uint32_t> ShaderDataDwordsFor(const IrBindingLayout& layout, std::uint32_t userDataBase, const ResourceSnapshot& snapshot, const std::array<std::uint32_t, 3>& partialThreads, const std::vector<PreparedImageMetadata>& imageMetadata) {
+std::vector<std::uint32_t> ShaderDataDwordsFor(const IrBindingLayout& layout, std::uint32_t userDataBase, const ResourceSnapshot& snapshot, const std::array<std::uint32_t, 3>& partialThreads, const std::vector<PreparedImageMetadata>& imageMetadata, std::span<const std::uint32_t> runtimeState) {
     std::vector<std::uint32_t> result(layout.ShaderDataDwords(), 0u);
     for (std::size_t i = 0; i < layout.userDataRegisters.size(); ++i) {
         const auto reg = layout.userDataRegisters[i];
@@ -226,6 +226,8 @@ std::vector<std::uint32_t> ShaderDataDwordsFor(const IrBindingLayout& layout, st
         std::copy_n(descriptor.dwords.begin(), metadata.descriptor.size(), metadata.descriptor.begin());
         std::memcpy(result.data() + entry.offset, &metadata, sizeof(metadata));
     }
+    if (runtimeState.size() != layout.runtimeStateDwords) fail("runtime state does not match its shader data layout");
+    std::copy(runtimeState.begin(), runtimeState.end(), result.begin() + layout.RuntimeStateDword());
     return result;
 }
 
@@ -255,8 +257,11 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
     if (info.images.size() > ShaderInfo::MaxImages) fail("runtime image count exceeds the static capacity");
     DescriptorBindingPlan plan;
     const auto unnormalized = ProveUnnormalized(info, snapshot);
+    std::uint32_t unnormalizedSamplers = 0u;
     for (std::uint32_t index = 0; index < info.samplers.size(); ++index) {
-        if (FoldsTexelOffsets(info.samplers[index])) plan.specialization.push_back({PipelineSpecialization::FoldOffsetBase + index, unnormalized.samplers[index] ? 1u : 0u});
+        if (!FoldsTexelOffsets(info.samplers[index])) continue;
+        if (!registrationModules) plan.specialization.push_back({PipelineSpecialization::FoldOffsetBase + index, unnormalized.samplers[index] ? 1u : 0u});
+        else if (unnormalized.samplers[index]) unnormalizedSamplers |= 1u << index;
     }
     std::vector<std::uint32_t> compareStates(info.images.size());
     for (std::uint32_t index = 0; index < info.images.size(); ++index) {
@@ -264,7 +269,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         const auto compare = compareStates[index] = ResourceMaterializer::EmulatedCompareState(info, snapshot, index);
         const auto first = PipelineSpecialization::CompareBase + index * PipelineSpecialization::CompareWords;
         const std::array<std::uint32_t, 6> values{EmulatedCompare::Function(compare), (compare & EmulatedCompare::Linear) != 0u, EmulatedCompare::AddressX(compare), EmulatedCompare::AddressY(compare), EmulatedCompare::Reference(compare), (compare & EmulatedCompare::BorderWhite) != 0u};
-        for (std::uint32_t word = 0; word < values.size(); ++word) plan.specialization.push_back({first + word, values[word]});
+        for (std::uint32_t word = 0; word < values.size() && !registrationModules; ++word) plan.specialization.push_back({first + word, values[word]});
     }
     std::vector<std::uint32_t> imageModes(info.images.size());
     for (std::size_t index = 0; index < info.images.size(); ++index) imageModes[index] = ResourceMaterializer::RuntimeImageMode(info.images[index], snapshot.images.at(index), info.runtimeImageModes.at(index));
@@ -301,7 +306,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         plan.specialization.push_back({first, imageModes[index]});
         for (std::uint32_t component = 0; component < 4u; ++component) plan.specialization.push_back({first + 1u + component, (snapshot.images.at(index).dwords[3] >> (component * 3u)) & 7u});
     }
-    for (std::uint32_t target = 0; target < exportMappings.size(); ++target) {
+    for (std::uint32_t target = 0; target < exportMappings.size() && !registrationModules; ++target) {
         for (std::uint32_t component = 0; component < 4u; ++component) plan.specialization.push_back({PipelineSpecialization::ExportBase + target * 4u + component, (exportMappings[target] >> (component * 2u)) & 3u});
     }
     std::vector<std::uint32_t> samplerModes(info.samplers.size(), 0u);
@@ -416,7 +421,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
                 metadata.binding = static_cast<std::uint32_t>(compact.kind);
                 metadata.firstElement = static_cast<std::uint32_t>(element);
                 metadata.elementCount = 1u;
-                metadata.flags = imageModes[resource] << 1u;
+                metadata.flags = imageModes[resource] << 1u | (registrationModules ? (compareStates[resource] & RuntimeAbi::CompareStateMask) << RuntimeAbi::CompareStateShift : 0u);
                 if (descriptor.dwords[0] == 0u && (descriptor.dwords[1] & 0xffu) == 0u) metadata.flags |= 1u;
                 const auto offset = layout.ImageMetadataDword() + resource * static_cast<std::uint32_t>(sizeof(metadata) / sizeof(std::uint32_t));
                 plan.imageMetadata.push_back({resource, offset, metadata});
@@ -447,9 +452,15 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         RuntimeAbi::ResourceMetadata metadata{};
         if (descriptor.dwordCount != metadata.descriptor.size()) fail("invalid runtime image descriptor width");
         metadata.elementCount = 1u;
-        metadata.flags = imageModes[resource] << 1u;
+        if (imageModes[resource] > RuntimeAbi::ImageModeMask) fail("runtime image mode exceeds its metadata field");
+        metadata.flags = imageModes[resource] << 1u | (registrationModules ? (compareStates[resource] & RuntimeAbi::CompareStateMask) << RuntimeAbi::CompareStateShift : 0u);
         if (descriptor.dwords[0] == 0u && (descriptor.dwords[1] & 0xffu) == 0u) metadata.flags |= 1u;
         plan.imageMetadata.push_back({resource, layout.ImageMetadataDword() + resource * static_cast<std::uint32_t>(sizeof(metadata) / sizeof(std::uint32_t)), metadata});
+    }
+    if (layout.runtimeStateDwords != 0u) {
+        plan.runtimeState.assign(layout.runtimeStateDwords, 0u);
+        plan.runtimeState.at(RuntimeAbi::StateUnnormalizedSamplers) = unnormalizedSamplers;
+        for (std::uint32_t target = 0; target < exportMappings.size(); ++target) plan.runtimeState.at(RuntimeAbi::StateExportMappings + target / 4u) |= static_cast<std::uint32_t>(exportMappings[target]) << (target % 4u * 8u);
     }
     std::vector<std::uint32_t> samplerMasks(info.samplers.size());
     for (const auto& binding : plan.bindings) {
@@ -488,13 +499,14 @@ DescriptorBindingPlan DescriptorBindingBuilder::Select(const DescriptorBindingPl
         }
     }
     selected.imageMetadata = plan.imageMetadata;
+    selected.runtimeState = plan.runtimeState;
     return selected;
 }
 
 void DescriptorBindingBuilder::Populate(BindingAllocationResult& allocation, const CompiledBindingLayout& compiled, const DescriptorBindingPlan& plan, std::uint32_t userDataBase, const ResourceSnapshot& snapshot, const std::array<std::uint32_t, 3>& partialThreads) const {
     const auto& layout = compiled.layout;
     const bool needsShaderData = layout.UsesPushData() || plan.storageData;
-    auto shaderData = needsShaderData ? ShaderDataDwordsFor(layout, userDataBase, snapshot, partialThreads, plan.imageMetadata) : std::vector<std::uint32_t>{};
+    auto shaderData = needsShaderData ? ShaderDataDwordsFor(layout, userDataBase, snapshot, partialThreads, plan.imageMetadata, plan.runtimeState) : std::vector<std::uint32_t>{};
     std::vector<DescriptorBinding> bindings;
     bindings.reserve(plan.bindings.size());
     std::size_t writtenHere = 0;

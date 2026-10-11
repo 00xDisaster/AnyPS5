@@ -47,6 +47,11 @@ struct SampleSetup {
     std::uint32_t coord;
 };
 
+std::uint32_t RuntimeImageMode(SpirvEmitterState& state, std::uint32_t resource) {
+    const auto mode = Binary(state, spv::OpShiftRightLogical, TypeU32(state), RuntimeImageDword(state, resource, offsetof(RuntimeAbi::ResourceMetadata, flags) / sizeof(std::uint32_t)), ConstantU32(state, 1u));
+    return state.registrationModules ? Binary(state, spv::OpBitwiseAnd, TypeU32(state), mode, ConstantU32(state, RuntimeAbi::ImageModeMask)) : mode;
+}
+
 std::uint32_t RuntimeImageSwizzle(SpirvEmitterState& state, std::uint32_t resource, std::uint32_t component) {
     if (state.program.Info().images.at(resource).indirectRoot == ImageResource::NoIndirectImage && !state.registrationModules) return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + resource * PipelineSpecialization::ImageWords + 1u + component, component + 4u);
     const auto descriptor = RuntimeImageDword(state, resource, offsetof(RuntimeAbi::ResourceMetadata, descriptor) / sizeof(std::uint32_t) + 3u);
@@ -1264,7 +1269,12 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
     auto& state = ctx.state;
     const auto& mem = access.mem;
     const auto& image = access.image;
-    const auto parameter = [&](std::uint32_t word) { return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::CompareBase + mem.resource * PipelineSpecialization::CompareWords + word, 0u); };
+    const auto compare = state.registrationModules ? EmitAndConstant(state, Binary(state, spv::OpShiftRightLogical, TypeU32(state), RuntimeImageDword(state, mem.resource, offsetof(RuntimeAbi::ResourceMetadata, flags) / sizeof(std::uint32_t)), ConstantU32(state, RuntimeAbi::CompareStateShift)), RuntimeAbi::CompareStateMask) : 0u;
+    const auto parameter = [&](std::uint32_t word) {
+        if (!state.registrationModules) return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::CompareBase + mem.resource * PipelineSpecialization::CompareWords + word, 0u);
+        constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 6> fields{{{EmulatedCompare::FunctionShift, 7u}, {4u, 1u}, {EmulatedCompare::ClampXShift, 3u}, {EmulatedCompare::ClampYShift, 3u}, {EmulatedCompare::ReferenceShift, 3u}, {12u, 1u}}};
+        return EmitAndConstant(state, Binary(state, spv::OpShiftRightLogical, TypeU32(state), compare, ConstantU32(state, fields.at(word).first)), fields.at(word).second);
+    };
     const auto equal = [&](std::uint32_t value, std::uint32_t literal) { return Binary(state, spv::OpIEqual, TypeBool(state), value, ConstantU32(state, literal)); };
     if (access.slot != 0) ctx.Fail(access.inst, "compares against a color texture through a bindless image table, which is not implemented");
     if (HasFlag(mem, RdnaImageSampleFlagDerivative) || HasFlag(mem, RdnaImageSampleFlagLod)) ctx.Fail(access.inst, "compares against a color texture with gradients or an explicit LOD, which is not implemented");
@@ -1484,7 +1494,7 @@ void EmitSampleOp(SpirvValueEmitContext& ctx, const ImageEmitAccess& access, con
     } else if (!offsetOperand) {
         sample = emitSample(FoldedOffsetCoord(ctx, access, setup), foldedMask, foldedOperands);
     } else {
-        const auto selector = state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::FoldOffsetBase + mem.sampler, 0u);
+        const auto selector = state.registrationModules ? EmitAndConstant(state, Binary(state, spv::OpShiftRightLogical, TypeU32(state), EmitShaderDataDwordLoad(state, state.program.Metadata().bindings.RuntimeStateDword() + RuntimeAbi::StateUnnormalizedSamplers), ConstantU32(state, mem.sampler)), 1u) : state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::FoldOffsetBase + mem.sampler, 0u);
         const auto folded = Binary(state, spv::OpINotEqual, TypeBool(state), selector, ConstantU32(state, 0u));
         const auto foldLabel = state.module.AllocateId();
         const auto operandLabel = state.module.AllocateId();
@@ -1644,7 +1654,7 @@ void EmitImage(SpirvValueEmitContext& ctx, const IrValue& inst) {
         state.runtimeImageMetadata = 0u;
         return;
     }
-    const auto selector = base.indirectRoot == ImageResource::NoIndirectImage && !state.registrationModules ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + memory.resource * PipelineSpecialization::ImageWords, 0u) : Binary(state, spv::OpShiftRightLogical, TypeU32(state), RuntimeImageDword(state, memory.resource, offsetof(RuntimeAbi::ResourceMetadata, flags) / sizeof(std::uint32_t)), ConstantU32(state, 1u));
+    const auto selector = base.indirectRoot == ImageResource::NoIndirectImage && !state.registrationModules ? state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageBase + memory.resource * PipelineSpecialization::ImageWords, 0u) : RuntimeImageMode(state, memory.resource);
     const bool returnsValue = inst.Opcode() != IrOpcode::ImageWrite;
     const auto resultId = returnsValue ? ctx.Result(inst) : 0u;
     ctx.definitions.erase(&inst);

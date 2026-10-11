@@ -12,6 +12,7 @@
 #include "RdnaDecoder/RdnaDescriptorFormat.hpp"
 #include "ShaderDiskCache.hpp"
 #include <list>
+#include <functional>
 #include <map>
 #include <set>
 #include <mutex>
@@ -602,6 +603,38 @@ struct PreparedBindingPlan {
     std::map<std::vector<std::uint32_t>, std::shared_ptr<PreparedModuleEntry>> modules;
 };
 
+struct RegistrationModuleEntry {
+    std::once_flag ready;
+    std::exception_ptr failure;
+    std::shared_ptr<const SpecializedModule> module;
+};
+
+std::shared_ptr<const SpecializedModule> registrationModule(std::uint64_t variantId, std::span<const std::uint32_t> moduleKey, const std::function<std::shared_ptr<const SpecializedModule>()>& specialize) {
+    std::vector<std::uint64_t> key{variantId};
+    key.insert(key.end(), moduleKey.begin(), moduleKey.end());
+    static std::shared_mutex mutex;
+    static std::map<std::vector<std::uint64_t>, std::shared_ptr<RegistrationModuleEntry>> modules;
+    std::shared_ptr<RegistrationModuleEntry> entry;
+    {
+        std::shared_lock lock(mutex);
+        if (const auto found = modules.find(key); found != modules.end()) entry = found->second;
+    }
+    if (entry == nullptr) {
+        std::unique_lock lock(mutex);
+        const auto found = modules.find(key);
+        entry = found != modules.end() ? found->second : modules.emplace(key, std::make_shared<RegistrationModuleEntry>()).first->second;
+    }
+    std::call_once(entry->ready, [&] {
+        try {
+            entry->module = specialize();
+        } catch (...) {
+            entry->failure = std::current_exception();
+        }
+    });
+    if (entry->failure) std::rethrow_exception(entry->failure);
+    return entry->module;
+}
+
 std::shared_ptr<PreparedBindingPlan> preparedBindingPlan(const CompiledVariant& variant, const ResourceSnapshot& snapshot, std::span<const std::uint8_t> exports, bool registrationModules) {
     struct BindingPlanKeyStorage {};
     auto& key = HostThreadLocal<std::vector<std::uint64_t>, BindingPlanKeyStorage>();
@@ -769,7 +802,7 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
                     constants.push_back({first + 5u, kind});
                 }
             }
-            const auto module = specializeModule(variant.artifact, vertexClasses, constants, request.target);
+            const auto module = request.target.registrationModules && plan->bindings.specialization.empty() ? registrationModule(artifact.variantId, moduleKey, [&] { return specializeModule(variant.artifact, vertexClasses, constants, request.target); }) : specializeModule(variant.artifact, vertexClasses, constants, request.target);
             if (variant.bindings.layout.UsesPushData() && !module->pushData) throw std::runtime_error("specialization removed the prepared push constant interface");
             auto selected = DescriptorBindingBuilder{}.Select(plan->bindings, module->bindings);
             entry->bindings = std::move(selected);
