@@ -12,14 +12,13 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
-#include <mutex>
+#include <atomic>
 
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
 #include <share.h>
 #include <sys/stat.h>
-#include <atomic>
 #include <filesystem>
 #include <random>
 #else
@@ -79,6 +78,8 @@ private:
     int descriptor = -1;
     int error = 0;
 };
+
+std::atomic<std::uint16_t> creationMask{022};
 
 constexpr int GuestNoMemory = 12;
 constexpr int GuestInvalid = 22;
@@ -163,9 +164,25 @@ int OpenNamedFile(const char* path, int flags, int mode) {
     if (flags & SCE_KERNEL_O_CREAT) hostFlags |= O_CREAT;
     if (flags & SCE_KERNEL_O_EXCL) hostFlags |= O_EXCL;
     if ((flags & SCE_KERNEL_O_TRUNC) && (flags & SCE_KERNEL_O_ACCMODE) == SCE_KERNEL_O_RDWR) hostFlags |= O_TRUNC;
-    const int descriptor = ::shm_open(hostName.c_str(), hostFlags | O_CLOEXEC, mode & 0777);
+    const auto permissions = (mode & 0777) & ~creationMask.load(std::memory_order_relaxed);
+    bool created = false;
+    int descriptor;
+    if (flags & SCE_KERNEL_O_CREAT) {
+        descriptor = ::shm_open(hostName.c_str(), hostFlags | O_CLOEXEC | O_EXCL, permissions);
+        created = descriptor >= 0;
+        if (descriptor < 0 && errno == EEXIST && !(flags & SCE_KERNEL_O_EXCL)) {
+            descriptor = ::shm_open(hostName.c_str(), (hostFlags & ~(O_CREAT | O_EXCL)) | O_CLOEXEC, 0);
+        }
+    } else {
+        descriptor = ::shm_open(hostName.c_str(), hostFlags | O_CLOEXEC, 0);
+    }
     if (descriptor >= 0) {
-        return descriptor;
+        if (!created || ::fchmod(descriptor, permissions) == 0) return descriptor;
+        const int error = errno;
+        ::close(descriptor);
+        ::shm_unlink(hostName.c_str());
+        if (const int guest = NamedGuestError(error)) return Fail(guest);
+        throw std::runtime_error("shm_open: setting guest creation permissions failed, errno=" + std::to_string(error));
     }
     const int error = errno;
     if (const int guest = NamedGuestError(error)) return Fail(guest);
@@ -201,6 +218,10 @@ int CreateAnonymousFile() {
 }
 
 namespace File {
+
+std::uint16_t ExchangeCreationMask_nid_no_patch(std::uint16_t mask) {
+    return creationMask.exchange(static_cast<std::uint16_t>(mask & 07777), std::memory_order_relaxed);
+}
 
 bool IsSharedMemoryDescriptor_nid_no_patch(int descriptor) {
     return IsHostSharedMemoryDescriptor(descriptor);

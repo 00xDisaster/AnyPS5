@@ -40,6 +40,25 @@ constexpr std::uintptr_t GuestUserAddressEnd = 0x800000000000;
 constexpr int GuestAlignedSuper = 0x1000000;
 constexpr std::size_t SuperpageSize = std::size_t{1} << 21;
 
+#if defined(__linux__)
+class ScopedDescriptor {
+public:
+    explicit ScopedDescriptor(int value) noexcept : descriptor(fcntl(value, F_DUPFD_CLOEXEC, 0)), error(descriptor < 0 ? errno : 0) {}
+    ~ScopedDescriptor() {
+        const int savedError = errno;
+        if (descriptor >= 0) close(descriptor);
+        errno = savedError;
+    }
+    ScopedDescriptor(const ScopedDescriptor&) = delete;
+    ScopedDescriptor& operator=(const ScopedDescriptor&) = delete;
+    int Get() const noexcept { return descriptor; }
+    int Error() const noexcept { return error; }
+private:
+    int descriptor = -1;
+    int error = 0;
+};
+#endif
+
 bool RoundLength(std::size_t length, std::size_t& rounded) {
     constexpr auto mask = PS5_PAGE_SIZE - 1;
     if (length == 0 || length > std::numeric_limits<std::size_t>::max() - mask)
@@ -95,18 +114,24 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
         static_cast<std::uint64_t>(offset) > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - rounded)
         return failed(GuestInvalid);
 #if defined(__linux__)
-    const int descriptorFlags = fcntl(descriptor, F_GETFL);
+    const ScopedDescriptor pinnedDescriptor(descriptor);
+    if (pinnedDescriptor.Get() < 0) return failed(pinnedDescriptor.Error());
+    const int mappingDescriptor = pinnedDescriptor.Get();
+    const int descriptorFlags = fcntl(mappingDescriptor, F_GETFL);
     if (descriptorFlags < 0) return failed(errno);
     const int accessMode = descriptorFlags & O_ACCMODE;
     if ((protection & 1) != 0 && accessMode == O_WRONLY) return failed(GuestAccess);
     if (kind == GuestShared && (protection & 2) != 0 && accessMode == O_RDONLY) return failed(GuestAccess);
+    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) return failed(GuestNotSupported);
+#else
+    const int mappingDescriptor = descriptor;
+    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) return failed(GuestNotSupported);
 #endif
-    if (!File::IsSharedMemoryDescriptor_nid_no_patch(descriptor)) return failed(GuestNotSupported);
     const std::size_t alignment = (flags & GuestAlignedSuper) != 0 ? SuperpageSize : PS5_PAGE_SIZE;
     void* mapped = nullptr;
     try {
         mapped = address;
-        const auto result = DoMapFileBacked_nid_no_patch(&mapped, rounded, protection, kind | placement, descriptor, static_cast<std::uint64_t>(offset), alignment);
+        const auto result = DoMapFileBacked_nid_no_patch(&mapped, rounded, protection, kind | placement, mappingDescriptor, static_cast<std::uint64_t>(offset), alignment);
         if (result != 0) return failed(result == SCE_KERNEL_ERROR_EINVAL ? GuestInvalid : GuestNoMemory);
         return mapped;
     } catch (const std::invalid_argument&) {

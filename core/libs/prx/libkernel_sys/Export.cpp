@@ -1,4 +1,3 @@
-#include <atomic>
 #include <algorithm>
 #include <cstdint>
 #include <cstddef>
@@ -17,6 +16,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
+#include "prx/libkernel/File/include/SharedMemory.hpp"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -37,8 +37,6 @@ constexpr int GuestEfault = 14;
 constexpr int GuestEinval = 22;
 constexpr int GuestEexist = 17;
 constexpr int GuestExdev = 18;
-
-std::atomic<std::uint16_t> creationMask{022};
 
 std::int64_t Fail(int error) {
     *__error_nid_postfix() = error;
@@ -63,7 +61,7 @@ int APS5_VABI setsid_nid_postfix(void) {
 }
 
 std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
-    return creationMask.exchange(static_cast<std::uint16_t>(mask & 07777));
+    return File::ExchangeCreationMask_nid_no_patch(mask);
 }
 
 int APS5_VABI _fstatfs_nid_postfix(int d, void* buf);

@@ -99,7 +99,7 @@ static void Run() {
     const int longDescriptor = longName.Open(create | readWrite, 07777);
     umask(previousMask);
     Require(longDescriptor >= 0 && fstat(longDescriptor, &info) == 0, "long name creation failed");
-    Require((info.st_mode & 07777) == 0700, "mode or umask was not applied");
+    Require((info.st_mode & 07777) == 0755, "default guest umask was not applied independently of host umask");
     Require(close(longDescriptor) == 0, "long name close failed");
     const int longReader = longName.Open(0);
     Require(longReader >= 0 && close(longReader) == 0, "maximum-length name reopen failed");
