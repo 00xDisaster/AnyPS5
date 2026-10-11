@@ -61,9 +61,15 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
     }
 
     FileByteOffset sceTableBase = 0;
-    for (const auto& ph : programHeaders)
-        if (ph.Type == PT_SCE_DYNLIBDATA)
-            sceTableBase = ph.Offset;
+    bool hasSceDynlibData = false;
+    for (const auto& ph : programHeaders) {
+        if (ph.Type != PT_SCE_DYNLIBDATA)
+            continue;
+        if (hasSceDynlibData)
+            throw RelinkerException("Multiple PT_SCE_DYNLIBDATA segments", ph.Offset);
+        hasSceDynlibData = true;
+        sceTableBase = ph.Offset;
+    }
 
     std::vector<DynamicTag> dynTags;
     bool hasDynamicSegment = false;
@@ -108,7 +114,7 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
         if (requireExactlyOneOf(osTag, sysvTag, name)) {
             const std::uint64_t value = getTagValue(osTag);
             if (value > std::numeric_limits<FileByteOffset>::max() - sceTableBase)
-                throw RelinkerException(std::string(name) + " is outside the file", value);
+                throw RelinkerException(std::string("Adding PT_SCE_DYNLIBDATA base to ") + name + " overflows", value);
             return sceTableBase + value;
         }
         return _elfReader->TranslateVirtualAddress(getTagValue(sysvTag));
