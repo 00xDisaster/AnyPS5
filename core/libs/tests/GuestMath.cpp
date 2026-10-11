@@ -40,6 +40,7 @@ int APS5_VABI __fpclassifyf_nid_postfix(float);
 float APS5_VABI fmodf_nid_postfix(float, float);
 float APS5_VABI asinf_nid_postfix(float);
 float APS5_VABI acosf_nid_postfix(float);
+double APS5_VABI asin_nid_postfix(double);
 float APS5_VABI atan2f_nid_postfix(float, float);
 float APS5_VABI hypotf_nid_postfix(float, float);
 double APS5_VABI hypot_nid_postfix(double, double);
@@ -282,6 +283,36 @@ static void CheckIntegerConversions() {
 
 static bool Near(double value, double expected, double tolerance) { return std::abs(value - expected) <= tolerance * std::abs(expected); }
 
+static void CheckAsin() {
+    const double pi = 3.14159265358979323846;
+    const double pi_2 = pi / 2;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double infinity = std::numeric_limits<double>::infinity();
+
+    Require(asin_nid_postfix(0.) == 0.);
+    Require(std::signbit(asin_nid_postfix(-0.)));
+    Require(Near(asin_nid_postfix(1.), pi_2, 1e-15));
+    Require(Near(asin_nid_postfix(-1.), -pi_2, 1e-15));
+    Require(std::isnan(asin_nid_postfix(2.0)) && std::signbit(asin_nid_postfix(2.0)));
+    Require(std::isnan(asin_nid_postfix(-2.0)) && std::signbit(asin_nid_postfix(-2.0)));
+    Require(std::isnan(asin_nid_postfix(infinity)) && std::signbit(asin_nid_postfix(infinity)));
+    Require(std::isnan(asin_nid_postfix(-infinity)) && std::signbit(asin_nid_postfix(-infinity)));
+    Require(std::isnan(asin_nid_postfix(nan)));
+    Require(Near(asin_nid_postfix(0.5), pi/6, 1e-15));
+    Require(Near(asin_nid_postfix(-0.5), -pi/6, 1e-15));
+    Require(Near(asin_nid_postfix(1./std::sqrt(2)), pi/4, 1e-15));
+    Require(asin_nid_postfix(1e-300) == 1e-300);
+    Require(asin_nid_postfix(-1e-300) == -1e-300);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    errno = 0;
+    asin_nid_postfix(2.0);
+    Require(std::fetestexcept(FE_INVALID));
+    Require(errno == 0);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    asin_nid_postfix(nan);
+    Require(!std::fetestexcept(FE_INVALID));
+}
+
 static void CheckHyperbolic() {
     const double infinity = std::numeric_limits<double>::infinity();
     Require(sinh_nid_postfix(0.) == 0. && std::signbit(sinh_nid_postfix(-0.)));
@@ -479,6 +510,7 @@ int main() {
     Require(__isnormalf_nid_postfix(std::numeric_limits<float>::denorm_min()) == 0);
     Require(__isnormal_nid_postfix(1.) == 1 && __isnormal_nid_postfix(0.) == 0);
     Require(__isnormal_nid_postfix(std::numeric_limits<double>::denorm_min()) == 0);
+    CheckAsin();
     const auto quotient = div_nid_postfix(7, 2);
     Require(quotient.quot == 3 && quotient.rem == 1);
     const auto negativeNumerator = div_nid_postfix(-7, 2);
