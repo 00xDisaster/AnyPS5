@@ -119,13 +119,24 @@ std::filesystem::path HostPath(WorkingDirectory& state, const std::filesystem::p
     if (auto aliased = ResolveAlias(guest.relative_path().generic_string())) return *aliased;
     return ResolveHostPath(state.root, guest.relative_path()).make_preferred();
 }
-bool HostDirectory(WorkingDirectory& state, const std::filesystem::path& guest) {
-    try {
-        std::error_code error;
-        return std::filesystem::is_directory(HostPath(state, guest), error);
-    } catch (const std::filesystem::filesystem_error&) {
-        return false;
+void RequireHostDirectory(WorkingDirectory& state, const std::filesystem::path& guest) {
+    const auto host = HostPath(state, guest);
+    std::error_code error;
+    const auto status = std::filesystem::status(host, error);
+    if (std::filesystem::is_directory(status)) return;
+    if (!error) error = std::make_error_code(std::filesystem::exists(status) ? std::errc::not_a_directory : std::errc::no_such_file_or_directory);
+#ifdef _WIN32
+    if (error == std::errc::no_such_file_or_directory) {
+        for (auto prefix = host.parent_path(); prefix.has_relative_path(); prefix = prefix.parent_path()) {
+            std::error_code prefixError;
+            const auto prefixStatus = std::filesystem::status(prefix, prefixError);
+            if (!std::filesystem::exists(prefixStatus)) continue;
+            if (!std::filesystem::is_directory(prefixStatus)) error = std::make_error_code(std::errc::not_a_directory);
+            break;
+        }
     }
+#endif
+    throw std::filesystem::filesystem_error("Guest path component is not a directory", host, error);
 }
 std::filesystem::path Resolve(WorkingDirectory& state, const char* path) {
     std::string text(path);
@@ -141,11 +152,7 @@ std::filesystem::path Resolve(WorkingDirectory& state, const char* path) {
     for (auto part = relative.begin(); part != relative.end(); ++part) {
         if (*part == "..") {
             const auto parent = guest.lexically_normal();
-            if (parent.has_relative_path() && !HostDirectory(state, parent)) {
-                auto host = HostPath(state, parent);
-                for (; part != relative.end(); ++part) host /= *part;
-                return host.make_preferred();
-            }
+            if (parent.has_relative_path()) RequireHostDirectory(state, parent);
         }
         guest /= *part;
     }
