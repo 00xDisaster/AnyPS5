@@ -390,6 +390,15 @@ if(BUILD_TESTING)
     add_test(NAME agc_fragment_barycentric COMMAND agc_fragment_barycentric_tests)
 endif()
 
+add_test_executable(agc_pipeline_link_optimization_tests EXCLUDE_FROM_ALL tests/PipelineLinkOptimization.cpp)
+target_include_directories(agc_pipeline_link_optimization_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
+set_target_properties(agc_pipeline_link_optimization_tests PROPERTIES CXX_EXTENSIONS OFF)
+configure_windows_unwind(agc_pipeline_link_optimization_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_pipeline_link_optimization_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_pipeline_link_optimization COMMAND agc_pipeline_link_optimization_tests)
+endif()
+
 add_test_executable(agc_subgroup_clock_tests EXCLUDE_FROM_ALL
         tests/SubgroupClock.cpp
         Execution/src/SubgroupClock.cpp
