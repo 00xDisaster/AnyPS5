@@ -2166,6 +2166,7 @@ void descriptorLayoutFlagTests() {
     for (const bool updateAfterBind : {false, true}) {
         mock = MockVulkan{};
         auto context = mockContext();
+        context.emptyBuffer = reinterpret_cast<VkBuffer>(std::uintptr_t{0x1000});
         context.descriptorIndexingLimits.maxPerStageDescriptorUpdateAfterBindStorageBuffers = 17;
         context.descriptorIndexingLimits.maxPerStageUpdateAfterBindResources = 128;
         context.descriptorIndexingLimits.maxDescriptorSetUpdateAfterBindStorageBuffers = 32;
