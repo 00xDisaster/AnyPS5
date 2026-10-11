@@ -146,5 +146,6 @@ bool GuestThreadStack(std::uintptr_t address, std::uintptr_t* start, std::uintpt
 void NoteGuestStackProtection(std::uintptr_t start, std::size_t bytes, bool readWrite);
 int GuestThreadCpuClockId(const PthreadPrivate* thread);
 bool GuestThreadCpuNanos(int cpuClockThread, std::uint64_t* nanos);
+void SetLiveGuestThreadsAffinity(KernelCpumask mask);
 
 #endif
