@@ -176,7 +176,7 @@ long double APS5_VABI strtold_nid_postfix(const char* str, char** endptr) {
 }
 
 int APS5_VABI atoi_nid_postfix(const char* str) {
-    return std::atoi(str);
+    return static_cast<int>(strtol_nid_postfix(str, nullptr, 10));
 }
 
 std::int64_t APS5_VABI atol_nid_postfix(const char* str) {
