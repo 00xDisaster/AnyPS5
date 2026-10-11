@@ -230,6 +230,22 @@ def main():
         assert result.returncode == 0, (result.stdout, result.stderr)
         assert output.is_file() and (output.parent / 'app0' / 'prx' / 'a.prx.guest.prx').is_file()
 
+        result, native_output = convert('unscoped-native-provider', 'b.prx')
+        assert result.returncode == 0, result.stderr
+        case = work / 'unscoped-native-import'
+        (case / 'prx').mkdir(parents=True)
+        (case / 'libs').mkdir()
+        native_provider = native_output.parent / 'app0' / 'prx' / 'b.prx.guest.prx'
+        (case / 'libs' / 'available.prx').write_bytes(native_provider.read_bytes())
+        source = case / 'input.elf'
+        source.write_bytes(executable('available.prx', 'shared', extra_dependencies=('unused.prx',)))
+        output = case / 'output.exe'
+        result = subprocess.run([str(relinker), '--windows', str(source), str(output)], capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        if os.name == 'nt':
+            run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+            assert run.returncode == 22 and 'unused.prx' not in run.stderr, (run.returncode, run.stdout, run.stderr)
+
         check_internal_guest_libc(convert, work, relinker)
 
         for filename, module_name in [('foo.native.prx', 'foo_native'),
