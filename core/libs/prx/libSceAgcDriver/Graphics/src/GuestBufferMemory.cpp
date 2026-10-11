@@ -28,6 +28,7 @@
 #include <condition_variable>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -140,6 +141,8 @@ bool addressSpaceCacheEnabled() {
     return !disabled;
 }
 
+struct RetiredImport;
+
 // Imports persist across draws, keyed by allocation base, and are dropped when their allocation leaves
 // the registered set; a dropped import is destroyed once the recorded work that may read it completed.
 struct HostImports {
@@ -148,6 +151,7 @@ struct HostImports {
     PFN_vkDestroyBuffer destroyBuffer = nullptr;
     PFN_vkFreeMemory freeMemory = nullptr;
     std::map<std::uint64_t, HostImport> imports;
+    std::map<VkDevice, std::vector<std::unique_ptr<RetiredImport>>> parked;
     std::uint64_t liveBytes = 0;
     std::set<std::uint64_t> failed;
     std::set<std::uint64_t> unaliasedSpans;
@@ -164,11 +168,6 @@ struct HostImports {
     bool importsStampPages = true;
     bool dmaBufImportsStampPages = true;
 };
-
-HostImports& Imports() {
-    static HostImports imports;
-    return imports;
-}
 
 void destroyImport(const Context& context, const HostImport& entry) {
     context.Function<PFN_vkDestroyBuffer>("vkDestroyBuffer")(context.device, entry.buffer, nullptr);
@@ -197,6 +196,11 @@ struct RetiredImport {
     PFN_vkFreeMemory freeMemory;
     HostImport entry;
 };
+
+HostImports& Imports() {
+    static HostImports imports;
+    return imports;
+}
 
 // Drops an import. Recorded batches (dispatches, recorded draws, GPU label writes) may still read it,
 // so the objects live until the batch open now completed; with no batches in flight all GPU work that
@@ -763,8 +767,8 @@ void refreshImports(const Context& context, HostImports& state, const GuestAlloc
     if (state.device != context.device) {
         for (const auto& [address, entry] : state.imports) {
             if (state.device != VK_NULL_HANDLE && state.destroyBuffer != nullptr && state.freeMemory != nullptr) {
-                state.destroyBuffer(state.device, entry.buffer, nullptr);
-                state.freeMemory(state.device, entry.memory, nullptr);
+                state.parked[state.device].push_back(std::make_unique<RetiredImport>(state.device, state.destroyBuffer, state.freeMemory, entry));
+                continue;
             }
 #ifdef _WIN32
             GuestArena::GuestArenaUnmapAlias_nid_postfix(entry.alias);
@@ -1731,6 +1735,7 @@ void ClearImageMirrors(VkDevice device) {
 void ClearHostImports(VkDevice device) {
     auto& state = Imports();
     std::lock_guard lock(state.mutex);
+    state.parked.erase(device);
     if (state.device != device) return;
     for (const auto& [address, entry] : state.imports) {
         state.destroyBuffer(state.device, entry.buffer, nullptr);
