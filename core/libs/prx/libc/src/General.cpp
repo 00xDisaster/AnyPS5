@@ -315,10 +315,17 @@ extern "C" std::filesystem::path ResolvePath_nid_no_patch(const char* path) {
     return Resolve(state, path);
 }
 
-extern "C" int SetWorkingDirectory_nid_no_patch(const std::filesystem::path& resolved) {
+extern "C" int SetWorkingDirectory_nid_no_patch(const char* resolved) {
+    if (resolved == nullptr) return 14;
     auto& state = Directories();
     std::lock_guard lock(state.mutex);
-    return SetWorkingDirectory(state, resolved);
+    try {
+        return SetWorkingDirectory(state, std::filesystem::u8path(resolved));
+    } catch (const std::bad_alloc&) {
+        return 12;
+    } catch (const std::filesystem::filesystem_error& error) {
+        return DirectoryFailure(error.code());
+    }
 }
 
 extern "C" int APS5_VABI chdir_nid_postfix(const char* path) {

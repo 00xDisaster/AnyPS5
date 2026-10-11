@@ -1,5 +1,9 @@
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
+#include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
+
+#include <cerrno>
+#include <string>
 
 #ifdef _WIN32
 
@@ -94,8 +98,6 @@ int ReadDirectoryDescriptor(int fd, char* buf, int nbytes) {
 
 #else
 
-#include <string>
-
 namespace File {
 
 std::optional<std::filesystem::path> DirectoryDescriptorPath(int fd) {
@@ -111,3 +113,21 @@ std::optional<std::filesystem::path> DirectoryDescriptorPath(int fd) {
 }
 
 #endif
+
+extern "C" const char* GetDirectoryDescriptorPath_nid_no_patch(int fd, int* error) {
+    if (error == nullptr) return nullptr;
+    if (!DescriptorIsOpen_nid_no_patch(fd)) {
+        *error = EBADF;
+        return nullptr;
+    }
+    const auto directory = File::DirectoryDescriptorPath(fd);
+    if (!directory) {
+        *error = ENOTDIR;
+        return nullptr;
+    }
+    static thread_local std::string path;
+    const auto utf8Path = directory->u8string();
+    path.assign(reinterpret_cast<const char*>(utf8Path.data()), utf8Path.size());
+    *error = 0;
+    return path.c_str();
+}
