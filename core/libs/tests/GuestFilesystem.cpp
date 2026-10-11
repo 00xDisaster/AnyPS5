@@ -2,6 +2,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -52,7 +53,19 @@ int APS5_VABI sceKernelDebugOutText(int, const char*);
 }
 static void Check(bool value, int line) {
     if (!value) {
-        std::fprintf(stderr, "Filesystem check failed at line %d (guest errno %d)\n", line, *__error_nid_postfix());
+#ifdef _WIN32
+        const auto nativeError = ::GetLastError();
+#else
+        const auto nativeError = errno;
+#endif
+        const auto guestError = *__error_nid_postfix();
+#ifdef _WIN32
+        std::fprintf(stderr, "Filesystem check failed at line %d (guest errno %d, Win32 error %lu)\n",
+            line, guestError, static_cast<unsigned long>(nativeError));
+#else
+        std::fprintf(stderr, "Filesystem check failed at line %d (guest errno %d, host errno %d)\n",
+            line, guestError, nativeError);
+#endif
         std::abort();
     }
 }
