@@ -176,6 +176,7 @@ private:
         append(key, value.executeOnNoop);
         append(key, value.conservativeZExport);
         append(key, value.orderedPixelShader);
+        append(key, value.alphaToCoverage);
         append(key, value.targetOutputMode);
     }
 
