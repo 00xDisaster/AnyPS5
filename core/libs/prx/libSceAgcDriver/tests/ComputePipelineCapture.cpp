@@ -71,6 +71,51 @@ void CheckRoundTrip() {
     Require(std::filesystem::file_size(file) == 1, "damaged capture was changed");
 }
 
+void CheckLargeRecord() {
+    auto capture = AgcDriver::ComputePipelineFixture();
+    constexpr std::size_t words = 5500000;
+    capture.spirv.insert(capture.spirv.end() - 2, words - capture.spirv.size(), 0x00010000u);
+    const auto encoded = capture.Encode();
+    Require(encoded.size() > 20u * 1024u * 1024u, "large fixture did not exceed the former file bound");
+    Require(AgcDriver::ComputePipelineCapture::Decode(encoded).spirv == capture.spirv, "large module changed during decoding");
+    Directory directory;
+    const auto file = capture.Write(directory.path);
+    Require(AgcDriver::ComputePipelineCapture::Read(file).spirv == capture.spirv, "large module changed on disk");
+    capture.spirv.resize(AgcDriver::ComputePipelineCapture::MaxSpirvWords + 1u, 0x00010000u);
+    Reject([&] { capture.Encode(); }, "module beyond the word bound accepted");
+    std::vector<std::byte> oversized(AgcDriver::ComputePipelineCapture::MaxFileBytes + 1u);
+    Reject([&] { AgcDriver::ComputePipelineCapture::Decode(oversized); }, "record beyond the file bound accepted");
+    const auto oversizedFile = directory.path / "oversized.aps5cp";
+    {
+        std::ofstream output(oversizedFile, std::ios::binary);
+        output.seekp(static_cast<std::streamoff>(AgcDriver::ComputePipelineCapture::MaxFileBytes));
+        output.put('x');
+        Require(output.good(), "cannot write oversized capture fixture");
+    }
+    Reject([&] { AgcDriver::ComputePipelineCapture::Read(oversizedFile); }, "file beyond the file bound accepted");
+}
+
+void CheckBindingFlags() {
+    auto capture = AgcDriver::ComputePipelineFixture();
+    capture.sets = {{0, {{7, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT},
+                         {3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT}}}};
+    const auto encoded = capture.Encode();
+    Require(AgcDriver::ComputePipelineCapture::Decode(encoded).Encode() == encoded, "binding flags changed without update-after-bind");
+    auto changed = capture;
+    changed.sets[0].bindings[0].flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    Require(changed.Identity() != capture.Identity(), "binding flags did not affect capture identity");
+    changed = capture;
+    changed.sets[0].bindings[1].flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    Reject([&] { changed.Encode(); }, "non-highest variable descriptor binding accepted");
+    changed = capture;
+    changed.sets[0].bindings[0].flags |= VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+    Reject([&] { changed.Encode(); }, "unsupported binding flags accepted");
+    capture.sets[0].flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    capture.sets[0].bindings[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    capture.sets[0].bindings[0].flags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    Require(AgcDriver::ComputePipelineCapture::Decode(capture.Encode()).Encode() == capture.Encode(), "combined binding flags changed");
+}
+
 void CheckMalformedRecords() {
     const auto capture = AgcDriver::ComputePipelineFixture();
     const auto encoded = capture.Encode();
@@ -116,7 +161,9 @@ int main() {
     try {
         CheckRoundTrip();
         CheckMalformedRecords();
-        std::puts("compute pipeline capture: round trip, immutable writes, truncated records and unsupported inputs passed");
+        CheckBindingFlags();
+        CheckLargeRecord();
+        std::puts("compute pipeline capture: round trip, 5500000-word module, binding flags, immutable writes and bounded inputs passed");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "compute pipeline capture test: %s\n", error.what());

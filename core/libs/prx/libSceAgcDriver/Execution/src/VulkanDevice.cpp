@@ -95,7 +95,7 @@ bool CaptureComputePipeline(std::size_t words) {
     std::uint32_t threshold = 0;
     const auto end = minimum + std::strlen(minimum);
     const auto parsed = std::from_chars(minimum, end, threshold);
-    require(parsed.ec == std::errc{} && parsed.ptr == end && threshold <= 4u * 1024u * 1024u, "APS5_DUMP_COMPUTE_MIN_WORDS must be an integer from 0 through 4194304");
+    require(parsed.ec == std::errc{} && parsed.ptr == end && threshold <= ComputePipelineCapture::MaxSpirvWords, "APS5_DUMP_COMPUTE_MIN_WORDS must be an integer from 0 through 8388608");
     return words >= threshold;
 }
 
@@ -250,6 +250,9 @@ struct VulkanDevice::State {
     // graphics stages, and compute workgroups wider than a wave).
     bool descriptorIndexing = false;
     bool storageBufferUpdateAfterBind = false;
+    bool descriptorBindingPartiallyBound = false;
+    bool descriptorBindingVariableDescriptorCount = false;
+    bool runtimeDescriptorArray = false;
     VkPhysicalDeviceDescriptorIndexingPropertiesEXT descriptorIndexingProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT};
     bool imageInt64Atomics = false;
     bool bufferInt64Atomics = false;
@@ -779,7 +782,11 @@ ComputePipelineReplayResult VulkanDevice::ReplayComputePipeline(const ComputePip
         require(!updateAfterBind || state->storageBufferUpdateAfterBind, "captured update-after-bind descriptors are unsupported");
         std::vector<VkDescriptorSetLayoutBinding> bindings;
         std::vector<VkDescriptorBindingFlags> flags;
+        std::uint32_t variableCount = 0;
         for (const auto& binding : layout.bindings) {
+            require((binding.flags & VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT) == 0 || state->descriptorBindingPartiallyBound, "captured partially-bound descriptors are unsupported");
+            require((binding.flags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT) == 0 || state->descriptorBindingVariableDescriptorCount, "captured variable descriptor count is unsupported");
+            if ((binding.flags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT) != 0) variableCount = binding.count;
             bindings.push_back({binding.binding, binding.type, binding.count, binding.stages, nullptr});
             flags.push_back(binding.flags);
             const std::size_t kind = binding.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ? 0 : binding.type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? 1 : binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 2 : 3;
@@ -789,13 +796,15 @@ ComputePipelineReplayResult VulkanDevice::ReplayComputePipeline(const ComputePip
         bindingFlags.bindingCount = static_cast<std::uint32_t>(flags.size());
         bindingFlags.pBindingFlags = flags.data();
         VkDescriptorSetLayoutCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        info.pNext = updateAfterBind ? &bindingFlags : nullptr;
+        info.pNext = std::ranges::any_of(flags, [](auto value) { return value != 0; }) ? &bindingFlags : nullptr;
         info.flags = layout.flags;
         info.bindingCount = static_cast<std::uint32_t>(bindings.size());
         info.pBindings = bindings.data();
-        VkDescriptorSetLayoutSupport support{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT};
+        VkDescriptorSetVariableDescriptorCountLayoutSupport variableSupport{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT};
+        VkDescriptorSetLayoutSupport support{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT, variableCount != 0 ? &variableSupport : nullptr};
         state->DeviceFunction<PFN_vkGetDescriptorSetLayoutSupport>("vkGetDescriptorSetLayoutSupport")(state->device, &info, &support);
         require(support.supported == VK_TRUE, "captured descriptor set layout is unsupported");
+        require(variableCount <= variableSupport.maxVariableDescriptorCount, "captured variable descriptor count exceeds layout support");
         VkDescriptorSetLayout handle = VK_NULL_HANDLE;
         check(state->DeviceFunction<PFN_vkCreateDescriptorSetLayout>("vkCreateDescriptorSetLayout")(state->device, &info, nullptr, &handle), "vkCreateDescriptorSetLayout replay");
         replay.sets.push_back(handle);
@@ -1333,13 +1342,16 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         state->InstanceFunction<PFN_vkGetPhysicalDeviceFeatures2>("vkGetPhysicalDeviceFeatures2")(selected, &features);
         state->descriptorIndexing = descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing == VK_TRUE && descriptorIndexingFeatures.shaderStorageImageArrayNonUniformIndexing == VK_TRUE;
         state->storageBufferUpdateAfterBind = descriptorIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind == VK_TRUE;
+        state->descriptorBindingPartiallyBound = compileOnly && descriptorIndexingFeatures.descriptorBindingPartiallyBound == VK_TRUE;
+        state->descriptorBindingVariableDescriptorCount = compileOnly && descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount == VK_TRUE;
+        state->runtimeDescriptorArray = compileOnly && descriptorIndexingFeatures.runtimeDescriptorArray == VK_TRUE;
         if (state->storageBufferUpdateAfterBind) {
             VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &state->descriptorIndexingProperties};
             state->InstanceFunction<PFN_vkGetPhysicalDeviceProperties2>("vkGetPhysicalDeviceProperties2")(selected, &properties);
         }
     }
     descriptorIndexingFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT};
-    if (state->descriptorIndexing || state->storageBufferUpdateAfterBind) deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    if (state->descriptorIndexing || state->storageBufferUpdateAfterBind || state->descriptorBindingPartiallyBound || state->descriptorBindingVariableDescriptorCount || state->runtimeDescriptorArray) deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     if (state->descriptorIndexing) {
         descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
         descriptorIndexingFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
@@ -1349,6 +1361,13 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         state->spirvExtensions.push_back("SPV_EXT_descriptor_indexing");
     }
     descriptorIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind = state->storageBufferUpdateAfterBind ? VK_TRUE : VK_FALSE;
+    descriptorIndexingFeatures.descriptorBindingPartiallyBound = state->descriptorBindingPartiallyBound ? VK_TRUE : VK_FALSE;
+    descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = state->descriptorBindingVariableDescriptorCount ? VK_TRUE : VK_FALSE;
+    descriptorIndexingFeatures.runtimeDescriptorArray = state->runtimeDescriptorArray ? VK_TRUE : VK_FALSE;
+    if (state->runtimeDescriptorArray) {
+        state->capabilities.push_back(spv::CapabilityRuntimeDescriptorArray);
+        if (!state->descriptorIndexing) state->spirvExtensions.push_back("SPV_EXT_descriptor_indexing");
+    }
     state->samplerAnisotropy = true;
     state->textureCompressionBC = true;
     deviceInfo.pEnabledFeatures = &enabled;
@@ -1416,7 +1435,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         imageRobustnessFeatures.pNext = byteFeatures.pNext;
         byteFeatures.pNext = &imageRobustnessFeatures;
     }
-    if (state->descriptorIndexing || state->storageBufferUpdateAfterBind) {
+    if (state->descriptorIndexing || state->storageBufferUpdateAfterBind || state->descriptorBindingPartiallyBound || state->descriptorBindingVariableDescriptorCount || state->runtimeDescriptorArray) {
         descriptorIndexingFeatures.pNext = byteFeatures.pNext;
         byteFeatures.pNext = &descriptorIndexingFeatures;
     }
@@ -4028,10 +4047,13 @@ VulkanDevice::IndirectOutcome VulkanDevice::dispatch(const ShaderRecompiler::Rec
             capture.spirv = shader.spirv;
             ComputeDescriptorSetLayout resourcesLayout;
             resourcesLayout.flags = resources->LayoutUpdateAfterBind() ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0;
-            for (const auto& binding : resources->LayoutBindings()) {
+            const auto layoutBindings = resources->LayoutBindings();
+            const auto bindingFlags = resources->LayoutBindingFlags();
+            require(layoutBindings.size() == bindingFlags.size(), "compute capture binding flag count differs from layout");
+            for (std::size_t index = 0; index < layoutBindings.size(); ++index) {
+                const auto& binding = layoutBindings[index];
                 require(binding.pImmutableSamplers == nullptr, "compute capture does not support immutable samplers");
-                const VkDescriptorBindingFlags flags = resources->LayoutUpdateAfterBind() && binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ? VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT : 0;
-                resourcesLayout.bindings.push_back({binding.binding, binding.descriptorType, binding.descriptorCount, binding.stageFlags, flags});
+                resourcesLayout.bindings.push_back({binding.binding, binding.descriptorType, binding.descriptorCount, binding.stageFlags, bindingFlags[index]});
             }
             capture.sets.push_back(std::move(resourcesLayout));
             if (shader.workgroupMemoryDwords != 0) capture.sets.push_back({0, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0}}});

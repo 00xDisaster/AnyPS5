@@ -32,7 +32,8 @@ struct ComputeSpecialization {
 
 struct ComputePipelineCapture {
     static constexpr std::uint32_t Version = 1;
-    static constexpr std::size_t MaxFileBytes = 20u * 1024u * 1024u;
+    static constexpr std::uint32_t MaxSpirvWords = 8u * 1024u * 1024u;
+    static constexpr std::size_t MaxFileBytes = 36u * 1024u * 1024u;
     std::vector<std::uint32_t> spirv;
     std::vector<ComputeDescriptorSetLayout> sets;
     std::vector<VkPushConstantRange> pushConstants;

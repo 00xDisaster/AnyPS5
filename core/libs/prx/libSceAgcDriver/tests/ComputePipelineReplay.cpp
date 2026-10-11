@@ -64,6 +64,29 @@ int main() {
             rejected = true;
         }
         Require(rejected, "cache with another pipeline UUID was accepted");
+        for (const auto flags : {VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, static_cast<VkDescriptorBindingFlagBits>(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)}) {
+            auto indexed = decoded;
+            indexed.sets[0].bindings[0].flags = flags;
+            try {
+                CheckResult(device->ReplayComputePipeline(indexed));
+                std::printf("compute pipeline replay: descriptor binding flags 0x%x compiled without update-after-bind\n", static_cast<unsigned>(flags));
+            } catch (const std::exception& error) {
+                if (std::getenv("ANYPS5_REQUIRE_DESCRIPTOR_BINDING_FLAGS") != nullptr) throw;
+                const std::string_view message(error.what());
+                Require(message == "Vulkan presentation: captured partially-bound descriptors are unsupported" || message == "Vulkan presentation: captured variable descriptor count is unsupported", "binding flag replay failed without an explicit feature refusal");
+                std::printf("compute pipeline replay: descriptor binding flags 0x%x explicitly refused: %s\n", static_cast<unsigned>(flags), error.what());
+            }
+        }
+        auto runtimeArray = decoded;
+        runtimeArray.spirv.insert(runtimeArray.spirv.begin() + 7, {0x00020011u, 5302u, 0x0008000au, 0x5f565053u, 0x5f545845u, 0x63736564u, 0x74706972u, 0x695f726fu, 0x7865646eu, 0x00676e69u});
+        try {
+            CheckResult(device->ReplayComputePipeline(runtimeArray));
+            std::puts("compute pipeline replay: runtime descriptor array capability compiled");
+        } catch (const std::exception& error) {
+            if (std::getenv("ANYPS5_REQUIRE_DESCRIPTOR_BINDING_FLAGS") != nullptr) throw;
+            Require(std::string_view(error.what()) == "Vulkan presentation: captured SPIR-V capability is not enabled", "runtime descriptor array replay failed without an explicit feature refusal");
+            std::puts("compute pipeline replay: device explicitly refused runtime descriptor array capability");
+        }
         capture.requiredSubgroupSize = 32;
         try {
             const auto subgroup = device->ReplayComputePipeline(capture);

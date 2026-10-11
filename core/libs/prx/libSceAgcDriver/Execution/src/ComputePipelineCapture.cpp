@@ -66,7 +66,7 @@ private:
 
 std::vector<std::byte> ReadBytes(const std::filesystem::path& path) {
     const auto size = std::filesystem::file_size(path);
-    RequireCapture(size <= ComputePipelineCapture::MaxFileBytes, "file exceeds 20 MiB");
+    RequireCapture(size <= ComputePipelineCapture::MaxFileBytes, "file exceeds 36 MiB");
     std::ifstream input(path, std::ios::binary);
     RequireCapture(input.good(), "cannot open capture");
     std::vector<std::byte> bytes(static_cast<std::size_t>(size));
@@ -78,7 +78,7 @@ std::vector<std::byte> ReadBytes(const std::filesystem::path& path) {
 }
 
 void ComputePipelineCapture::Validate() const {
-    RequireCapture(spirv.size() >= 5 && spirv.size() <= 4u * 1024u * 1024u, "SPIR-V word count out of bounds");
+    RequireCapture(spirv.size() >= 5 && spirv.size() <= MaxSpirvWords, "SPIR-V word count out of bounds");
     RequireCapture(spirv[0] == 0x07230203u && spirv[1] >= 0x00010000u && spirv[1] <= 0x00010600u && (spirv[1] & 0xffu) == 0 && spirv[3] != 0 && spirv[3] <= 0x003fffffu && spirv[4] == 0, "invalid SPIR-V header");
     bool mainEntry = false;
     for (std::size_t cursor = 5; cursor < spirv.size();) {
@@ -103,12 +103,16 @@ void ComputePipelineCapture::Validate() const {
         RequireCapture(layout.bindings.size() <= 4096, "too many descriptor bindings");
         totalBindings += layout.bindings.size();
         std::set<std::uint32_t> used;
+        const auto highest = layout.bindings.empty() ? 0u : std::ranges::max(layout.bindings, {}, &ComputeDescriptorBinding::binding).binding;
         for (const auto& binding : layout.bindings) {
             RequireCapture(used.insert(binding.binding).second, "duplicate descriptor binding");
             RequireCapture(binding.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || binding.type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE || binding.type == VK_DESCRIPTOR_TYPE_SAMPLER, "unsupported descriptor type");
             RequireCapture(binding.count != 0 && binding.count <= 1048576, "invalid descriptor count");
             RequireCapture(binding.stages == VK_SHADER_STAGE_COMPUTE_BIT, "unsupported descriptor stage flags");
-            RequireCapture(binding.flags == 0 || (binding.flags == VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT && binding.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && (layout.flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT) != 0), "unsupported descriptor binding flags");
+            constexpr VkDescriptorBindingFlags supported = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+            RequireCapture((binding.flags & ~supported) == 0, "unsupported descriptor binding flags");
+            RequireCapture((binding.flags & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT) == 0 || (binding.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && (layout.flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT) != 0), "unsupported update-after-bind descriptor");
+            RequireCapture((binding.flags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT) == 0 || binding.binding == highest, "variable descriptor count must use the highest binding");
         }
     }
     RequireCapture(totalBindings <= 4096, "too many total descriptor bindings");
@@ -164,7 +168,7 @@ std::vector<std::byte> ComputePipelineCapture::Encode() const {
 }
 
 ComputePipelineCapture ComputePipelineCapture::Decode(std::span<const std::byte> bytes) {
-    RequireCapture(bytes.size() <= MaxFileBytes, "record exceeds 20 MiB");
+    RequireCapture(bytes.size() <= MaxFileBytes, "record exceeds 36 MiB");
     Decoder input(bytes);
     RequireCapture(input.Word() == 0x35535041u && input.Word() == 0x504d4f43u, "invalid file signature");
     RequireCapture(input.Word() == Version, "unsupported file version");
@@ -209,7 +213,7 @@ ComputePipelineCapture ComputePipelineCapture::Decode(std::span<const std::byte>
         value.id = input.Word();
         value.value = input.Word();
     }
-    result.spirv.resize(input.Count(4u * 1024u * 1024u, 4));
+    result.spirv.resize(input.Count(MaxSpirvWords, 4));
     for (auto& word : result.spirv) word = input.Word();
     RequireCapture(input.Finished(), "trailing bytes after capture");
     result.Validate();
