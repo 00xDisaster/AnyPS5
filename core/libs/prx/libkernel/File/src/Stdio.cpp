@@ -1078,4 +1078,14 @@ int APS5_VABI fdatasync_nid_postfix(int fd) {
     return PosixResult(sceKernelFdatasync(fd));
 }
 
+int64_t APS5_VABI readv_nid_postfix(int d, const KernelIovec* iov, int iovcnt) {
+    const auto result = sceKernelReadv(d, iov, iovcnt);
+    return result < 0 ? PosixFailure(static_cast<int>(result) & 0xffff) : result;
+}
+
+int64_t APS5_VABI writev_nid_postfix(int d, const KernelIovec* iov, int iovcnt) {
+    const auto result = sceKernelWritev(d, iov, iovcnt);
+    return result < 0 ? PosixFailure(static_cast<int>(result) & 0xffff) : result;
+}
+
 }
