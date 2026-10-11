@@ -814,7 +814,7 @@ struct InitParameter2 {
     void* allocator;
     void* userData;
     std::size_t fileBufferSize;
-    std::uint32_t specialFloatFormatType;
+    std::int32_t specialFloatFormatType;
     std::uint32_t reserved[3];
 };
 static_assert(sizeof(InitParameter2) == 0x28 && offsetof(InitParameter2, specialFloatFormatType) == 0x18);
@@ -841,7 +841,7 @@ void APS5_VABI _ZN3sce4Json14InitParameter217setFileBufferSizeEm(InitParameter2*
     self->fileBufferSize = size;
 }
 
-void APS5_VABI _ZN3sce4Json14InitParameter225setSpecialFloatFormatTypeENS0_22SpecialFloatFormatTypeE(InitParameter2* self, std::uint32_t type) {
+void APS5_VABI _ZN3sce4Json14InitParameter225setSpecialFloatFormatTypeENS0_22SpecialFloatFormatTypeE(InitParameter2* self, std::int32_t type) {
     self->specialFloatFormatType = type;
 }
 
