@@ -3007,6 +3007,20 @@ bool StorageDumpSelects(const GuestTextureResource& descriptor) {
 
 }
 
+void StorageTexture::FlushDumpSelected(const char* reason) {
+    const auto& selector = StorageDumpSelection();
+    if (selector.address == 0 && selector.width == 0) return;
+    std::vector<std::pair<std::uint64_t, std::size_t>> ranges;
+    {
+        auto& pending = Pending();
+        std::lock_guard lock(pending.mutex);
+        for (const auto* texture : pending.textures) {
+            if (StorageDumpSelects(texture->descriptor)) ranges.emplace_back(texture->descriptor.baseAddress, static_cast<std::size_t>(texture->guestBytes));
+        }
+    }
+    for (const auto& [address, bytes] : ranges) static_cast<void>(FlushPending(address, bytes, nullptr, reason));
+}
+
 void StorageTexture::FlushAllPending(const char* reason) {
     static_cast<void>(FlushPending(0, std::numeric_limits<std::size_t>::max(), nullptr, reason));
 }
