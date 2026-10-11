@@ -31,6 +31,7 @@ void Report(const char* format, ...) {
 }
 
 void ReportAllThreads();
+void ReportStackCandidates(std::uint64_t rsp, int limit, std::uint64_t span);
 
 void DescribeAddress(std::uint64_t address, char* buffer, std::size_t size) {
     HMODULE module = nullptr;
@@ -238,20 +239,6 @@ bool HandleSse4a(EXCEPTION_POINTERS* info) {
     return true;
 }
 
-void ReportStackCandidates(std::uint64_t rsp, int limit, std::uint64_t span) {
-    char line[256];
-    Report("  stack return address candidates:\n");
-    int printed = 0;
-    for (std::uint64_t slot = rsp; printed < limit && slot < rsp + span; slot += 8) {
-        if (!IsReadable(slot)) break;
-        const auto value = *reinterpret_cast<const std::uint64_t*>(slot);
-        if (!IsExecutable(value)) continue;
-        DescribeAddress(value, line, sizeof(line));
-        Report("    [rsp+0x%llx] %s\n", static_cast<unsigned long long>(slot - rsp), line);
-        ++printed;
-    }
-}
-
 LONG WINAPI ReportCrash(EXCEPTION_POINTERS* info) {
     static std::atomic<bool> reported{false};
     const auto* fault = info->ExceptionRecord;
@@ -436,6 +423,20 @@ DWORD WINAPI HangWatchdog(LPVOID param) {
     std::fflush(stderr);
     std::abort();
     return 0;
+}
+
+void ReportStackCandidates(std::uint64_t rsp, int limit, std::uint64_t span) {
+    char line[256];
+    Report("  stack return address candidates:\n");
+    int printed = 0;
+    for (std::uint64_t slot = rsp; printed < limit && slot < rsp + span; slot += 8) {
+        if (!IsReadable(slot)) break;
+        const auto value = *reinterpret_cast<const std::uint64_t*>(slot);
+        if (!IsExecutable(value)) continue;
+        DescribeAddress(value, line, sizeof(line));
+        Report("    [rsp+0x%llx] %s\n", static_cast<unsigned long long>(slot - rsp), line);
+        ++printed;
+    }
 }
 
 // abort() and the UCRT's invalid-parameter path end the process with a silent fast fail
