@@ -282,6 +282,10 @@ static constexpr int GUEST_ENOTDIR = 20;
 static constexpr int GUEST_EISDIR = 21;
 static constexpr int GUEST_EWOULDBLOCK = 35;
 static constexpr int GUEST_ENOTEMPTY = 66;
+static constexpr int GUEST_EDEADLK = 11;
+static constexpr int GUEST_ELOOP = 62;
+static constexpr int GUEST_EDQUOT = 69;
+static constexpr int GUEST_EOVERFLOW = 84;
 
 static int SceErrorFromErrno(int error);
 
@@ -297,7 +301,23 @@ static bool FailPosixPositionedGuestSocket(int descriptor) {
 }
 
 static int SceErrorFromErrno(int error) {
-    return static_cast<int>(0x80020000u | static_cast<unsigned>(error > 0 && error <= 34 ? error : error == GUEST_ENOTEMPTY ? error : GUEST_EIO));
+    int guest = error > 0 && error <= 34 ? error : error == GUEST_ENOTEMPTY ? error : GUEST_EIO;
+    if (error == EAGAIN) guest = GUEST_EWOULDBLOCK;
+#ifdef EDEADLK
+    else if (error == EDEADLK) guest = GUEST_EDEADLK;
+#endif
+    else if (error == ENAMETOOLONG) guest = GUEST_ENAMETOOLONG;
+    else if (error == ENOTEMPTY) guest = GUEST_ENOTEMPTY;
+#ifdef ELOOP
+    else if (error == ELOOP) guest = GUEST_ELOOP;
+#endif
+#ifdef EDQUOT
+    else if (error == EDQUOT) guest = GUEST_EDQUOT;
+#endif
+#ifdef EOVERFLOW
+    else if (error == EOVERFLOW) guest = GUEST_EOVERFLOW;
+#endif
+    return static_cast<int>(0x80020000u | static_cast<unsigned>(guest));
 }
 
 extern "C" int* APS5_VABI __error_nid_postfix();
