@@ -261,7 +261,13 @@ void run() {
 
 int main(int argc, char** argv) {
     try {
-        if (argc == 2 && std::string_view(argv[1]) == "--partial-collect") partialCollect();
+        if (argc == 2 && std::string_view(argv[1]) == "--partial-collect") {
+            if (!WriteWatched()) {
+                std::cout << "Partial shared write collection skipped: write tracking unavailable\n";
+                return 77;
+            }
+            partialCollect();
+        }
         else if (argc == 2 && std::string_view(argv[1]) == "--benchmark") benchmark();
         else if (argc == 2 && std::string_view(argv[1]) == "--benchmark-labels") benchmark(true);
         else if (argc == 2 && std::string_view(argv[1]) == "--benchmark-fallback") benchmark(false, false);
