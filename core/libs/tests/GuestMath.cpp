@@ -25,6 +25,9 @@ long long APS5_VABI atoll_nid_postfix(const char*);
 int* APS5_VABI __error_nid_postfix();
 double APS5_VABI sqrt_nid_postfix(double);
 float APS5_VABI sqrtf_nid_postfix(float);
+double APS5_VABI fabs_nid_postfix(double);
+double APS5_VABI trunc_nid_postfix(double);
+double APS5_VABI fma_nid_postfix(double, double, double);
 long double APS5_VABI acosl_nid_postfix(long double);
 long double APS5_VABI frexpl_nid_postfix(long double, int*);
 struct LibcFloatConstant { std::uint32_t bits[4]; };
@@ -83,6 +86,22 @@ static void CheckSquareRoot() {
     Require(std::bit_cast<std::uint32_t>(sqrtf_nid_postfix(-0.f)) == 0x80000000u);
     Require(sqrt_nid_postfix(INFINITY) == INFINITY && sqrtf_nid_postfix(INFINITY) == INFINITY);
     Require(std::isnan(sqrt_nid_postfix(-1.)) && std::isnan(sqrtf_nid_postfix(-1.f)));
+}
+
+static void CheckExactOperations() {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    Require(fabs_nid_postfix(-3.5) == 3.5 && fabs_nid_postfix(-INFINITY) == INFINITY);
+    Require(std::bit_cast<std::uint64_t>(fabs_nid_postfix(-0.)) == 0);
+    Require(std::isnan(fabs_nid_postfix(-nan)) && !std::signbit(fabs_nid_postfix(-nan)));
+    Require(trunc_nid_postfix(2.7) == 2. && trunc_nid_postfix(-2.7) == -2.);
+    Require(std::bit_cast<std::uint64_t>(trunc_nid_postfix(-0.5)) == 0x8000000000000000ull);
+    Require(trunc_nid_postfix(4503599627370497.) == 4503599627370497. && trunc_nid_postfix(-1e300) == -1e300);
+    Require(trunc_nid_postfix(-INFINITY) == -INFINITY && std::isnan(trunc_nid_postfix(nan)));
+    Require(fma_nid_postfix(2., 3., 4.) == 10.);
+    volatile double tenth = 0.1;
+    Require(fma_nid_postfix(tenth, 10., -1.) == 0x1p-54);
+    Require(fma_nid_postfix(0x1p1023, 2., -0x1p1023) == 0x1p1023);
+    Require(std::isnan(fma_nid_postfix(INFINITY, 0., 1.)));
 }
 
 static bool ExtendedBits(long double value, std::uint64_t mantissa, std::uint16_t signExponent) {
@@ -350,6 +369,7 @@ int main() {
     Require(exp2_nid_postfix(-3.) == 0.125);
     Require(ldexp_nid_postfix(0.75, 4) == 12.);
     CheckSquareRoot();
+    CheckExactOperations();
     CheckLongDouble();
     Require(scalbn_nid_postfix(0.75, -2) == 0.1875);
     Require(scalbnf_nid_postfix(0.75f, 4) == 12.f);
