@@ -731,11 +731,13 @@ int APS5_VABI sceKernelFstat(int d, FileStat* sb) {
 }
 
 int APS5_VABI sceKernelFsync(int fd) {
+    if (fd >= GuestSockets::FirstDescriptor) return SceErrorFromErrno(GuestSockets::IsOpen(fd) ? GUEST_EINVAL : GUEST_EBADF);
 #ifdef _WIN32
- return NativeSync(fd);
+    if (NativeSync(fd) != 0) return SceErrorFromErrno(errno);
 #else
- return ::fsync(fd);
+    if (::fsync(fd) != 0) return SceErrorFromErrno(errno);
 #endif
+    return 0;
 }
 
 int APS5_VABI sceKernelFdatasync(int fd) {
@@ -1141,8 +1143,7 @@ int APS5_VABI futimes_nid_postfix(int d, const KernelTimeval* times) {
 }
 
 int APS5_VABI fsync_nid_postfix(int fd) {
-    if (sceKernelFsync(fd) != 0) return PosixFailure(errno);
-    return 0;
+    return PosixResult(sceKernelFsync(fd));
 }
 
 int APS5_VABI fdatasync_nid_postfix(int fd) {
