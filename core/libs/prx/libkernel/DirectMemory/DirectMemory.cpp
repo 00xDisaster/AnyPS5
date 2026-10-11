@@ -673,6 +673,7 @@ void EraseProtections(std::uintptr_t start, std::uintptr_t end) {
 
 std::mutex g_reservationLock;
 std::map<std::uintptr_t, std::uintptr_t> g_reservations;
+
 void EraseReservations(const void* addr, size_t len) {
     const auto start = reinterpret_cast<std::uintptr_t>(addr);
     const auto end = start + len;
