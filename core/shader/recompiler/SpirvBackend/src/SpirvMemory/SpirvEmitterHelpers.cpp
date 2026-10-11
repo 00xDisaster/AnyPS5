@@ -120,7 +120,7 @@ std::uint32_t PushConstantArrayType(SpirvEmitterState& state) {
 
 std::uint32_t PushConstantBlockType(SpirvEmitterState& state) {
     return state.module.DecoratedType(spv::OpTypeStruct,
-        {{spv::OpMemberDecorate, {0u, spv::DecorationOffset, 0u}},
+        {{spv::OpMemberDecorate, {0u, spv::DecorationOffset, state.program.Metadata().bindings.PushSlotDword() * 4u}},
          {spv::OpDecorate, {spv::DecorationBlock}}},
         PushConstantArrayType(state));
 }
@@ -171,6 +171,15 @@ void DefineInputs(SpirvEmitterState& state) {
         })) {
             addBuiltin(StageInputKind::WorkgroupId, 3u, "gl_WorkGroupID");
         }
+    }
+    if (LdsInDeviceMemory(state)) {
+        if (std::none_of(state.inputs.begin(), state.inputs.end(), [](const SpirvInputBinding& input) {
+            return input.kind == StageInputKind::WorkgroupId;
+        })) {
+            state.inputs.push_back(SpirvInputBinding {{StageInputKind::WorkgroupId, 0u, 3u, "gl_WorkGroupID", false}});
+        }
+        state.numWorkgroupsVariable = DefineInterfaceVariable(state, TypeU32Vector(state, 3u), spv::StorageClassInput, "gl_NumWorkGroups");
+        state.module.AddAnnotation(spv::OpDecorate, state.numWorkgroupsVariable, spv::DecorationBuiltIn, spv::BuiltInNumWorkgroups);
     }
     const bool pixelStage = state.program.Resources().stage == IrShaderStage::Pixel;
     const bool emulated = pixelStage && state.program.Metadata().barycentricEmulation;
@@ -346,6 +355,10 @@ void DefineOutputs(SpirvEmitterState& state) {
         }
         }
     }
+    if (state.program.Resources().stage == IrShaderStage::Pixel && state.inputInfo.pixel != nullptr && state.inputInfo.pixel->psAlphaToCoverage) {
+        if (state.inputInfo.pixel->psSampleMaskExportEnable) throw std::runtime_error("alpha-to-coverage with a sample-mask export is unsupported");
+        BuiltIn(state.sampleMaskVariable, SampleMaskArrayType(state), "gl_SampleMask", spv::BuiltInSampleMask);
+    }
 }
 
 void DefineDescriptors(SpirvEmitterState& state) {
@@ -374,13 +387,15 @@ void DefineDescriptors(SpirvEmitterState& state) {
         switch (binding.kind) {
         case DescriptorBindingKind::Buffers:
             state.storageBufferVariable = Define(ArrayType(StorageBufferBlockType(state)), "buffers");
-            if (state.requirements.bufferInt64Atomics) {
-                state.storageBufferU64Variable = Define(ArrayType(StorageBufferU64BlockType(state)), "buffers_u64");
-                state.module.AddAnnotation(spv::OpDecorate, state.storageBufferVariable, spv::DecorationAliased);
-                state.module.AddAnnotation(spv::OpDecorate, state.storageBufferU64Variable, spv::DecorationAliased);
+            if (state.requirements.coherentBufferAlias) state.storageBufferCoherentVariable = Define(ArrayType(StorageBufferBlockType(state)), "buffers_coherent");
+            if (state.requirements.bufferInt64Atomics) state.storageBufferU64Variable = Define(ArrayType(StorageBufferU64BlockType(state)), "buffers_u64");
+            if (state.storageBufferU64Variable != 0u || state.storageBufferCoherentVariable != 0u) {
+                for (const auto variable : {state.storageBufferVariable, state.storageBufferCoherentVariable, state.storageBufferU64Variable}) {
+                    if (variable != 0u) state.module.AddAnnotation(spv::OpDecorate, variable, spv::DecorationAliased);
+                }
             }
             if (state.requirements.coherentBuffers) {
-                state.module.AddAnnotation(spv::OpDecorate, state.storageBufferVariable, spv::DecorationCoherent);
+                state.module.AddAnnotation(spv::OpDecorate, state.storageBufferCoherentVariable != 0u ? state.storageBufferCoherentVariable : state.storageBufferVariable, spv::DecorationCoherent);
                 if (state.storageBufferU64Variable != 0u) state.module.AddAnnotation(spv::OpDecorate, state.storageBufferU64Variable, spv::DecorationCoherent);
             }
             break;
@@ -418,6 +433,13 @@ void DefineDescriptors(SpirvEmitterState& state) {
             break;
         }
         }
+    }
+    if (LdsInDeviceMemory(state)) {
+        state.ldsBufferVariable = state.module.DefineGlobalVariable(TypePointer(state, spv::StorageClassStorageBuffer, StorageBufferBlockType(state)), spv::StorageClassStorageBuffer);
+        state.module.AddName(state.ldsBufferVariable, "workgroup_memory");
+        state.module.AddAnnotation(spv::OpDecorate, state.ldsBufferVariable, spv::DecorationDescriptorSet, WorkgroupMemoryDescriptorSet);
+        state.module.AddAnnotation(spv::OpDecorate, state.ldsBufferVariable, spv::DecorationBinding, 0u);
+        state.module.AddAnnotation(spv::OpDecorate, state.ldsBufferVariable, spv::DecorationCoherent);
     }
 }
 

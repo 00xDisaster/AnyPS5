@@ -6,8 +6,10 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureDetiler.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/VertexInput.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DccMetadata.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/ParallelCompare.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
 #include "SceShaders.hpp"
@@ -15,6 +17,7 @@
 #include "CacheKey.hpp"
 #include "Optimization/ResourceProgram.hpp"
 #include "BdaAbi.hpp"
+#include "prx/libc/include/general/VabiMacros.hpp"
 #include <spirv/unified1/spirv.hpp>
 #include <algorithm>
 #include <array>
@@ -22,6 +25,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <initializer_list>
 #include <iostream>
 #include <map>
@@ -32,7 +36,10 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <thread>
 #include <vector>
+
+extern "C" std::terminate_handler APS5_VABI _ZSt13set_terminatePFvvE_nid_postfix(std::terminate_handler handler);
 
 namespace {
 
@@ -85,6 +92,48 @@ void expectFailure(TAction action, std::string_view reason) {
         return;
     }
     throw std::runtime_error("expected graphics rejection: " + std::string(reason));
+}
+
+void hdrComponentSwapTests() {
+    using namespace AgcDriver::Graphics;
+    for (const auto number : {0u, 1u, 4u, 7u}) {
+        auto queue = makeState();
+        queue.context[0x31c] = (queue.context[0x31c] & ~0x1f7cu) | (12u << 2u) | (number << 8u) | (1u << 11u);
+        const auto address = reinterpret_cast<std::uintptr_t>(sliceMemory.data());
+        queue.context[0x318] = static_cast<std::uint32_t>(address >> 8u);
+        queue.context[0x390] = static_cast<std::uint32_t>(address >> 40u);
+        queue.context[0x1b3] = queue.context[0x1b4] = 2;
+        auto state = DecodeState(queue);
+        const auto expected = number == 0 ? VK_FORMAT_R16G16B16A16_UNORM : number == 1 ? VK_FORMAT_R16G16B16A16_SNORM : number == 4 ? VK_FORMAT_R16G16B16A16_UINT : VK_FORMAT_R16G16B16A16_SFLOAT;
+        Require(state.color.format == expected && state.color.elementBytes == 8, "alternate 16-bit color format was not decoded");
+        Require(state.color.componentMapping == 0xc6u && ExportMappings(state)[0] == 0xc6u, "alternate 16-bit color export did not swap red and blue");
+        Require(DecodePixelStageInfo(queue.context, ExportMappings(state)).targetExportMapping[0] == 0xc6u, "pixel export lost the alternate color mapping");
+        queue.context[0x8e] = 1;
+        state = DecodeState(queue);
+        Require(state.blend.colorWriteMask == VK_COLOR_COMPONENT_B_BIT, "alternate red-only write did not select the third storage component");
+        queue.context[0x8e] = 0xf;
+        queue.context[0x1e0] = (1u << 30u) | 13u;
+        for (std::uint32_t i = 0; i < 4; ++i) queue.context[0x105 + i] = std::bit_cast<std::uint32_t>(float(i + 1) / 8.0f);
+        state = DecodeState(queue);
+        Require(state.blendConstants == std::array<float, 4>{0.375f, 0.25f, 0.125f, 0.5f}, "alternate color blend constants were not swizzled with the export");
+        queue.context[0x31c] &= ~(1u << 11u);
+        state = DecodeState(queue);
+        Require(state.color.componentMapping == 0xe4u && state.blendConstants == std::array<float, 4>{0.125f, 0.25f, 0.375f, 0.5f}, "standard color mapping changed");
+        queue.context[0x31c] |= 2u << 11u;
+        expectFailure([&] { DecodeState(queue); }, "reversed component order");
+    }
+    auto queue = makeState();
+    queue.context[0x31c] = (queue.context[0x31c] & ~0x1f7cu) | (12u << 2u) | (7u << 8u) | (1u << 11u);
+    for (const auto offset : {0x318u, 0x31bu, 0x31cu, 0x31du}) queue.context[offset + 0xfu] = queue.context.at(offset);
+    for (const auto offset : {0x390u, 0x3b0u, 0x3b8u}) queue.context[offset + 1u] = queue.context.at(offset);
+    queue.context[0x31c + 0xfu] &= ~(1u << 11u);
+    queue.context[0x1c5] = 0x99u;
+    queue.context[0x8e] = queue.context[0x8f] = 0xffu;
+    queue.context[0x1e0] = queue.context[0x1e1] = (1u << 30u) | 13u;
+    for (std::uint32_t i = 0; i < 4; ++i) queue.context[0x105 + i] = std::bit_cast<std::uint32_t>(float(i + 1) / 8.0f);
+    expectFailure([&] { DecodeState(queue); }, "conflicting blend constants");
+    queue.context[0x107] = queue.context[0x105];
+    Require(DecodeState(queue).colors.size() == 2, "compatible constants rejected mixed component orders");
 }
 
 void stateTests() {
@@ -438,13 +487,39 @@ void ShaderStageTests() {
     queue.context[0x2d5] = 0x200d;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "Patch topology and HS_EN disagree");
     queue.userConfig[0x242] = 9;
-    queue.context[0x2d6] = (3u << 8u) | (3u << 14u);
-    queue.context[0x2db] = 1u | (2u << 2u) | (2u << 5u);
-    stages = AgcDriver::Graphics::DecodeState(queue).stages;
-    Require(stages.path == AgcDriver::Graphics::ShaderPath::Tessellation && stages.tessellation && stages.tessellation->inputControlPoints == 3, "tessellation routing changed");
+    queue.context[0x2d6] = 0xc355;
+    queue.context[0x2db] = 0x40049;
+    queue.context[0x286] = 0x42800000;
+    queue.context[0x287] = 0x3f800000;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "unsupported tessellation routing");
+    queue.context[0x2d5] = 0x0200010d;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "unsupported tessellation routing");
+    queue.context[0x2d5] = 0x0200210d;
+    {
+        std::vector<AgcDriver::Graphics::RegisterRead> tessellationLog;
+        AgcDriver::Graphics::RegisterReadLog() = &tessellationLog;
+        stages = AgcDriver::Graphics::DecodeState(queue).stages;
+        AgcDriver::Graphics::RegisterReadLog() = nullptr;
+        for (const auto read : tessellationLog) Require(AgcDriver::Graphics::DrawKeyCovers(read), "DrawKeyRegisters lacks a tessellation register the decoder reads: " + std::to_string(read.offset));
+    }
+    Require(stages.path == AgcDriver::Graphics::ShaderPath::Tessellation && stages.tessellation, "tessellation routing changed");
+    const auto& tessellation = *stages.tessellation;
+    Require(tessellation.inputControlPoints == 3 && tessellation.outputControlPoints == 3 && tessellation.domain == 1 && tessellation.partitioning == 2 && tessellation.outputTopology == 2, "the passthrough triangle-patch configuration decoded differently");
+    for (const auto [parameters, reason] : {std::pair{0x44049u, "VGT_TF_PARAM"}, std::pair{0x140049u, "VGT_TF_PARAM"}, std::pair{0x2040049u, "VGT_TF_PARAM"}, std::pair{0x40059u, "only triangular"}, std::pair{0x40069u, "only triangular"}, std::pair{0x4006au, "only triangular"}}) {
+        queue.context[0x2db] = parameters;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, reason);
+    }
+    queue.context[0x2db] = 0x40049;
+    for (const auto [maximum, minimum] : {std::pair{0x41100000u, 0x3f800000u}, std::pair{0x42800000u, 0x40000000u}}) {
+        queue.context[0x286] = maximum;
+        queue.context[0x287] = minimum;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "tessellation level clamps");
+    }
+    queue.context[0x286] = 0x42800000;
+    queue.context[0x287] = 0x3f800000;
     queue.context[0x2d5] = 0x202d;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "combined tessellation and geometry");
-    queue.context[0x2d5] = 0x200d;
+    queue.context[0x2d5] = 0x0200210d;
     queue.context[0x2d6] = 0;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "control-point counts");
     queue = makeState();
@@ -463,6 +538,41 @@ void ShaderStageTests() {
     queue.context[0x2d5] = 0x2000;
     queue.context.erase(0x1b6);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "missing register");
+}
+
+void NggVertexWorkgroupTests() {
+    auto queue = makeState();
+    queue.context[0x2d5] = 0x12010;
+    queue.userConfig[0x242] = 4;
+    queue.userConfig[0x25b] = 0x10080;
+    queue.context[0x1ff] = 0x80;
+    queue.context[0x2ce] = 0;
+    queue.context[0x29b] = 2;
+    queue.context[0x2ab] = 1;
+    queue.shader[0x8a] = 0x222c0009;
+    queue.shader[0x8b] = 0x43001e;
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    Require(AgcDriver::Graphics::DecodeState(queue).stages.path == AgcDriver::Graphics::ShaderPath::Vertex, "an NGG vertex program without a workgroup left the vertex path");
+    auto state = AgcDriver::Graphics::DecodeState(queue, true);
+    Require(state.stages.path == AgcDriver::Graphics::ShaderPath::Geometry && state.stages.mesh, "an NGG vertex program that needs a workgroup did not take the mesh path");
+    auto mesh = *state.stages.mesh;
+    Require(mesh.inputPrimitive == 4 && mesh.primitivesPerGroup == 42 && mesh.verticesPerGroup == 126 && mesh.maxVertices == 128 && mesh.maxPrimitives == 128 && mesh.threadsPerGroup == 128 && mesh.ldsSizeDwords == 1024 && mesh.esgsItemSize == 1, "the NGG vertex subgroup of a triangle list changed");
+    queue.userConfig[0x242] = 6;
+    mesh = *AgcDriver::Graphics::DecodeState(queue, true).stages.mesh;
+    Require(mesh.primitivesPerGroup == 126 && mesh.verticesPerGroup == 128 && mesh.maxPrimitives == 128, "the NGG vertex subgroup of a triangle strip is not bounded by its vertex budget");
+    queue.shader[0x8a] = 0x222c0005;
+    queue.shader[0x8b] = 0x400030;
+    Require(AgcDriver::Graphics::DecodeState(queue, true).stages.mesh.has_value(), "an NGG vertex program that loads only its vertex ID was rejected");
+    queue.shader[0x8a] = 0x222c0009;
+    queue.shader[0x8b] = 0x43001e;
+    queue.context[0x1ff] = 2;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue, true); }, "invalid geometry subgroup output");
+    queue.context[0x1ff] = 0x80;
+    for (const auto stages : {0x02012010u, 0x00012030u, 0x00010010u}) {
+        queue.context[0x2d5] = stages;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue, true); }, "requires PRIMGEN_EN without GS_EN, PRIMGEN_PASSTHRU_EN or tessellation");
+    }
 }
 
 constexpr std::array<std::uint8_t, 8> IdentityExports{0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u};
@@ -561,6 +671,9 @@ void ComputeScratchTests() {
     expectFailure([&] { static_cast<void>(AgcDriver::Graphics::DecodeComputeStageInfo(shader, header)); }, "zero scratch size");
     shader[0x213] = 0u;
     Require(AgcDriver::Graphics::DecodeComputeStageInfo(shader, {}).scratchDwords == 0u, "a dispatch without SCRATCH_EN got scratch");
+    shader[0x207] = 0x00100040u;
+    Require(AgcDriver::Graphics::DecodeComputeStageInfo(shader, {}).numThreads[0] == 64u, "the partial group size leaked into the group size");
+    shader[0x207] = 64u;
     ShaderRecompiler::RecompileRequest request{};
     const std::array<std::uint32_t, 1> code{0xbf810000u};
     request.shader = {ShaderRecompiler::ShaderStage::Compute, 0x30000u, code, 0, {}};
@@ -582,6 +695,40 @@ void shaderUserDataTailPaddingTests() {
     const auto headerAddress = reinterpret_cast<std::uintptr_t>(header.data());
     const auto info = AgcDriver::Graphics::DecodeVertexStageInfo(header, headerAddress, {}, nullptr, true);
     Require(!info.fetchEmbedded, "a ShaderUserData block without trailing struct padding was rejected");
+}
+
+void ColorPipeBankXorTests() {
+    constexpr std::uint32_t side = 128;
+    constexpr std::size_t blockBytes = 65536;
+    static std::vector<std::byte> storage(2 * blockBytes + side * side * 4);
+    const auto block = (reinterpret_cast<std::uintptr_t>(storage.data()) + blockBytes - 1) / blockBytes * blockBytes;
+    auto queue = makeState();
+    queue.context[0x3b8] |= static_cast<std::uint32_t>(AgcDriver::Graphics::ColorTileMode::RenderTarget) << 14u;
+    queue.context[0x3b0] = ((side - 1u) << 14u) | (side - 1u);
+    for (const auto offset : {0xdu, 0x82u, 0x91u, 0x95u}) queue.context[offset] = (side << 16u) | side;
+    for (const std::uint32_t pipeBankXor : {0u, 0x5600u, 0xff00u}) {
+        const auto address = block + pipeBankXor;
+        queue.context[0x318] = static_cast<std::uint32_t>(address >> 8u);
+        queue.context[0x390] = static_cast<std::uint32_t>(address >> 40u);
+        const auto color = AgcDriver::Graphics::DecodeState(queue).color;
+        Require(color.address == block && color.surfaceAddress == block && color.pipeBankXor == pipeBankXor, "a SW_64KB_R_X color base did not split into its block base and pipe/bank XOR " + std::to_string(pipeBankXor));
+    }
+    queue.context[0x3b8] = 0x9000000u | (0x16u << 14u) | (0x14u << 19u);
+    for (const std::uint32_t pipeBankXor : {0u, 0xa00u, 0xf00u}) {
+        const auto address = block + 0x3000u + pipeBankXor;
+        queue.context[0x318] = static_cast<std::uint32_t>(address >> 8u);
+        queue.context[0x390] = static_cast<std::uint32_t>(address >> 40u);
+        const auto color = AgcDriver::Graphics::DecodeState(queue).color;
+        Require(color.tileMode == AgcDriver::Graphics::ColorTileMode::D4KBX && color.address == block + 0x3000u && color.pipeBankXor == pipeBankXor, "a SW_4KB_D_X color base did not split into its 4 KiB block base and pipe/bank XOR " + std::to_string(pipeBankXor));
+    }
+}
+
+void HeaderlessVertexStageTests() {
+    const std::array<std::uint32_t, 4> userData{1, 2, 3, 4};
+    const auto info = AgcDriver::Graphics::DecodeVertexStageInfo({}, 0, userData);
+    Require(!info.fetchEmbedded && info.resourcesNum == 0, "a vertex program without an AGC header received an embedded fetch table");
+    const std::array<std::byte, 8> truncated{};
+    expectFailure([&] { static_cast<void>(AgcDriver::Graphics::DecodeVertexStageInfo(truncated, 0x1000, userData)); }, "smaller than the fixed AGC header");
 }
 
 void PixelInputLayoutTests() {
@@ -732,6 +879,19 @@ void TuningFieldTests() {
 }
 
 void ReversedComponentOrderTests() {
+    {
+        auto queue = makeState();
+        queue.context[0x31c] = (queue.context[0x31c] & ~((0x1fu << 2u) | (7u << 8u) | (3u << 11u))) | (3u << 2u) | (1u << 11u);
+        const auto state = AgcDriver::Graphics::DecodeState(queue);
+        Require(state.colors.size() == 1 && state.colors[0].format == VK_FORMAT_R8G8_UNORM && state.colors[0].componentMapping == 0xecu, "an 8_8 target with SWAP_ALT did not store the x and w exports in its two channels");
+        queue.context[0x1e0] = 0x40010001u;
+        for (const auto offset : {0x105u, 0x106u, 0x107u, 0x108u}) queue.context[offset] = 0;
+        const auto blended = AgcDriver::Graphics::DecodeState(queue);
+        Require(blended.blends.size() == 1 && blended.blends[0].blendEnable, "blending into an 8_8 SWAP_ALT target with one equation for color and alpha was rejected");
+        Require(!AgcDriver::Graphics::SplitsAlternateAlpha(blended), "one blend equation for color and alpha split an 8_8 SWAP_ALT draw");
+        queue.context[0x1e0] = 0x60000001u;
+        Require(AgcDriver::Graphics::SplitsAlternateAlpha(AgcDriver::Graphics::DecodeState(queue)), "a separate alpha blend into an 8_8 SWAP_ALT target did not split its second channel");
+    }
     for (const auto& [swap, mapping] : {std::pair{2u, 0x1bu}, std::pair{3u, 0x93u}}) {
         auto queue = makeState();
         queue.context[0x31c] = (queue.context[0x31c] & ~(3u << 11u)) | (swap << 11u);
@@ -745,9 +905,6 @@ void ReversedComponentOrderTests() {
         const auto wide = AgcDriver::Graphics::DecodeState(queue);
         Require(wide.colors.size() == 1 && wide.colors[0].format == VK_FORMAT_R16G16B16A16_SFLOAT && wide.colors[0].componentMapping == mapping && wide.blends[0].colorWriteMask == 0xfu, "a 16_16_16_16 float target with a reversed component order did not map exports onto RGBA16");
     }
-    auto queue = makeState();
-    queue.context[0x31c] = (queue.context[0x31c] & ~((0x1fu << 2u) | (7u << 8u) | (3u << 11u))) | (12u << 2u) | (7u << 8u) | (1u << 11u);
-    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "component swap 1");
 }
 
 void CompactedExportTests() {
@@ -795,6 +952,8 @@ void DepthStencilTests() {
     queue.context[0x011] = 0x20000181;
     for (const auto offset : {0x012u, 0x014u}) queue.context[offset] = 0x100;
     for (const auto offset : {0x013u, 0x015u}) queue.context[offset] = 0x200;
+    queue.context[0x005] = 0x300;
+    queue.context[0x01e] = 0x1;
     queue.context[0x10b] = 0x00050050;
     queue.context[0x10c] = 0x01ffff01;
     queue.context[0x10d] = 0x01000001;
@@ -808,10 +967,36 @@ void DepthStencilTests() {
     queue.context[0x1b4] = 2;
     const auto rejection = AgcDriver::Graphics::DrawRejection(queue, false);
     Require(rejection.empty(), "precheck rejected a stencil draw with a surface: " + rejection);
-    Require(state.depth && state.depth->address == 0x10000 && state.depth->stencilAddress == 0x20000 && state.depth->format == VK_FORMAT_D32_SFLOAT_S8_UINT && state.depth->clearStencil == 7, "depth surface decode changed");
+    Require(state.depth && state.depth->address == 0x10000 && state.depth->stencilAddress == 0x20000 && state.depth->format == VK_FORMAT_D32_SFLOAT_S8_UINT && state.depth->clearStencil == 7 && state.depth->htileAddress == 0x10000030000ull && !state.depth->htileStencil, "depth surface decode changed");
+    {
+        queue.context[0x011] &= ~(1u << 29u);
+        const auto stencilTiled = AgcDriver::Graphics::DecodeState(queue);
+        Require(stencilTiled.depth && stencilTiled.depth->htileStencil, "HTILE holds the stencil state without TILE_STENCIL_DISABLE");
+        queue.context[0x011] |= 1u << 29u;
+        queue.context[0x010] &= ~(1u << 29u);
+        const auto untiled = AgcDriver::Graphics::DecodeState(queue);
+        Require(untiled.depth && untiled.depth->htileAddress == 0, "HTILE must be ignored without TILE_SURFACE_ENABLE");
+        queue.context[0x010] |= 1u << 29u;
+        using AgcDriver::Graphics::HtileFillClears;
+        using AgcDriver::Graphics::HtileFillCovers;
+        constexpr VkImageAspectFlags both = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        Require(HtileFillClears(0x0003fff0u, false) == VK_IMAGE_ASPECT_DEPTH_BIT, "a depth-only HTILE fill with ZMask 0 clears the depth");
+        Require(HtileFillClears(0x000000f0u, true) == both, "a depth and stencil fast clear (ZMask 0, SMem 0) clears both aspects");
+        Require(HtileFillClears(0x000003f0u, true) == VK_IMAGE_ASPECT_DEPTH_BIT, "SMem 3 leaves the stencil uncleared");
+        Require(HtileFillClears(0xfffff0ffu, true) == VK_IMAGE_ASPECT_STENCIL_BIT, "ZMask 0xf with SMem 0 clears only the stencil");
+        Require(HtileFillClears(0xffffffffu, true) == 0 && HtileFillClears(0xffffffffu, false) == 0, "an expanded fill clears nothing");
+        const VkExtent2D extent{16, 8};
+        Require(HtileFillCovers(0x10000, extent, 0x10000, 0x8000) && HtileFillCovers(0x10000, extent, 0xfff0, 0x8010), "a fill over the whole 32 KiB metadata block covers the surface");
+        Require(!HtileFillCovers(0x10000, extent, 0x10000, 0x7ffc) && !HtileFillCovers(0x10000, extent, 0x10004, 0x8000) && !HtileFillCovers(0, extent, 0, 0x10000), "a partial fill, one starting past the HTILE base, or no HTILE covers nothing");
+        // Pipe-aligned SW_64KB_Z_X places a 16x16 surface's HTILE words across its metadata block (a valid word at offset
+        // 260, AMD PAL), so a fill of the words a linear layout would hold covers nothing.
+        Require(!HtileFillCovers(0x10000, {16, 16}, 0x10000, 16) && !HtileFillCovers(0x10000, {16, 16}, 0x10000, 264), "a fill of the linear HTILE size of a 16x16 surface misses its pipe-aligned words");
+        Require(AgcDriver::Graphics::HtileMetadataBytes({1024, 512}) == 0x8000u && AgcDriver::Graphics::HtileMetadataBytes({1025, 512}) == 0x10000u && AgcDriver::Graphics::HtileMetadataBytes({3840, 2160}) == 20u * 0x8000u, "the HTILE metadata is 32 KiB per 1024x512 block");
+    }
     Require(state.renderExtent.width == 4 && state.renderExtent.height == 2, "render extent ignores the depth surface");
     Require(!state.depthTest && !state.depthWrite && state.stencilTest, "depth/stencil enables changed");
-    Require(state.depth->htileAddress == 0, "an HTILE surface without DB_HTILE_DATA_BASE decoded an HTILE address");
+    queue.context.erase(0x005);
+    Require(AgcDriver::Graphics::DecodeState(queue).depth->htileAddress == 0, "an HTILE surface without DB_HTILE_DATA_BASE decoded an HTILE address");
     queue.context[0x005] = 0x300;
     queue.context[0x01e] = 0x01;
     log.clear();
@@ -922,6 +1107,11 @@ void DepthStencilTests() {
     queue.context[0x31b] = 1u | (1u << 13u);
     const auto slice = AgcDriver::Graphics::DecodeState(queue);
     Require(slice.color.address == sliced + 1024u && slice.color.bytes == 1024u, "a color view of one slice did not move the target by one slice");
+    queue.context[0x3b8] = 0x09000001;
+    const auto arraySlice = AgcDriver::Graphics::DecodeState(queue);
+    Require(arraySlice.color.address == sliced + 1024u && arraySlice.color.bytes == 1024u && arraySlice.color.depth == 1u, "a color view of one slice of a 2D array target did not move the target by one slice");
+    queue.context[0x31b] = 2u | (2u << 13u);
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "beyond the array surface");
     queue.context[0x3b8] = 0x0a000003;
     queue.context[0x31b] = 2u | (2u << 13u);
     const auto volume = AgcDriver::Graphics::DecodeState(queue);
@@ -1077,6 +1267,12 @@ void DepthBoundsBiasTests() {
     queue.context[0x205] = 0x00003a46u;
     state = AgcDriver::Graphics::DecodeState(queue);
     Require(state.depthBias && state.depthBiasConstant == 4.0f && state.cullMode == VK_CULL_MODE_BACK_BIT, "a triangle draw with the point and line offset enable lost its depth bias");
+    queue.context[0x205] = 0x00013a46u;
+    state = AgcDriver::Graphics::DecodeState(queue);
+    Require(state.depthBias && state.depthBiasConstant == 4.0f && state.cullMode == VK_CULL_MODE_BACK_BIT, "the window offset enable bit changed the raster decode while the window offset is zero");
+    queue.context[0x80] = 1;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "window offset");
+    queue.context[0x80] = 0;
     queue.userConfig[0x242] = 2;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "polygon mode, depth bias or nonstandard rasterization");
     queue.userConfig[0x242] = 4;
@@ -1240,6 +1436,28 @@ void metadataPassTests() {
             for (std::size_t offset = 0; offset < tiledBytes; offset += 4) filled = filled && std::memcmp(tiledTexels + offset, &texel, 4) == 0;
             Require(filled && stored == expected && std::all_of(tiledKeys, tiledKeys + expected, [](std::uint8_t value) { return value == 0xff; }), std::string("a ") + code + " fast clear eliminate of a 128x128 SW_64KB_R_X target with " + alignment + " DCC stored uncompressed keys over " + std::to_string(stored) + " of its " + std::to_string(keyCount) + " DCC key bytes, expected " + std::to_string(expected));
         }
+        std::vector<std::uint32_t> original(tiledBytes / 4);
+        for (std::size_t index = 0; index < original.size(); ++index) original[index] = 0x01000000u + static_cast<std::uint32_t>(index);
+        const auto resetSingle = [&] {
+            std::memcpy(tiledTexels, original.data(), tiledBytes);
+            std::memset(tiledKeys, 0x10, keyCount);
+        };
+        resetSingle();
+        expectFailure([&] { AgcDriver::Graphics::RunColorMetadataPass(context, *tiledPass); }, "fast-clear eliminate over comp-to-single");
+        Require(std::memcmp(tiledTexels, original.data(), tiledBytes) == 0 && std::all_of(tiledKeys, tiledKeys + keyCount, [](std::uint8_t value) { return value == 0x10; }), "a refused fast-clear eliminate over comp-to-single keys changed the " + alignment + " target");
+        resetSingle();
+        AgcDriver::Graphics::RunColorMetadataPass(context, {AgcDriver::Graphics::ColorMetadataPass::Mode::DccDecompress, tiledPass->targets});
+        const AgcDriver::Graphics::ColorTargetLayout layout(tiledSide, tiledSide, AgcDriver::Graphics::ColorTileMode::RenderTarget, 4);
+        bool expanded = true;
+        for (std::uint32_t y = 0; y < tiledSide && expanded; ++y) {
+            for (std::uint32_t x = 0; x < tiledSide && expanded; ++x) {
+                std::uint32_t texel = 0;
+                std::memcpy(&texel, tiledTexels + layout.Offset(x, y), 4);
+                expanded = texel == original[layout.Offset(x & ~7u, y & ~7u) / 4];
+            }
+        }
+        const auto stored = static_cast<std::size_t>(std::count(tiledKeys, tiledKeys + keyCount, std::uint8_t{0xff}));
+        Require(expanded && stored == expected, "a DCC decompress of comp-to-single keys over a 128x128 SW_64KB_R_X target with " + alignment + " DCC did not give every 8x8 block its first texel (" + std::to_string(stored) + " of " + std::to_string(keyCount) + " keys uncompressed, expected " + std::to_string(expected) + ")");
     }
 }
 
@@ -1452,6 +1670,32 @@ void DepthClipTests() {
     }
 }
 
+void AlphaToCoverageTests() {
+    auto queue = makeState();
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    Require(!AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "alpha-to-coverage decoded while disabled");
+    queue.context[0x2dc] = 0xaa01;
+    Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "undithered alpha-to-coverage was not decoded");
+    Require(AgcDriver::Graphics::DrawRejection(queue, false).empty(), "the precheck rejected undithered alpha-to-coverage");
+    for (const auto control : {0x8701u, 0x1aa01u, 0xaa03u}) {
+        queue.context[0x2dc] = control;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "alpha-to-coverage");
+        Require(AgcDriver::Graphics::DrawRejection(queue, false).find("alpha-to-coverage") != std::string::npos, "the precheck accepted unsupported alpha-to-coverage");
+    }
+    queue.context[0x2dc] = 0xaa01;
+    const auto exportFormat = queue.context.at(0x1c5);
+    for (const auto format : {4u, 5u, 6u, 9u}) {
+        queue.context[0x1c5] = (exportFormat & ~0xfu) | format;
+        Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "alpha-to-coverage rejected an MRT0 export format with a floating-point alpha");
+    }
+    for (const auto format : {1u, 2u, 3u}) {
+        queue.context[0x1c5] = (exportFormat & ~0xfu) | format;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "floating-point alpha");
+    }
+    queue.context[0x1c5] = exportFormat;
+}
+
 void InitialContextTests() {
     const auto configured = makeState();
     AgcDriver::QueueState queue;
@@ -1469,7 +1713,7 @@ void InitialContextTests() {
     }
     queue.context[0x206] = 0x43f;
     queue.context[0x2dc] |= 1;
-    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "alpha-to-coverage");
+    Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "undithered alpha-to-coverage was not decoded");
     queue.context.erase(0x2dc);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "missing register");
     queue.ClearContext();
@@ -1492,6 +1736,7 @@ struct MockVulkan {
     std::map<VkBuffer, VkBufferUsageFlags> bufferUsage;
     std::map<VkDeviceMemory, VkMemoryAllocateFlags> allocationFlags;
     std::map<VkBuffer, VkDeviceMemory> bufferMemory;
+    std::map<VkBuffer, VkDeviceSize> bufferOffset;
     std::map<VkDeviceMemory, std::vector<std::byte>> memories;
     std::map<VkDeviceMemory, VkDeviceSize> allocationSizes;
     VkDeviceSize allocatedBytes = 0;
@@ -1503,7 +1748,16 @@ struct MockVulkan {
     std::vector<VkDescriptorPoolSize> poolSizes;
     std::uint32_t poolMaxSets = 0;
     VkDescriptorPoolCreateFlags poolFlags = 0;
-    std::uint32_t freedSets = 0;
+    struct DescriptorPool {
+        VkDescriptorPoolCreateFlags flags;
+        std::uint32_t maxSets;
+        std::uint32_t allocated = 0;
+        std::uint32_t attempts = 0;
+        std::uint32_t resets = 0;
+    };
+    std::map<VkDescriptorPool, DescriptorPool> descriptorPools;
+    std::uint32_t descriptorPoolLimit = 1000000;
+    VkResult descriptorResetResult = VK_SUCCESS;
     std::vector<MockDescriptorWrite> writes;
     std::vector<VkCopyDescriptorSet> copies;
     bool allowCopies = false;
@@ -1556,9 +1810,15 @@ VKAPI_ATTR VkResult VKAPI_CALL mockAllocateMemory(VkDevice, const VkMemoryAlloca
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL mockBindBufferMemory(VkDevice, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize offset) {
-    Require(offset == 0, "mock buffer memory must be bound at offset zero");
+    Require(offset + mock.bufferSizes.at(buffer) <= mock.memories.at(memory).size(), "mock buffer memory is bound past its allocation");
     mock.bufferMemory[buffer] = memory;
+    mock.bufferOffset[buffer] = offset;
     return VK_SUCCESS;
+}
+
+std::span<std::byte> mockBufferMemory(VkBuffer buffer) {
+    auto& memory = mock.memories.at(mock.bufferMemory.at(buffer));
+    return std::span<std::byte>(memory).subspan(static_cast<std::size_t>(mock.bufferOffset.at(buffer)), static_cast<std::size_t>(mock.bufferSizes.at(buffer)));
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL mockMapMemory(VkDevice, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize, VkMemoryMapFlags, void** data) {
@@ -1601,22 +1861,33 @@ VKAPI_ATTR VkResult VKAPI_CALL mockCreateDescriptorPool(VkDevice, const VkDescri
     mock.poolSizes.assign(info->pPoolSizes, info->pPoolSizes + info->poolSizeCount);
     mock.poolMaxSets = info->maxSets;
     mock.poolFlags = info->flags;
+    mock.descriptorPools.emplace(*pool, MockVulkan::DescriptorPool{info->flags, std::min(info->maxSets, mock.descriptorPoolLimit)});
     ++mock.live;
     return VK_SUCCESS;
 }
 
-VKAPI_ATTR void VKAPI_CALL mockDestroyDescriptorPool(VkDevice, VkDescriptorPool, const VkAllocationCallbacks*) {
+VKAPI_ATTR void VKAPI_CALL mockDestroyDescriptorPool(VkDevice, VkDescriptorPool pool, const VkAllocationCallbacks*) {
+    mock.descriptorPools.erase(pool);
     --mock.live;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL mockAllocateDescriptorSets(VkDevice, const VkDescriptorSetAllocateInfo* info, VkDescriptorSet* sets) {
     Require(info->descriptorSetCount == 1, "exactly one descriptor set must be allocated");
+    auto& pool = mock.descriptorPools.at(info->descriptorPool);
+    ++pool.attempts;
+    if (pool.allocated == pool.maxSets) return VK_ERROR_OUT_OF_POOL_MEMORY;
+    ++pool.allocated;
     sets[0] = makeHandle<VkDescriptorSet>();
     return VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL mockFreeDescriptorSets(VkDevice, VkDescriptorPool, std::uint32_t count, const VkDescriptorSet*) {
-    mock.freedSets += count;
+VKAPI_ATTR VkResult VKAPI_CALL mockResetDescriptorPool(VkDevice, VkDescriptorPool handle, VkDescriptorPoolResetFlags) {
+    auto& pool = mock.descriptorPools.at(handle);
+    const auto result = mock.descriptorResetResult;
+    mock.descriptorResetResult = VK_SUCCESS;
+    if (result != VK_SUCCESS) return result;
+    pool.allocated = 0;
+    ++pool.resets;
     return VK_SUCCESS;
 }
 
@@ -1703,7 +1974,7 @@ VKAPI_ATTR void VKAPI_CALL mockCmdDispatch(VkCommandBuffer, std::uint32_t x, std
 }
 
 VKAPI_ATTR void VKAPI_CALL mockCmdUpdateBuffer(VkCommandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, const void* data) {
-    auto& memory = mock.memories.at(mock.bufferMemory.at(buffer));
+    auto memory = mockBufferMemory(buffer);
     Require(offset + size <= memory.size(), "a buffer update exceeds its buffer");
     std::memcpy(memory.data() + offset, data, static_cast<std::size_t>(size));
 }
@@ -1762,7 +2033,7 @@ PFN_vkVoidFunction VKAPI_CALL mockProc(VkDevice, const char* name) {
         {"vkCreateDescriptorPool", reinterpret_cast<PFN_vkVoidFunction>(mockCreateDescriptorPool)},
         {"vkDestroyDescriptorPool", reinterpret_cast<PFN_vkVoidFunction>(mockDestroyDescriptorPool)},
         {"vkAllocateDescriptorSets", reinterpret_cast<PFN_vkVoidFunction>(mockAllocateDescriptorSets)},
-        {"vkFreeDescriptorSets", reinterpret_cast<PFN_vkVoidFunction>(mockFreeDescriptorSets)},
+        {"vkResetDescriptorPool", reinterpret_cast<PFN_vkVoidFunction>(mockResetDescriptorPool)},
         {"vkUpdateDescriptorSets", reinterpret_cast<PFN_vkVoidFunction>(mockUpdateDescriptorSets)},
         {"vkCmdBindDescriptorSets", reinterpret_cast<PFN_vkVoidFunction>(mockCmdBindDescriptorSets)},
         {"vkCreatePipelineLayout", reinterpret_cast<PFN_vkVoidFunction>(mockCreatePipelineLayout)},
@@ -1830,7 +2101,7 @@ std::vector<std::uint32_t> ShaderDataWords(std::initializer_list<std::uint32_t> 
     return words;
 }
 
-bool sameBytes(const std::vector<std::byte>& memory, const void* expected, std::size_t bytes) {
+bool sameBytes(std::span<const std::byte> memory, const void* expected, std::size_t bytes) {
     return memory.size() >= bytes && std::memcmp(memory.data(), expected, bytes) == 0;
 }
 
@@ -1848,8 +2119,8 @@ const VkDescriptorSetLayoutBinding& findLayoutBinding(std::uint32_t binding) {
     throw std::runtime_error("expected descriptor set layout binding is missing for binding " + std::to_string(binding));
 }
 
-const std::vector<std::byte>& bufferBytes(VkBuffer buffer) {
-    return mock.memories.at(mock.bufferMemory.at(buffer));
+std::span<const std::byte> bufferBytes(VkBuffer buffer) {
+    return mockBufferMemory(buffer);
 }
 
 void expectResourceFailure(const ShaderRecompiler::RecompileResult& vertex, const ShaderRecompiler::RecompileResult& fragment, std::string_view reason) {
@@ -1878,6 +2149,60 @@ void expectSingleAccepted(const ShaderRecompiler::DescriptorBinding& binding, st
     Require(mock.live == 0, std::string(what) + " leaked Vulkan objects");
 }
 
+void descriptorPoolTests() {
+    using namespace AgcDriver::Graphics;
+    mock = MockVulkan{};
+    mock.descriptorPoolLimit = 2;
+    {
+        DescriptorCache cache(mockContext());
+        const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+        const std::array<std::uint32_t, 4> key{binding.binding, binding.descriptorType, binding.descriptorCount, binding.stageFlags};
+        const auto layout = cache.Layout(key, std::span(&binding, 1));
+        const VkDescriptorPoolSize size{binding.descriptorType, binding.descriptorCount};
+        const auto allocate = [&] { return cache.Allocate(layout, std::span(&size, 1)); };
+        const auto first = allocate();
+        const auto second = allocate();
+        Require(first.pool == second.pool, "descriptor allocations did not share a pool");
+        Require(mock.descriptorPools.at(first.pool).flags == 0, "descriptor pools use the individually freed allocation path");
+        const auto third = allocate();
+        const auto fourth = allocate();
+        const auto fifth = allocate();
+        Require(third.pool == fourth.pool && third.pool != first.pool && fifth.pool != third.pool, "exhausted descriptor pools did not advance the chain");
+        Require(mock.descriptorPools.at(first.pool).attempts == 3, "an exhausted descriptor pool was retried before reset");
+        cache.Free(first);
+        Require(mock.descriptorPools.at(first.pool).resets == 0, "a descriptor pool reset while another set was live");
+        cache.Free(second);
+        Require(mock.descriptorPools.at(first.pool).resets == 1, "an empty descriptor pool was not reset");
+        const auto sixth = allocate();
+        const auto seventh = allocate();
+        Require(sixth.pool == fifth.pool && seventh.pool == first.pool && cache.Counters().pools == 3, "an empty descriptor pool was not recycled");
+        cache.Free(third);
+        cache.Free(fourth);
+        cache.Free(fifth);
+        cache.Free(sixth);
+        cache.Free(seventh);
+        Require(mock.descriptorPools.at(first.pool).resets == 2 && mock.descriptorPools.at(third.pool).resets == 1 && mock.descriptorPools.at(fifth.pool).resets == 1, "descriptor pool ownership was lost after recycling");
+    }
+    Require(mock.live == 0 && mock.descriptorPools.empty(), "descriptor pool cache leaked Vulkan objects");
+}
+
+void descriptorPoolResetFailureTest() {
+    using namespace AgcDriver::Graphics;
+    mock = MockVulkan{};
+    DescriptorCache cache(mockContext());
+    const VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    const std::array<std::uint32_t, 4> key{binding.binding, binding.descriptorType, binding.descriptorCount, binding.stageFlags};
+    const auto layout = cache.Layout(key, std::span(&binding, 1));
+    const VkDescriptorPoolSize size{binding.descriptorType, binding.descriptorCount};
+    const auto allocation = cache.Allocate(layout, std::span(&size, 1));
+    mock.descriptorResetResult = VK_ERROR_DEVICE_LOST;
+    const auto previous = _ZSt13set_terminatePFvvE_nid_postfix([] {
+        std::_Exit(mock.descriptorResetResult == VK_SUCCESS ? 0 : 1);
+    });
+    cache.Free(allocation);
+    _ZSt13set_terminatePFvvE_nid_postfix(previous);
+}
+
 void pushConstantTests() {
     ShaderRecompiler::RecompileResult vertex;
     ShaderRecompiler::RecompileResult fragment;
@@ -1886,11 +2211,16 @@ void pushConstantTests() {
     std::array<AgcDriver::Graphics::CompiledShader, 2> shaders{{{ShaderRecompiler::ShaderStage::Vertex, &vertex, 0}, {ShaderRecompiler::ShaderStage::Fragment, &fragment, 8}}};
     Require(AgcDriver::Graphics::PushConstantStages(shaders) == (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), "push constant stage union changed");
     const auto bytes = AgcDriver::Graphics::AssemblePushConstants(shaders);
-    Require(bytes.size() == 128 && bytes[0] == std::byte{1} && bytes[7] == std::byte{1} && bytes[8] == std::byte{2} && bytes[19] == std::byte{2} && bytes[20] == std::byte{0} && bytes[127] == std::byte{0}, "assembled push constants are misplaced");
+    Require(bytes.size() == AgcDriver::Graphics::PipelinePushConstantBytes && bytes[0] == std::byte{1} && bytes[7] == std::byte{1} && bytes[8] == std::byte{2} && bytes[19] == std::byte{2} && bytes[20] == std::byte{0} && bytes[127] == std::byte{0} && bytes.back() == std::byte{0}, "assembled push constants are misplaced");
     shaders[1].pushConstantOffset = 4;
     expectFailure([&] { AgcDriver::Graphics::AssemblePushConstants(shaders); }, "overlap");
     shaders[1].pushConstantOffset = 120;
+    expectFailure([&] { AgcDriver::Graphics::AssemblePushConstants(shaders); }, "crosses a push constant slot");
+    shaders[1].pushConstantOffset = AgcDriver::Graphics::PipelinePushConstantBytes - 4;
     expectFailure([&] { AgcDriver::Graphics::AssemblePushConstants(shaders); }, "outside the pipeline push constant block");
+    shaders[1].pushConstantOffset = AgcDriver::Graphics::PipelinePushSlotBytes;
+    const auto slotted = AgcDriver::Graphics::AssemblePushConstants(shaders);
+    Require(slotted[128] == std::byte{2} && slotted[139] == std::byte{2} && slotted[8] == std::byte{0}, "a pixel shader in its push slot was misplaced");
     shaders[1].pushConstantOffset = 2;
     expectFailure([&] { AgcDriver::Graphics::AssemblePushConstants(shaders); }, "DWORD aligned");
     shaders[1].pushConstantOffset = 8;
@@ -1925,6 +2255,7 @@ void descriptorSnapshotTests() {
             const auto state = AgcDriver::Graphics::DecodeState(makeState());
             ShaderResources resources(context, vertex, fragment, state.color, 0, 0);
             const auto original = findWrite(0).buffers;
+            const auto originalThird = findWrite(4).buffers;
             std::vector<ShaderResources::MovedBuffer> moved;
             for (std::size_t index = 0; index < 2; ++index) {
                 if ((selected & (1u << index)) == 0) continue;
@@ -1934,9 +2265,11 @@ void descriptorSnapshotTests() {
             mock.writes.clear();
             const auto snapshots = resources.PrepareDrawBindings(recorder, moved);
             Require(snapshots != nullptr && snapshots->snapshots.size() == moved.size(), "draw snapshots are missing");
-            Require(mock.copies.size() == 2 && mock.copies[0].descriptorCount == 2 && mock.copies[1].descriptorCount == 1, "snapshot descriptor set did not copy every original binding");
-            Require(mock.writes.size() == 1, "snapshot updates must rewrite one complete affected array");
+            Require(mock.copies.empty(), "snapshot descriptor set must be written without descriptor copies");
+            Require(mock.writes.size() == 2, "snapshot update must write every binding once");
             const auto& write = mock.writes.front();
+            const auto& untouched = mock.writes.back();
+            Require(untouched.binding == 4 && untouched.count == 1 && untouched.buffers[0].buffer == originalThird[0].buffer && untouched.buffers[0].offset == originalThird[0].offset && untouched.buffers[0].range == originalThird[0].range, "snapshot update changed a binding without snapshots");
             Require(write.binding == 0 && write.arrayElement == 0 && write.count == 2, "snapshot update did not start from array element zero");
             std::size_t snapshot = 0;
             for (std::size_t index = 0; index < 2; ++index) {
@@ -1988,9 +2321,9 @@ void resourceTests() {
         Require(findWrite(44).buffers.size() == 1 && findWrite(44).buffers[0].range == 8 && sameBytes(bufferBytes(findWrite(44).buffers[0].buffer), guestThird.data(), 8), "fragment guest buffer is incorrect");
         resources.Bind(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_NULL_HANDLE);
         Require(mock.boundPoint == VK_PIPELINE_BIND_POINT_GRAPHICS && mock.boundFirst == 0 && mock.boundSets == 1, "exactly one descriptor set must be bound at set zero");
-        auto& first = mock.memories.at(mock.bufferMemory.at(array.buffers[0].buffer));
+        auto first = mockBufferMemory(array.buffers[0].buffer);
         std::memset(first.data(), 0xab, 16);
-        auto& shaderData = mock.memories.at(mock.bufferMemory.at(findWrite(5).buffers[0].buffer));
+        auto shaderData = mockBufferMemory(findWrite(5).buffers[0].buffer);
         std::memset(shaderData.data(), 0xcd, 12);
         resources.WriteBack();
         Require(guestFirst[0] == 0xabababab && guestFirst[3] == 0xabababab, "guest buffer was not written back");
@@ -2018,7 +2351,7 @@ void resourceTests() {
         resources.Bind(commands, VK_PIPELINE_BIND_POINT_COMPUTE, VK_NULL_HANDLE);
         Require(mock.boundPoint == VK_PIPELINE_BIND_POINT_COMPUTE && mock.boundSets == 1, "compute descriptors were bound to the wrong bind point");
         guestThird = {0xaaaaaaaa, 0xbbbbbbbb};
-        std::memset(mock.memories.at(mock.bufferMemory.at(findWrite(3).buffers[0].buffer)).data(), 0x5a, 8);
+        std::memset(mockBufferMemory(findWrite(3).buffers[0].buffer).data(), 0x5a, 8);
         resources.WriteBack();
         Require(guestThird[0] == 0x5a5a5a5a && guestThird[1] == 0x5a5a5a5a, "compute buffer was not written back");
         guestThird = {0xaaaaaaaa, 0xbbbbbbbb};
@@ -2037,7 +2370,7 @@ void resourceTests() {
         Require(buffer.range == sizeof(guestSecond), "strided buffer range does not cover every record");
         Require(sameBytes(bufferBytes(buffer.buffer), guestSecond.data(), sizeof(guestSecond)), "strided buffer contents were not uploaded");
         const std::uint32_t changed = 0x12345678u;
-        auto& bytes = mock.memories.at(mock.bufferMemory.at(buffer.buffer));
+        auto bytes = mockBufferMemory(buffer.buffer);
         std::memcpy(bytes.data() + 16, &changed, sizeof(changed));
         resources.WriteBack();
         Require(guestSecond[4] == changed && guestSecond[0] == 1 && guestSecond[7] == 8, "strided buffer write back changed the wrong record");
@@ -2188,12 +2521,23 @@ void descriptorCacheTests() {
         Require(mock.poolSizes.size() == 2 && mock.poolSizes[0].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && mock.poolSizes[0].descriptorCount == 4097 && mock.poolSizes[1].type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && mock.poolSizes[1].descriptorCount == 3, "the dedicated pool is not sized to its set");
         Require(cache.Counters().pools == 0 && cache.Counters().sets == 1, "an oversized set was counted in the chain pools");
         cache.Free(dedicated);
-        Require(mock.live == live && mock.freedSets == 0, "freeing an oversized set did not destroy its pool");
+        Require(mock.live == live, "freeing an oversized set did not destroy its pool");
         const std::array<VkDescriptorPoolSize, 1> fitting{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096}}};
         const auto chained = cache.Allocate(layout(4096), fitting);
-        Require(chained.set != VK_NULL_HANDLE && mock.poolMaxSets == 1024 && mock.poolFlags == VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT && cache.Counters().pools == 1, "a set the chain pool holds left the chain");
+        Require(chained.set != VK_NULL_HANDLE && mock.poolMaxSets == 1024 && mock.poolFlags == 0 && cache.Counters().pools == 1, "a set the chain pool holds left the chain");
         cache.Free(chained);
-        Require(mock.freedSets == 1 && mock.live == live + 2, "a chain set was not freed back to its pool");
+        Require(mock.descriptorPools.at(chained.pool).resets == 1 && mock.live == live + 2, "a chain pool was not reset after its last set");
+        const std::array<VkDescriptorPoolSize, 1> regular{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096}}};
+        const auto first = cache.Allocate(layout(4096), regular);
+        const auto oversizedMixed = cache.Allocate(large, oversized);
+        const auto second = cache.Allocate(layout(4096), regular);
+        Require(first.pool == chained.pool && second.pool == chained.pool && oversizedMixed.pool != chained.pool && mock.descriptorPools.at(chained.pool).resets == 1, "an oversized set disturbed the chain pool");
+        cache.Free(oversizedMixed);
+        Require(mock.live == live + 2 && mock.descriptorPools.count(oversizedMixed.pool) == 0 && mock.descriptorPools.at(chained.pool).resets == 1, "freeing an oversized set between chain sets touched the chain pool");
+        cache.Free(first);
+        Require(mock.descriptorPools.at(chained.pool).resets == 1, "a chain pool reset while a set was live");
+        cache.Free(second);
+        Require(mock.descriptorPools.at(chained.pool).resets == 2, "a chain pool was not reset after the oversized set was freed");
         const std::array<VkDescriptorPoolSize, 1> beyondDevice{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8193}}};
         expectFailure([&] { cache.Allocate(large, beyondDevice); }, "descriptor set exceeds the device's per-set descriptor limit");
         const std::array<VkDescriptorPoolSize, 1> storageImages{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}}};
@@ -3099,10 +3443,12 @@ void ConservativeRasterizationTests() {
         expectFailure([&] { AgcDriver::Graphics::DecodeState(geometry); }, rejected);
     }
     auto tessellation = queue;
-    tessellation.context[0x2d5] = 0x200d;
+    tessellation.context[0x2d5] = 0x0200210d;
     tessellation.userConfig[0x242] = 9;
-    tessellation.context[0x2d6] = (3u << 8u) | (3u << 14u);
+    tessellation.context[0x2d6] = 0xc355;
     tessellation.context[0x2db] = 1u | (2u << 2u) | (2u << 5u);
+    tessellation.context[0x286] = 0x42800000;
+    tessellation.context[0x287] = 0x3f800000;
     const auto tessellated = AgcDriver::Graphics::DecodeState(tessellation);
     Require(tessellated.stages.path == AgcDriver::Graphics::ShaderPath::Tessellation && tessellated.conservativeRasterization == VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT, "OVER_RAST_ENABLE did not overestimate clockwise tessellated triangles");
     for (const auto& [parameters, rejected] : std::array<std::pair<std::uint32_t, std::string_view>, 3>{{{1u | (2u << 2u), "conservative rasterization of points is unsupported (VGT_TF_PARAM=0x9)"}, {1u | (2u << 2u) | (1u << 5u), "conservative rasterization of lines is unsupported (VGT_TF_PARAM=0x29)"}, {(2u << 2u) | (1u << 5u), "conservative rasterization of lines is unsupported (VGT_TF_PARAM=0x28)"}}}) {
@@ -3272,7 +3618,142 @@ void unorm10_11_11TargetTests() {
     expectFailure([&] { validate(packed, plainState); }, "float4 colors");
     auto uintExport = request;
     uintExport.context.pixel->targetOutputMode[0] = 7;
-    expectFailure([&] { ShaderRecompiler::Recompile(uintExport); }, "fragment output 0 has no 10_11_11 unorm packing path");
+    expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(uintExport)); }, "fragment output 0 has no 10_11_11 unorm packing path");
+}
+
+AgcDriver::QueueState dualSourceQueue() {
+    auto queue = makeState();
+    queue.context[0x8f] = 0xffu;
+    queue.context[0x1c5] = 0x44u;
+    queue.context[0x1e0] = 0x40010f01u;
+    for (std::uint32_t i = 0; i < 4; ++i) queue.context[0x105 + i] = 0;
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    return queue;
+}
+
+struct OutputDecorations {
+    std::map<std::uint32_t, std::uint32_t> locations;
+    std::map<std::uint32_t, std::uint32_t> indices;
+};
+
+OutputDecorations outputDecorations(std::span<const std::uint32_t> words) {
+    OutputDecorations result;
+    std::set<std::uint32_t> outputs;
+    for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+        const auto op = static_cast<spv::Op>(words[at] & 0xffffu);
+        if (op == spv::OpVariable && words[at + 3] == spv::StorageClassOutput) outputs.insert(words[at + 2]);
+        if (op != spv::OpDecorate) continue;
+        if (words[at + 2] == spv::DecorationLocation) result.locations[words[at + 1]] = words[at + 3];
+        if (words[at + 2] == spv::DecorationIndex) result.indices[words[at + 1]] = words[at + 3];
+    }
+    std::erase_if(result.locations, [&](const auto& entry) { return !outputs.contains(entry.first); });
+    return result;
+}
+
+void DualSourceBlendTests() {
+    auto queue = dualSourceQueue();
+    const auto state = AgcDriver::Graphics::DecodeState(queue);
+    Require(state.dualSourceBlend && state.colors.size() == 1 && state.blends.size() == 1, "an ONE + SRC1_COLOR blend did not decode as dual-source blending into one target");
+    Require(state.blends[0].srcColorBlendFactor == VK_BLEND_FACTOR_ONE && state.blends[0].dstColorBlendFactor == VK_BLEND_FACTOR_SRC1_COLOR && state.blends[0].srcAlphaBlendFactor == VK_BLEND_FACTOR_ONE && state.blends[0].dstAlphaBlendFactor == VK_BLEND_FACTOR_SRC1_COLOR, "BLEND_SRC1_COLOR did not become VK_BLEND_FACTOR_SRC1_COLOR");
+    const std::array<std::pair<std::uint32_t, VkBlendFactor>, 4> factors{{{15u, VK_BLEND_FACTOR_SRC1_COLOR}, {16u, VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR}, {17u, VK_BLEND_FACTOR_SRC1_ALPHA}, {18u, VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA}}};
+    for (const auto& [value, factor] : factors) {
+        auto changed = queue;
+        changed.context[0x1e0] = 0x60000000u | (value << 24u) | (1u << 16u) | (value << 8u) | value;
+        const auto decoded = AgcDriver::Graphics::DecodeState(changed);
+        Require(decoded.dualSourceBlend && decoded.blends[0].srcColorBlendFactor == factor && decoded.blends[0].dstColorBlendFactor == factor && decoded.blends[0].srcAlphaBlendFactor == VK_BLEND_FACTOR_ONE && decoded.blends[0].dstAlphaBlendFactor == factor, "blend factor " + std::to_string(value) + " decoded wrongly");
+    }
+    auto changed = queue;
+    changed.context[0x1e0] = 0x00010f01u;
+    Require(!AgcDriver::Graphics::DecodeState(changed).dualSourceBlend, "SRC1 factors of a disabled blend enabled dual-source blending");
+    changed = queue;
+    changed.context[0x1e0] = 0x40010001u;
+    Require(!AgcDriver::Graphics::DecodeState(changed).dualSourceBlend, "a blend without SRC1 factors enabled dual-source blending");
+    for (const auto operation : {2u, 3u}) {
+        changed.context[0x1e0] = 0x40010f01u | (operation << 5u);
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MIN or MAX operation");
+    }
+    changed.context[0x1e0] = 0x40010f01u | (4u << 5u);
+    Require(AgcDriver::Graphics::DecodeState(changed).blends[0].colorBlendOp == VK_BLEND_OP_REVERSE_SUBTRACT, "a reverse-subtract dual-source blend was refused");
+    changed = queue;
+    changed.context[0x8f] = 0xfu;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MRT slots 0 and 1");
+    changed.context[0x8f] = 0xfffu;
+    changed.context[0x1c5] = 0x444u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MRT slots 0 and 1");
+    changed.context[0x8f] = 0xf000fu;
+    changed.context[0x1c5] = 0x44u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MRT slots 0 and 1");
+    alignas(256) static std::array<std::byte, 1024> slotOneMemory{};
+    changed = queue;
+    for (const auto offset : {0x31bu, 0x31cu, 0x31du}) changed.context[offset + 0xfu] = changed.context.at(offset);
+    for (const auto offset : {0x3b0u, 0x3b8u}) changed.context[offset + 1u] = changed.context.at(offset);
+    changed.context[0x318 + 0xfu] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(slotOneMemory.data()) >> 8u);
+    changed.context[0x390 + 1u] = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(slotOneMemory.data()) >> 40u);
+    changed.context[0x1e1] = 0;
+    changed.context[0x8e] = 0xffu;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "color writes to slot 0 alone");
+    for (const auto format : {0x04u, 0x14u, 0x74u, 0x94u}) {
+        changed = queue;
+        changed.context[0x1c5] = format;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MRT1 export in the MRT0 export format");
+    }
+    changed = queue;
+    changed.context[0x1c5] = 0x99u;
+    Require(AgcDriver::Graphics::DecodeState(changed).dualSourceBlend, "a 32_ABGR MRT0 and MRT1 export pair was refused");
+    for (const auto mask : {0x7fu, 0xf7u}) {
+        changed = queue;
+        changed.context[0x8f] = mask;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "MRT1 export with the MRT0 shader mask");
+    }
+    changed = queue;
+    changed.context[0x31c] = 0x8804u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "component-swapped color target");
+
+    constexpr std::array<std::uint32_t, 5> code{0xf800000fu, 0x07060504u, 0xf800181fu, 0x0b0a0908u, 0xbf810000u};
+    ShaderRecompiler::RecompileRequest request{};
+    request.shader = {ShaderRecompiler::ShaderStage::Fragment, 0x30000u, code, 0, {}};
+    request.context.waveSize = 64;
+    request.context.pixel = AgcDriver::Graphics::DecodePixelStageInfo(queue.context, AgcDriver::Graphics::ExportMappings(state));
+    request.context.pixel->dualSourceBlend = state.dualSourceBlend;
+    request.target.vulkanVersion = 0x00401000u;
+    request.target.spirvVersion = 0x00010300u;
+    request.target.subgroupSize = 64;
+    request.layout.pushConstantSizeBytes = 128;
+    request.useCache = true;
+    auto plain = request;
+    plain.context.pixel->dualSourceBlend = false;
+    const ShaderRecompiler::RequestSerializer serializer;
+    Require(serializer.Deserialize(serializer.Serialize(request)).request.context.pixel->dualSourceBlend, "dual-source blending was lost in serialization");
+    std::vector<std::uint64_t> key;
+    std::vector<std::uint64_t> plainKey;
+    ShaderRecompiler::BuildPreparedShaderKey(request, key);
+    ShaderRecompiler::BuildPreparedShaderKey(plain, plainKey);
+    Require(key == plainKey, "dual-source blending entered the static shader ABI");
+    const auto prepared = ShaderRecompiler::PrepareShader(plain);
+    Require(ShaderRecompiler::MatchesPreparedShader(request, *prepared), "a dual-source draw did not match the registered pixel shader");
+    const auto dual = ShaderRecompiler::Recompile(request);
+    const auto single = ShaderRecompiler::Recompile(plain);
+    Require(dual.variantId == single.variantId && dual.variantId == ShaderRecompiler::GetPreparedArtifact(*prepared).variantId, "the dual-source draw did not reuse the registered artifact");
+    Require(dual.PipelineVariantId() != single.PipelineVariantId() && ShaderRecompiler::Recompile(request).PipelineVariantId() == dual.PipelineVariantId(), "dual-source blending did not key its own specialization");
+    const auto dualOutputs = outputDecorations(dual.spirv.Words());
+    const auto singleOutputs = outputDecorations(single.spirv.Words());
+    Require(dualOutputs.locations.size() == 2 && std::all_of(dualOutputs.locations.begin(), dualOutputs.locations.end(), [](const auto& entry) { return entry.second == 0u; }) && dualOutputs.indices.size() == 1 && dualOutputs.indices.begin()->second == 1u, "the MRT1 export of a dual-source draw was not the location 0 index 1 output");
+    std::set<std::uint32_t> singleLocations;
+    for (const auto& entry : singleOutputs.locations) singleLocations.insert(entry.second);
+    Require(singleOutputs.indices.empty() && singleLocations == std::set<std::uint32_t>{0u, 1u}, "MRT0 and MRT1 without dual-source blending did not keep locations 0 and 1");
+    ShaderRecompiler::RecompileResult vertex;
+    vertex.spirv = makeModule({});
+    const VkPhysicalDeviceSubgroupProperties subgroup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    const auto validate = [&](const ShaderRecompiler::RecompileResult& pixel, const AgcDriver::Graphics::State& target) {
+        const std::array<AgcDriver::Graphics::CompiledShader, 2> shaders{{{ShaderRecompiler::ShaderStage::Vertex, &vertex, 0}, {ShaderRecompiler::ShaderStage::Fragment, &pixel, 0}}};
+        return AgcDriver::Graphics::ValidateShaders(shaders, target, subgroup, false);
+    };
+    Require(validate(dual, state) == std::set<std::uint32_t>{0u}, "the dual-source shader did not validate against its draw");
+    expectFailure([&] { validate(single, state); }, "needs a float4 second color at location 0 index 1");
+    auto singleState = state;
+    singleState.dualSourceBlend = false;
+    expectFailure([&] { validate(dual, singleState); }, "Index decoration");
 }
 
 void validationTests() {
@@ -3564,6 +4045,19 @@ void meshIndexBufferTests() {
     expectFailure([] { static_cast<void>(AgcDriver::Graphics::MeshIndexBufferDescriptor(AgcDriver::Pm4::DrawParameters{0, 3, 2, 1, 0, true})); }, "invalid mesh index buffer range");
 }
 
+void stagingPoolBudgetTests() {
+    if (std::getenv("APS5_STAGING_POOL_MIB") != nullptr) return;
+    VkPhysicalDeviceMemoryProperties memory{};
+    memory.memoryHeapCount = 2;
+    memory.memoryHeaps[0] = {VkDeviceSize{32} << 30u, 0};
+    memory.memoryHeaps[1] = {VkDeviceSize{16} << 30u, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+    Require(AgcDriver::Graphics::BufferPool::DeviceBudget(memory) == VkDeviceSize{2} << 30u, "the staging pool budget is not an eighth of the device-local heap");
+    memory.memoryHeaps[1].size = VkDeviceSize{2} << 30u;
+    Require(AgcDriver::Graphics::BufferPool::DeviceBudget(memory) == VkDeviceSize{512} << 20u, "the staging pool budget fell below 512 MiB");
+    memory.memoryHeapCount = 1;
+    Require(AgcDriver::Graphics::BufferPool::DeviceBudget(memory) == VkDeviceSize{512} << 20u, "a host heap sized the staging pool budget");
+}
+
 void meshArgumentTests() {
     using AgcDriver::Graphics::MeshArguments;
     using AgcDriver::Graphics::ResolveMeshArguments;
@@ -3710,7 +4204,42 @@ void vertexZeroFillMergeTests() {
     Require(solo.size() == 1 && solo[0] == 1, "a fetch past the records is copied alone");
 }
 
-int main() {
+void parallelCompareTests() {
+    using AgcDriver::Graphics::CompareSpan;
+    using AgcDriver::Graphics::CompareSpansFrom;
+    constexpr std::size_t block = 65536;
+    constexpr std::size_t count = 48;
+    std::vector<std::byte> first(block * count + 100, std::byte{7});
+    auto second = first;
+    const std::array<std::size_t, 4> changedAt{3 * block + 17, 20 * block, 33 * block + block - 1, 47 * block + 120};
+    for (const auto at : changedAt) second[at] = std::byte{9};
+    std::vector<CompareSpan> spans;
+    for (std::size_t k = 0; k < count; ++k) {
+        const auto length = k + 1 == count ? block + 100 : block;
+        spans.push_back({first.data() + k * block, second.data() + k * block, length});
+    }
+    const auto expected = [&](std::size_t k) {
+        return std::none_of(changedAt.begin(), changedAt.end(), [&](std::size_t at) { return at >= k * block && at < k * block + spans[k].bytes; });
+    };
+    for (const std::size_t threshold : {std::size_t{0}, std::size_t{1} << 40u}) {
+        for (int round = 0; round < 20; ++round) {
+            std::vector<std::uint8_t> equal(count, 2);
+            CompareSpansFrom(spans, equal, threshold);
+            for (std::size_t k = 0; k < count; ++k) Require((equal[k] == 1) == expected(k) && equal[k] <= 1, "parallel compare misreported a span");
+        }
+    }
+    std::vector<std::uint8_t> left(count, 2), right(count, 2);
+    std::thread other([&] {
+        for (int round = 0; round < 50; ++round) CompareSpansFrom(spans, right, 0);
+    });
+    for (int round = 0; round < 50; ++round) CompareSpansFrom(spans, left, 0);
+    other.join();
+    for (std::size_t k = 0; k < count; ++k) Require((left[k] == 1) == expected(k) && (right[k] == 1) == expected(k), "concurrent parallel compares misreported a span");
+    std::vector<std::uint8_t> none;
+    CompareSpansFrom({}, none, 0);
+}
+
+int main(int argc, char** argv) {
 #ifdef _WIN32
     _putenv_s("APS5_PIN_WAIT_MS", "200");
     _putenv_s("APS5_HEAP_MIRROR_MIB", "4");
@@ -3719,6 +4248,11 @@ int main() {
     setenv("APS5_HEAP_MIRROR_MIB", "4", 1);
 #endif
     try {
+        if (argc == 2 && std::string_view(argv[1]) == "--descriptor-pool-reset-failure") {
+            descriptorPoolResetFailureTest();
+            std::cerr << "descriptor pool reset failure did not terminate\n";
+            return 1;
+        }
         {
             const AgcDriver::Graphics::Context context{};
             const AgcDriver::Graphics::State state{};
@@ -3751,6 +4285,7 @@ int main() {
         }
         RunGuestLeaseWaitTests();
         stateTests();
+        hdrComponentSwapTests();
         depthMaintenanceTests();
         hardwareScreenOffsetTests();
         srgb8TargetTests();
@@ -3770,16 +4305,22 @@ int main() {
         OpaqueDestinationAlphaTests();
         CompactedExportTests();
         ReversedComponentOrderTests();
+        DualSourceBlendTests();
         metadataPassTests();
         cmaskTests();
         uint16ExportTests();
         uint8x4TargetTests();
         ShaderStageTests();
+        NggVertexWorkgroupTests();
         TuningFieldTests();
         PixelInputLayoutTests();
+        ColorPipeBankXorTests();
+        HeaderlessVertexStageTests();
         ComputeScratchTests();
         shaderUserDataTailPaddingTests();
         InitialContextTests();
+        AlphaToCoverageTests();
+        descriptorPoolTests();
         pushConstantTests();
         resourceTests();
         descriptorSnapshotTests();
@@ -3791,6 +4332,7 @@ int main() {
         sampledBudgetReportTests();
         meshArgumentTests();
         meshIndexBufferTests();
+        stagingPoolBudgetTests();
         validationTests();
         vertexCopyTests();
         highestDrawIndexTests();
@@ -3798,6 +4340,7 @@ int main() {
         nullVertexDescriptorTests();
         vertexZeroFillTests();
         vertexZeroFillMergeTests();
+        parallelCompareTests();
         pixelParameterSlotTests();
         rectListTests();
         floatControlsModeTests();
@@ -3807,7 +4350,7 @@ int main() {
         bdaContext.bufferDeviceAddress = true;
         bdaContext.limits.maxStorageBufferRange = 1u << 27;
         RunBdaResourceTests(bdaContext, {
-            [](VkBuffer buffer) -> std::span<std::byte> { return mock.memories.at(mock.bufferMemory.at(buffer)); },
+            [](VkBuffer buffer) -> std::span<std::byte> { return mockBufferMemory(buffer); },
             [](std::uint32_t binding) {
                 for (auto it = mock.writes.rbegin(); it != mock.writes.rend(); ++it) {
                     if (it->binding == binding) return it->buffers.at(0);
@@ -3817,7 +4360,7 @@ int main() {
             [](VkDeviceAddress address) {
                 const auto offset = address - 0x100000000000ULL;
                 const auto buffer = reinterpret_cast<VkBuffer>(offset / 0x10000);
-                return std::span<std::byte>(mock.memories.at(mock.bufferMemory.at(buffer))).subspan(offset % 0x10000);
+                return mockBufferMemory(buffer).subspan(offset % 0x10000);
             },
             [](std::optional<VkDeviceSize> headroom) {
                 mock.memoryLimit = headroom.has_value() ? std::optional<VkDeviceSize>(mock.allocatedBytes + *headroom) : std::nullopt;
