@@ -6,6 +6,7 @@
 extern "C" {
 int APS5_VABI scePthreadCreate(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name);
 int APS5_VABI scePthreadJoin(Pthread thread, void** retval);
+int APS5_VABI scePthreadCancel(Pthread thread);
 void APS5_VABI scePthreadExit(void* retval);
 Pthread APS5_VABI scePthreadSelf();
 int APS5_VABI scePthreadGetthreadid();
@@ -24,6 +25,7 @@ struct Context {
     unsigned calls = 0;
     unsigned failures = 0;
     bool exitExplicitly = false;
+    bool pendingCancel = false;
 
     void Check(bool passed, const char* message) {
         if (passed) return;
@@ -53,13 +55,15 @@ static void* APS5_VABI Worker(void* value) {
     context.expected = scePthreadSelf();
     context.expectedId = scePthreadGetthreadid();
     context.Check(scePthreadSetspecific(context.key, value) == 0, "worker could not bind its key value");
+    if (context.pendingCancel) context.Check(scePthreadCancel(context.expected) == 0, "worker could not request cancellation");
     if (context.exitExplicitly) scePthreadExit(value);
     return value;
 }
 
-static bool RunGuest(bool exitExplicitly) {
+static bool RunGuest(bool exitExplicitly, bool pendingCancel = false) {
     Context context;
     context.exitExplicitly = exitExplicitly;
+    context.pendingCancel = pendingCancel;
     if (scePthreadKeyCreate(&context.key, reinterpret_cast<pthread_key_destructor_func_t>(DestroyValue)) != 0) return false;
     Pthread thread = nullptr;
     if (scePthreadCreate(&thread, nullptr, Worker, &context, "KeyDestructor") != 0) return false;
@@ -85,7 +89,8 @@ static bool RunHost() {
 int main() {
     const bool returned = RunGuest(false);
     const bool exited = RunGuest(true);
+    const bool canceled = RunGuest(false, true);
     const bool host = RunHost();
-    if (!returned || !exited || !host) return 1;
-    std::puts("PASS: pthread key destructors retain thread identity on return and explicit exit; four iterations and host cleanup preserved");
+    if (!returned || !exited || !canceled || !host) return 1;
+    std::puts("PASS: pthread key destructors retain thread identity on return and explicit exit; pending cancellation, four iterations and host cleanup preserved");
 }
