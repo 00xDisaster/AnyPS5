@@ -75,6 +75,7 @@ int main() {
         Require(readlink_nid_postfix(invalid.c_str(), buffer, sizeof(buffer)) == -1 && Error() == expected);
         Require(link_nid_postfix(invalid.c_str(), created.c_str()) == -1 && Error() == expected);
         Require(link_nid_postfix(file.c_str(), created.c_str()) == -1 && Error() == expected);
+        Require(symlink_nid_postfix("file.txt", created.c_str()) == -1 && Error() == expected);
         Require(std::filesystem::hard_link_count(file) == 1 && !std::filesystem::exists(root / "new.txt"));
     }
     Require(readlink_nid_postfix(file.c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);

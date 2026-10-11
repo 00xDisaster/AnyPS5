@@ -137,7 +137,8 @@ int APS5_VABI symlink_nid_postfix(const char* target, const char* created) {
         NotImplemented_nid_no_patch("symlink: absolute targets");
         return -1;
     }
-    const auto native = ResolvePath_nid_no_patch(created);
+    std::filesystem::path native;
+    if (const int error = ResolvePathError_nid_no_patch(created, native)) return static_cast<int>(Fail(error));
     std::error_code error;
 #ifdef _WIN32
     if (GetFileAttributesW(native.wstring().c_str()) != INVALID_FILE_ATTRIBUTES) return static_cast<int>(Fail(GuestEexist));
