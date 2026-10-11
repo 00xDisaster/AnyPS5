@@ -44,6 +44,14 @@ int main() {
         {{0xd6000005u, 0x42020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, -v2, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, true, false, 0u},
         {{0xd6008005u, 0x02020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x clamp", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, true, 0u},
         {{0xd6000005u, 0x0a020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x mul:2", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 1u},
+        {{0xd6000005u, 0x12020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x mul:4", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 2u},
+        {{0xd6000005u, 0x1a020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x div:2", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 3u},
+        {{0xd6000205u, 0x42020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, -|v2|, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, true, true, false, 0u},
+        {{0xd6000205u, 0x5a020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, -|v2|, attr0.x div:2", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, true, true, false, 3u},
+        {{0xd6010005u, 0x42020481u}, RdnaOpcode::VInterpP2F32, "v_interp_p2_f32_e64 v5, -v2, attr1.z", RdnaOperandKind::VectorRegister, 2u, 1u, 2u, false, true, false, 0u},
+        {{0xd6018205u, 0x02020400u}, RdnaOpcode::VInterpP2F32, "v_interp_p2_f32_e64 v5, |v2|, attr0.x clamp", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, true, false, true, 0u},
+        {{0xd6028005u, 0x02000000u}, RdnaOpcode::VInterpMovF32, "v_interp_mov_f32_e64 v5, p10, attr0.x clamp", RdnaOperandKind::IntegerInlineConstant, 0u, 0u, 0u, false, false, true, 0u},
+        {{0xd6020005u, 0x0a000000u}, RdnaOpcode::VInterpMovF32, "v_interp_mov_f32_e64 v5, p10, attr0.x mul:2", RdnaOperandKind::IntegerInlineConstant, 0u, 0u, 0u, false, false, false, 1u},
     };
     const std::vector<Refused> refused{
         {{0xd6000005u, 0x02000400u}, "not a vector register", "v_interp_p1_f32_e64 with a non-VGPR coordinate"},
