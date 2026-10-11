@@ -1425,7 +1425,7 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
         if (drawBuild && !usesBda && std::all_of(allocations.begin(), allocations.end(), [&](const Allocation& allocation) { return !allocation.guest || allocation.pushByte >= 0 || (allocation.dataAllocation >= 0 && allocation.dataByte < allocations[static_cast<std::size_t>(allocation.dataAllocation)].size); })) guestMemory.AllowAdjustedRegions();
         guestMemory.UploadPrepare(usesBda);
         timing.uploadMs = phase(BuildPhase::Upload);
-        splitSets = std::any_of(shaders.begin(), shaders.end(), [](const CompiledShader& shader) { return shader.program != nullptr && std::any_of(shader.program->bindings.begin(), shader.program->bindings.end(), [](const auto& binding) { return binding.descriptorSet == ShaderRecompiler::RuntimeAbi::FragmentDescriptorSet; }); });
+        splitSets = SplitsSets(context, shaders);
         std::array<std::vector<VkDescriptorSetLayoutBinding>, 2> descriptions;
         for (const auto& binding : bindings) {
             const auto set = setOf(binding);
@@ -1449,7 +1449,7 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
         _layout = createLayout(layoutKey, descriptions[0], layoutBindingFlags, ownsLayout);
         if (splitSets) {
             fragment.layout = createLayout(fragmentLayoutKey, descriptions[1], fragmentBindingFlags, fragment.ownsLayout);
-            if (!descriptions[1].empty()) {
+            {
                 const auto sizes = PoolSizes(descriptions[1]);
                 if (context.descriptorCache != nullptr && !noPoolCache) {
                     fragment.cacheAllocation = context.descriptorCache->Allocate(fragment.layout, sizes, updateAfterBind);
@@ -1465,7 +1465,7 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
                 }
             }
         }
-        if (splitSets && !descriptions[0].empty()) {
+        if (splitSets) {
             const auto sizes = PoolSizes(descriptions[0]);
             if (context.descriptorCache != nullptr && !noPoolCache) {
                 cacheAllocation = context.descriptorCache->Allocate(_layout, sizes, updateAfterBind);
@@ -1513,11 +1513,17 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
     }
 }
 
+bool SplitsSets(const Context& context, std::span<const CompiledShader> shaders) {
+    const auto fragmentSet = [](const CompiledShader& shader) { return shader.program != nullptr && std::any_of(shader.program->bindings.begin(), shader.program->bindings.end(), [](const auto& binding) { return binding.descriptorSet == ShaderRecompiler::RuntimeAbi::FragmentDescriptorSet; }); };
+    const auto fragmentStage = [](const CompiledShader& shader) { return shader.stage == ShaderRecompiler::ShaderStage::Fragment; };
+    return std::any_of(shaders.begin(), shaders.end(), fragmentSet) || (context.graphicsPipelineLibrary && std::any_of(shaders.begin(), shaders.end(), fragmentStage));
+}
+
 DescribedSetLayouts DescribeSetLayouts(const Context& context, std::span<const CompiledShader> shaders) {
     Require(context.descriptorCache != nullptr, "described set layouts need the descriptor cache");
     DescribedSetLayouts result;
     std::array<std::vector<VkDescriptorSetLayoutBinding>, 2> descriptions;
-    bool split = false;
+    const bool split = SplitsSets(context, shaders);
     bool updateAfterBind = false;
     std::uint64_t storageBuffers = 0;
     for (const auto& shader : shaders) {
@@ -1526,7 +1532,6 @@ DescribedSetLayouts DescribeSetLayouts(const Context& context, std::span<const C
         std::uint64_t stageStorageBuffers = 0;
         std::uint64_t stageResources = 0;
         for (const auto& binding : shader.program->bindings) {
-            split |= binding.descriptorSet == ShaderRecompiler::RuntimeAbi::FragmentDescriptorSet;
             const bool image = binding.role == ShaderRecompiler::DescriptorRole::GuestImages || binding.role == ShaderRecompiler::DescriptorRole::GuestSamplers;
             const auto type = !image ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : binding.kind == ShaderRecompiler::DescriptorKind::StorageImage ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : binding.kind == ShaderRecompiler::DescriptorKind::SampledImage ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLER;
             if (type != VK_DESCRIPTOR_TYPE_SAMPLER) stageResources += binding.count;
@@ -3558,11 +3563,11 @@ std::shared_ptr<ShaderResources::DrawBindings> ShaderResources::PrepareDrawBindi
     std::array<std::vector<VkDescriptorSetLayoutBinding>, 2> descriptions;
     for (const auto& binding : bindings) descriptions[setOf(binding)].push_back(binding.layout);
     result->cache = context.descriptorCache;
-    if (!descriptions[0].empty()) {
+    if (!descriptions[0].empty() || splitSets) {
         result->allocation = result->cache->Allocate(_layout, PoolSizes(descriptions[0]));
         Require(result->allocation.set != VK_NULL_HANDLE, "draw snapshot descriptor allocation failed");
     }
-    if (!descriptions[1].empty()) {
+    if (!descriptions[1].empty() || splitSets) {
         result->fragmentAllocation = result->cache->Allocate(fragment.layout, PoolSizes(descriptions[1]));
         Require(result->fragmentAllocation.set != VK_NULL_HANDLE, "draw snapshot descriptor allocation failed");
     }

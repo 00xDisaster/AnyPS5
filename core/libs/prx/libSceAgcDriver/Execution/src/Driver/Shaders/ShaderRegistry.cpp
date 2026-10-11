@@ -573,6 +573,7 @@ struct RegisteredPreparation {
     std::array<ShaderRecompiler::MemoryRegion, 2> memory{};
     std::optional<ShaderRecompiler::RecompileRequest> request;
     std::vector<std::uint64_t> abiKey;
+    std::shared_ptr<VulkanDevice> prebuildDevice;
 };
 
 std::unique_ptr<RegisteredPreparation> PlanRegistered(const ShaderSnapshot& snapshot, const VulkanDevice& device, const QueueState& state, bool registration, bool* deferred = nullptr) {
@@ -671,6 +672,18 @@ std::unique_ptr<RegisteredPreparation> PlanRegistered(const ShaderSnapshot& snap
     return plan;
 }
 
+void PrebuildStageLibrary(const std::shared_ptr<VulkanDevice>& device, const Graphics::ShaderStages& stages, ShaderRecompiler::ShaderStage stage, std::shared_ptr<const ShaderRecompiler::RecompileResult> result, std::uint32_t pushOffset) {
+    if (stage != ShaderRecompiler::ShaderStage::Vertex && stage != ShaderRecompiler::ShaderStage::Fragment) return;
+    SubmitRegistrationPreparation([device, stages, stage, result = std::move(result), pushOffset] {
+        const std::array<Graphics::CompiledShader, 1> shaders{{{stage, result.get(), pushOffset}}};
+        try {
+            static_cast<void>(device->PrebuildGraphicsLibraries(stages, shaders));
+        } catch (const std::exception& error) {
+            APS5_LOG_OUT("shader library prebuild skipped: %s", error.what());
+        }
+    });
+}
+
 std::vector<PreparedShaders::Entry> PrepareRegistered(RegisteredPreparation& plan) {
     auto& request = *plan.request;
     std::vector<PreparedShaders::Entry> entries;
@@ -680,6 +693,12 @@ std::vector<PreparedShaders::Entry> PrepareRegistered(RegisteredPreparation& pla
         entries.push_back({plan.codeOffset, PrepareShaderWithDiagnostics(request, &preparation)});
     };
     append();
+    if (plan.prebuildDevice != nullptr && request.target.registrationModules && request.shader.stage == ShaderRecompiler::ShaderStage::Fragment) {
+        try {
+            PrebuildStageLibrary(plan.prebuildDevice, {Graphics::ShaderPath::Vertex, 0u, 32u, request.context.waveSize, {}, {}}, request.shader.stage, ShaderRecompiler::RegistrationResult(request, *entries.front().handle), request.layout.pushConstantOffsetBytes);
+        } catch (const std::exception&) {
+        }
+    }
     if (request.context.compute) {
         request.context.compute->partialThreads = {1, 1, 1};
         append();
@@ -939,22 +958,10 @@ void Driver::ResolveGraphicsStagesAbi(std::span<const Shader* const> stages, std
         if (stage.snapshot->type == 1) continue;
         ResolvePreparedGraphics(*stage.snapshot, {}, primitiveType == state.userConfig.end() ? 0u : primitiveType->second, localDevice->Target());
     }
-    if (localDevice->Target().registrationModules && !prepared.empty() && std::ranges::all_of(prepared, [](const auto& stage) { return stage.registration != nullptr && (stage.stage == ShaderRecompiler::ShaderStage::Vertex || stage.stage == ShaderRecompiler::ShaderStage::Fragment); }) && prepared.back().stage == ShaderRecompiler::ShaderStage::Fragment) {
-        std::vector<std::shared_ptr<const ShaderRecompiler::RecompileResult>> results;
-        std::vector<std::pair<ShaderRecompiler::ShaderStage, std::uint32_t>> stages;
+    if (decoded.state.stages.path == Graphics::ShaderPath::Vertex) {
         for (const auto& stage : prepared) {
-            results.push_back(stage.registration);
-            stages.emplace_back(stage.stage, stage.pushOffset);
+            if (stage.registration != nullptr) PrebuildStageLibrary(localDevice, decoded.state.stages, stage.stage, stage.registration, stage.pushOffset);
         }
-        SubmitRegistrationPreparation([localDevice, results = std::move(results), stages = std::move(stages), shaderStages = decoded.state.stages] {
-            std::vector<Graphics::CompiledShader> shaders;
-            for (std::size_t index = 0; index < results.size(); ++index) shaders.push_back({stages[index].first, results[index].get(), stages[index].second});
-            try {
-                static_cast<void>(localDevice->PrebuildGraphicsLibraries(shaderStages, shaders));
-            } catch (const std::exception& error) {
-                APS5_LOG_OUT("graphics library prebuild skipped: %s", error.what());
-            }
-        });
     }
     PreparedShaderState::GraphicsAbi abi{key, registry, {}};
     for (const auto& stage : prepared) abi.stages.push_back(stage.snapshot);
@@ -996,14 +1003,20 @@ void Driver::ResolveShaderAbi(const Shader* shader, std::span<const ShaderRegist
     struct RegisteredAbiKeyStorage {};
     auto& key = HostThreadLocal<std::vector<std::uint64_t>, RegisteredAbiKeyStorage>();
     BuildRegisteredAbiKey(state, *localDevice, key);
+    const auto prepare = [&] {
+        const auto plan = PlanRegistered(*snapshot, *localDevice, state, false);
+        if (plan == nullptr) return std::vector<PreparedShaders::Entry>{};
+        plan->prebuildDevice = localDevice;
+        return PrepareRegistered(*plan);
+    };
     const bool committedAbi = CommittedAbi(*snapshot, key);
-    auto entries = committedAbi ? std::vector<PreparedShaders::Entry>{} : PrepareRegistered(*snapshot, *localDevice, state, false);
+    auto entries = committedAbi ? std::vector<PreparedShaders::Entry>{} : prepare();
     const auto& registeredAbis = transaction.Read(*snapshot).registeredAbis;
     if (std::ranges::find(registeredAbis, key) != registeredAbis.end()) {
         transaction.Commit();
         return;
     }
-    if (committedAbi) entries = PrepareRegistered(*snapshot, *localDevice, state, false);
+    if (committedAbi) entries = prepare();
     auto& prepared = transaction.Edit(*snapshot);
     for (auto& entry : entries) {
         const auto duplicate = std::ranges::any_of(prepared.entries, [&](const auto& existing) { return existing.handle->artifact == entry.handle->artifact; });
@@ -1190,6 +1203,7 @@ void Driver::RegisterShader(const Shader* shader) {
     std::shared_ptr<RegisteredPreparation> preparation;
     if (AsyncRegistrationPrepare()) {
         preparation = PlanRegistered(snapshot, *localDevice, registered, true, &snapshot.prepared->deferred);
+        if (preparation != nullptr) preparation->prebuildDevice = localDevice;
         if (preparation != nullptr && (snapshot.type == 0 || snapshot.type == 1)) BuildRegisteredAbiKey(registered, *localDevice, preparation->abiKey);
         snapshot.prepared->pending = preparation != nullptr;
     } else {

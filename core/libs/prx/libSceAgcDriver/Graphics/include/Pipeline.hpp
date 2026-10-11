@@ -108,6 +108,7 @@ struct DescribedSetLayouts {
     PipelineSetLayouts View() const { return {layouts.main, layouts.fragment, layouts.split, mainKey, fragmentKey}; }
 };
 DescribedSetLayouts DescribeSetLayouts(const Context& context, std::span<const CompiledShader> shaders);
+bool SplitsSets(const Context& context, std::span<const CompiledShader> shaders);
 // Destroys the cached pipelines of a device; to be called before the device goes away. Without it,
 // entries of a gone device are recognised by their buffer pool (made and reset with the device, so
 // it tells device instances apart when the loader reuses a VkDevice handle) and forgotten unused.

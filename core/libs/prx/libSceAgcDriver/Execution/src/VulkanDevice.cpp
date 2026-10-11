@@ -3073,8 +3073,27 @@ bool VulkanDevice::PrebuildGraphicsLibraries(const Graphics::ShaderStages& stage
     state.blend.colorWriteMask = 15;
     state.blends.push_back(state.blend);
     state.renderExtent = {1, 1};
-    const auto layouts = Graphics::DescribeSetLayouts(context, shaders);
-    return Graphics::Pipeline::Prebuild(context, state, Graphics::VertexInputLayout{}, layouts.View(), shaders);
+    std::vector<Graphics::CompiledShader> group(shaders.begin(), shaders.end());
+    if (group.size() == 1u) {
+        const bool vertex = group.front().stage == ShaderRecompiler::ShaderStage::Fragment;
+        static const auto stub = [](bool vertexStub) {
+            auto result = std::make_shared<ShaderRecompiler::RecompileResult>();
+            const std::uint32_t model = vertexStub ? 0u : 4u;
+            std::vector<std::uint32_t> words{0x07230203u, 0x00010000u, 0u, 6u, 0u, 0x00020011u, 1u, 0x0003000eu, 0u, 1u, 0x0005000fu, model, 4u, 0x6e69616du, 0u};
+            if (!vertexStub) words.insert(words.end(), {0x00030010u, 4u, 7u});
+            words.insert(words.end(), {0x00020013u, 2u, 0x00030021u, 3u, 2u, 0x00050036u, 2u, 4u, 0u, 3u, 0x000200f8u, 5u, 0x000100fdu, 0x00010038u});
+            result->spirv = std::move(words);
+            result->variantId = vertexStub ? ~std::uint64_t{0} - 1u : ~std::uint64_t{0} - 2u;
+            result->runtimeAbiVersion = ShaderRecompiler::RuntimeAbi::Version;
+            return result;
+        };
+        static const auto vertexStub = stub(true);
+        static const auto fragmentStub = stub(false);
+        if (vertex) group.insert(group.begin(), {ShaderRecompiler::ShaderStage::Vertex, vertexStub.get(), 0u});
+        else group.push_back({ShaderRecompiler::ShaderStage::Fragment, fragmentStub.get(), Graphics::PipelinePushSlotBytes});
+    }
+    const auto layouts = Graphics::DescribeSetLayouts(context, group);
+    return Graphics::Pipeline::Prebuild(context, state, Graphics::VertexInputLayout{}, layouts.View(), group);
 }
 
 void VulkanDevice::Draw(const Graphics::State& graphics, const Pm4::DrawParameters& draw, std::span<const Graphics::CompiledShader> shaders, std::span<const Graphics::GuestMemorySnapshot> snapshots, std::shared_ptr<const DrawRecipe>* recipe) {
