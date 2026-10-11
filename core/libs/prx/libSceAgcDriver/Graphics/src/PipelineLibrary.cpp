@@ -38,10 +38,8 @@ using Key = std::vector<std::byte>;
 struct DeviceLibraries {
     PFN_vkDestroyPipeline destroyPipeline = nullptr;
     PFN_vkDestroyPipelineLayout destroyLayout = nullptr;
-    PFN_vkDestroyShaderModule destroyModule = nullptr;
     std::map<Key, VkPipelineLayout> layouts;
     std::array<std::map<Key, VkPipeline>, 4> parts;
-    std::vector<VkShaderModule> modules;
     PipelineLibraryCounters counters;
 };
 
@@ -102,7 +100,7 @@ std::span<const VkDynamicState> PipelineLibraryDynamicStates() {
     return dynamicStates;
 }
 
-VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPipelineCreateInfo& info, const VkPipelineRenderingCreateInfoKHR& rendering, const VkPipelineLayoutCreateInfo& layout, const PipelineLibraryKeys& keys, std::shared_ptr<OptimizedPipeline>* optimized, std::span<VkShaderModule> modules, bool partsOnly) {
+VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPipelineCreateInfo& info, const VkPipelineRenderingCreateInfoKHR& rendering, const VkPipelineLayoutCreateInfo& layout, const PipelineLibraryKeys& keys, std::shared_ptr<OptimizedPipeline>* optimized, bool partsOnly) {
     Require(info.renderPass == VK_NULL_HANDLE && info.pDynamicState != nullptr, "pipeline library parts need dynamic rendering and the library dynamic states");
     auto& store = Libraries();
     std::unique_lock lock(store.mutex);
@@ -110,7 +108,6 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
     if (device.destroyPipeline == nullptr) {
         device.destroyPipeline = context.Function<PFN_vkDestroyPipeline>("vkDestroyPipeline");
         device.destroyLayout = context.Function<PFN_vkDestroyPipelineLayout>("vkDestroyPipelineLayout");
-        device.destroyModule = context.Function<PFN_vkDestroyShaderModule>("vkDestroyShaderModule");
     }
     const auto layoutFor = [&](const Key& key, std::optional<std::uint32_t> set) {
         auto found = device.layouts.find(key);
@@ -203,15 +200,6 @@ VkPipeline LinkPipelineFromLibraries(const Context& context, const VkGraphicsPip
             continue;
         }
         cache.emplace(key, handle);
-        if (optimize) {
-            for (std::uint32_t stage = 0; stage < create.stageCount; ++stage) {
-                for (auto& module : modules) {
-                    if (module == VK_NULL_HANDLE || module != create.pStages[stage].module) continue;
-                    device.modules.push_back(module);
-                    module = VK_NULL_HANDLE;
-                }
-            }
-        }
         ++device.counters.built[part];
         libraries.push_back(handle);
     }
@@ -275,7 +263,6 @@ void ClearPipelineLibraries(VkDevice device) {
     for (auto& part : libraries.parts) {
         for (const auto& [key, handle] : part) libraries.destroyPipeline(device, handle, nullptr);
     }
-    for (const auto module : libraries.modules) libraries.destroyModule(device, module, nullptr);
     for (const auto& [key, handle] : libraries.layouts) libraries.destroyLayout(device, handle, nullptr);
     store.devices.erase(found);
 }
