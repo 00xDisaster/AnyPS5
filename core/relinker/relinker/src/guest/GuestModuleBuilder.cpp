@@ -122,7 +122,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
             return name == identity || name == identity + ".prx" || name == identity + ".sprx" || name == identity + ".suprx";
         });
     };
-    for (const auto& path : paths) discovered.emplace(path, GuestImageReader().Read(path, reader.Read(Io::Utf8Path(path))));
+    for (const auto& path : paths) discovered.emplace(path, GuestImageReader().Read(path, reader.Read(Io::Utf8Path(path)), windows));
     if (!unmatchedExclusions.empty()) throw Domain::RelinkerException("Excluded guest module file not found: " + *unmatchedExclusions.begin());
     std::sort(paths.begin(), paths.end());
     paths.erase(std::unique(paths.begin(), paths.end()), paths.end());

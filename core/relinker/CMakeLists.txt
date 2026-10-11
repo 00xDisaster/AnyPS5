@@ -81,6 +81,20 @@ target_include_directories(relinker PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../libs
 )
 
+if(BUILD_TESTING AND WIN32)
+    get_target_property(windowsAliasTestSources relinker SOURCES)
+    list(REMOVE_ITEM windowsAliasTestSources
+        ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/src/CliArgs.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/src/Autorun.cpp)
+    add_test_executable(windows_guest_export_alias_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/WindowsExportAliasTests.cpp
+        ${windowsAliasTestSources})
+    get_target_property(windowsAliasIncludes relinker INCLUDE_DIRECTORIES)
+    target_include_directories(windows_guest_export_alias_tests PRIVATE ${windowsAliasIncludes})
+    add_test(NAME windows_guest_export_aliases COMMAND windows_guest_export_alias_tests)
+endif()
+
 if(WIN32)
     target_compile_options(relinker PRIVATE -municode)
     target_link_options(relinker PRIVATE -municode)
