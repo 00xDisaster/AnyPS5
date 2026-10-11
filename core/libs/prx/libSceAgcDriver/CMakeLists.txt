@@ -224,8 +224,8 @@ target_include_directories(libSceAgcDriver PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${agcTextureDetileGeneratedRoot}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler/RdnaDecoder/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+        ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
 )
 
 file(GLOB_RECURSE agcShaderCacheGuardSources CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -288,8 +288,8 @@ add_test_executable(agc_driver_tests EXCLUDE_FROM_ALL
 target_include_directories(agc_driver_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+        ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
 )
 
 target_link_libraries(agc_driver_tests PRIVATE
@@ -364,7 +364,7 @@ set_target_properties(agc_structurizer_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_structurizer_tests)
 
 add_test_executable(agc_fragment_barycentric_tests EXCLUDE_FROM_ALL tests/FragmentBarycentric.cpp)
-target_include_directories(agc_fragment_barycentric_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_fragment_barycentric_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 set_target_properties(agc_fragment_barycentric_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_fragment_barycentric_tests)
 if(BUILD_TESTING)
@@ -376,7 +376,7 @@ add_test_executable(agc_subgroup_clock_tests EXCLUDE_FROM_ALL
         tests/SubgroupClock.cpp
         Execution/src/SubgroupClock.cpp
 )
-target_include_directories(agc_subgroup_clock_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_subgroup_clock_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 set_target_properties(agc_subgroup_clock_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_subgroup_clock_tests)
 if(BUILD_TESTING)
@@ -509,13 +509,13 @@ if(BUILD_TESTING)
 endif()
 
 add_test_executable(agc_pass_hazards_tests EXCLUDE_FROM_ALL tests/PassHazards.cpp Graphics/src/PassHazards.cpp)
-target_include_directories(agc_pass_hazards_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_pass_hazards_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_pass_hazards_tests PRIVATE libc)
 set_target_properties(agc_pass_hazards_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_pass_hazards_tests)
 
 add_test_executable(agc_dcc_key_sharing_tests EXCLUDE_FROM_ALL tests/DccKeySharing.cpp)
-target_include_directories(agc_dcc_key_sharing_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_dcc_key_sharing_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_dcc_key_sharing_tests PRIVATE libc)
 set_target_properties(agc_dcc_key_sharing_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_dcc_key_sharing_tests)
@@ -529,7 +529,7 @@ if(BUILD_TESTING)
 endif()
 
 add_test_executable(agc_buffer_pool_tests EXCLUDE_FROM_ALL tests/BufferPool.cpp)
-target_include_directories(agc_buffer_pool_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_buffer_pool_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_buffer_pool_tests PRIVATE libSceAgcDriver libc)
 set_target_properties(agc_buffer_pool_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_buffer_pool_tests)
@@ -543,7 +543,7 @@ if(BUILD_TESTING)
 endif()
 
 add_test_executable(agc_display_buffer_dcc_tests EXCLUDE_FROM_ALL tests/DisplayBufferDcc.cpp)
-target_include_directories(agc_display_buffer_dcc_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_display_buffer_dcc_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_display_buffer_dcc_tests PRIVATE libSceAgcDriver libc)
 set_target_properties(agc_display_buffer_dcc_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_display_buffer_dcc_tests)
@@ -573,7 +573,7 @@ set_target_properties(agc_shader_disk_cache_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_shader_disk_cache_tests)
 
 add_test_executable(agc_shader_device_profile_tests EXCLUDE_FROM_ALL tests/ShaderDeviceProfile.cpp Execution/src/ShaderDeviceProfile.cpp)
-target_include_directories(agc_shader_device_profile_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_shader_device_profile_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_shader_device_profile_tests PRIVATE shader_recompiler_agc_driver libc)
 set_target_properties(agc_shader_device_profile_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_shader_device_profile_tests)
@@ -676,7 +676,7 @@ target_include_directories(agc_driver_cmask_fast_clear_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${agcTestShaderGeneratedRoot}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
 )
 
 target_link_libraries(agc_driver_cmask_fast_clear_tests PRIVATE
@@ -701,7 +701,7 @@ target_include_directories(agc_driver_recorder_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${agcTestShaderGeneratedRoot}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
 )
 
 target_link_libraries(agc_driver_recorder_tests PRIVATE
@@ -754,7 +754,7 @@ if(BUILD_TESTING)
 endif()
 
 add_test_executable(agc_recorder_kept_bytes_tests EXCLUDE_FROM_ALL tests/RecorderKeptBytes.cpp)
-target_include_directories(agc_recorder_kept_bytes_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+target_include_directories(agc_recorder_kept_bytes_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
 target_link_libraries(agc_recorder_kept_bytes_tests PRIVATE libSceAgcDriver libc)
 set_target_properties(agc_recorder_kept_bytes_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_recorder_kept_bytes_tests)
@@ -840,8 +840,8 @@ target_include_directories(agc_driver_graphics_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler/IntermediateRepresentation/include
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler/ControlFlow/include
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler/RdnaDecoder/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+        ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
 )
 
 target_link_libraries(agc_driver_graphics_tests PRIVATE
@@ -866,7 +866,7 @@ add_test_executable(agc_driver_bda_device_tests EXCLUDE_FROM_ALL
 target_include_directories(agc_driver_bda_device_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
 )
 target_link_libraries(agc_driver_bda_device_tests PRIVATE SDL2-static libc shader_recompiler_agc_driver)
 set_target_properties(agc_driver_bda_device_tests PROPERTIES CXX_EXTENSIONS OFF)
@@ -879,8 +879,8 @@ add_test_executable(agc_driver_mesh_tests EXCLUDE_FROM_ALL
 target_include_directories(agc_driver_mesh_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
         ${agcTextureDetileGeneratedRoot}
-        ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-        ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+        ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+        ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
 )
 target_link_libraries(agc_driver_mesh_tests PRIVATE shader_recompiler_agc_driver SDL2-static libc libkernel ${CMAKE_DL_LIBS})
 set_target_properties(agc_driver_mesh_tests PROPERTIES CXX_EXTENSIONS OFF)
@@ -896,8 +896,8 @@ foreach(agcExecutionTestSource IN LISTS agcExecutionTestSources)
     target_include_directories(${agcExecutionTest} PRIVATE
             ${LIBS_INCLUDE_DIR}
             ${CMAKE_SOURCE_DIR}/core/shader/recompiler
-            ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-            ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+            ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+            ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
     )
     target_link_libraries(${agcExecutionTest} PRIVATE libSceAgcDriver SDL2-static libc)
     set_target_properties(${agcExecutionTest} PROPERTIES CXX_EXTENSIONS OFF)
@@ -1127,8 +1127,8 @@ if(AGC_BUILD_VISUAL_TEST)
             ${CMAKE_SOURCE_DIR}/core/shader/recompiler/IntermediateRepresentation/include
             ${CMAKE_SOURCE_DIR}/core/shader/recompiler/ControlFlow/include
             ${CMAKE_SOURCE_DIR}/core/shader/recompiler/RdnaDecoder/include
-            ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include
-            ${CMAKE_SOURCE_DIR}/3rdparty/SPIRV-Headers/include
+            ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
+            ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
     )
 
     target_link_libraries(agc_driver_visual_test PRIVATE
@@ -1190,7 +1190,7 @@ configure_windows_unwind(agc_shader_replay)
 
 if(BUILD_TESTING)
     add_test_executable(texture_format_lookup_tests ${LIBS_INCLUDE_DIR}/tests/TextureFormatLookup.cpp)
-    target_include_directories(texture_format_lookup_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+    target_include_directories(texture_format_lookup_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
     target_link_libraries(texture_format_lookup_tests PRIVATE libSceAgcDriver libc)
     configure_windows_unwind(texture_format_lookup_tests)
     add_test(NAME texture_format_lookup COMMAND texture_format_lookup_tests)
@@ -1199,7 +1199,7 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test_executable(linear_display_buffer_tests ${LIBS_INCLUDE_DIR}/tests/LinearDisplayBuffer.cpp)
-    target_include_directories(linear_display_buffer_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/Vulkan-Headers/include)
+    target_include_directories(linear_display_buffer_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
     target_link_libraries(linear_display_buffer_tests PRIVATE libSceAgcDriver libc)
     configure_windows_unwind(linear_display_buffer_tests)
     add_test(NAME linear_display_buffer COMMAND linear_display_buffer_tests)
