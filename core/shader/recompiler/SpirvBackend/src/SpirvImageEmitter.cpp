@@ -331,7 +331,7 @@ std::uint32_t ResultVector(SpirvValueEmitContext& ctx, const ImageEmitAccess& ac
     std::uint32_t component[4] = {};
     for (std::uint32_t index = 0; index < 4u; index++) {
         if (dref) {
-            component[index] = index == 0u ? F32BitsToU32(ctx, value) : ConstantU32(state, 0);
+            component[index] = F32BitsToU32(ctx, value);
             continue;
         }
         const auto scalar = state.module.AllocateId();
@@ -1380,18 +1380,11 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
         const auto selector = RuntimeImageSwizzle(state, mem.resource, channel);
         return Select(state, f32, equal(selector, 0u), zero, Select(state, f32, equal(selector, 1u), one, result));
     };
-    const auto dmask = EffectiveDmask(mem);
-    const auto channels = static_cast<std::uint32_t>(std::popcount(dmask));
-    if (mem.dataBits == 16u) {
-        if (channels != 1u) ctx.Fail(access.inst, "compares against a color texture into several packed 16-bit channels, which is not implemented");
-        ctx.Define(access.inst, TableResult(ctx, access, ResultVector(ctx, access, channelResult(DmaskComponent(dmask, 0u)), setup.numericClass, true, false)));
-        return;
-    }
-    std::uint32_t component[4] = {};
-    for (std::uint32_t index = 0; index < 4u; ++index) component[index] = index < channels ? F32BitsToU32(ctx, channelResult(DmaskComponent(dmask, index))) : ConstantU32(state, 0u);
-    const auto vector = state.module.AllocateId();
-    state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 4), vector, component[0], component[1], component[2], component[3]);
-    ctx.Define(access.inst, TableResult(ctx, access, vector));
+    std::uint32_t channels[4] = {};
+    for (std::uint32_t channel = 0; channel < 4u; ++channel) channels[channel] = channelResult(channel);
+    const auto value = state.module.AllocateId();
+    state.module.AddFunction(spv::OpCompositeConstruct, TypeF32Vector(state, 4), value, channels[0], channels[1], channels[2], channels[3]);
+    ctx.Define(access.inst, TableResult(ctx, access, ResultVector(ctx, access, value, IrTextureNumericClass::Float, false, false)));
 }
 
 void EmitSampleOp(SpirvValueEmitContext& ctx, const ImageEmitAccess& access, const SampleSetup& setup) {
