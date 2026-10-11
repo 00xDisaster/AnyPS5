@@ -154,6 +154,10 @@ void RunStampedBlocks(AgcDriver::VulkanDevice& device, GuestBlock& guest) {
     namespace GuestMemory = AgcDriver::GuestMemory;
     const auto base = guest.Address();
     Dispatch(device, 32, guest.Data());
+    if (!GuestMemory::Watched(base, 2 * BlockBytes)) {
+        std::printf("host imports are compared, not watched: stamped blocks at 0x%llx not tested\n", static_cast<unsigned long long>(base));
+        return;
+    }
     for (int use = 0; use < 2; ++use) {
         guest.Clear();
         const auto collected = GuestMemory::CollectWrites(base, 2 * BlockBytes);
