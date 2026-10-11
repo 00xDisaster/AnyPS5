@@ -122,6 +122,14 @@ int main() {
     Require(std::strcmp(dirname_nid_postfix(leaf), ".") == 0);
     char nested[] = "one/two///";
     Require(std::strcmp(dirname_nid_postfix(nested), "one") == 0 && std::strcmp(nested, "one") == 0);
+    char repeatedSeparators[] = "one//two";
+    Require(std::strcmp(dirname_nid_postfix(repeatedSeparators), "one") == 0);
+    char absoluteRepeatedSeparators[] = "/one//two";
+    Require(std::strcmp(dirname_nid_postfix(absoluteRepeatedSeparators), "/one") == 0);
+    char rootPath[] = "/";
+    Require(std::strcmp(dirname_nid_postfix(rootPath), "/") == 0);
+    char trailingSlash[] = "foo/";
+    Require(std::strcmp(dirname_nid_postfix(trailingSlash), ".") == 0);
     char absolute[] = "/one/two";
     Require(std::strcmp(dirname_nid_postfix(absolute), "/one") == 0);
     char rootChild[] = "/file";
