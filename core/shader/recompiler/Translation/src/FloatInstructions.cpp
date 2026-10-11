@@ -305,9 +305,9 @@ IrU32 TranslationContext::normF32(IrU32 bits, bool signedValue) {
     const IrU1 saturated(ir.Emit(IrOpcode::UGreaterThanEqual32, IrType::U1, {&magnitude.Value(), &ir.Constant(0x3f800000u)}));
     const std::uint32_t scale = signedValue ? 32767u : 65535u;
     IrValue& absolute = ir.BitCastF32(ir.Select(ir.LogicalOr(saturated.Value(), nan.Value()), ir.Constant(0u), magnitude.Value()));
-    IrValue& factor = ir.ConstantF32(static_cast<float>(scale));
-    IrValue& product = ir.Emit(IrOpcode::FPMul32, IrType::F32, {&absolute, &factor});
-    IrValue& error = ir.Emit(IrOpcode::FPFma32, IrType::F32, {&absolute, &factor, &ir.Emit(IrOpcode::FPNeg32, IrType::F32, {&product})});
+    IrValue& scaled = ir.Emit(IrOpcode::FPMul32, IrType::F32, {&absolute, &ir.ConstantF32(static_cast<float>(scale + 1u))});
+    IrValue& product = ir.Emit(IrOpcode::FPSub32, IrType::F32, {&scaled, &absolute});
+    IrValue& error = ir.Emit(IrOpcode::FPSub32, IrType::F32, {&ir.Emit(IrOpcode::FPSub32, IrType::F32, {&scaled, &product}), &absolute});
     IrValue& floored = ir.Emit(IrOpcode::FPFloor32, IrType::F32, {&product});
     IrValue& tie = ir.Emit(IrOpcode::FPOrdEqual32, IrType::U1, {&ir.Emit(IrOpcode::FPSub32, IrType::F32, {&product, &floored}), &ir.ConstantF32(0.5f)});
     IrValue& zero = ir.ConstantF32(0.0f);
