@@ -252,6 +252,7 @@ public:
             function<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")(context.physical, &context.memory);
             VkPhysicalDeviceProperties properties{};
             function<PFN_vkGetPhysicalDeviceProperties>("vkGetPhysicalDeviceProperties")(context.physical, &properties);
+            std::cout << "Vulkan device: " << properties.deviceName << '\n';
             context.limits = properties.limits;
             context.bufferDeviceAddress = true;
             context.formatProperties = function<PFN_vkGetPhysicalDeviceFormatProperties>("vkGetPhysicalDeviceFormatProperties");
@@ -2347,7 +2348,7 @@ void storageRefreshTests(const Device& device, Recorder& recorder, bool watched)
     DccKeyProof proof;
     Require(ProvedClearKeys(resource, surfaceBytes, proof) == DccKeys::Clear0000, "0x00 keys are not a 0000 clear");
     {
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         const auto draw = [&](VkClearColorValue value) {
             const auto commands = recorder.Commands();
@@ -2701,7 +2702,7 @@ void staleGenerationTests(const Device& device, Recorder& recorder) {
     resource.dccAddress = address + surfaceBytes;
     {
         Require(AgcDriver::GuestMemory::Watched(address, bytes), "(s) the block is not watched before the storage image takes its generation");
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         const auto commands = recorder.Commands();
         recorder.Keep(image);
@@ -2843,7 +2844,7 @@ void writeBackPaddingTests(const Device& device, Recorder& recorder, bool watche
         context.detiler = &detiler;
         resource.baseAddress = address;
         {
-            auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+            auto image = StorageTexture::Create(context, detiler, resource, 0);
             const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, test.mipCount, 0, 1};
             const auto commands = recorder.Commands();
             recorder.Keep(image);
@@ -3020,7 +3021,7 @@ void singlePassTests(const Device& device, Recorder& recorder, bool watched) {
             for (auto& value : texels) value = random();
             const auto movesBefore = StorageTexture::SinglePassMoves();
             {
-                auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+                auto image = StorageTexture::Create(context, detiler, resource, 0);
                 recorder.Keep(image);
                 results[mode].uploaded = readImage(*image);
                 Buffer staging(context, linearBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -3044,7 +3045,7 @@ void singlePassTests(const Device& device, Recorder& recorder, bool watched) {
                 recorder.Submit();
                 device.WaitQueue();
                 recorder.Sync();
-                auto again = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+                auto again = StorageTexture::Create(context, detiler, resource, 0);
                 recorder.Keep(again);
                 results[mode].reuploaded = readImage(*again);
                 std::vector<std::byte> read(bytes);
@@ -3073,6 +3074,145 @@ void singlePassTests(const Device& device, Recorder& recorder, bool watched) {
     }
     if (!failures.empty()) throw std::runtime_error("single-pass storage moves:\n" + failures);
     std::cout << "single-pass storage moves" << (watched ? " (watched)" : "") << ": ok (" << tested << " surfaces)\n";
+}
+
+class StorageUploadProbe {
+public:
+    StorageUploadProbe(Context& context, bool failView) : context(context), resolver(context.deviceProc), failView(failView) {
+        Require(active == nullptr, "nested storage upload probe");
+        active = this;
+        context.deviceProc = resolve;
+    }
+    ~StorageUploadProbe() {
+        for (const auto view : destroyedViews) function<PFN_vkDestroyImageView>("vkDestroyImageView")(context.device, view, nullptr);
+        if (imageDestroyed) function<PFN_vkDestroyImage>("vkDestroyImage")(context.device, image, nullptr);
+        if (memoryFreed) function<PFN_vkFreeMemory>("vkFreeMemory")(context.device, memory, nullptr);
+        context.deviceProc = resolver;
+        active = nullptr;
+    }
+    VkImage Image() const { return image; }
+    bool Destroyed() const { return imageDestroyed || memoryFreed; }
+    bool Released() const { return imageDestroyed && memoryFreed; }
+    bool FailedView() const { return failedView; }
+    std::uint32_t Clears() const { return clears; }
+
+private:
+    template<typename TFunction>
+    TFunction function(const char* name) const { return reinterpret_cast<TFunction>(resolver(context.device, name)); }
+    static VKAPI_ATTR VkResult VKAPI_CALL createImage(VkDevice device, const VkImageCreateInfo* info, const VkAllocationCallbacks* callbacks, VkImage* created) {
+        const auto result = active->function<PFN_vkCreateImage>("vkCreateImage")(device, info, callbacks, created);
+        if (result == VK_SUCCESS) active->image = *created;
+        return result;
+    }
+    static VKAPI_ATTR VkResult VKAPI_CALL bindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize offset) {
+        const auto result = active->function<PFN_vkBindImageMemory>("vkBindImageMemory")(device, image, memory, offset);
+        if (result == VK_SUCCESS && image == active->image) active->memory = memory;
+        return result;
+    }
+    static VKAPI_ATTR VkResult VKAPI_CALL createView(VkDevice device, const VkImageViewCreateInfo* info, const VkAllocationCallbacks* callbacks, VkImageView* created) {
+        if (info->image == active->image && active->failView && active->clears != 0) {
+            active->failedView = true;
+            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        }
+        const auto result = active->function<PFN_vkCreateImageView>("vkCreateImageView")(device, info, callbacks, created);
+        if (result == VK_SUCCESS && info->image == active->image) active->views.push_back(*created);
+        return result;
+    }
+    static VKAPI_ATTR void VKAPI_CALL destroyView(VkDevice device, VkImageView view, const VkAllocationCallbacks* callbacks) {
+        if (std::find(active->views.begin(), active->views.end(), view) != active->views.end()) active->destroyedViews.push_back(view);
+        else active->function<PFN_vkDestroyImageView>("vkDestroyImageView")(device, view, callbacks);
+    }
+    static VKAPI_ATTR void VKAPI_CALL destroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks* callbacks) {
+        if (image == active->image) active->imageDestroyed = true;
+        else active->function<PFN_vkDestroyImage>("vkDestroyImage")(device, image, callbacks);
+    }
+    static VKAPI_ATTR void VKAPI_CALL freeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* callbacks) {
+        if (memory == active->memory) active->memoryFreed = true;
+        else active->function<PFN_vkFreeMemory>("vkFreeMemory")(device, memory, callbacks);
+    }
+    static VKAPI_ATTR void VKAPI_CALL clearImage(VkCommandBuffer commands, VkImage image, VkImageLayout layout, const VkClearColorValue* value, std::uint32_t count, const VkImageSubresourceRange* ranges) {
+        if (image == active->image) ++active->clears;
+        active->function<PFN_vkCmdClearColorImage>("vkCmdClearColorImage")(commands, image, layout, value, count, ranges);
+    }
+    static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL resolve(VkDevice device, const char* name) {
+        if (std::strcmp(name, "vkCreateImage") == 0) return reinterpret_cast<PFN_vkVoidFunction>(createImage);
+        if (std::strcmp(name, "vkBindImageMemory") == 0) return reinterpret_cast<PFN_vkVoidFunction>(bindImageMemory);
+        if (std::strcmp(name, "vkCreateImageView") == 0) return reinterpret_cast<PFN_vkVoidFunction>(createView);
+        if (std::strcmp(name, "vkDestroyImageView") == 0) return reinterpret_cast<PFN_vkVoidFunction>(destroyView);
+        if (std::strcmp(name, "vkDestroyImage") == 0) return reinterpret_cast<PFN_vkVoidFunction>(destroyImage);
+        if (std::strcmp(name, "vkFreeMemory") == 0) return reinterpret_cast<PFN_vkVoidFunction>(freeMemory);
+        if (std::strcmp(name, "vkCmdClearColorImage") == 0) return reinterpret_cast<PFN_vkVoidFunction>(clearImage);
+        return active->resolver(device, name);
+    }
+    Context& context;
+    PFN_vkGetDeviceProcAddr resolver;
+    bool failView;
+    bool failedView = false;
+    bool imageDestroyed = false;
+    bool memoryFreed = false;
+    std::uint32_t clears = 0;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    std::vector<VkImageView> views;
+    std::vector<VkImageView> destroyedViews;
+    static inline StorageUploadProbe* active = nullptr;
+};
+
+void storageUploadLifetimeTests(const Device& device, Recorder& previous, bool failView) {
+    auto context = device.GetContext();
+    context.hostImportAlignment = 0;
+    TextureDetiler detiler(context);
+    context.detiler = &detiler;
+    GuestTextureResource resource{};
+    resource.width = 64;
+    resource.height = 64;
+    resource.mipCount = 1;
+    resource.tileMode = TextureTileMode::kLinear;
+    resource.dimension = TextureDimension::k2D;
+    resource.format = 56;
+    const auto guestBytes = static_cast<std::size_t>(DescribeSurface(resource).guestBytes);
+    std::vector<std::byte> texels(guestBytes + 256, std::byte{0x55});
+    std::vector<std::byte> keys(guestBytes / 256, std::byte{0});
+    resource.baseAddress = (reinterpret_cast<std::uintptr_t>(texels.data()) + 255) & ~std::uintptr_t{255};
+    resource.dccAddress = reinterpret_cast<std::uintptr_t>(keys.data());
+    DccKeyProof proof;
+    Require(ProvedClearKeys(resource, guestBytes, proof) == DccKeys::Clear0000, "storage lifetime fixture has no DCC clear");
+    StorageUploadProbe probe(context, failView);
+    Buffer readback(device.GetContext(), resource.width * resource.height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    std::memset(readback.Bytes().data(), 0x55, readback.Bytes().size());
+    std::weak_ptr<StorageTexture> lifetime;
+    bool premature = false;
+    bool retained = true;
+    bool threw = false;
+    {
+        Recorder recorder(context);
+        recorder.Activate();
+        try {
+            auto image = StorageTexture::Create(context, detiler, resource, 0);
+            lifetime = image;
+            image.reset();
+            retained = !lifetime.expired();
+        } catch (const std::exception& error) {
+            if (!probe.FailedView() || std::string_view(error.what()).find("vkCreateImageView storage") == std::string_view::npos) throw;
+            threw = true;
+        }
+        premature = probe.Destroyed();
+        Require(probe.Clears() == 1 && recorder.Recording(), "storage creation did not record its initial clear");
+        const auto commands = recorder.Commands();
+        RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copy.imageExtent = {resource.width, resource.height, 1};
+        context.Function<PFN_vkCmdCopyImageToBuffer>("vkCmdCopyImageToBuffer")(commands, probe.Image(), VK_IMAGE_LAYOUT_GENERAL, readback.Handle(), 1, &copy);
+        RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+        recorder.Sync();
+    }
+    previous.Activate();
+    Require(threw == failView && probe.FailedView() == failView, "storage view failure injection did not take the requested path");
+    Require(std::all_of(readback.Bytes().begin(), readback.Bytes().end(), [](std::byte value) { return value == std::byte{0}; }), "recorded storage clear did not reach every texel");
+    Require(lifetime.expired() && probe.Released(), "storage upload resources outlived recorder teardown");
+    Require(!premature && retained, failView ? "failed storage creation released an image still referenced by its recorded clear" : "storage creation did not retain its image through the recorded clear");
+    std::cout << "Storage upload lifetime" << (failView ? " after view failure" : " after caller release") << ": passed\n";
 }
 
 void refreshProofTests(const Device& device, Recorder& recorder) {
@@ -3133,7 +3273,7 @@ void refreshProofTests(const Device& device, Recorder& recorder) {
     resource.dccAddress = address + surfaceBytes;
     const auto proved = [] { return StorageTexture::RefreshesProved(); };
     {
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         const auto draw = [&](VkClearColorValue value) {
             const auto commands = recorder.Commands();
@@ -3178,7 +3318,7 @@ void refreshProofTests(const Device& device, Recorder& recorder) {
         expectProved("the proof was not taken again after a key store");
         auto other = resource;
         other.dccAddress = 0;
-        auto pending = std::make_shared<StorageTexture>(context, detiler, other, 0);
+        auto pending = StorageTexture::Create(context, detiler, other, 0);
         recorder.Keep(pending);
         pending->MarkDirty();
         expectFull("another image's pending results over the surface were answered from the proof");
@@ -3187,7 +3327,7 @@ void refreshProofTests(const Device& device, Recorder& recorder) {
         pending->MarkDirty();
         expectFull("another image's pending results were answered from the proof");
         Require(!AgcDriver::Graphics::PendingStorageOverlaps(address, surfaceBytes, image.get()), "the full refresh left another image's results pending");
-        auto fresh = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto fresh = StorageTexture::Create(context, detiler, resource, 0);
         const auto before = proved();
         fresh->Refresh();
         Require(proved() == before, "a new image of the surface was answered from another image's proof");
@@ -3273,7 +3413,7 @@ void unchangedCpuStampTests(const Device& device, Recorder& recorder) {
             resource.dstSelW = 7;
             Require(DescribeSurface(resource).guestBytes == surfaceBytes, "(c) unexpected surface size");
             {
-                auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+                auto image = StorageTexture::Create(context, detiler, resource, 0);
                 const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
                 const auto commands = recorder.Commands();
                 recorder.Keep(image);
@@ -3386,7 +3526,7 @@ void settledBaselineTests(const Device& device, Recorder& recorder) {
         if (pending) recorder.NotePendingWrite(address + 4096, 4096);
         const auto before = recorder.Submissions();
         {
-            auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+            auto image = StorageTexture::Create(context, detiler, resource, 0);
             recorder.Keep(image);
             if (pending) Require(recorder.Submissions() == before, "(b) an upload over a pending recorded store submitted the open batch to read its generation baseline");
         }
@@ -3476,7 +3616,7 @@ void importWindowTests(const Device& device, Recorder& recorder) {
         Require(!HostImportCovers(base, address, bytes), "(w) the block is imported before the cache takes its generation");
         const auto cached = CollectWritesUncached(address, surfaceBytes);
         Require(cached != 0 && UnchangedSince(address, surfaceBytes, cached), "(w) the cache's generation is not current before the import");
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         const auto commands = recorder.Commands();
         recorder.Keep(image);
@@ -4689,7 +4829,7 @@ void singleCubeTests(const Device& device, Recorder& recorder) {
         resource.baseAddress = reinterpret_cast<std::uint64_t>(surface);
         const std::span<const std::byte> snapshot(surface, static_cast<std::size_t>(geometry.guestBytes));
         Texture texture(context, detiler, resource, identity, snapshot);
-        auto storage = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto storage = StorageTexture::Create(context, detiler, resource, 0);
         recorder.Keep(storage);
         Texture storageView(context, storage, resource, identity);
         for (std::uint32_t face = 0; face < 6; ++face) {
@@ -4723,7 +4863,7 @@ void firstLayerViewTests(const Device& device, Recorder& recorder) {
     auto* surface = reinterpret_cast<std::uint8_t*>((reinterpret_cast<std::uintptr_t>(memory.data()) + 255) & ~std::uintptr_t{255});
     for (std::uint32_t layer = 0; layer < 3; ++layer) std::memset(surface + geometry.GuestLayerOffset(layer), 0x20 * (layer + 1), static_cast<std::size_t>(geometry.layerBytes));
     resource.baseAddress = reinterpret_cast<std::uint64_t>(surface);
-    auto image = std::make_shared<StorageTexture>(withDetiler, detiler, resource, 0);
+    auto image = StorageTexture::Create(withDetiler, detiler, resource, 0);
     recorder.Keep(image);
     SampleProgram program(context, recorder);
     expectRed(program.Red(image->FirstLayerView(0), VK_IMAGE_LAYOUT_GENERAL, 0.0f), 0x40 / 255.0f, "a first-layer view does not read the BASE_ARRAY layer");
@@ -4764,7 +4904,7 @@ void atomicViewTests(const Device& device, Recorder& recorder) {
         const auto geometry = DescribeSurface(resource);
         std::vector<std::uint8_t> memory(static_cast<std::size_t>(geometry.guestBytes) + 256);
         resource.baseAddress = (reinterpret_cast<std::uintptr_t>(memory.data()) + 255) & ~std::uintptr_t{255};
-        auto image = std::make_shared<StorageTexture>(withDetiler, detiler, resource, 0);
+        auto image = StorageTexture::Create(withDetiler, detiler, resource, 0);
         recorder.Keep(image);
         if (format == 56u) {
             bool refused = false;
@@ -4934,7 +5074,7 @@ void keysFillTests(const Device& device, Recorder& recorder) {
     resource.dccAddress = keysAddress;
     Require(DescribeSurface(resource).guestBytes == surfaceBytes, "the key fill surface has an unexpected size");
     {
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         const auto draw = [&](VkClearColorValue value) {
             const auto commands = recorder.Commands();
@@ -5047,7 +5187,7 @@ void denormalClearTests(const Device& device, Recorder& recorder) {
     Require(ClearKeepsDenormals(context, VK_FORMAT_R16G16_SFLOAT) == keeps, "the denormal clear probe changed its answer");
     Require(!ClearKeepsDenormals(context, VK_FORMAT_R32G32B32A32_SFLOAT), "a format without small floats probed as keeping denormals");
     {
-        auto image = std::make_shared<StorageTexture>(context, detiler, resource, 0);
+        auto image = StorageTexture::Create(context, detiler, resource, 0);
         const auto holds = [&](std::uint32_t texel) {
             Buffer readback(context, side * side * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             const auto commands = recorder.Commands();
@@ -5189,6 +5329,10 @@ int main(int argc, char** argv) {
         std::cout << "host imports " << (PrepareImportWatch(device.GetContext()) == ImportWatch::Unwatch ? "are compared" : "stay watched") << '\n';
         Recorder recorder(device.GetContext());
         recorder.Activate();
+        if (argc == 2 && (std::string_view(argv[1]) == "--storage-upload-lifetime-only" || std::string_view(argv[1]) == "--storage-upload-failure-only")) {
+            storageUploadLifetimeTests(device, recorder, std::string_view(argv[1]) == "--storage-upload-failure-only");
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--cube-only") {
             singleCubeTests(device, recorder);
             std::cout << "Single cube snapshot and storage sampling tests passed\n";
