@@ -40,7 +40,6 @@ def open_prs(base):
     out = gh("api", "--paginate", "--slurp", f"repos/{REPO}/pulls?{query}")
     prs = {}
     for pr in chain.from_iterable(json.loads(out)):
-        depends = DEPENDS.search(pr["body"] or "") or PLAIN_DEPENDS.search(pr["body"] or "")
         prs[pr["number"]] = {
             "ref": f"refs/pr/{pr['number']}",
             "sha": pr["head"]["sha"],
