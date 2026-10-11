@@ -242,6 +242,9 @@ bool _waitSatisfied(std::uint32_t compare, std::uint64_t value, std::uint64_t re
 
 template<class TCommand>
 TCommand _read(const Apr::CommandBufferObject& buffer, std::uint32_t cursor) {
+    Apr::CommandHeader header;
+    std::memcpy(&header, buffer.base + cursor, sizeof(header));
+    if (header.bytes < sizeof(TCommand)) throw std::runtime_error("APR: truncated command payload (opcode " + std::to_string(static_cast<std::uint32_t>(header.opcode)) + ", has " + std::to_string(header.bytes) + ", needs " + std::to_string(sizeof(TCommand)) + ")");
     TCommand command;
     std::memcpy(&command, buffer.base + cursor, sizeof(command));
     return command;
@@ -532,14 +535,15 @@ void _execute(const Apr::CommandBufferObject& buffer) {
         std::memcpy(&header, buffer.base + cursor, sizeof(header));
         if ((static_cast<std::uint32_t>(header.opcode) & 0xffu) == static_cast<std::uint32_t>(Apr::Opcode::CompactReadFileGather)) {
             if (sizeof(Apr::CompactReadFileGatherCommand) > buffer.offset - cursor) throw std::runtime_error("APR: truncated compact gather command");
-            const auto command = _read<Apr::CompactReadFileGatherCommand>(buffer, cursor);
+            Apr::CompactReadFileGatherCommand command;
+            std::memcpy(&command, buffer.base + cursor, sizeof(command));
             const auto offset = static_cast<std::uint64_t>(command.opcodeAndOffsetHigh >> 8u) << 32u | command.offsetLow;
             if (offset >= 0x10000000000ull) throw std::runtime_error("APR: malformed compact gather offset");
             _readResolved(Apr::Opcode::ReadFileGather, Apr::ReadFileCommand{{}, 0, 0, 0, static_cast<std::uint64_t>(command.sizeMinusOne) + 1u, offset}, read);
             cursor += sizeof(command);
             continue;
         }
-        if (header.bytes < sizeof(header) || cursor + header.bytes > buffer.offset) throw std::runtime_error("APR: malformed command");
+        if (header.bytes < sizeof(header) || header.bytes > buffer.offset - cursor) throw std::runtime_error("APR: malformed command");
         switch (header.opcode) {
         case Apr::Opcode::Nop:
         case Apr::Opcode::PushMarker:
@@ -585,8 +589,7 @@ void _execute(const Apr::CommandBufferObject& buffer) {
         case Apr::Opcode::MapEnd:
             break;
         case Apr::Opcode::WriteAddress: {
-            Apr::WriteAddressCommand command;
-            std::memcpy(&command, buffer.base + cursor, sizeof(command));
+            const auto command = _read<Apr::WriteAddressCommand>(buffer, cursor);
             _writeAddress(command);
             break;
         }

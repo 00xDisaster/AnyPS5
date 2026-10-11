@@ -10,6 +10,8 @@
 #include <cstring>
 #include <fstream>
 #include <future>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -579,6 +581,40 @@ void TestResolveFailures() {
     std::remove(paths[0]);
 }
 
+void TestMalformedCommandSizes() {
+    const auto requireFailure = [](Apr::Opcode opcode, std::uint32_t recordBytes, std::uint32_t bufferBytes, const char* expected) {
+        std::array<std::uint8_t, 16> memory{};
+        const Apr::CommandHeader header{opcode, recordBytes};
+        std::memcpy(memory.data(), &header, sizeof(header));
+        Apr::CommandBufferObject buffer{Apr::BufferType::Generic, 0, bufferBytes, 1, bufferBytes, memory.data()};
+        bool rejected = false;
+        try {
+            sceKernelAprSubmitCommandBuffer(&buffer, 0);
+        } catch (const std::runtime_error& error) {
+            rejected = std::string(error.what()).starts_with(expected);
+        }
+        Require(rejected);
+    };
+
+    requireFailure(Apr::Opcode::ReadFile, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
+    requireFailure(Apr::Opcode::WriteAddress, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
+    requireFailure(Apr::Opcode::Nop, std::numeric_limits<std::uint32_t>::max(), 2u * sizeof(Apr::CommandHeader), "APR: malformed command");
+
+    std::array<std::uint8_t, 2 * sizeof(Apr::CommandHeader)> memory{};
+    const Apr::CommandHeader first{Apr::Opcode::Nop, sizeof(Apr::CommandHeader)};
+    const Apr::CommandHeader overflowing{Apr::Opcode::Nop, std::numeric_limits<std::uint32_t>::max()};
+    std::memcpy(memory.data(), &first, sizeof(first));
+    std::memcpy(memory.data() + sizeof(first), &overflowing, sizeof(overflowing));
+    Apr::CommandBufferObject buffer{Apr::BufferType::Generic, 0, sizeof(memory), 2, sizeof(memory), memory.data()};
+    bool rejected = false;
+    try {
+        sceKernelAprSubmitCommandBuffer(&buffer, 0);
+    } catch (const std::runtime_error& error) {
+        rejected = std::string(error.what()).starts_with("APR: malformed command");
+    }
+    Require(rejected);
+}
+
 void TestGatherScatter() {
     const char* path = "ampr_gather_scatter.bin";
     {
@@ -1054,6 +1090,7 @@ int main() {
     TestConstructed();
     TestZeroFilledBuffer();
     TestResolveFailures();
+    TestMalformedCommandSizes();
     TestGatherScatter();
     TestAmmRangesAboveHintedMaps();
     TestAmm();
