@@ -178,6 +178,21 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
     )
     add_test(NAME cli_args COMMAND cli_args_tests)
+    add_test_executable(program_layout_ranges_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/ProgramLayoutRangeTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/general/ProgramHeaderLayoutBuilder.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/ByteWriter.cpp
+    )
+    target_include_directories(program_layout_ranges_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/include
+    )
+    add_test(NAME program_layout_ranges COMMAND program_layout_ranges_tests)
+    set_tests_properties(program_layout_ranges PROPERTIES TIMEOUT 20)
+
     add_test_executable(buffer_bounds_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/io/tests/BufferBoundsTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/ByteReader.cpp
