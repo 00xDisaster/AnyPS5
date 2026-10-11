@@ -154,7 +154,9 @@ void Device() {
     std::uint16_t interruptMax = 0;
     for (std::uint8_t index = 0; index < interfaces && interruptAddress == 0; ++index) {
         const std::uint8_t* alternate = *reinterpret_cast<const std::uint8_t* const*>(interfaceArray + index * 16);
+        if (alternate == nullptr) continue;
         const std::uint8_t* endpoints = *reinterpret_cast<const std::uint8_t* const*>(alternate + 16);
+        if (endpoints == nullptr) continue;
         for (std::uint8_t endpoint = 0; endpoint < alternate[4]; ++endpoint) {
             const std::uint8_t* item = endpoints + endpoint * 32;
             if ((item[2] & 0x80) != 0 && (item[3] & 3) == 3) {
