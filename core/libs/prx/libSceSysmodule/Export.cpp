@@ -34,11 +34,7 @@ std::unordered_map<std::uint32_t, KernelModule> gHandles;
 
 void* openHostModule(const char* name) {
     const std::string relative = std::string("libs/") + name + ".prx";
-    if (void* module = dlopen_nid_postfix(relative.c_str(), kRtldNow)) {
-        return module;
-    }
-    const std::string bare = std::string(name) + ".prx";
-    return dlopen_nid_postfix(bare.c_str(), kRtldNow);
+    return dlopen_nid_postfix(relative.c_str(), kRtldNow);
 }
 
 bool fillModuleInfoForUnwind(std::uint64_t addr, ModuleInfoForUnwind* info) {
