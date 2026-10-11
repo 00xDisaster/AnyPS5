@@ -6,11 +6,14 @@
 #include <cstring>
 #include <stdexcept>
 struct SceKernelSystemSwVersion {
-    std::uint32_t size;
+    std::uint64_t size;
     char versionString[0x1C];
     std::uint32_t version;
-    std::uint32_t unk_24;
 };
+static_assert(offsetof(SceKernelSystemSwVersion, size) == 0x00);
+static_assert(offsetof(SceKernelSystemSwVersion, versionString) == 0x08);
+static_assert(offsetof(SceKernelSystemSwVersion, version) == 0x24);
+static_assert(sizeof(SceKernelSystemSwVersion) == 0x28);
 extern "C" {
 std::int64_t APS5_VABI sysconf_nid_postfix(int);
 int APS5_VABI getpagesize_nid_postfix();
@@ -84,7 +87,6 @@ static void CheckSystemSwVersion() {
         Require(version.versionString[i] == 0);
     }
     Require(version.version == 0x01000000);
-    Require(version.unk_24 == 0);
 }
 int main() {
     CheckProcessorCountSysctl();

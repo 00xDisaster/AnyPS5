@@ -17,10 +17,9 @@
 extern "C" int* APS5_VABI __error_nid_postfix();
 
 struct SceKernelSystemSwVersion {
-    std::uint32_t size;
+    std::uint64_t size;
     char versionString[0x1C];
     std::uint32_t version;
-    std::uint32_t unk_24;
 };
 
 namespace {
@@ -125,7 +124,6 @@ int APS5_VABI sceKernelGetSystemSwVersion_nid_postfix(SceKernelSystemSwVersion* 
     std::memset(version->versionString, 0, sizeof(version->versionString));
     std::memcpy(version->versionString, "01.000.000", sizeof("01.000.000"));
     version->version = 0x01000000;
-    version->unk_24 = 0;
     return 0;
 }
 }
