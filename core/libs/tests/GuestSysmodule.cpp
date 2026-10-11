@@ -40,6 +40,7 @@ constexpr std::uint16_t kFiberModuleId = 0x0006;
 constexpr std::uint16_t kUltModuleId = 0x0007;
 constexpr int kModuleUnloaded = static_cast<int>(0x805A1001);
 constexpr std::uint16_t kTrophy2ModuleId = 0x0110;
+constexpr std::uint32_t kAgcModuleId = 0x80000094;
 
 #ifdef __linux__
 struct Mapping {
@@ -124,6 +125,13 @@ int main() {
     Require(sceSysmoduleUnloadModuleInternal(kTrophy2ModuleId) == 0);
     Require(sceSysmoduleIsLoaded(kTrophy2ModuleId) == kModuleUnloaded);
     Require(sceSysmoduleUnloadModuleInternal(kTrophy2ModuleId) == kModuleUnloaded);
+
+    Require(sceSysmoduleUnloadModuleInternal(kAgcModuleId) == kModuleUnloaded);
+    Require(sceSysmoduleLoadModuleInternal(kAgcModuleId) == 0);
+    Require(sceSysmoduleLoadModuleInternal(kAgcModuleId) == 0);
+    Require(sceSysmoduleUnloadModuleInternal(kAgcModuleId) == 0);
+    Require(sceSysmoduleUnloadModuleInternal(kAgcModuleId) == 0);
+    Require(sceSysmoduleUnloadModuleInternal(kAgcModuleId) == kModuleUnloaded);
 #ifdef __linux__
     CheckUnwindInfo();
 #endif
