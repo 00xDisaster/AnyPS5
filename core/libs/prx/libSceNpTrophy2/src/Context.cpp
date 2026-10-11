@@ -41,8 +41,7 @@ int APS5_VABI sceNpTrophy2GetRewardIcon(void) {
 }
 
 int APS5_VABI sceNpTrophy2ShowTrophyList(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_TROPHY2_OK;
 }
 
 }
