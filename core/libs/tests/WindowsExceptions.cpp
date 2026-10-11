@@ -84,13 +84,14 @@ static void testUnhandledThrowSite() {
     RequireHandle(SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0) != 0);
     std::array<wchar_t, 32768> image{};
     RequireHandle(GetModuleFileNameW(nullptr, image.data(), static_cast<DWORD>(image.size())) != 0);
-    const wchar_t* argument = L" throw-uncaught";
+    const wchar_t* argument = L"\" throw-uncaught";
     std::array<wchar_t, 32768> command{};
     const std::size_t imageLength = std::wcslen(image.data());
     const std::size_t argumentLength = std::wcslen(argument);
-    RequireHandle(imageLength + argumentLength + 1 < command.size());
-    std::memcpy(command.data(), image.data(), imageLength * sizeof(wchar_t));
-    std::memcpy(command.data() + imageLength, argument, (argumentLength + 1) * sizeof(wchar_t));
+    RequireHandle(1 + imageLength + argumentLength + 1 < command.size());
+    command[0] = L'"';
+    std::memcpy(command.data() + 1, image.data(), imageLength * sizeof(wchar_t));
+    std::memcpy(command.data() + 1 + imageLength, argument, (argumentLength + 1) * sizeof(wchar_t));
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     startup.dwFlags = STARTF_USESTDHANDLES;
