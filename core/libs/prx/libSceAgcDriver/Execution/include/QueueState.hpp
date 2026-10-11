@@ -67,6 +67,15 @@ public:
     const_iterator upper_bound(std::uint32_t offset) const { return {this, nextPresent(static_cast<std::size_t>(offset) + 1)}; }
     bool contains(std::uint32_t offset) const { return offset < values.size() && ((present[offset / 64] >> (offset % 64)) & 1u) != 0; }
     std::size_t count(std::uint32_t offset) const { return contains(offset) ? 1 : 0; }
+    template <class TVisit>
+    void ForEach(TVisit&& visit) const {
+        for (std::size_t word = 0; word < present.size(); ++word) {
+            for (auto bits = present[word]; bits != 0; bits &= bits - 1) {
+                const auto offset = word * 64 + static_cast<std::size_t>(std::countr_zero(bits));
+                visit(static_cast<std::uint32_t>(offset), values[offset]);
+            }
+        }
+    }
     std::size_t size() const { return entries; }
     bool empty() const { return entries == 0; }
     void clear() {

@@ -144,10 +144,16 @@ void testRegisterFile() {
     std::vector<std::pair<std::uint32_t, std::uint32_t>> order;
     for (const auto& [offset, value] : registers) order.emplace_back(offset, value);
     check(order == std::vector<std::pair<std::uint32_t, std::uint32_t>>{{0x10, 7}, {0x41, 2}, {0x300, 3}}, "register file order");
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> visited;
+    registers.ForEach([&](std::uint32_t offset, std::uint32_t value) { visited.emplace_back(offset, value); });
+    check(visited == order, "register file visit order");
     auto copy = registers;
     copy[0x7000] = 5;
     check(copy.size() == 4 && registers.size() == 3 && !registers.contains(0x7000) && !(copy == registers), "register file copy");
     check(copy.erase(0x7000) == 1 && copy.erase(0x7000) == 0 && copy == registers, "register file erase");
+    visited.clear();
+    copy.ForEach([&](std::uint32_t offset, std::uint32_t value) { visited.emplace_back(offset, value); });
+    check(visited == order, "register file visited an erased register");
     bool threw = false;
     try {
         static_cast<void>(registers.at(0x42));
