@@ -48,6 +48,12 @@ elseif(NOT APPLE)
 endif()
 
 if(BUILD_TESTING)
+    add_test_executable(shader_cache_file_read_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/shader/recompiler/tests/CacheFileReadTests.cpp)
+    target_include_directories(shader_cache_file_read_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/shader/recompiler)
+    add_test(NAME shader_cache_file_read COMMAND shader_cache_file_read_tests)
+    set_tests_properties(shader_cache_file_read PROPERTIES TIMEOUT 20)
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
         add_test(NAME pr_overlap_encoding COMMAND ${Python3_EXECUTABLE}
