@@ -173,6 +173,10 @@ bool InFunctionStorage(const SpirvEmitterState& state, ResourceKind kind) {
     return kind == ResourceKind::Lds && !LdsInDeviceMemory(state) && ShaderWorkgroupInput(state) == nullptr;
 }
 
+std::uint32_t EmitValueOrZero(SpirvEmitterState& state, std::uint32_t condition, std::uint32_t value) {
+    return Select(state, TypeU32(state), condition, value, ConstantU32(state, 0u));
+}
+
 std::uint32_t EmitMemoryElementPointer(SpirvEmitterState& state, const MemoryResourceAccess& access, std::uint32_t index) {
     if (access.kind == ResourceKind::Lds && LdsInDeviceMemory(state)) {
         return EmitStorageBufferElementPointer(state, access, EmitAddU32(state, state.ldsBufferBase, index), TypeStorageBufferElementPointer(state));
