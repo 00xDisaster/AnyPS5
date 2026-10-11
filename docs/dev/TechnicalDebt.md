@@ -343,6 +343,8 @@ Throughout the project, every function at every stage either **does exactly what
 
 - [sceAppContentGetAddcontDownloadProgress](../../core/libs/prx/libSceAppContent/Export.cpp) (libSceAppContent) - imported by PPSA08755, which fails to load without it; added without an implementation because its behavior is unverified. [SharpProspero](https://github.com/SvenGDK/SharpProspero) lists `(uint32_t serviceLabel, entitlementLabel, SceAppContentAddcontDownloadProgress*)`, but no PS5 reference gives the progress layout or the error codes
 
+- [_sceFiberGetThreadFramePointerAddress](../../core/libs/prx/libSceFiber/Export.cpp) (libSceFiber, NID `0dy4JtMUcMQ`) forwards to `sceFiberGetThreadFramePointerAddress`; that the argument list matches is inferred from the export without the underscore, as for the underscore Ult exports, not measured
+
 ### Functional
 
 - [getc_unlocked, putc_unlocked](../../core/libs/prx/libc/src/StandardStreams.cpp) (libc) - byte I/O uses the host unlocked operations; guest EOF/error flags and macro counters follow `FileStream`. Linux status queries use `feof_unlocked`/`ferror_unlocked` because [glibc `feof`](https://github.com/bminor/glibc/blob/d2097651cc57834dbfcaa102ddfacae0d86cfb66/libio/feof.c) and [`ferror`](https://github.com/bminor/glibc/blob/d2097651cc57834dbfcaa102ddfacae0d86cfb66/libio/ferror.c) can acquire the stream lock. Windows uses [the CRT no-lock byte operations](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/fgetc-nolock-fgetwc-nolock) and `feof`/`ferror`, verified under a held stream lock on UCRT. Console behavior and other host CRTs remain unverified.
