@@ -69,6 +69,8 @@ DONE_COLOR, TODO_COLOR, BORDER, TEXT = "#2ea043", "#6e7681", "#0d1117", "#ffffff
 
 
 def blank(match):
+    if match.group(0).startswith(('"', "'")):
+        return "LITERAL"
     return re.sub(r"[^\n]", " ", match.group(0))
 
 

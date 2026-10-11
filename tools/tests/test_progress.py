@@ -131,14 +131,16 @@ class ProgressTests(unittest.TestCase):
                 "int APS5_VABI A() { return 0; }\n"
                 "int APS5_VABI B(const void* p) { (void)p; return SCE_KERNEL_ERROR_EOPNOTSUPP; }\n"
                 "int APS5_VABI C(void* p) { (void)p; return 0x8A810001; }\n"
+                'const char* APS5_VABI I() { return "constant; { text }"; }\n'
                 'int APS5_VABI D() { throw std::runtime_error("no"); }\n'
+                'std::string APS5_VABI J() { return std::string("not constant"); }\n'
                 "int APS5_VABI E() { return Support(); }\n"
                 "int APS5_VABI F(int a, int b) { return a + b; }\n"
                 "int APS5_VABI G() { NotImplemented_nid_no_patch(__func__); return 0; }\n"
                 "int APS5_VABI H(int a) { return Compute(a); }\n")
             group = progress.scan_library(library)
-            self.assertEqual(group["inert_names"], ["A", "B", "C", "D", "E"])
-            self.assertEqual(group["done_names"], ["A", "B", "C", "D", "E", "F", "H"])
+            self.assertEqual(group["inert_names"], ["A", "B", "C", "D", "E", "I"])
+            self.assertEqual(group["done_names"], ["A", "B", "C", "D", "E", "F", "H", "I", "J"])
             self.assertEqual(group["todo_names"], ["G"])
 
     def test_compare_marks_behaviourally_empty_implementations(self):
