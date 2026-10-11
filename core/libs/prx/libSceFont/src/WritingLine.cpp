@@ -246,18 +246,19 @@ int APS5_VABI sceFontDestroyWritingLine(void** pWritingLine) {
 }
 
 int APS5_VABI sceFontWritingLineClear(void* writingLine) {
-    if (!writingLine) return SCE_FONT_ERROR_INVALID_PARAMETER;
     auto* line = GetLine(__func__, writingLine);
     ResetOrders(*line);
     return SCE_FONT_OK;
 }
 
 int APS5_VABI sceFontWritingLineWritesOrder(void* writingLine, std::uint64_t writingAttribute, const FontWritingMetrics* writingMetrics, void* writingOrderer) {
-    if (!writingLine || !writingOrderer) return SCE_FONT_ERROR_INVALID_PARAMETER;
-    if ((writingAttribute & WRITING_ATTRIBUTE_ID_MASK) != WRITING_ATTRIBUTE_ID) return SCE_FONT_ERROR_INVALID_PARAMETER;
-    const std::size_t level = (writingAttribute >> 8) & 0xFF;
-    if (level >= WRITING_LEVEL_COUNT) return SCE_FONT_ERROR_INVALID_PARAMETER;
     auto* line = GetLine(__func__, writingLine);
+    if (writingAttribute == 0) writingAttribute = WRITING_ATTRIBUTE_ID;
+    if ((writingAttribute & WRITING_ATTRIBUTE_ID_MASK) != WRITING_ATTRIBUTE_ID)
+        Unsupported(__func__, "writing attribute " + std::to_string(writingAttribute) + " is not modelled");
+    const std::size_t level = (writingAttribute >> 8) & 0xFF;
+    if (level >= WRITING_LEVEL_COUNT) Unsupported(__func__, "embedding level " + std::to_string(level) + " (error code not verified)");
+    if (!writingOrderer) Unsupported(__func__, "null writing orderer (error code not verified)");
     if (line->cursor) ResetOrders(*line);
     WritingOrder* order = &line->orders.emplace_back();
     order->orderer = writingOrderer;
@@ -318,23 +319,13 @@ const FontWritingLineStep* APS5_VABI sceFontWritingLineRefersRenderStep(void* wr
 }
 
 int APS5_VABI sceFontWritingLineGetRenderMetrics(void* writingLine, FontWritingMetrics* writingMetrics) {
-    if (!writingLine || !writingMetrics) {
-        if (writingMetrics) *writingMetrics = {};
-        return SCE_FONT_ERROR_INVALID_PARAMETER;
-    }
     auto* line = GetLine(__func__, writingLine);
+    if (!writingMetrics) Unsupported(__func__, "null metrics pointer (error code not verified)");
     *writingMetrics = line->renderMetrics;
     return SCE_FONT_OK;
 }
 
 int APS5_VABI sceFontWritingLineGetOrderingSpace(void* writingLine, float* advanceSpace, float* headSpace, float* inlineSpace, float* tailSpace) {
-    if (!writingLine) {
-        if (advanceSpace) *advanceSpace = 0.0f;
-        if (headSpace) *headSpace = 0.0f;
-        if (inlineSpace) *inlineSpace = 0.0f;
-        if (tailSpace) *tailSpace = 0.0f;
-        return SCE_FONT_ERROR_INVALID_PARAMETER;
-    }
     auto* line = GetLine(__func__, writingLine);
     if (headSpace && !tailSpace) Unsupported(__func__, "a head space pointer without a tail space pointer is not modelled");
     if (advanceSpace) *advanceSpace = line->advanceX;
