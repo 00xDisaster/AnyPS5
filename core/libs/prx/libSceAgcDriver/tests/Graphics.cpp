@@ -116,7 +116,7 @@ void hdrComponentSwapTests() {
         state = DecodeState(queue);
         Require(state.color.componentMapping == 0xe4u && state.blendConstants == std::array<float, 4>{0.125f, 0.25f, 0.375f, 0.5f}, "standard color mapping changed");
         queue.context[0x31c] |= 2u << 11u;
-        expectFailure([&] { DecodeState(queue); }, "blending into a reversed component order");
+        expectFailure([&] { DecodeState(queue); }, "reversed component order");
     }
     auto queue = makeState();
     queue.context[0x31c] = (queue.context[0x31c] & ~0x1f7cu) | (12u << 2u) | (7u << 8u) | (1u << 11u);
