@@ -270,13 +270,22 @@ static int dirNameSearch(const SaveDataDirNameSearchCond* cond, SaveDataDirNameS
     }
     result->hit_num = 0;
     result->set_num = 0;
+    const std::uint32_t key = cond->key;
+    if ((key > SAVE_DATA_SORT_KEY_MTIME && key != SAVE_DATA_SORT_KEY_FREE_BLOCKS) || cond->order > SAVE_DATA_SORT_ORDER_DESCENT) {
+        return SAVE_DATA_ERROR_PARAMETER;
+    }
     const char* pattern = (cond->dir_name != nullptr) ? cond->dir_name->data : nullptr;
     const std::string root = save_root();
     if (!std::filesystem::is_directory(root)) {
         return SAVE_DATA_OK;
     }
-    std::uint32_t hit = 0;
-    std::uint32_t set = 0;
+    struct Match {
+        std::string name;
+        std::string path;
+        SaveDataParam param;
+    };
+    const bool sortByParam = key == SAVE_DATA_SORT_KEY_USER_PARAM || key == SAVE_DATA_SORT_KEY_MTIME;
+    std::vector<Match> matches;
     for (const auto& entry : std::filesystem::directory_iterator(root)) {
         if (!entry.is_directory()) {
             continue;
@@ -285,16 +294,29 @@ static int dirNameSearch(const SaveDataDirNameSearchCond* cond, SaveDataDirNameS
         if (!dir_name_match(name.c_str(), pattern)) {
             continue;
         }
-        hit++;
-        if (result->dir_names != nullptr && set < result->dir_names_num) {
-            std::snprintf(result->dir_names[set].data, sizeof(result->dir_names[set].data), "%s", name.c_str());
-            if (result->params != nullptr) {
-                result->params[set] = load_param(entry.path().string());
-            }
-            set++;
+        Match match{name, entry.path().string(), {}};
+        if (sortByParam) {
+            match.param = load_param(match.path);
+        }
+        matches.push_back(std::move(match));
+    }
+    std::sort(matches.begin(), matches.end(), [](const Match& a, const Match& b) { return a.name < b.name; });
+    if (key == SAVE_DATA_SORT_KEY_USER_PARAM) {
+        std::stable_sort(matches.begin(), matches.end(), [](const Match& a, const Match& b) { return a.param.user_param < b.param.user_param; });
+    } else if (key == SAVE_DATA_SORT_KEY_MTIME) {
+        std::stable_sort(matches.begin(), matches.end(), [](const Match& a, const Match& b) { return a.param.mtime < b.param.mtime; });
+    }
+    if (cond->order == SAVE_DATA_SORT_ORDER_DESCENT) {
+        std::reverse(matches.begin(), matches.end());
+    }
+    const std::uint32_t set = result->dir_names == nullptr ? 0 : static_cast<std::uint32_t>(std::min<std::size_t>(result->dir_names_num, matches.size()));
+    for (std::uint32_t i = 0; i < set; i++) {
+        std::snprintf(result->dir_names[i].data, sizeof(result->dir_names[i].data), "%s", matches[i].name.c_str());
+        if (result->params != nullptr) {
+            result->params[i] = sortByParam ? matches[i].param : load_param(matches[i].path);
         }
     }
-    result->hit_num = hit;
+    result->hit_num = static_cast<std::uint32_t>(matches.size());
     result->set_num = set;
     return SAVE_DATA_OK;
 }
