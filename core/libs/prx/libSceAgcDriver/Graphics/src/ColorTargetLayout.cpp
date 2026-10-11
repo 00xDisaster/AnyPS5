@@ -156,7 +156,7 @@ std::size_t ColorTargetLayout::offset(std::uint32_t x, std::uint32_t y) const {
         const auto highY = ((y & ~(blockHeight - 1u)) << 12u) & 0xfff000u;
         for (std::uint32_t bit = 0; bit < 16u; ++bit) {
             const auto coordinates = (highX & equation->bits[bit]) ^ (highY & equation->bits[bit]);
-            inBlock |= (parity(coordinates) << bit);
+            inBlock ^= (parity(coordinates) << bit);
         }
     }
     return block * Alignment() + (inBlock ^ pipeBankXor);

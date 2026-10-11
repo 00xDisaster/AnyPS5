@@ -55,6 +55,8 @@ void RunColorTargetLayoutTests() {
     const ColorTargetLayout r128(129, 67, ColorTileMode::RenderTarget, 16);
     Require(r64.Offset(0, 64) == 67584, "64 bpp SW_64KB_R_X dropped a cross-block y-coordinate XOR bit");
     Require(r128.Offset(64, 0) == 66560, "128 bpp SW_64KB_R_X dropped a cross-block x-coordinate XOR bit");
+    Require(r64.Offset(32, 64) == 65536, "64 bpp SW_64KB_R_X did not XOR overlapping coordinate contributions");
+    Require(r128.Offset(32, 64) == 3 * 65536, "128 bpp SW_64KB_R_X did not XOR overlapping coordinate contributions");
     Require(DecodeColorTileMode(0x4dc14000) == ColorTileMode::Standard4KB, "4 KiB standard color descriptor was rejected");
     const ColorTargetLayout standard(256, 256, ColorTileMode::Standard4KB);
     Require(standard.Bytes() == ComputeSurfaceSize(ComputeElementMipLayout(TextureTileMode::kStandard4KB, 4, 256, 256, 1), 1) && standard.Alignment() == 4096, "4 KiB standard color layout differs from the texture layout");
