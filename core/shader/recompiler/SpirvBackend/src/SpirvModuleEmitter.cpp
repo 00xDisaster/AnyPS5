@@ -504,10 +504,18 @@ std::uint32_t TessellationPointer(SpirvValueEmitContext& ctx, const IrValue& ins
     }
     const bool local = kind == TessellationAttribute::LocalOutput || kind == TessellationAttribute::ControlInput;
     const auto stride = local ? state.program.Metadata().tessellationLocalStride : state.program.Metadata().tessellationControlStride;
+    const auto type = TypePointer(state, storage, TypeU32(state));
+    const auto* sum = inst.Argument(1);
+    const auto* scaled = sum->Opcode() == IrOpcode::IAdd32 ? sum->Argument(0) : nullptr;
+    if (kind == TessellationAttribute::ControlInput && scaled != nullptr && sum->Argument(1)->HasImmediate() && scaled->Opcode() == IrOpcode::IMul32 && scaled->Argument(1)->HasImmediate() && scaled->Argument(1)->ImmediateU32() == stride) {
+        const auto constant = sum->Argument(1)->ImmediateU32();
+        const auto vertex = EmitBinaryU32(state, spv::OpIAdd, ctx.Arg(*scaled, 0), ConstantU32(state, constant / stride));
+        state.module.AddFunction(spv::OpAccessChain, type, pointer, variable, vertex, ConstantU32(state, constant % stride / 16u), ConstantU32(state, constant % 16u / 4u));
+        return pointer;
+    }
     const auto offset = kind == TessellationAttribute::PatchOutput ? address : EmitBinaryU32(state, spv::OpUMod, address, ConstantU32(state, stride));
     const auto attribute = EmitBinaryU32(state, spv::OpShiftRightLogical, offset, ConstantU32(state, 4u));
     const auto component = EmitBinaryU32(state, spv::OpBitwiseAnd, EmitBinaryU32(state, spv::OpShiftRightLogical, offset, ConstantU32(state, 2u)), ConstantU32(state, 3u));
-    const auto type = TypePointer(state, storage, TypeU32(state));
     if (kind == TessellationAttribute::LocalOutput || kind == TessellationAttribute::PatchOutput) {
         state.module.AddFunction(spv::OpAccessChain, type, pointer, variable, attribute, component);
     } else {
