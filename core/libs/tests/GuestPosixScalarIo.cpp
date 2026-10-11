@@ -30,6 +30,9 @@ std::int64_t APS5_VABI write_nid_postfix(int, const char*, std::int64_t);
 std::int64_t APS5_VABI _read_nid_postfix(int, void*, std::size_t);
 std::int64_t APS5_VABI _write_nid_postfix(int, const void*, std::size_t);
 std::int64_t APS5_VABI lseek_nid_postfix(int, std::int64_t, int);
+std::int64_t APS5_VABI sceKernelRead(int, void*, std::size_t);
+std::int64_t APS5_VABI sceKernelWrite(int, const void*, std::size_t);
+std::int64_t APS5_VABI sceKernelLseek(int, std::int64_t, int);
 }
 
 static void Check(bool value, int line) {
@@ -43,6 +46,7 @@ static void Check(bool value, int line) {
 
 #ifndef _WIN32
 static constexpr int GuestEagain = 35;
+static constexpr int GuestEisdir = 21;
 #endif
 
 template <typename Operation>
@@ -127,6 +131,10 @@ int main() {
     }
     Require(limitDiagnosticPreserved && errno == EACCES);
 #endif
+    char direct[1]{};
+    Require(sceKernelRead(-1, direct, 1) == static_cast<std::int32_t>(0x80020009u));
+    Require(sceKernelWrite(-1, direct, 1) == static_cast<std::int32_t>(0x80020009u));
+    Require(sceKernelLseek(-1, 0, 0) == static_cast<std::int32_t>(0x80020009u));
     Require(close_nid_postfix(descriptor) == 0);
     const int readOnly = open_nid_postfix(fileName.c_str(), SCE_KERNEL_O_RDONLY, 0);
     Require(readOnly >= 0);
@@ -154,8 +162,17 @@ int main() {
     Require(pipeFlags >= 0 && fcntl(nonBlockingPipe[0], F_SETFL, pipeFlags | O_NONBLOCK) == 0);
     RequirePosixFailure([&] { return read_nid_postfix(nonBlockingPipe[0], buffer, 1); }, GuestEagain);
     RequirePosixFailure([&] { return _read_nid_postfix(nonBlockingPipe[0], buffer, 1); }, GuestEagain);
+    Require(sceKernelRead(nonBlockingPipe[0], direct, 1) == static_cast<std::int32_t>(0x80020000u | GuestEagain));
     Require(close_nid_postfix(nonBlockingPipe[0]) == 0);
     Require(close_nid_postfix(nonBlockingPipe[1]) == 0);
+#endif
+#ifndef _WIN32
+    const std::string rootName = root.string();
+    const int directory = open_nid_postfix(rootName.c_str(), SCE_KERNEL_O_RDONLY, 0);
+    Require(directory >= 0);
+    RequirePosixFailure([&] { return read_nid_postfix(directory, buffer, 1); }, GuestEisdir);
+    RequirePosixFailure([&] { return _read_nid_postfix(directory, buffer, 1); }, GuestEisdir);
+    Require(close_nid_postfix(directory) == 0);
 #endif
     Require(std::filesystem::remove_all(root) == 2);
     return 0;
