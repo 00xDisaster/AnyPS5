@@ -1216,6 +1216,18 @@ const CompiledShaderArtifact& GetPreparedArtifact(const SourceHandle& handle) {
     return handle.artifact->artifact;
 }
 
+std::shared_ptr<const RecompileResult> RegistrationResult(const RecompileRequest& request, const SourceHandle& handle) {
+    if (!request.target.registrationModules) throw std::runtime_error("ShaderRecompiler: registration results need registration modules");
+    if (handle.artifact == nullptr || !MatchesPreparedShader(request, handle)) throw std::runtime_error("ShaderRecompiler: prepared artifact does not match the static ABI");
+    const auto& info = handle.artifact->info.info;
+    ResourceSnapshot snapshot;
+    snapshot.buffers.assign(info.buffers.size(), {{}, 4u});
+    snapshot.images.assign(info.images.size(), {{}, 8u});
+    snapshot.samplers.assign(info.samplers.size(), {{}, 4u});
+    snapshot.userData.assign(RuntimeAbi::UserDataCapacity, 0u);
+    return std::make_shared<RecompileResult>(materializeResult(*handle.artifact, request, snapshot));
+}
+
 std::shared_ptr<const RecompileResult> MaterializeShader(const RecompileRequest& request, const ResourceCapture& capture, const SourceHandle& handle) {
     if (!MatchesPreparedShader(request, handle)) throw std::runtime_error("ShaderRecompiler: prepared artifact does not match the static ABI");
     if (capture.source != handle.source || capture.plan != handle.source->plan) throw std::runtime_error("ShaderRecompiler: resource capture belongs to another prepared shader");

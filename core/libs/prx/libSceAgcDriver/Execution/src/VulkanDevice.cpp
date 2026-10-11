@@ -3058,6 +3058,25 @@ void VulkanDevice::ColorMetadataPass(const Graphics::ColorMetadataPass& pass) {
     Graphics::RunColorMetadataPass(graphicsContext(), pass);
 }
 
+bool VulkanDevice::PrebuildGraphicsLibraries(const Graphics::ShaderStages& stages, std::span<const Graphics::CompiledShader> shaders) {
+    PerformanceTimer timing("Vulkan.GraphicsPipelinePrebuild");
+    const auto context = graphicsContext();
+    if (!context.graphicsPipelineLibrary || context.descriptorCache == nullptr) return false;
+    Graphics::State state{};
+    state.stages = stages;
+    state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    state.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    state.color.format = VK_FORMAT_R8G8B8A8_UNORM;
+    state.color.exportIndex = 0;
+    state.colors.push_back(state.color);
+    state.hasColorTarget = true;
+    state.blend.colorWriteMask = 15;
+    state.blends.push_back(state.blend);
+    state.renderExtent = {1, 1};
+    const auto layouts = Graphics::DescribeSetLayouts(context, shaders);
+    return Graphics::Pipeline::Prebuild(context, state, Graphics::VertexInputLayout{}, layouts.View(), shaders);
+}
+
 void VulkanDevice::Draw(const Graphics::State& graphics, const Pm4::DrawParameters& draw, std::span<const Graphics::CompiledShader> shaders, std::span<const Graphics::GuestMemorySnapshot> snapshots, std::shared_ptr<const DrawRecipe>* recipe) {
     for (const auto& shader : shaders) {
         require(shader.program != nullptr, "missing compiled shader");

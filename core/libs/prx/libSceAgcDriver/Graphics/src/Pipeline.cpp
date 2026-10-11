@@ -152,6 +152,9 @@ bool ShadersWriteMemory(std::span<const CompiledShader> shaders) {
 
 namespace {
 
+thread_local bool prebuilding = false;
+thread_local bool prebuilt = false;
+
 VkShaderStageFlags pushStagesOf(const Context& context) {
     return PreRasterizationPushStages(context.meshShader, context.tessellationShader, context.geometryShader);
 }
@@ -469,7 +472,18 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         pipelineInfo.renderPass = renderPass;
         if (dynamicRendering) pipelineInfo.pNext = &rendering;
         timing.Mark("modules_and_state");
-        if (libraries) pipeline = LinkPipelineFromLibraries(context, pipelineInfo, rendering, layoutInfo, keys, &optimized, _modules);
+        if (prebuilding && !libraries) {
+            for (const auto module : _modules) context.Function<PFN_vkDestroyShaderModule>("vkDestroyShaderModule")(context.device, module, nullptr);
+            _modules.clear();
+            return;
+        }
+        if (libraries) pipeline = LinkPipelineFromLibraries(context, pipelineInfo, rendering, layoutInfo, keys, &optimized, _modules, prebuilding);
+        if (prebuilding) {
+            for (const auto module : _modules) context.Function<PFN_vkDestroyShaderModule>("vkDestroyShaderModule")(context.device, module, nullptr);
+            _modules.clear();
+            prebuilt = true;
+            return;
+        }
         else Check(context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines")(context.device, context.pipelineCache, 1, &pipelineInfo, nullptr, &pipeline), "vkCreateGraphicsPipelines");
         if (alternateAlpha) {
             blend.pAttachments = secondChannels.data();
@@ -487,6 +501,15 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         release();
         throw;
     }
+}
+
+bool Pipeline::Prebuild(const Context& context, const State& state, const VertexInputLayout& vertexInput, const PipelineSetLayouts& resources, std::span<const CompiledShader> shaders) {
+    struct Scope {
+        Scope() { prebuilding = true; prebuilt = false; }
+        ~Scope() { prebuilding = false; }
+    } scope;
+    const Pipeline pipeline(context, state, vertexInput, resources, shaders);
+    return prebuilt;
 }
 
 Pipeline::~Pipeline() {

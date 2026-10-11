@@ -21,6 +21,7 @@
 #include <deque>
 #include <functional>
 #include <list>
+#include <atomic>
 #include <pthread.h>
 #include <stdexcept>
 #include <thread>
@@ -30,7 +31,8 @@ namespace AgcDriver::DriverDetail {
 
 std::shared_ptr<const ShaderRecompiler::SourceHandle> PrepareShaderWithDiagnostics(const ShaderRecompiler::RecompileRequest& request, ShaderRecompiler::ShaderPreparationContext* preparation) {
     try {
-        return ShaderRecompiler::PrepareShader(request, preparation);
+        auto handle = ShaderRecompiler::PrepareShader(request, preparation);
+        return handle;
     } catch (...) {
         try {
             if (std::getenv("APS5_DUMP_SHADERS") != nullptr) static_cast<void>(Driver::dumpRequest(request.shader.codeAddress, request));
@@ -860,7 +862,14 @@ std::vector<PreparedGraphicsStage> PrepareGraphicsStages(const DrawDecode& decod
         }
         const auto bytes = handle->artifact->bindings.pushConstantSizeBytes;
         require(bytes <= room, "prepared graphics stages exceed the push constant block");
-        prepared.push_back({program.snapshot, {program.codeOffset, handle}});
+        std::shared_ptr<const ShaderRecompiler::RecompileResult> registration;
+        if (target.registrationModules) {
+            try {
+                registration = ShaderRecompiler::RegistrationResult(request, *handle);
+            } catch (const std::exception&) {
+            }
+        }
+        prepared.push_back({program.snapshot, {program.codeOffset, handle}, program.binary.stage, offset, std::move(registration)});
         pushOffset += bytes;
     }
     transaction.Commit();
@@ -929,6 +938,23 @@ void Driver::ResolveGraphicsStagesAbi(std::span<const Shader* const> stages, std
     for (const auto& stage : prepared) {
         if (stage.snapshot->type == 1) continue;
         ResolvePreparedGraphics(*stage.snapshot, {}, primitiveType == state.userConfig.end() ? 0u : primitiveType->second, localDevice->Target());
+    }
+    if (localDevice->Target().registrationModules && !prepared.empty() && std::ranges::all_of(prepared, [](const auto& stage) { return stage.registration != nullptr && (stage.stage == ShaderRecompiler::ShaderStage::Vertex || stage.stage == ShaderRecompiler::ShaderStage::Fragment); }) && prepared.back().stage == ShaderRecompiler::ShaderStage::Fragment) {
+        std::vector<std::shared_ptr<const ShaderRecompiler::RecompileResult>> results;
+        std::vector<std::pair<ShaderRecompiler::ShaderStage, std::uint32_t>> stages;
+        for (const auto& stage : prepared) {
+            results.push_back(stage.registration);
+            stages.emplace_back(stage.stage, stage.pushOffset);
+        }
+        SubmitRegistrationPreparation([localDevice, results = std::move(results), stages = std::move(stages), shaderStages = decoded.state.stages] {
+            std::vector<Graphics::CompiledShader> shaders;
+            for (std::size_t index = 0; index < results.size(); ++index) shaders.push_back({stages[index].first, results[index].get(), stages[index].second});
+            try {
+                static_cast<void>(localDevice->PrebuildGraphicsLibraries(shaderStages, shaders));
+            } catch (const std::exception& error) {
+                APS5_LOG_OUT("graphics library prebuild skipped: %s", error.what());
+            }
+        });
     }
     PreparedShaderState::GraphicsAbi abi{key, registry, {}};
     for (const auto& stage : prepared) abi.stages.push_back(stage.snapshot);
