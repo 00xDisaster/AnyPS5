@@ -3144,9 +3144,9 @@ void ShaderResources::applyAnisoOverride() {
         if (!variant.has_value()) continue;
         const auto& words = *variant;
         if (context.samplerCache != nullptr && !SamplerCacheDisabled()) {
-            samplers[index] = context.samplerCache->Get(context, words, source.compareEnable, source.unnormalized, false, source.integerBorder);
+            samplers[index] = context.samplerCache->Get(context, words, source.compareEnable, source.unnormalized, true, source.integerBorder);
         } else {
-            auto resource = DecodeSamplerResource(words, source.unnormalized, false, source.integerBorder);
+            auto resource = DecodeSamplerResource(words, source.unnormalized, true, source.integerBorder);
             resource.compareEnable = source.compareEnable;
             samplers[index] = std::make_shared<Sampler>(context, resource);
         }
