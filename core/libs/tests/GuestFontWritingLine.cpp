@@ -65,6 +65,20 @@ static bool StepIs(const FontWritingLineStep* step, float x, float progress, con
            step->Adjusting.y == 0.0f && Same(step->Metrics, run);
 }
 
+static bool OrderIs(void* line, const std::uint64_t* levels, const std::size_t* order, std::size_t count) {
+    static int orderers[16];
+    const FontWritingMetrics run{1.0f, 0.0f, {-1.0f, 1.0f, 0.0f, 1.0f}};
+    if (sceFontWritingLineClear(line) != SCE_FONT_OK) return false;
+    for (std::size_t i = 0; i < count; ++i) {
+        if (sceFontWritingLineWritesOrder(line, Attribute(levels[i]), &run, &orderers[i]) != SCE_FONT_OK) return false;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        const FontWritingLineStep* step = sceFontWritingLineRefersRenderStep(line);
+        if (!step || step->writingOrderer != &orderers[order[i]]) return false;
+    }
+    return sceFontWritingLineRefersRenderStep(line) == nullptr;
+}
+
 int main() {
     FontMemory memory{};
     void* line = nullptr;
@@ -179,6 +193,30 @@ int main() {
     Require(StepIs(sceFontWritingLineRefersRenderStep(rtl), 8.0f, 1.0f, runA, &a));
     Require(sceFontWritingLineRefersRenderStep(rtl) == nullptr);
     Require(sceFontWritingLineGetRenderMetrics(rtl, &metrics) == SCE_FONT_OK && Same(metrics, {18.0f, 0.0f, {-8.0f, 2.0f, 2.0f, 17.0f}}));
+
+    const std::uint64_t nested[] = {0, 1, 2, 3, 1, 1, 0};
+    const std::size_t nestedOrder[] = {0, 5, 4, 2, 3, 1, 6};
+    Require(OrderIs(ltr, nested, nestedOrder, 7));
+    const std::uint64_t repeated[] = {0, 1, 1, 2, 2, 0, 1, 2, 2, 0};
+    const std::size_t repeatedOrder[] = {0, 3, 4, 2, 1, 5, 7, 8, 6, 9};
+    Require(OrderIs(ltr, repeated, repeatedOrder, 10));
+    const std::uint64_t skipped[] = {0, 2, 3, 3, 2, 1, 0};
+    const std::size_t skippedOrder[] = {0, 5, 1, 3, 2, 4, 6};
+    Require(OrderIs(ltr, skipped, skippedOrder, 7));
+
+    const FontWritingMetrics runE{10.0f, 3.0f, {-8.0f, 2.0f, 1.0f, 9.0f}};
+    const FontWritingMetrics runF{6.0f, -1.0f, {-12.0f, 3.0f, -1.0f, 5.0f}};
+    Require(sceFontWritingLineClear(ltr) == SCE_FONT_OK);
+    Require(sceFontWritingLineWritesOrder(ltr, Attribute(0), &runE, &a) == SCE_FONT_OK);
+    Require(sceFontWritingLineWritesOrder(ltr, Attribute(0), &runF, &b) == SCE_FONT_OK);
+    auto* adjusted = const_cast<FontWritingLineStep*>(sceFontWritingLineRefersRenderStep(ltr));
+    Require(adjusted && adjusted->x == 0.0f && adjusted->y == 0.0f && adjusted->writingOrderer == &a);
+    adjusted->Adjusting = {2.0f, 5.0f};
+    const FontWritingLineStep* second = sceFontWritingLineRefersRenderStep(ltr);
+    Require(second && second->x == 10.0f && second->y == 3.0f && second->Adjusting.x == 0.0f && second->Adjusting.y == 0.0f);
+    Require(sceFontWritingLineGetRenderMetrics(ltr, &metrics) == SCE_FONT_OK && Same(metrics, {12.0f, 8.0f, {-3.0f, 7.0f, 3.0f, 11.0f}}));
+    Require(sceFontWritingLineRefersRenderStep(ltr) == nullptr);
+    Require(sceFontWritingLineGetRenderMetrics(ltr, &metrics) == SCE_FONT_OK && Same(metrics, {16.0f, 2.0f, {-9.0f, 7.0f, 3.0f, 15.0f}}));
 
     float space = 7.0f;
     Require(sceFontWritingLineGetOrderingSpace(rtl, nullptr, nullptr, &space, nullptr) == SCE_FONT_OK && space == 15.0f);

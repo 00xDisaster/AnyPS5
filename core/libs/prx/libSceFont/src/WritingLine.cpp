@@ -281,7 +281,10 @@ const FontWritingLineStep* APS5_VABI sceFontWritingLineRefersRenderStep(void* wr
         ExtendRenderMetrics(*line);
     } else {
         line->steppedSpace = 0.0f;
-        line->step = {};
+        line->step.x = 0.0f;
+        line->step.y = 0.0f;
+        line->step.spacingProgress = 0.0f;
+        line->step.Metrics = {};
         line->renderMetrics = {};
     }
     const bool rightToLeft = IsRightToLeft(*line);
