@@ -11,6 +11,7 @@
 #include <map>
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -183,11 +184,12 @@ struct Predication {
 };
 
 struct QueueState {
+    static constexpr std::size_t ConstantRamWords = 0x3000;
     Registers shader;
     Registers context = InitialContextRegisters();
     Registers userConfig{{0x24a, 0}, {0x24b, 0}};
     std::optional<Registers> savedContext;
-    std::array<std::uint32_t, 0x3000> constantRam{};
+    std::vector<std::uint32_t> constantRam;
     std::uint64_t indexBase = 0;
     std::uint64_t drawIndirectBase = 0;
     std::uint64_t dispatchIndirectBase = 0;
@@ -199,6 +201,17 @@ struct QueueState {
 
     void ClearContext() {
         context = InitialContextRegisters();
+    }
+
+    std::span<const std::uint32_t> ConstantRam() const {
+        static const std::array<std::uint32_t, ConstantRamWords> unwritten{};
+        if (constantRam.empty()) return unwritten;
+        return constantRam;
+    }
+
+    std::span<std::uint32_t> WritableConstantRam() {
+        if (constantRam.empty()) constantRam.resize(ConstantRamWords);
+        return constantRam;
     }
 };
 
