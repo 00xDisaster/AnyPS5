@@ -2,6 +2,7 @@
 #include <cstddef>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libc/include/PreciseWait.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/Apr/include/AprCommandBuffer.hpp"
@@ -107,7 +108,8 @@ int _fail(int guestErrno) {
 
 bool _resolve(const char* guestPath, std::uint32_t* id, std::uint64_t* size) {
     if (!guestPath) return false;
-    auto hostPath = ResolvePath_nid_no_patch(guestPath);
+    std::filesystem::path hostPath;
+    if (ResolvePathError_nid_no_patch(guestPath, hostPath) != 0) return false;
     std::uint64_t bytes = 0;
     if (!_fileSize(hostPath, bytes)) return false;
     std::lock_guard lock(g_filesLock);

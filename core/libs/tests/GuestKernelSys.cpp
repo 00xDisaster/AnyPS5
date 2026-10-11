@@ -67,6 +67,17 @@ int main() {
     Require(close_nid_postfix(descriptor) == 0);
     Require(fstatfs_nid_postfix(-1, viaPublic) == -1 && Error() == 9);
     char buffer[64];
+    for (const auto& component : {std::string("missing"), std::string("file.txt")}) {
+        const auto prefix = root.generic_string() + "/" + component + "/../";
+        const auto invalid = prefix + "file.txt";
+        const auto created = prefix + "new.txt";
+        const int expected = component == "missing" ? 2 : 20;
+        Require(readlink_nid_postfix(invalid.c_str(), buffer, sizeof(buffer)) == -1 && Error() == expected);
+        Require(link_nid_postfix(invalid.c_str(), created.c_str()) == -1 && Error() == expected);
+        Require(link_nid_postfix(file.c_str(), created.c_str()) == -1 && Error() == expected);
+        Require(symlink_nid_postfix("file.txt", created.c_str()) == -1 && Error() == expected);
+        Require(std::filesystem::hard_link_count(file) == 1 && !std::filesystem::exists(root / "new.txt"));
+    }
     Require(readlink_nid_postfix(file.c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
     Require(readlink_nid_postfix(root.string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
     Require(readlink_nid_postfix((root / "missing").string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 2);

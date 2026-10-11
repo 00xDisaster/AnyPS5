@@ -1,6 +1,7 @@
 #include "prx/libkernel/File/include/FileFlags.hpp"
 #include "prx/libkernel/File/include/NativeStat.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
@@ -142,7 +143,8 @@ int APS5_VABI sceKernelOpen(const char* path, int flags, std::uint16_t mode) {
         const int fd = File::OpenRandomDevice();
         return fd < 0 ? SceErrorFromErrno(errno) : fd;
     }
-    auto native = ResolvePath_nid_no_patch(path);
+    std::filesystem::path native;
+    if (const int error = ResolvePathError_nid_no_patch(path, native)) return SceKernelError(error);
 #ifdef _WIN32
     if ((flags & (SCE_KERNEL_O_DIRECTORY | SCE_KERNEL_O_CREAT)) == SCE_KERNEL_O_DIRECTORY) {
         std::error_code error;
@@ -235,11 +237,7 @@ int APS5_VABI sceKernelStat(const char* path, FileStat* sb) {
     }
     if (*path == '\0') return SceErrorFromErrno(2);
     std::filesystem::path native;
-    try {
-        native = ResolvePath_nid_no_patch(path);
-    } catch (const std::filesystem::filesystem_error&) {
-        return SceErrorFromErrno(2);
-    }
+    if (const int error = ResolvePathError_nid_no_patch(path, native)) return SceKernelError(error);
     std::error_code error;
     constexpr int GuestEnotdir = 20;
     const auto status = std::filesystem::status(native, error);
@@ -258,7 +256,8 @@ int APS5_VABI sceKernelUnlink(const char* path) {
         throw std::invalid_argument(std::string(__func__) + ": path is null");
     }
     if (*path == '\0') return SceErrorFromErrno(2);
-    auto native = ResolvePath_nid_no_patch(path);
+    std::filesystem::path native;
+    if (const int error = ResolvePathError_nid_no_patch(path, native)) return SceKernelError(error);
     constexpr int GuestEperm = 1;
     std::error_code error;
     if (std::filesystem::is_directory(std::filesystem::symlink_status(native, error))) return SceErrorFromErrno(GuestEperm);

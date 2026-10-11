@@ -15,6 +15,7 @@
 #endif
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -75,7 +76,8 @@ std::int64_t APS5_VABI readlink_nid_postfix(const char* path, char* buffer, std:
     if (path == nullptr) return Fail(GuestEfault);
     if (*path == '\0') return Fail(GuestEnoent);
     if (size > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) return Fail(GuestEinval);
-    const auto native = ResolvePath_nid_no_patch(path);
+    std::filesystem::path native;
+    if (const int error = ResolvePathError_nid_no_patch(path, native)) return Fail(error);
 #ifdef _WIN32
     const DWORD attributes = GetFileAttributesW(native.wstring().c_str());
     if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
@@ -99,8 +101,9 @@ std::int64_t APS5_VABI readlink_nid_postfix(const char* path, char* buffer, std:
 int APS5_VABI link_nid_postfix(const char* existing, const char* created) {
     if (existing == nullptr || created == nullptr) return static_cast<int>(Fail(GuestEfault));
     if (*existing == '\0' || *created == '\0') return static_cast<int>(Fail(GuestEnoent));
-    const auto source = ResolvePath_nid_no_patch(existing);
-    const auto destination = ResolvePath_nid_no_patch(created);
+    std::filesystem::path source, destination;
+    if (const int error = ResolvePathError_nid_no_patch(existing, source)) return static_cast<int>(Fail(error));
+    if (const int error = ResolvePathError_nid_no_patch(created, destination)) return static_cast<int>(Fail(error));
     std::error_code error;
     const auto status = std::filesystem::symlink_status(source, error);
     if (!std::filesystem::exists(status)) return static_cast<int>(Fail(GuestEnoent));
@@ -134,7 +137,8 @@ int APS5_VABI symlink_nid_postfix(const char* target, const char* created) {
         NotImplemented_nid_no_patch("symlink: absolute targets");
         return -1;
     }
-    const auto native = ResolvePath_nid_no_patch(created);
+    std::filesystem::path native;
+    if (const int error = ResolvePathError_nid_no_patch(created, native)) return static_cast<int>(Fail(error));
     std::error_code error;
 #ifdef _WIN32
     if (GetFileAttributesW(native.wstring().c_str()) != INVALID_FILE_ATTRIBUTES) return static_cast<int>(Fail(GuestEexist));
