@@ -4,6 +4,7 @@
 #include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/File/include/File.hpp"
+#include "prx/libkernel/File/include/SharedMemory.hpp"
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
 #include "prx/libkernel/File/include/FileLock.hpp"
 #include "prx/libkernel/Socket/include/SocketRuntime.hpp"
@@ -72,7 +73,8 @@ static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint
     return descriptor;
 }
 static std::int64_t NativeLseek(int fd, std::int64_t offset, int whence) {
-    return ::_lseeki64(fd, offset, whence);
+    const auto result = File::SeekSharedMemory_nid_no_patch(fd, offset, whence);
+    return result == -2 ? ::_lseeki64(fd, offset, whence) : result;
 }
 static int NativeRead(int fd, void* buf, std::size_t n) {
     if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
@@ -84,7 +86,8 @@ static int NativeWrite(int fd, const void* buf, std::size_t n) {
     if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
         throw std::runtime_error("sceKernelWrite: nbytes exceeds platform limit");
     }
-    return ::_write(fd, buf, static_cast<unsigned int>(n));
+    const auto result = File::WriteSharedMemory_nid_no_patch(fd, buf, n);
+    return result == -2 ? ::_write(fd, buf, static_cast<unsigned int>(n)) : static_cast<int>(result);
 }
 extern "C" _invalid_parameter_handler _set_thread_local_invalid_parameter_handler(_invalid_parameter_handler);
 static void IgnoreInvalidParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {}
@@ -126,13 +129,15 @@ static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint
     return ::open(p.c_str(), nativeFlags, static_cast<mode_t>(mode));
 }
 static std::int64_t NativeLseek(int fd, std::int64_t offset, int whence) {
-    return ::lseek(fd, static_cast<off_t>(offset), whence);
+    const auto result = File::SeekSharedMemory_nid_no_patch(fd, offset, whence);
+    return result == -2 ? ::lseek(fd, static_cast<off_t>(offset), whence) : result;
 }
 static std::int64_t NativeRead(int fd, void* buf, std::size_t n) {
     return ::read(fd, buf, n);
 }
 static std::int64_t NativeWrite(int fd, const void* buf, std::size_t n) {
-    return ::write(fd, buf, n);
+    const auto result = File::WriteSharedMemory_nid_no_patch(fd, buf, n);
+    return result == -2 ? ::write(fd, buf, n) : result;
 }
 static int NativeClose(int fd) { return ::close(fd); }
 static int NativeUnlink(const std::filesystem::path& p) {
