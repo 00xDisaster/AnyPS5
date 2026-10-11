@@ -4,7 +4,7 @@ import json
 import tempfile
 import sys
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 from urllib.error import URLError
 
@@ -160,6 +160,12 @@ int APS5_VABI sceReal() { return 0; }
     def test_formatted_alias_macro_is_detected(self):
         self.write_source('APS5_EXPORT (\n "AAAAAAAAAAA" ,\n exampleUnknown00\n );\n')
         self.assertEqual(nid_names.collect_unknowns(), {"AAAAAAAAAAA": "core/libs/prx/libSceExample/Export.cpp:exampleUnknown00"})
+
+    def test_windows_source_paths_use_portable_separators(self):
+        self.write_source('APS5_EXPORT("AAAAAAAAAAA", exampleUnknown00);\n')
+        relative = PureWindowsPath("core/libs/prx/libSceExample/Export.cpp")
+        with patch.object(Path, "relative_to", return_value=relative):
+            self.assertEqual(nid_names.collect_unknowns(), {"AAAAAAAAAAA": "core/libs/prx/libSceExample/Export.cpp:exampleUnknown00"})
 
     def test_test_fixtures_are_not_runtime_implementations(self):
         self.write_source('APS5_EXPORT("AAAAAAAAAAA", exampleUnknown00);\nint APS5_VABI sceFixture() { return 0; }\n', "tests/Fixture.cpp")
