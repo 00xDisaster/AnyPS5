@@ -155,7 +155,7 @@ ShaderRecompiler::RecompileResult Compile(const ShaderRecompiler::SpirvTarget& t
         {stage, reinterpret_cast<std::uintptr_t>(code.data()), code, 0, {}},
         {64, hull ? 0u : 8u, userData, std::nullopt, pixel, vertex, memory},
         target,
-        {0, 0, pushCursor, AgcDriver::Graphics::PipelinePushConstantBytes - pushCursor},
+        stage == ShaderStage::Fragment ? PixelPushLayout(pushCursor, target) : ShaderRecompiler::BindingLayout{0, 0, pushCursor, AgcDriver::Graphics::PipelinePushSlotBytes - pushCursor},
         graphics
     };
     auto result = ShaderRecompiler::Recompile(request);
@@ -207,7 +207,7 @@ void Draw(AgcDriver::VulkanDevice& device, const Stages& stages, VkCullModeFlags
         {ShaderStage::Local, &stages.local, offset(stages.local)},
         {ShaderStage::TessellationControl, &stages.hull, offset(stages.hull)},
         {ShaderStage::TessellationEvaluation, &stages.domain, offset(stages.domain)},
-        {ShaderStage::Fragment, &stages.fragment, offset(stages.fragment)},
+        {ShaderStage::Fragment, &stages.fragment, PixelPushOffset(cursor, device.Target())},
     }};
     AgcDriver::Graphics::State state{};
     state.stages = {AgcDriver::Graphics::ShaderPath::Tessellation, 0x0200210du, 64, 64, std::nullopt, Patches};

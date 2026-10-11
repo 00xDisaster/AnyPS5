@@ -246,7 +246,7 @@ void Check(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ShaderPath path
     if (tessellation) {
         Fixture late;
         late.Initialize(5u);
-        registry.emplace(late.snapshot->codeAddress, late.snapshot);
+        registry.emplace(late.snapshot->codeAddress, std::vector<std::shared_ptr<const ShaderSnapshot>>{late.snapshot});
         auto unbound = queue;
         unbound.shader[0x148u] = 0u;
         unbound.shader[0x149u] = 0u;
@@ -270,7 +270,8 @@ void Check(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ShaderPath path
         static_cast<void>(InvocationFor(*late.snapshot, program.codeOffset, request));
         Require(late.snapshot->prepared->entries.size() == 1u, "the local program was not prepared once at its first draw");
         ++request.graphics->tessellation->outputControlPoints;
-        Reject([&] { static_cast<void>(InvocationFor(*late.snapshot, program.codeOffset, request)); }, "artifact is missing");
+        static_cast<void>(InvocationFor(*late.snapshot, program.codeOffset, request));
+        Require(late.snapshot->prepared->entries.size() == 2u, "a second state of the local program was not prepared at its draw");
         registry.erase(late.snapshot->codeAddress);
     }
     ShaderRegistry invalidRegistry;
