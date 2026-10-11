@@ -3025,8 +3025,17 @@ void rectListTests() {
     queue.userConfig[0x242] = 17;
     const auto state = DecodeState(queue);
     const Context context{};
-    const AgcDriver::Pm4::DrawParameters draw{0, 4, 0, 1, 0, false};
-    expectFailure([&] { Draw(context, state, draw, {}); }, "incomplete rect-list");
+    const auto drawFailure = [&](std::uint32_t count) {
+        const AgcDriver::Pm4::DrawParameters draw{0, count, 0, 1, 0, false};
+        try {
+            Draw(context, state, draw, {});
+        } catch (const std::exception& error) {
+            return std::string(error.what());
+        }
+        return std::string{};
+    };
+    const auto complete = drawFailure(3);
+    for (const auto count : {4u, 5u}) Require(drawFailure(count) == complete, "a rect-list draw with a partial last rectangle was not drawn like its complete rectangles");
 }
 
 ShaderRecompiler::RecompileResult recompilePixel(std::initializer_list<std::uint32_t> controls, std::span<const std::uint32_t> code) {
