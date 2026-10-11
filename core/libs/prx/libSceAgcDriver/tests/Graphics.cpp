@@ -1529,6 +1529,26 @@ void DepthClipTests() {
     }
 }
 
+void AlphaToCoverageTests() {
+    auto queue = makeState();
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    Require(!AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "alpha-to-coverage decoded while disabled");
+    queue.context[0x2dc] = 0xaa01;
+    Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "undithered alpha-to-coverage was not decoded");
+    Require(AgcDriver::Graphics::DrawRejection(queue, false).empty(), "the precheck rejected undithered alpha-to-coverage");
+    for (const auto control : {0x8701u, 0x1aa01u, 0xaa03u}) {
+        queue.context[0x2dc] = control;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "alpha-to-coverage");
+        Require(AgcDriver::Graphics::DrawRejection(queue, false).find("alpha-to-coverage") != std::string::npos, "the precheck accepted unsupported alpha-to-coverage");
+    }
+    queue.context[0x2dc] = 0xaa01;
+    const auto exportFormat = queue.context.at(0x1c5);
+    queue.context[0x1c5] = (exportFormat & ~0xfu) | 1u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "floating-point alpha");
+    queue.context[0x1c5] = exportFormat;
+}
+
 void InitialContextTests() {
     const auto configured = makeState();
     AgcDriver::QueueState queue;
@@ -1546,7 +1566,7 @@ void InitialContextTests() {
     }
     queue.context[0x206] = 0x43f;
     queue.context[0x2dc] |= 1;
-    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "alpha-to-coverage");
+    Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "undithered alpha-to-coverage was not decoded");
     queue.context.erase(0x2dc);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "missing register");
     queue.ClearContext();
@@ -4055,6 +4075,7 @@ int main() {
         ComputeScratchTests();
         shaderUserDataTailPaddingTests();
         InitialContextTests();
+        AlphaToCoverageTests();
         pushConstantTests();
         resourceTests();
         descriptorSnapshotTests();

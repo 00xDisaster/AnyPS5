@@ -324,6 +324,7 @@ void writePixelInfo(Writer& writer, const ShaderPixelStageInfo& info) {
         writer.WriteU8(static_cast<std::uint8_t>(value));
     }
     writer.WriteBool(info.dualSourceBlend);
+    writer.WriteBool(info.alphaToCoverage);
 }
 
 ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
@@ -371,6 +372,7 @@ ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
         }
     }
     if (version >= 15u) info.dualSourceBlend = reader.ReadBool();
+    if (version >= 16u) info.alphaToCoverage = reader.ReadBool();
     if (version < 5u) {
         const auto input = [](PixelInput value, bool present) { return present ? PixelInputBit(value) : 0u; };
         info.inputAddr = input(PixelInput::PerspectiveSample, info.hasPerspectiveCenterVgpr && inputAddrOrCenterVgpr == 2u) | input(PixelInput::PerspectiveCenter, info.hasPerspectiveCenterVgpr) |

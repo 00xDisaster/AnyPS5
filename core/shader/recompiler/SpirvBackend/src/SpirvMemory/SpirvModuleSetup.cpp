@@ -180,7 +180,7 @@ void DefineModule(SpirvEmitterState& state) {
                 state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeDepthGreater);
             }
         }
-        if (pixel.psEarlyZ && !pixel.psPixelKillEnable && !pixel.psDepthExportEnable && !pixel.psSampleMaskExportEnable) {
+        if (pixel.psEarlyZ && !pixel.psPixelKillEnable && !pixel.psDepthExportEnable && !pixel.psSampleMaskExportEnable && !pixel.psAlphaToCoverage) {
             state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeEarlyFragmentTests);
         }
         if (pixel.psOrderedPixelShader) {
