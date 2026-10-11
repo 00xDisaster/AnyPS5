@@ -390,6 +390,8 @@ void EmitGetScalarRegister(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitSetScalarRegister(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitGetVectorRegister(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitSetVectorRegister(SpirvValueEmitContext& ctx, const IrValue& inst);
+void EmitLoadVectorWindow(SpirvValueEmitContext& ctx, const IrValue& inst);
+void EmitStoreVectorWindow(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitGetGotoVariable(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitSetGotoVariable(SpirvValueEmitContext& ctx, const IrValue& inst);
 void EmitGetScc(SpirvValueEmitContext& ctx, const IrValue& inst);

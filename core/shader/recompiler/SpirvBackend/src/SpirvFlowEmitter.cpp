@@ -308,6 +308,8 @@ void EmitDirectInstruction(SpirvValueEmitContext& ctx, const IrValue& inst) {
         case IrOpcode::SetScalarRegister: return Invoke(EmitSetScalarRegister, ctx, inst);
         case IrOpcode::GetVectorRegister: return Invoke(EmitGetVectorRegister, ctx, inst);
         case IrOpcode::SetVectorRegister: return Invoke(EmitSetVectorRegister, ctx, inst);
+        case IrOpcode::LoadVectorWindow: return Invoke(EmitLoadVectorWindow, ctx, inst);
+        case IrOpcode::StoreVectorWindow: return Invoke(EmitStoreVectorWindow, ctx, inst);
         case IrOpcode::GetGotoVariable: return Invoke(EmitGetGotoVariable, ctx, inst);
         case IrOpcode::SetGotoVariable: return Invoke(EmitSetGotoVariable, ctx, inst);
         case IrOpcode::GetScc: return Invoke(EmitGetScc, ctx, inst);
