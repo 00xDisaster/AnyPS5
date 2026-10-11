@@ -92,6 +92,44 @@ class SilentStubTests(unittest.TestCase):
             self.assertNotIn("[comment]", result.stdout)
 
 
+class QuotedPathTests(unittest.TestCase):
+    def test_non_ascii_path_does_not_crash_the_checker(self):
+        checker = Path(__file__).resolve().parents[1] / "check_conventions.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", "-c", "user.name=Conventions Test", "-c", "user.email=test@example.com",
+                     "-c", "commit.gpgsign=false", *args],
+                    cwd=root, capture_output=True, text=True, check=True,
+                )
+
+            git("init", "-q")
+            git("config", "core.quotePath", "true")
+            readme = root / "README.md"
+            readme.write_text("# Example\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "docs: add readme")
+            note = root / "docs/dev/caf\u00e9.md"
+            note.parent.mkdir(parents=True)
+            note.write_text("# Cafe\n\nA short note.\n", encoding="utf-8")
+            source = root / "core/x.cpp"
+            source.parent.mkdir(parents=True)
+            source.write_text("int x; // note\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "feat: add cafe note")
+            result = subprocess.run(
+                [sys.executable, "-I", str(checker), "--base", "HEAD~1"],
+                cwd=root, capture_output=True, text=True, encoding="utf-8",
+                env={key: value for key, value in os.environ.items()
+                     if key not in ("GITHUB_EVENT_PATH", "GITHUB_STEP_SUMMARY", "GITHUB_ACTIONS")},
+            )
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("[comment]", result.stdout)
+            self.assertIn("core/x.cpp", result.stdout)
+
+
 class SilentStubSectionTests(unittest.TestCase):
     path = "core/libs/prx/libSceExample/Export.cpp"
     entry = f"- [Existing limitation](../../{path}) - console layout is unknown.\n"

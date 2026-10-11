@@ -43,7 +43,7 @@ SECTION = re.compile(r"^###\s*(.+?)\s*$", re.M)
 
 
 def git(*args, text=True):
-    output = subprocess.run(["git", *args], capture_output=True, check=True).stdout
+    output = subprocess.run(["git", "-c", "core.quotePath=false", *args], capture_output=True, check=True).stdout
     return output.decode("utf-8", errors="replace") if text else output
 
 
