@@ -332,6 +332,8 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_entry_point_bounds.py $<TARGET_FILE:relinker>)
         add_test(NAME init_array_roots COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_init_array_roots.py $<TARGET_FILE:relinker>)
+        add_test(NAME gnu_hash_analysis COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_gnu_hash_analysis.py $<TARGET_FILE:relinker>)
         add_test(NAME to_rosetta COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_to_rosetta.py $<TARGET_FILE:relinker>)
         add_test(NAME syscall_number COMMAND ${Python3_EXECUTABLE}
