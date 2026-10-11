@@ -27,6 +27,14 @@ def upstream():
     return os.environ.get("GITHUB_REPOSITORY") or gh("repo", "view", "--json", "nameWithOwner,parent", "--jq", PARENT).strip()
 
 
+def depends_on(body):
+    body = re.sub(r"<!--.*?-->", "", body or "", flags=re.S)
+    match = DEPENDS.search(body)
+    if not match or not match.group(1).strip():
+        match = PLAIN_DEPENDS.search(body)
+    return {int(n) for n in re.findall(r"#(\d+)", match.group(1))} if match else set()
+
+
 def open_prs(base):
     query = urlencode({"state": "open", "base": base, "per_page": 100})
     out = gh("api", "--paginate", "--slurp", f"repos/{REPO}/pulls?{query}")
@@ -37,7 +45,7 @@ def open_prs(base):
             "ref": f"refs/pr/{pr['number']}",
             "sha": pr["head"]["sha"],
             "author": pr["user"]["login"],
-            "depends": {int(n) for n in re.findall(r"#(\d+)", depends.group(1))} if depends else set(),
+            "depends": depends_on(pr["body"]),
         }
     return prs
 
