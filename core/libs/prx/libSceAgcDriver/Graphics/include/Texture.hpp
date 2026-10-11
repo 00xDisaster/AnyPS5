@@ -67,6 +67,11 @@ public:
     static bool CanDepthCopyFrom(const StorageTexture& source, const GuestTextureResource& descriptor);
     bool IsDepthCopy() const { return depthCopy; }
     bool RefreshDepthCopy();
+    struct DepthCopyCounts {
+        std::uint64_t textures;
+        std::uint64_t refreshes;
+    };
+    static DepthCopyCounts TakeDepthCopyCounts();
     static bool CanCopyFrom(const StorageTexture& source, const GuestTextureResource& descriptor);
     ~Texture();
     Texture(const Texture&) = delete;

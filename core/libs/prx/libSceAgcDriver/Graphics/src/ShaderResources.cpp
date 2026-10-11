@@ -410,11 +410,6 @@ bool ClearedViewEnabled() {
     return !disabled;
 }
 
-bool DepthCopyEnabled() {
-    static const bool disabled = std::getenv("APS5_NO_DEPTH_COPY") != nullptr;
-    return !disabled;
-}
-
 std::uint64_t DepthCopyMinBytes() {
     static const std::uint64_t bytes = [] {
         const char* text = std::getenv("APS5_DEPTH_COPY_MIN_KIB");
@@ -550,7 +545,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     // A storage image whose results for this surface (or for a mip chain containing it) are still on
     // the GPU supplies the texture by a view of it; anything else needs those results in guest
     // memory first.
-    const bool depthCopy = depthCompare && DepthCopyEnabled() && guestBytes >= DepthCopyMinBytes() && Texture::DepthCopyFormat(ResolveTextureFormat(resource.format)) != VK_FORMAT_UNDEFINED && resource.dimension != TextureDimension::k3D;
+    const bool depthCopy = depthCompare && guestBytes >= DepthCopyMinBytes() && Texture::DepthCopyFormat(ResolveTextureFormat(resource.format)) != VK_FORMAT_UNDEFINED && resource.dimension != TextureDimension::k3D;
     auto source = StorageTexture::FindPending(address, guestBytes);
     if (source != nullptr && (depthCompare ? !depthCopy || !Texture::CanDepthCopyFrom(*source, resource) : !Texture::CanCopyFrom(*source, resource))) source.reset();
     if (source != nullptr && MetadataMoved(*source, resource)) source.reset();

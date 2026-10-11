@@ -87,6 +87,7 @@ std::atomic<std::uint64_t> pretestSkipped{0}, unregisteredDropped{0}, keyFlipKep
 // Images stored by a FlushPending after a hook skip of theirs (AccessKeptByCpu), of which by the
 // hook for the read site of the last skip; images evictStale dropped (the [hooksync] and [storage] lines).
 std::atomic<std::uint64_t> flushedAfterSkip{0}, flushedAfterSkipSameSite{0}, staleEvicted{0};
+std::atomic<std::uint64_t> depthCopyTextures{0}, depthCopyRefreshes{0};
 std::atomic<std::uint64_t> refreshesProved{0};
 
 struct StorageTraffic {
@@ -525,6 +526,7 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         Check(context.Function<PFN_vkCreateImageView>("vkCreateImageView")(context.device, &viewInfo, nullptr, &view), "vkCreateImageView depth copy");
         createFirstLayerView(descriptor, viewInfo);
         static_cast<void>(components);
+        depthCopyTextures.fetch_add(1, std::memory_order_relaxed);
     } catch (...) {
         release();
         throw;
@@ -601,7 +603,12 @@ bool Texture::RefreshDepthCopy() {
     if (batch) batch->SubmitAndWait();
     copiedOnce = true;
     copiedVersion = storageSource->Version();
+    depthCopyRefreshes.fetch_add(1, std::memory_order_relaxed);
     return true;
+}
+
+Texture::DepthCopyCounts Texture::TakeDepthCopyCounts() {
+    return {depthCopyTextures.exchange(0, std::memory_order_relaxed), depthCopyRefreshes.exchange(0, std::memory_order_relaxed)};
 }
 
 bool Texture::CanCopyFrom(const StorageTexture& source, const GuestTextureResource& descriptor) {
