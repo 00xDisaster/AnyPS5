@@ -20,11 +20,11 @@ using ShaderRecompiler::ShaderStage;
 constexpr std::uint32_t MaxThreads = 64;
 constexpr std::uint32_t Inputs = 4;
 constexpr std::uint32_t Results = 32;
-constexpr std::uint32_t Checked = 17;
+constexpr std::uint32_t Checked = 19;
 alignas(256) std::array<std::uint32_t, MaxThreads * Inputs> Input{};
 alignas(256) std::array<std::uint32_t, MaxThreads * Results> Output{};
 
-alignas(256) constexpr std::array<std::uint32_t, 101> Code{
+alignas(256) constexpr std::array<std::uint32_t, 108> Code{
     0x34020084, 0x34060087, 0xe0301000, 0x80000401, 0x7e140280, 0x7e160280, 0x7e180280, 0x7e1a0280,
     0x7e1c0280, 0x7e1e0280, 0x7e200280, 0x7e220280, 0x7e240280, 0x7e260280, 0x7e280280, 0xbf8c3f70,
     0x7e3c0304, 0xd525001f, 0x00010304, 0xd5250020, 0x00010504, 0xd5250021, 0x00010704, 0xd5250022,
@@ -37,16 +37,18 @@ alignas(256) constexpr std::array<std::uint32_t, 101> Code{
     0xe070101c, 0x80011103, 0xe0701020, 0x80011203, 0xe0701024, 0x80011303, 0xe0701028, 0x80011403,
     0xbefc03c1, 0x7e2a8720, 0xe070102c, 0x80011503, 0x7e428504, 0xe0701030, 0x80012003, 0x7e468922,
     0xe0701034, 0x80012203, 0xe0701038, 0x80012103, 0xbefc03ff, 0x000103ff, 0x7e3ed120, 0xe070103c,
-    0x80012003, 0x7e48911e, 0xe0701040, 0x80012503, 0xbf810000,
+    0x80012003, 0x7e48911e, 0xe0701040, 0x80012503, 0x7e2c0327, 0xe0701044, 0x80011603, 0xbefc0388,
+    0x7e2e871e, 0xe0701048, 0x80011703, 0xbf810000,
 };
 
 constexpr const char* Names[Checked] = {"movrelsd", "swapped_2", "sd2_untouched", "swaprel_dst", "swaprel_src", "swaprel_other", "swap_dst", "swap_src", "swaprel_same", "swaprel_same_other", "movrelsd_e64_dst",
-    "movrels_out_of_range", "movreld_out_of_range_neighbour", "movrelsd_out_of_range_source", "movrelsd_out_of_range_other", "swaprel_one_side_out_of_range", "movrelsd_2_source_out_of_range"};
+    "movrels_out_of_range", "movreld_out_of_range_neighbour", "movrelsd_out_of_range_source", "movrelsd_out_of_range_other", "swaprel_one_side_out_of_range", "movrelsd_2_source_out_of_range",
+    "unwritten_direct", "unwritten_relative"};
 
 std::array<std::uint32_t, Checked> ExpectedFor(std::uint32_t tid) {
     const std::uint32_t x = 0x1000u * (tid + 1u);
     return {x + 2u, x + 2u, x + 1u, x + 0x30u, x + 0x20u, x, x + 7u, x + 6u, x + 7u, x + 5u, x + 5u,
-        tid, x + 0x30u, x + 2u, x + 0x20u, x + 0x30u, tid};
+        tid, x + 0x30u, x + 2u, x + 0x20u, x + 0x30u, tid, 0u, 0u};
 }
 
 void Fill(std::uint32_t tid, std::uint32_t* words) {
