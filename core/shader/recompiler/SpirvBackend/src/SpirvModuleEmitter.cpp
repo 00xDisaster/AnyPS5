@@ -999,6 +999,11 @@ void EmitProgram(SpirvEmitterState& state) {
             state.module.AddFunction(spv::OpVariable, TypeU32ArrayPointer(state, spv::StorageClassFunction, state.program.Info().scratchDwords), state.scratchVariable.at(half), spv::StorageClassFunction);
         }
     }
+    if (const auto window = state.program.Metadata().vectorWindowSize; window != 0u) {
+        for (std::uint32_t half = 0; half < state.laneCount; half++) {
+            state.module.AddFunction(spv::OpVariable, TypeU32ArrayPointer(state, spv::StorageClassFunction, window), state.vectorWindowVariable.at(half), spv::StorageClassFunction);
+        }
+    }
     if (state.pixelValidMaskVariable != 0u) {
         state.module.AddFunction(spv::OpVariable, TypePointer(state, spv::StorageClassFunction, TypeU32(state)), state.pixelValidMaskVariable, spv::StorageClassFunction);
     }

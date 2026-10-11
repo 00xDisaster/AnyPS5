@@ -93,6 +93,8 @@ enum class IrOpcode : std::uint16_t {
     SetScalarRegister,
     GetVectorRegister,
     SetVectorRegister,
+    LoadVectorWindow,
+    StoreVectorWindow,
     GetGotoVariable,
     SetGotoVariable,
     GetScc,

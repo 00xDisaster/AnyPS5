@@ -134,6 +134,8 @@ constexpr std::array<OpcodeMeta, static_cast<std::size_t>(IrOpcode::Count)> Meta
     makeMeta("SetScalarRegister", Void, ScalarReg, U32),
     makeMeta("GetVectorRegister", U32, VectorReg),
     makeMeta("SetVectorRegister", Void, VectorReg, U32),
+    makeMeta("LoadVectorWindow", U32, U32),
+    makeMeta("StoreVectorWindow", Void, U32, U32),
     makeMeta("GetGotoVariable", U1, U32),
     makeMeta("SetGotoVariable", Void, U32, U1),
     makeMeta("GetScc", U1),
@@ -890,6 +892,7 @@ bool IrOpcodeHasSideEffects(IrOpcode opcode) {
         case IrOpcode::SetScalarMaskTag:
         case IrOpcode::SetScalarRegister:
         case IrOpcode::SetVectorRegister:
+        case IrOpcode::StoreVectorWindow:
         case IrOpcode::SetGotoVariable:
         case IrOpcode::SetScc:
         case IrOpcode::SetExec:

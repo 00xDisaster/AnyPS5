@@ -396,6 +396,32 @@ IrProgram InstructionTranslator::Translate(const RdnaProgram& decoded, const Con
 
     IrProgram program;
     program.SetWaveSize(options.waveSize);
+    std::uint32_t windowBase = NumVectorRegs;
+    for (const auto& cfgBlock : cfg.blocks) {
+        for (std::uint32_t index = cfgBlock.instructionBegin; index < cfgBlock.instructionEnd; index++) {
+            const auto& instruction = decoded.instructions[index];
+            if (isCodeTableLoad(cfg, instruction.programCounter)) continue;
+            switch (instruction.op) {
+                case RdnaOpcode::VMovrelsB32:
+                    windowBase = std::min(windowBase, instruction.source0.reg);
+                    break;
+                case RdnaOpcode::VMovreldB32:
+                    windowBase = std::min(windowBase, instruction.destination.reg);
+                    break;
+                case RdnaOpcode::VMovrelsdB32:
+                case RdnaOpcode::VMovrelsd2B32:
+                case RdnaOpcode::VSwaprelB32:
+                    windowBase = std::min({windowBase, instruction.source0.reg, instruction.destination.reg});
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    if (windowBase < vectorLimit) {
+        program.Metadata().vectorWindowBase = windowBase;
+        program.Metadata().vectorWindowSize = vectorLimit - windowBase;
+    }
     program.Resources().stage = toIrShaderStage(options.stage);
     program.Resources().shaderHash = options.shaderHash;
     program.Resources().userDataBase = options.userDataBaseRegister;

@@ -295,9 +295,27 @@ void TranslationContext::sWqm(const RdnaInstruction& inst, bool wide) {
 
 // M0 holds a uniform register offset. Vector registers are SSA values with fixed indices, so an indexed
 // access becomes a select over every register the program references at or past the base.
+struct RelativeWindowAccess {
+    IrValue* index = nullptr;
+    IrValue* inRange = nullptr;
+};
+
+RelativeWindowAccess relativeWindowAccess(IrBuilder& ir, const IrProgram& program, std::uint32_t reg, IrValue& offset) {
+    const auto& metadata = program.Metadata();
+    if (metadata.vectorWindowSize == 0u) return {};
+    if (reg < metadata.vectorWindowBase) throw std::runtime_error("relative vector access below the relative-addressing window");
+    IrValue& raw = ir.IAdd(ir.Constant(reg - metadata.vectorWindowBase), offset);
+    IrValue& index = ir.Emit(IrOpcode::UMin32, IrType::U32, {&raw, &ir.Constant(metadata.vectorWindowSize - 1u)});
+    return {&index, &ir.ULessThan(raw, ir.Constant(metadata.vectorWindowSize))};
+}
+
 IrU32 TranslationContext::readRelativeVector(const RdnaOperand& base, IrValue& offset, const char* name) {
     if (base.kind != RdnaOperandKind::VectorRegister) {
         throw std::runtime_error(std::string(name) + " source is not a vector register");
+    }
+    if (const auto access = relativeWindowAccess(ir, program, base.reg, offset); access.index != nullptr) {
+        IrValue& loaded = ir.Emit(IrOpcode::LoadVectorWindow, IrType::U32, {access.index});
+        return applyBitSourceModifiers(base, IrU32(ir.Select(*access.inRange, loaded, ir.Constant(0u))));
     }
     IrU32 result(ir.GetVectorReg(static_cast<VectorReg>(base.reg)));
     for (std::uint32_t reg = base.reg + 1u; reg < currentVectorLimit; ++reg) {
@@ -311,6 +329,19 @@ void TranslationContext::writeRelativeVector(const RdnaOperand& base, IrValue& o
     const RdnaOperand& destination = base;
     if (destination.kind != RdnaOperandKind::VectorRegister) {
         throw std::runtime_error(std::string(name) + " destination is not a vector register");
+    }
+    if (const auto access = relativeWindowAccess(ir, program, destination.reg, offset); access.index != nullptr) {
+        IrValue* index = access.index;
+        IrValue& previous = ir.Emit(IrOpcode::LoadVectorWindow, IrType::U32, {index});
+        IrValue* merged = nullptr;
+        if (destination.dpp) {
+            const DppMoveFlags flags{destination.dpp8 ? DppMoveFlags::Lanes8 | destination.dppCtrl : destination.dppCtrl, static_cast<std::uint8_t>(destination.dppRowMask), static_cast<std::uint8_t>(destination.dppBankMask), destination.dppFetchInactive, destination.dppBoundCtrl};
+            merged = &ir.Emit(IrOpcode::DppUpdateU32, IrType::U32, {&value.Value(), &previous, &ir.GetExec()}, flags);
+        } else {
+            merged = &ir.Select(ir.GetExec(), value.Value(), previous);
+        }
+        (void)ir.Emit(IrOpcode::StoreVectorWindow, IrType::Void, {index, &ir.Select(*access.inRange, *merged, previous)});
+        return;
     }
     for (std::uint32_t reg = destination.reg; reg < currentVectorLimit; ++reg) {
         RdnaOperand target = destination;
