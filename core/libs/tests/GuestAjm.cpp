@@ -171,7 +171,7 @@ void TestOpus(std::uint32_t context) {
     Require(sceAjmInstanceDestroy(context, instance) == 0);
 }
 
-void TestOpusInputBeyondStatedData(std::uint32_t context) {
+void TestOpusInputBeyondStatedData(std::uint32_t context, bool multipleFrames) {
 #ifdef _WIN32
     SYSTEM_INFO system{};
     GetSystemInfo(&system);
@@ -206,9 +206,23 @@ void TestOpusInputBeyondStatedData(std::uint32_t context) {
     Require(initResult[0] == 0);
 
     std::vector<std::int16_t> pcm(960 * 2);
-    DecodeSideband sideband{};
-    RunDecode(context, instance, packet, 0xFFFFFE74u, pcm.data(), pcm.size() * sizeof(std::int16_t), sideband);
-    Require(sideband.result == 0 && static_cast<std::size_t>(sideband.inputConsumed) == packetBytes && sideband.outputWritten == 960 * 2 * 2);
+    if (multipleFrames) {
+        constexpr std::uint64_t runMultipleFrames = 1ull << 12;
+        constexpr std::uint64_t sidebandStream = 1ull << 47;
+        struct {
+            DecodeSideband stream;
+            std::uint32_t frames;
+            std::uint32_t reserved;
+        } decoded{{-1, -1, 0, 0, 0}, 0, 0};
+        Require(sceAjmBatchInitialize(batch.data(), batch.size(), &info) == 0);
+        Require(sceAjmBatchJobRun(&info, instance, sidebandStream | runMultipleFrames, packet, 0xFFFFFE74u, pcm.data(), pcm.size() * sizeof(std::int16_t), &decoded, sizeof(decoded)) == 0);
+        Require(sceAjmBatchStart(context, &info, 0, &error, &id) == 0 && sceAjmBatchWait(context, id, 0, &error) == 0);
+        Require(decoded.stream.result == 0 && static_cast<std::size_t>(decoded.stream.inputConsumed) == packetBytes && decoded.stream.outputWritten == 960 * 2 * 2 && decoded.frames == 1);
+    } else {
+        DecodeSideband sideband{};
+        RunDecode(context, instance, packet, 0xFFFFFE74u, pcm.data(), pcm.size() * sizeof(std::int16_t), sideband);
+        Require(sideband.result == 0 && static_cast<std::size_t>(sideband.inputConsumed) == packetBytes && sideband.outputWritten == 960 * 2 * 2);
+    }
     Require(sceAjmInstanceDestroy(context, instance) == 0);
 #ifdef _WIN32
     Require(VirtualFree(pages, 0, MEM_RELEASE) != 0);
@@ -1156,7 +1170,8 @@ int main() {
     TestMp3ParseOfl();
     TestMp3(context);
     TestOpus(context);
-    TestOpusInputBeyondStatedData(context);
+    TestOpusInputBeyondStatedData(context, false);
+    TestOpusInputBeyondStatedData(context, true);
     TestDecodeSingle(context);
     TestDecodeSplit(context);
     TestGaplessDecode(context);

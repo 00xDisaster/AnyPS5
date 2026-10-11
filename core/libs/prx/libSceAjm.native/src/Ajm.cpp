@@ -690,7 +690,7 @@ void RunAt9(Instance& instance, const JobHeader& job, const AjmBuffer* inputs, c
         std::fprintf(stderr, "[ajm] instance %u run flags 0x%llx: %zu input bytes in %u buffers, %zu output bytes in %u buffers, sideband %llu bytes; superframe %d (%d frames), %d channels, %d samples/frame, %d Hz, config %02x %02x %02x %02x -> result 0x%x, decoder status 0x%x, %u frames, consumed %zu, produced %zu, total samples %llu, gapless total %u skip %u skipped %u, input",
                      job.instance, static_cast<unsigned long long>(job.flags), input.size(), job.inputCount, pcmOutputs.capacity, job.outputCount, static_cast<unsigned long long>(job.sidebandSize), instance.info.superframeSize, instance.info.framesInSuperframe, instance.info.channels, instance.info.frameSamples, instance.info.samplingRate,
                      instance.info.configData[0], instance.info.configData[1], instance.info.configData[2], instance.info.configData[3], static_cast<unsigned>(result), static_cast<unsigned>(decodeStatus), frames, consumed, pcmOutputs.produced, static_cast<unsigned long long>(instance.totalDecodedSamples), instance.gapless.totalSamples, instance.gapless.skipSamples, instance.gapless.skippedSamples);
-        for (std::size_t i = 0; i < input.size() && i < 16; ++i) std::fprintf(stderr, " %02x", input[i]);
+        for (std::size_t i = 0; i < consumed && i < 16; ++i) std::fprintf(stderr, " %02x", input[i]);
         std::fprintf(stderr, "\n");
     }
     WriteRunSideband(job, instance, result, consumed, pcmOutputs.produced, frames, CurrentFormat(instance));
@@ -1000,6 +1000,7 @@ void RunOpus(Instance& instance, const JobHeader& job, const AjmBuffer* inputs, 
         instance.opusPending.erase(instance.opusPending.begin(), instance.opusPending.begin() + static_cast<std::ptrdiff_t>(bytes));
     }
     while (consumed < input.size() && instance.opusPending.empty()) {
+        if (frames != 0 && pcmOutputs.Room() < frameBytes) break;
         if (input.size() - consumed < 2) {
             result |= AJM_RESULT_PARTIAL_INPUT;
             break;
