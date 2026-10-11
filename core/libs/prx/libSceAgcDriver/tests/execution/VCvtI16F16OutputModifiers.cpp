@@ -19,7 +19,7 @@ using ShaderRecompiler::ShaderStage;
 constexpr std::uint32_t Threads = 16;
 constexpr std::uint32_t Inputs = 4;
 constexpr std::uint32_t Results = 4;
-constexpr std::uint32_t RowCount = 12;
+constexpr std::uint32_t RowCount = 16;
 alignas(256) std::array<std::uint32_t, Threads * Inputs> Input{};
 alignas(256) std::array<std::uint32_t, Threads * Results> Output{};
 
@@ -39,6 +39,7 @@ constexpr Variant Variants[] = {
     {"mul:2", 0, 1},
     {"mul:4", 0, 2},
     {"div:2", 0, 3},
+    {"clamp", 1, 0},
     {"clamp mul:2", 1, 1},
 };
 
@@ -55,12 +56,17 @@ constexpr std::uint32_t Rows[RowCount] = {
     0x00007e00u,
     0xbeef3c00u,
     0xbeefc100u,
+    0x00007c00u,
+    0x0000fc00u,
+    0x00007c01u,
+    0x00003e00u,
 };
 
 constexpr std::uint32_t Expected[RowCount] = {
     0x5a5a0001u, 0x5a5affffu, 0x5a5afffeu, 0x5a5a0003u,
     0x5a5a0400u, 0x5a5a0064u, 0x5a5aff9cu, 0x5a5a7fffu,
     0x5a5a8000u, 0x5a5a0000u, 0x5a5a0001u, 0x5a5afffeu,
+    0x5a5a7fffu, 0x5a5a8000u, 0x5a5a0000u, 0x5a5a0001u,
 };
 
 std::array<std::uint32_t, 4> BufferDescriptor(const void* data, std::uint32_t bytes) {
