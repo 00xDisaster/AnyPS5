@@ -1,5 +1,6 @@
 #include "Recompiler.hpp"
 #include <algorithm>
+#include <cstring>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -714,7 +715,7 @@ std::shared_ptr<const SpecializedModule> specializeModule(const CompiledShaderAr
     return entry->module;
 }
 
-RecompileResult materializeResult(const CompiledVariant& variant, const RecompileRequest& request, const ResourceSnapshot& snapshot) {
+RecompileResult materializeResult(const CompiledVariant& variant, const RecompileRequest& request, const ResourceSnapshot& snapshot, bool registrationDefaults = false) {
     RecompileResult result;
     const auto& artifact = variant.artifact;
     static_cast<CompiledShaderArtifact&>(result) = {
@@ -751,6 +752,7 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
     }
     result.vertexAttributes.reserve(result.vertexInputs.size());
     std::array<std::uint32_t, ShaderVertexStageInfo::MaxResources> vertexClasses{};
+    std::array<std::uint32_t, ShaderVertexStageInfo::MaxResources / RuntimeAbi::VertexSelectorsPerDword> runtimeSelectors{};
     for (const auto& input : result.vertexInputs) {
         if (!request.context.vertex || input.location >= request.context.vertex->resourcesNum || input.location >= request.context.vertex->resources.size()) throw std::runtime_error("Shader cache: invalid vertex attribute metadata");
         const auto& vertex = *request.context.vertex;
@@ -758,7 +760,8 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
         const auto fetchIndex = vertex.fetchEmbedded ? vertex.resourcesDst[input.location].fetchIndex : input.fetchIndex;
         result.vertexAttributes.push_back({input.location, input.components, resource, fetchIndex});
         if (!artifact.vertexInputPatches.empty()) {
-            const auto numeric = VertexInputNumericClass(static_cast<IrBufferFormat>((resource.fields[3] >> 12u) & 0x7fu));
+            const auto format = static_cast<IrBufferFormat>((resource.fields[3] >> 12u) & 0x7fu);
+            const auto numeric = registrationDefaults && format == IrBufferFormat::Invalid ? IrTextureNumericClass::Float : VertexInputNumericClass(format);
             if (numeric == IrTextureNumericClass::Unsupported) throw std::runtime_error("unsupported prepared vertex format");
             const auto kind = numeric == IrTextureNumericClass::Float ? 0u : numeric == IrTextureNumericClass::Sint ? 1u : 2u;
             vertexClasses.at(input.location) = kind;
@@ -771,7 +774,8 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
                 if (selector >= 4u) formatComponents = std::max(formatComponents, selector - 3u);
                 selectors |= selector << (component * 3u);
             }
-            moduleKey.push_back(selectors);
+            moduleKey.push_back(request.target.registrationModules ? selectors & ~0xfffu : selectors);
+            if (request.target.registrationModules) runtimeSelectors.at(input.location / RuntimeAbi::VertexSelectorsPerDword) |= (selectors & 0xfffu) << (input.location % RuntimeAbi::VertexSelectorsPerDword * 16u);
         }
     }
     if (!plan->bindings.specialization.empty() || variant.bindings.layout.UsesPushData() || !artifact.vertexInputPatches.empty() || request.context.pixel) {
@@ -828,6 +832,19 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
     result.workgroupMemoryDwords = WorkgroupMemoryStrideDwords(variant.info.info);
     result.bindings = std::move(bindings.bindings);
     result.pushConstants = std::move(bindings.pushConstants);
+    const auto& layout = variant.bindings.layout;
+    if (request.target.registrationModules && request.shader.stage != ShaderStage::Fragment && layout.runtimeStateDwords != 0u) {
+        const auto first = layout.RuntimeStateDword() + RuntimeAbi::StateVertexSelectors;
+        if (layout.runtimeStateDwords > runtimeSelectors.size()) throw std::runtime_error("vertex selector state exceeds its capacity");
+        if (layout.UsesPushData()) {
+            if ((first + layout.runtimeStateDwords) * sizeof(std::uint32_t) > result.pushConstants.size()) throw std::runtime_error("vertex selector state lies outside the push data");
+            std::memcpy(result.pushConstants.data() + first * sizeof(std::uint32_t), runtimeSelectors.data(), layout.runtimeStateDwords * sizeof(std::uint32_t));
+        } else {
+            const auto data = std::ranges::find_if(result.bindings, [](const DescriptorBinding& binding) { return binding.role == DescriptorRole::ShaderData; });
+            if (data == result.bindings.end() || first + layout.runtimeStateDwords > data->guestDescriptor.size()) throw std::runtime_error("vertex selector state lies outside the shader data");
+            std::copy_n(runtimeSelectors.begin(), layout.runtimeStateDwords, data->guestDescriptor.begin() + first);
+        }
+    }
     result.poisonedSrtReads = static_cast<std::uint32_t>(snapshot.srtPoison.size()) + snapshot.nullRootReads;
     return result;
 }
@@ -1225,7 +1242,7 @@ std::shared_ptr<const RecompileResult> RegistrationResult(const RecompileRequest
     snapshot.images.assign(info.images.size(), {{}, 8u});
     snapshot.samplers.assign(info.samplers.size(), {{}, 4u});
     snapshot.userData.assign(RuntimeAbi::UserDataCapacity, 0u);
-    return std::make_shared<RecompileResult>(materializeResult(*handle.artifact, request, snapshot));
+    return std::make_shared<RecompileResult>(materializeResult(*handle.artifact, request, snapshot, true));
 }
 
 std::shared_ptr<const RecompileResult> MaterializeShader(const RecompileRequest& request, const ResourceCapture& capture, const SourceHandle& handle) {

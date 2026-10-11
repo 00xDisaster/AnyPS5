@@ -1250,7 +1250,7 @@ std::uint32_t EmitGetAttribute(SpirvValueEmitContext& ctx, const IrValue& inst) 
         const auto component = inst.Argument(1)->ImmediateU32();
         if (state.inputInfo.vertex == nullptr || !state.inputInfo.vertex->fetchEmbedded || component >= 4u) ctx.Fail(inst, "invalid prepared vertex attribute");
         const auto first = PipelineSpecialization::VertexBase + attribute * PipelineSpecialization::VertexWords;
-        const auto selector = state.module.SpecializationConstant(TypeU32(state), first + component, component + 4u);
+        const auto selector = state.registrationModules ? EmitAndConstant(state, Binary(state, spv::OpShiftRightLogical, TypeU32(state), EmitShaderDataDwordLoad(state, state.program.Metadata().bindings.RuntimeStateDword() + RuntimeAbi::StateVertexSelectors + attribute / RuntimeAbi::VertexSelectorsPerDword), ConstantU32(state, attribute % RuntimeAbi::VertexSelectorsPerDword * 16u + component * 3u)), 7u) : state.module.SpecializationConstant(TypeU32(state), first + component, component + 4u);
         const auto one = state.module.SpecializationConstant(TypeU32(state), first + 4u, 0x3f800000u);
         auto value = Select(state, TypeU32(state), Binary(state, spv::OpIEqual, TypeBool(state), selector, ConstantU32(state, 1u)), one, ConstantU32(state, 0u));
         for (std::uint32_t channel = 0; channel < 4u; ++channel) value = Select(state, TypeU32(state), Binary(state, spv::OpIEqual, TypeBool(state), selector, ConstantU32(state, channel + 4u)), EmitAttributeValue(state, attribute, channel), value);
