@@ -50,6 +50,7 @@ python3 tools/check_conventions.py --base origin/main
 The [pull request template](.github/pull_request_template.md) is the checklist for these rules.
 
 - One branch per topic, based on current `main`. Follow-up work goes in a new pull request, not into an open one.
+- Open pull requests per author are limited by how many of theirs are merged into `main`: 1 with none merged, 20 with at least 1, no limit from 20. A pull request opened or reopened over the limit is closed automatically; reopen it once another one is merged or closed.
 - Before starting, check that no open pull request already implements the same functions.
 - Keep the branch up to date with `main` and resolve conflicts yourself; rebasing and force-pushing is fine.
 - If a pull request needs another one first, say so in the description (`Depends on #N`).
