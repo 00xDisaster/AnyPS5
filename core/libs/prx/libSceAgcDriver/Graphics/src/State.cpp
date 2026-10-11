@@ -727,7 +727,6 @@ State DecodeState(const QueueState& queue) {
         state.blendEnable = (blend >> 30u) & 1u;
         if (state.blendEnable && (mapping == 0x1bu || mapping == 0x93u)) throw std::runtime_error("AGC graphics: blending into a color target with a reversed component order is not implemented");
         Require(!state.blendEnable || !color.uintExport, "blending into an unsigned integer target is unsupported");
-        if (state.blendEnable && mapping == 0xecu) throw std::runtime_error("AGC graphics: blending into an 8_8 color target with the alternate component order is not implemented");
         if (state.blendEnable) {
             Require((read(cx, 0x31c + slot * 0xfu) & 0x10000u) == 0, "blend bypass conflicts with enabled blending");
             state.srcColorBlendFactor = blendFactor(blend & 0x1fu);
@@ -749,6 +748,10 @@ State DecodeState(const QueueState& queue) {
                 state.dstAlphaBlendFactor = alphaFactorWithOpaqueDestination(state.dstAlphaBlendFactor);
             }
             for (std::uint32_t i = 0; i < 4; ++i) result.blendConstants[i] = readFloat(cx, 0x105 + i);
+            if (mapping == 0xecu) {
+                const auto destinationAlpha = [](VkBlendFactor factor) { return factor == VK_BLEND_FACTOR_DST_ALPHA || factor == VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA || factor == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE; };
+                if (destinationAlpha(state.srcColorBlendFactor) || destinationAlpha(state.dstColorBlendFactor) || destinationAlpha(state.srcAlphaBlendFactor) || destinationAlpha(state.dstAlphaBlendFactor)) throw std::runtime_error("AGC graphics: blending into an 8_8 color target with the alternate component order with a factor of the destination alpha, which the target keeps in its second channel, is not implemented");
+            }
         }
         if (color.packing != ShaderRecompiler::ColorExportPacking::None) {
             const auto slotExport = (exportFormat >> (4u * color.exportIndex)) & 0xfu;
@@ -1034,6 +1037,15 @@ std::string NullPixelProgramRejection(const QueueState& queue) {
 std::vector<RegisterRead>*& RegisterReadLog() {
     static thread_local std::vector<RegisterRead>* log = nullptr;
     return log;
+}
+
+bool SplitsAlternateAlpha(const State& state) {
+    for (std::size_t index = 0; index < state.colors.size() && index < state.blends.size(); ++index) {
+        const auto& blend = state.blends[index];
+        if (state.colors[index].componentMapping != 0xecu || !blend.blendEnable) continue;
+        if (blend.srcColorBlendFactor != blend.srcAlphaBlendFactor || blend.dstColorBlendFactor != blend.dstAlphaBlendFactor || blend.colorBlendOp != blend.alphaBlendOp) return true;
+    }
+    return false;
 }
 
 bool DrawKeyCovers(RegisterRead read) {
