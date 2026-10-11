@@ -20,6 +20,7 @@ extern "C" {
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <span>
 
 // The batch buffer and its job records are private to this library: the guest only reserves the
 // memory and reads the "used bytes" field of AjmBatchInfo. Sideband results written back to guest
@@ -422,14 +423,30 @@ bool consumedFirstRun(Instance& instance) {
     return true;
 }
 
-std::vector<std::uint8_t> JoinInputs(const JobHeader& job, const AjmBuffer* inputs) {
-    std::vector<std::uint8_t> input;
-    for (std::uint32_t index = 0; index < job.inputCount; ++index) {
-        const auto* data = static_cast<const std::uint8_t*>(inputs[index].ptr);
-        input.insert(input.end(), data, data + inputs[index].size);
+class JobInput {
+public:
+    JobInput(const JobHeader& job, const AjmBuffer* inputs) {
+        if (job.inputCount == 1) {
+            bytes = {static_cast<const std::uint8_t*>(inputs[0].ptr), static_cast<std::size_t>(inputs[0].size)};
+            return;
+        }
+        for (std::uint32_t index = 0; index < job.inputCount; ++index) {
+            const auto* data = static_cast<const std::uint8_t*>(inputs[index].ptr);
+            joined.insert(joined.end(), data, data + inputs[index].size);
+        }
+        bytes = joined;
     }
-    return input;
-}
+    JobInput(const JobInput&) = delete;
+    JobInput& operator=(const JobInput&) = delete;
+    std::size_t size() const { return bytes.size(); }
+    bool empty() const { return bytes.empty(); }
+    const std::uint8_t* data() const { return bytes.data(); }
+    std::uint8_t operator[](std::size_t index) const { return bytes[index]; }
+
+private:
+    std::vector<std::uint8_t> joined;
+    std::span<const std::uint8_t> bytes;
+};
 
 struct PcmOutputs {
     const AjmBuffer* buffers;
@@ -606,7 +623,7 @@ void WriteRunSideband(const JobHeader& job, const Instance& instance, std::int32
 }
 
 void RunAt9(Instance& instance, const JobHeader& job, const AjmBuffer* inputs, const AjmBuffer* outputs) {
-    const auto input = JoinInputs(job, inputs);
+    const JobInput input(job, inputs);
     PcmOutputs pcmOutputs(outputs, job.outputCount);
 
     const auto channels = static_cast<std::size_t>(instance.info.channels);
@@ -845,7 +862,7 @@ void OpenMp3(Instance& instance) {
 }
 
 void RunMp3(Instance& instance, const JobHeader& job, const AjmBuffer* inputs, const AjmBuffer* outputs) {
-    const auto input = JoinInputs(job, inputs);
+    const JobInput input(job, inputs);
     PcmOutputs pcmOutputs(outputs, job.outputCount);
     const auto encoding = PcmEncoding(instance);
     if (encoding > 2) throw std::runtime_error("AJM MP3: PCM encoding " + std::to_string(encoding) + " is not implemented");
@@ -955,7 +972,7 @@ std::size_t OpusPacketSamples(const std::uint8_t* packet, std::size_t size) {
 }
 
 void RunOpus(Instance& instance, const JobHeader& job, const AjmBuffer* inputs, const AjmBuffer* outputs) {
-    const auto input = JoinInputs(job, inputs);
+    const JobInput input(job, inputs);
     PcmOutputs pcmOutputs(outputs, job.outputCount);
     const auto encoding = PcmEncoding(instance);
     if (encoding > 2) throw std::runtime_error("AJM Opus: PCM encoding " + std::to_string(encoding) + " is not implemented");
