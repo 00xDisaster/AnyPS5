@@ -238,6 +238,20 @@ bool HandleSse4a(EXCEPTION_POINTERS* info) {
     return true;
 }
 
+void ReportStackCandidates(std::uint64_t rsp, int limit, std::uint64_t span) {
+    char line[256];
+    Report("  stack return address candidates:\n");
+    int printed = 0;
+    for (std::uint64_t slot = rsp; printed < limit && slot < rsp + span; slot += 8) {
+        if (!IsReadable(slot)) break;
+        const auto value = *reinterpret_cast<const std::uint64_t*>(slot);
+        if (!IsExecutable(value)) continue;
+        DescribeAddress(value, line, sizeof(line));
+        Report("    [rsp+0x%llx] %s\n", static_cast<unsigned long long>(slot - rsp), line);
+        ++printed;
+    }
+}
+
 LONG WINAPI ReportCrash(EXCEPTION_POINTERS* info) {
     static std::atomic<bool> reported{false};
     const auto* fault = info->ExceptionRecord;
@@ -296,16 +310,7 @@ LONG WINAPI ReportCrash(EXCEPTION_POINTERS* info) {
         if (next <= frame) break;
         frame = next;
     }
-    Report("  stack return address candidates:\n");
-    int printed = 0;
-    for (std::uint64_t slot = context->Rsp; printed < 16 && slot < context->Rsp + 0x2000; slot += 8) {
-        if (!IsReadable(slot)) break;
-        const auto value = *reinterpret_cast<const std::uint64_t*>(slot);
-        if (!IsExecutable(value)) continue;
-        DescribeAddress(value, line, sizeof(line));
-        Report("    [rsp+0x%llx] %s\n", static_cast<unsigned long long>(slot - context->Rsp), line);
-        ++printed;
-    }
+    ReportStackCandidates(context->Rsp, 16, 0x2000);
     if (context->Rip == 0 || !IsExecutable(context->Rip)) {
         // A jump into nothing usually follows a return through a clobbered frame; the frames that just
         // returned are still below rsp.
@@ -444,6 +449,7 @@ void ReportBacktrace(const char* what, bool reportThreads) {
         DescribeAddress(reinterpret_cast<std::uint64_t>(frames[i]), line, sizeof(line));
         Report("    #%u %s\n", static_cast<unsigned>(i), line);
     }
+    ReportStackCandidates(reinterpret_cast<std::uint64_t>(__builtin_frame_address(0)), 32, 0x4000);
     if (reportThreads) ReportAllThreads();
     std::fflush(stderr);
 }
