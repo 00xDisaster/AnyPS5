@@ -51,6 +51,14 @@ bool StorageImageServesKeys(const StorageTexture& image, std::uint64_t dccAddres
 // a storage image other than `except` has results pending in [address, address + bytes).
 bool PendingStorageOverlaps(std::uint64_t address, std::size_t bytes, const StorageTexture* except);
 
+struct PipelineSetLayouts {
+    VkDescriptorSetLayout main = VK_NULL_HANDLE;
+    VkDescriptorSetLayout fragment = VK_NULL_HANDLE;
+    bool split = false;
+    std::span<const std::uint32_t> mainKey;
+    std::span<const std::uint32_t> fragmentKey;
+};
+
 class DescriptorCache {
 public:
     explicit DescriptorCache(const Context& context);
@@ -119,6 +127,7 @@ public:
     std::span<const VkDescriptorBindingFlags> LayoutBindingFlags() const { return layoutBindingFlags; }
     VkDescriptorSetLayout FragmentLayout() const { return fragment.layout; }
     bool SplitSets() const { return splitSets; }
+    PipelineSetLayouts SetLayouts() const { return {_layout, fragment.layout, splitSets, layoutKey, fragmentLayoutKey}; }
     void Bind(VkCommandBuffer commands, VkPipelineBindPoint bindPoint, VkPipelineLayout layout) const;
     struct DrawBindings {
         DrawBindings() = default;

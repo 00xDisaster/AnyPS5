@@ -7,6 +7,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/PlaceholderImages.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderResources.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Pipeline.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Recorder.hpp"
 #include <algorithm>
 #include <atomic>
@@ -1510,6 +1511,43 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
         release();
         throw;
     }
+}
+
+DescribedSetLayouts DescribeSetLayouts(const Context& context, std::span<const CompiledShader> shaders) {
+    Require(context.descriptorCache != nullptr, "described set layouts need the descriptor cache");
+    DescribedSetLayouts result;
+    std::array<std::vector<VkDescriptorSetLayoutBinding>, 2> descriptions;
+    bool split = false;
+    bool updateAfterBind = false;
+    std::uint64_t storageBuffers = 0;
+    for (const auto& shader : shaders) {
+        Require(shader.program != nullptr, "missing compiled shader");
+        const VkShaderStageFlags flags = VulkanStage(shader.stage);
+        std::uint64_t stageStorageBuffers = 0;
+        std::uint64_t stageResources = 0;
+        for (const auto& binding : shader.program->bindings) {
+            split |= binding.descriptorSet == ShaderRecompiler::RuntimeAbi::FragmentDescriptorSet;
+            const bool image = binding.role == ShaderRecompiler::DescriptorRole::GuestImages || binding.role == ShaderRecompiler::DescriptorRole::GuestSamplers;
+            const auto type = !image ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : binding.kind == ShaderRecompiler::DescriptorKind::StorageImage ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : binding.kind == ShaderRecompiler::DescriptorKind::SampledImage ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLER;
+            if (type != VK_DESCRIPTOR_TYPE_SAMPLER) stageResources += binding.count;
+            if (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
+                stageStorageBuffers += binding.count;
+                storageBuffers += binding.count;
+            }
+            if (stageStorageBuffers > context.limits.maxPerStageDescriptorStorageBuffers || stageResources > context.limits.maxPerStageResources) updateAfterBind = true;
+            descriptions[binding.descriptorSet == ShaderRecompiler::RuntimeAbi::FragmentDescriptorSet ? 1 : 0].push_back({binding.binding, type, binding.count, flags, nullptr});
+        }
+    }
+    if (storageBuffers > context.limits.maxDescriptorSetStorageBuffers) updateAfterBind = true;
+    for (std::size_t set = 0; set < descriptions.size(); ++set) {
+        auto& key = set == 0 ? result.mainKey : result.fragmentKey;
+        for (const auto& binding : descriptions[set]) key.insert(key.end(), {binding.binding, static_cast<std::uint32_t>(binding.descriptorType), binding.descriptorCount, binding.stageFlags});
+        if (updateAfterBind && (set == 0 || split)) key.push_back(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+    }
+    result.layouts.split = split;
+    result.layouts.main = context.descriptorCache->Layout(result.mainKey, descriptions[0], updateAfterBind);
+    if (split) result.layouts.fragment = context.descriptorCache->Layout(result.fragmentKey, descriptions[1], updateAfterBind);
+    return result;
 }
 
 void ShaderResources::buildComplete() {
