@@ -37,6 +37,23 @@ int replacementDescriptor = -1;
 bool armed = false;
 bool swapped = false;
 
+int CreateOrdinaryFile() {
+    char path[] = "/tmp/anyps5-descriptor-reuse-XXXXXX";
+    const int descriptor = ::mkstemp(path);
+    if (descriptor < 0) throw std::runtime_error("ordinary file creation failed");
+    if (::unlink(path) != 0) {
+        ::close(descriptor);
+        throw std::runtime_error("ordinary file unlink failed");
+    }
+    constexpr char contents[] = "ordinary file contents";
+    if (::write(descriptor, contents, sizeof(contents)) != static_cast<ssize_t>(sizeof(contents)) ||
+        ::lseek(descriptor, 0, SEEK_SET) != 0) {
+        ::close(descriptor);
+        throw std::runtime_error("ordinary file initialization failed");
+    }
+    return descriptor;
+}
+
 void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(std::string(message) + " (guest errno=" + std::to_string(*__error_nid_postfix()) + ")");
 }
@@ -135,7 +152,7 @@ int main() {
         Require(pwrite_nid_disambig1_nid_postfix(descriptor, "original", 8, 0) == 8, "shared-memory seed failed");
         const int verifier = object.Open(ReadWrite);
         Require(verifier >= 0, "shared-memory verifier open failed");
-        const int replacement = ::open(__FILE__, O_RDONLY);
+        const int replacement = CreateOrdinaryFile();
         Require(replacement >= 0, "ordinary-file setup failed");
         armedDescriptor = descriptor;
         replacementDescriptor = replacement;

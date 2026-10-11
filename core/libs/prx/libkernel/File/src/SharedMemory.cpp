@@ -1,6 +1,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libkernel/File/include/FileFlags.hpp"
 #include "prx/libkernel/File/include/SharedMemory.hpp"
+#include "prx/libc/include/CreationMask.hpp"
 #include "prx/libkernel/File/include/File.hpp"
 
 #include <cerrno>
@@ -78,8 +79,6 @@ private:
     int descriptor = -1;
     int error = 0;
 };
-
-std::atomic<std::uint16_t> creationMask{022};
 
 constexpr int GuestNoMemory = 12;
 constexpr int GuestInvalid = 22;
@@ -164,7 +163,7 @@ int OpenNamedFile(const char* path, int flags, int mode) {
     if (flags & SCE_KERNEL_O_CREAT) hostFlags |= O_CREAT;
     if (flags & SCE_KERNEL_O_EXCL) hostFlags |= O_EXCL;
     if ((flags & SCE_KERNEL_O_TRUNC) && (flags & SCE_KERNEL_O_ACCMODE) == SCE_KERNEL_O_RDWR) hostFlags |= O_TRUNC;
-    const auto permissions = (mode & 0777) & ~creationMask.load(std::memory_order_relaxed);
+    const auto permissions = (mode & 0777) & ~File::GetCreationMask_nid_no_patch();
     bool created = false;
     int descriptor;
     if (flags & SCE_KERNEL_O_CREAT) {
@@ -219,10 +218,6 @@ int CreateAnonymousFile() {
 
 namespace File {
 
-std::uint16_t ExchangeCreationMask_nid_no_patch(std::uint16_t mask) {
-    return creationMask.exchange(static_cast<std::uint16_t>(mask & 07777), std::memory_order_relaxed);
-}
-
 bool IsSharedMemoryDescriptor_nid_no_patch(int descriptor) {
     return IsHostSharedMemoryDescriptor(descriptor);
 }
@@ -232,6 +227,10 @@ namespace {
 class SharedMemoryLock {
 public:
     explicit SharedMemoryLock(int value) {
+#ifdef __linux__
+        struct stat originalStatus{};
+        if (::fstat(value, &originalStatus) != 0) { shared = true; error = errno; return; }
+#endif
         if (!IsHostSharedMemoryDescriptor(value)) return;
         shared = true;
         hostLock.emplace();
@@ -239,7 +238,10 @@ public:
         descriptor = Duplicate(value);
         if (descriptor < 0) { error = errno; return; }
         if (!IsHostSharedMemoryDescriptor(descriptor)) { error = EBADF; return; }
-        if (!Refresh()) error = errno;
+        if (!Refresh()) { error = errno; return; }
+#ifdef __linux__
+        if (status.st_dev != originalStatus.st_dev || status.st_ino != originalStatus.st_ino) error = EBADF;
+#endif
     }
 
     ~SharedMemoryLock() {

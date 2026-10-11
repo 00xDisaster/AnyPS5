@@ -9,7 +9,6 @@
 
 namespace File {
 
-std::uint16_t ExchangeCreationMask_nid_no_patch(std::uint16_t mask);
 bool IsSharedMemoryDescriptor_nid_no_patch(int descriptor);
 std::int64_t WriteSharedMemory_nid_no_patch(int descriptor, const void* buffer, std::size_t size);
 std::int64_t PwriteSharedMemory_nid_no_patch(int descriptor, const void* buffer, std::size_t size, std::int64_t offset);

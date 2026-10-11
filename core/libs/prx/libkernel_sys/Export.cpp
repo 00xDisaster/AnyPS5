@@ -16,7 +16,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
-#include "prx/libkernel/File/include/SharedMemory.hpp"
+#include "prx/libc/include/CreationMask.hpp"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX

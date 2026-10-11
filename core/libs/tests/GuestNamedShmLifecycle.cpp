@@ -50,6 +50,23 @@ constexpr int Private = 0x2;
 constexpr std::size_t Page = 0x4000;
 using Unlink = int (*)(const char*);
 
+int CreateOrdinaryFile() {
+    char path[] = "/tmp/anyps5-lifecycle-XXXXXX";
+    const int descriptor = ::mkstemp(path);
+    if (descriptor < 0) throw std::runtime_error("ordinary file creation failed");
+    if (::unlink(path) != 0) {
+        ::close(descriptor);
+        throw std::runtime_error("ordinary file unlink failed");
+    }
+    constexpr char contents[] = "ordinary file contents";
+    if (::write(descriptor, contents, sizeof(contents)) != static_cast<ssize_t>(sizeof(contents)) ||
+        ::lseek(descriptor, 0, SEEK_SET) != 0) {
+        ::close(descriptor);
+        throw std::runtime_error("ordinary file initialization failed");
+    }
+    return descriptor;
+}
+
 void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(std::string(message) + " (guest errno=" + std::to_string(*__error_nid_postfix()) + ")");
 }
@@ -163,7 +180,7 @@ void Run() {
             "mprotect on a read-only shared mapping did not return EACCES");
     Require(munmap_nid_postfix(readOnlyMap, Page) == 0, "read-only mapping unmap failed");
 
-    const int ordinary = ::open(__FILE__, O_RDONLY);
+    const int ordinary = CreateOrdinaryFile();
     Require(ordinary >= 0, "ordinary file setup failed");
     Require(dup2_nid_postfix(ordinary, second) == second, "dup2 onto shared descriptor failed");
     Require(lseek_nid_postfix(second, 0, SEEK_SET) == 0 && read_nid_postfix(second, bytes, sizeof(bytes)) > 0,
