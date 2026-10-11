@@ -25,8 +25,8 @@ static constexpr int SCE_PLAYGO_ERROR_BAD_SIZE = static_cast<int>(0x80B2000B);
 static constexpr int SCE_PLAYGO_ERROR_BAD_LOCUS = static_cast<int>(0x80B20010);
 
 // The package's chunk table is not part of the dump, so the chunk set comes from the title's
-// playgo-chunkdefs.xml: every listed chunk plus chunks 0 through the default chunk. Games probe
-// chunk IDs and size arrays from the result, so unknown IDs must be rejected.
+// playgo-chunkdefs.xml: every listed chunk plus chunks 0 through the default chunk. When that file
+// exists, IDs outside the set are rejected; without it the table is unknown and every ID is accepted.
 struct ChunkTable {
     std::set<uint16_t> ids{0};
     bool defined = false;
