@@ -25,7 +25,7 @@ int main() {
         Elfpatcher::ProgramHeaderLayoutRequest valid{64, 56, 6, {load}, 0x1000, 0x2000, 0x100, 0x1000, 16, 0x1010, 8};
         std::vector<std::uint8_t> output(0x1100, 0xA5);
         Require(builder.WriteLayout(output, valid) == 6);
-        for (int kind = 0; kind < 9; ++kind) {
+        for (int kind = 0; kind < 11; ++kind) {
             auto request = valid;
             switch (kind) {
                 case 0: request.PhEntSize = 55; break;
@@ -37,6 +37,8 @@ int main() {
                 case 6: request.DynamicSegmentOffset = maximum; break;
                 case 7: request.InterpOffset = maximum; break;
                 case 8: request.ExtraBlockOffset = maximum; break;
+                case 9: request.ExtraBlockSize = 0x1000; break;
+                case 10: request.PhOff = 0xF00; request.ExtraBlockVaddr = maximum - 0x1fff; break;
             }
             std::vector<std::uint8_t> bytes(0x1100, 0xA5);
             const auto before = bytes;
@@ -44,6 +46,6 @@ int main() {
             try { builder.WriteLayout(bytes, request); } catch (const std::exception&) { rejected = true; }
             Require(rejected && bytes == before);
         }
-        std::cout << "12 program layout cases passed\n";
+        std::cout << "14 program layout cases passed\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
