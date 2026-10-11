@@ -130,6 +130,12 @@ void AwaitRegisteredPreparation(PreparedShaders& prepared, std::unique_lock<std:
     if (prepared.failure != nullptr) std::rethrow_exception(prepared.failure);
 }
 
+bool CommittedAbi(const ShaderSnapshot& snapshot, std::span<const std::uint64_t> key) {
+    std::unique_lock lock(snapshot.prepared->mutex);
+    AwaitRegisteredPreparation(*snapshot.prepared, lock);
+    return std::ranges::any_of(snapshot.prepared->registeredAbis, [&](const auto& abi) { return std::ranges::equal(abi, key); });
+}
+
 }
 
 bool ProgramUsesWorkgroup(const ShaderSnapshot& snapshot, std::size_t codeOffset) {
@@ -157,9 +163,13 @@ struct ShaderPreparationTransaction::State {
     };
     static std::mutex writers;
     static thread_local State* active;
-    std::unique_lock<std::mutex> lock{writers};
+    std::unique_lock<std::mutex> lock{writers, std::defer_lock};
     std::map<PreparedShaders*, Change> changes;
     bool failed = false;
+
+    void Hold() {
+        if (!lock.owns_lock()) lock.lock();
+    }
 };
 
 std::mutex ShaderPreparationTransaction::State::writers;
@@ -180,6 +190,7 @@ ShaderPreparationTransaction::~ShaderPreparationTransaction() {
 
 PreparedShaderState& ShaderPreparationTransaction::Edit(const ShaderSnapshot& snapshot) {
     require(!committed, "shader preparation transaction is already committed");
+    root->Hold();
     auto& changes = root->changes;
     const auto found = changes.find(snapshot.prepared.get());
     if (found != changes.end()) {
@@ -193,12 +204,18 @@ PreparedShaderState& ShaderPreparationTransaction::Edit(const ShaderSnapshot& sn
 
 const PreparedShaderState& ShaderPreparationTransaction::Read(const ShaderSnapshot& snapshot) const {
     require(!committed, "shader preparation transaction is already committed");
+    root->Hold();
     auto& changes = root->changes;
     const auto found = changes.find(snapshot.prepared.get());
     if (found != changes.end()) return found->second.prepared;
     std::unique_lock lock(snapshot.prepared->mutex);
     AwaitRegisteredPreparation(*snapshot.prepared, lock);
     return changes.emplace(snapshot.prepared.get(), State::Change{snapshot.prepared, *snapshot.prepared, false, snapshot.prepared->entries.size(), snapshot.prepared->registeredAbis.size()}).first->second.prepared;
+}
+
+void ShaderPreparationTransaction::Hold() {
+    require(!committed, "shader preparation transaction is already committed");
+    root->Hold();
 }
 
 void ShaderPreparationTransaction::Commit() {
@@ -294,6 +311,7 @@ std::shared_ptr<const ShaderSnapshot> RegisteredProgram(const ShaderRegistry& re
 
 void PublishRegisteredShader(std::shared_ptr<ShaderRegistry>& registry, const std::shared_ptr<const ShaderSnapshot>& snapshot) {
     ShaderPreparationTransaction transaction;
+    transaction.Hold();
     auto published = snapshot;
     if (registry != nullptr) {
         const auto found = registry->find(snapshot->codeAddress);
@@ -935,12 +953,14 @@ void Driver::ResolveShaderAbi(const Shader* shader, std::span<const ShaderRegist
     struct RegisteredAbiKeyStorage {};
     auto& key = HostThreadLocal<std::vector<std::uint64_t>, RegisteredAbiKeyStorage>();
     BuildRegisteredAbiKey(state, *localDevice, key);
+    const bool committedAbi = CommittedAbi(*snapshot, key);
+    auto entries = committedAbi ? std::vector<PreparedShaders::Entry>{} : PrepareRegistered(*snapshot, *localDevice, state, false);
     const auto& registeredAbis = transaction.Read(*snapshot).registeredAbis;
     if (std::ranges::find(registeredAbis, key) != registeredAbis.end()) {
         transaction.Commit();
         return;
     }
-    auto entries = PrepareRegistered(*snapshot, *localDevice, state, false);
+    if (committedAbi) entries = PrepareRegistered(*snapshot, *localDevice, state, false);
     auto& prepared = transaction.Edit(*snapshot);
     for (auto& entry : entries) {
         const auto duplicate = std::ranges::any_of(prepared.entries, [&](const auto& existing) { return existing.handle->artifact == entry.handle->artifact; });
@@ -1094,6 +1114,7 @@ void Driver::RegisterShader(const Shader* shader) {
     snapshot.header.resize(fields.header_size);
     std::memcpy(snapshot.header.data(), static_cast<const void*>(shader), fields.header_size);
 
+    transaction.Hold();
     {
         std::lock_guard lock(mutex);
         rethrowFailure();
