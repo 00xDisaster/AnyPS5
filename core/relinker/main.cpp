@@ -85,7 +85,7 @@ int Run(const int argc, char* argv[]) {
         }
 
         auto elfReader = std::make_shared<Relinker::ElfReader>(sourceBytes);
-        const std::shared_ptr<Relinker::ISyscallScanner> syscallScanner = args.skipSyscallCheck ? Relinker::MakeNullSyscallScanner() : Relinker::MakeSyscallScanner();
+        const std::shared_ptr<Relinker::ISyscallScanner> syscallScanner = args.skipSyscallCheck ? Relinker::MakeNullSyscallScanner() : Relinker::MakeSyscallScanner(args.trapSdkSyscallStubs);
 
         const auto pipeline = std::make_shared<Relinker::RelinkerPipeline>(
             elfReader,

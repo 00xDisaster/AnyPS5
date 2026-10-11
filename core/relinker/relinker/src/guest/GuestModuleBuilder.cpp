@@ -342,7 +342,12 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         }
         for (const auto& header : codeHeaders) {
             const std::vector<std::uint8_t> code(image.Bytes.begin() + header.Offset, image.Bytes.begin() + header.Offset + header.FileSize);
-            syscallScanner.ScanCodeSectionForSyscalls(code, header.MappedAddress, header.FileSize);
+            for (const auto offset : syscallScanner.ScanCodeSectionForSyscalls(code, header.MappedAddress, header.FileSize)) {
+                if (offset > code.size() || code.size() - offset < 2u)
+                    throw Domain::RelinkerException("Syscall trap patch exceeds guest executable segment", header.MappedAddress + offset);
+                image.Bytes[header.Offset + offset] = 0x0F;
+                image.Bytes[header.Offset + offset + 1] = 0x0B;
+            }
         }
         const auto relativeDirectory = "app0/" + image.SourcePath.parent_path().lexically_relative(root).generic_string();
         const auto destination = outputDirectory / relativeDirectory;
