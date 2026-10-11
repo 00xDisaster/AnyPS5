@@ -209,6 +209,16 @@ int DirectoryFailure(const std::error_code& error) {
     if (error == std::errc::too_many_symbolic_link_levels) return 62;
     return 5;
 }
+int SetWorkingDirectory(WorkingDirectory& state, const std::filesystem::path& resolved) {
+    std::error_code error;
+    const auto canonical = std::filesystem::canonical(resolved, error);
+    if (error) return DirectoryFailure(error);
+    if (!std::filesystem::is_directory(canonical, error)) return error ? DirectoryFailure(error) : 20;
+    const auto relative = canonical.lexically_relative(state.root);
+    if (relative.empty() || *relative.begin() == "..") return 45;
+    state.current = canonical;
+    return 0;
+}
 }
 
 extern "C" void AddPathAlias_nid_no_patch(const char* guestPrefix, const char* hostPath) {
@@ -308,27 +318,17 @@ extern "C" std::filesystem::path ResolvePath_nid_no_patch(const char* path) {
 extern "C" int SetWorkingDirectory_nid_no_patch(const std::filesystem::path& resolved) {
     auto& state = Directories();
     std::lock_guard lock(state.mutex);
-    std::error_code error;
-    const auto canonical = std::filesystem::canonical(resolved, error);
-    if (error) return DirectoryFailure(error);
-    if (!std::filesystem::is_directory(canonical, error)) return error ? DirectoryFailure(error) : 20;
-    const auto relative = canonical.lexically_relative(state.root);
-    if (relative.empty() || *relative.begin() == "..") return 45;
-    state.current = canonical;
-    return 0;
+    return SetWorkingDirectory(state, resolved);
 }
 
 extern "C" int APS5_VABI chdir_nid_postfix(const char* path) {
     if (!path) { errno = 14; return -1; }
     if (!*path) { errno = 2; return -1; }
     try {
-        std::filesystem::path resolved;
-        {
-            auto& state = Directories();
-            std::lock_guard lock(state.mutex);
-            resolved = Resolve(state, path);
-        }
-        const int error = SetWorkingDirectory_nid_no_patch(resolved);
+        auto& state = Directories();
+        std::lock_guard lock(state.mutex);
+        const auto resolved = Resolve(state, path);
+        const int error = SetWorkingDirectory(state, resolved);
         if (error) { errno = error; return -1; }
         return 0;
     } catch (const std::bad_alloc&) { errno = 12; return -1; }
