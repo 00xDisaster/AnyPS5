@@ -37,6 +37,12 @@ constexpr int GuestEfault = 14;
 constexpr int GuestEinval = 22;
 constexpr int GuestEexist = 17;
 constexpr int GuestExdev = 18;
+constexpr int GuestEdeadlk = 11;
+constexpr int GuestEagain = 35;
+constexpr int GuestEloop = 62;
+constexpr int GuestEnametoolong = 63;
+constexpr int GuestEnotempty = 66;
+constexpr int GuestEoverflow = 84;
 
 std::atomic<std::uint16_t> creationMask{022};
 
@@ -46,7 +52,14 @@ std::int64_t Fail(int error) {
 }
 
 int GuestError(const std::error_code& error) {
-    const int value = error.default_error_condition().value();
+    const auto condition = error.default_error_condition();
+    if (condition == std::errc::resource_unavailable_try_again) return GuestEagain;
+    if (condition == std::errc::resource_deadlock_would_occur) return GuestEdeadlk;
+    if (condition == std::errc::too_many_symbolic_link_levels) return GuestEloop;
+    if (condition == std::errc::filename_too_long) return GuestEnametoolong;
+    if (condition == std::errc::directory_not_empty) return GuestEnotempty;
+    if (condition == std::errc::value_too_large) return GuestEoverflow;
+    const int value = condition.value();
     return value > 0 && value <= 34 ? value : GuestEio;
 }
 }
