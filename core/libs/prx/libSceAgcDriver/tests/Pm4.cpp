@@ -537,6 +537,28 @@ void testWriteChangedKeepsUntouchedBytes() {
     check(guest[3] == 7 && guest[100] == 0x55, "write-back rolled back a byte the GPU did not change");
 }
 
+void testWriteChangedStoresExactlyTheChangedRuns() {
+    alignas(256) static std::uint8_t guest[1024 + 13];
+    std::vector<std::byte> original(sizeof(guest)), current(sizeof(guest));
+    std::uint32_t seed = 12345;
+    const auto next = [&] { return seed = seed * 1103515245u + 12345u, seed >> 16u; };
+    for (std::size_t i = 0; i < sizeof(guest);) {
+        const auto length = 1 + next() % 40;
+        const bool changed = next() % 2 == 0;
+        for (std::size_t j = i; j < std::min(sizeof(guest), i + length); ++j) {
+            original[j] = static_cast<std::byte>(next());
+            current[j] = changed && next() % 9 != 0 ? static_cast<std::byte>(static_cast<std::uint8_t>(original[j]) ^ (1u + next() % 255u)) : original[j];
+        }
+        i += length;
+    }
+    for (std::size_t i = 0; i < sizeof(guest); ++i) guest[i] = static_cast<std::uint8_t>(0xa0u ^ i);
+    AgcDriver::GuestMemory::WriteChanged(reinterpret_cast<std::uintptr_t>(guest), current, original);
+    for (std::size_t i = 0; i < sizeof(guest); ++i) {
+        const auto expected = current[i] != original[i] ? static_cast<std::uint8_t>(current[i]) : static_cast<std::uint8_t>(0xa0u ^ i);
+        check(guest[i] == expected, "write-back stored a byte the GPU did not change or missed one it did");
+    }
+}
+
 void testEventWrite() {
     for (const auto eventType : {0x07u, 0x0fu, 0x10u}) {
         AgcDriver::Pm4::Validate(makePacket(0x46, {0x400u | eventType}), 0);
@@ -1015,6 +1037,15 @@ void testAsyncMemoryFailure() {
     expectFailure([] { LibcRunShutdown_nid_postfix(); }, "guest");
 }
 
+void testRefusedWorkerPriority() {
+    alignas(8) static std::uint32_t result = 0;
+    auto words = writeWord(result, 91);
+    submitWords(words);
+    expectFailure([] { AgcDriverWaitIdle_nid_postfix(); }, "refused");
+    check(result == 0, "a queue worker whose priority was refused executed its submission");
+    expectFailure([] { LibcRunShutdown_nid_postfix(); }, "refused");
+}
+
 }
 
 void testUnwrittenUserData() {
@@ -1032,9 +1063,15 @@ int main(int argc, char** argv) {
             std::puts("PM4 asynchronous memory failure propagated to idle, suspend, submit and shutdown");
             return 0;
         }
+        if (argc == 2 && std::string(argv[1]) == "priority-refused") {
+            testRefusedWorkerPriority();
+            std::puts("PM4 refused queue worker priority propagated to idle and shutdown");
+            return 0;
+        }
         testCatalog();
         testNopPad();
         testWriteChangedKeepsUntouchedBytes();
+        testWriteChangedStoresExactlyTheChangedRuns();
         testRegisters();
         testRegisterFile();
         testContextAndBases();
