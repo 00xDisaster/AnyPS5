@@ -224,6 +224,7 @@ int APS5_VABI sceKernelOpen(const char* path, int flags, std::uint16_t mode) {
 }
 
 int APS5_VABI sceKernelClose(int d) {
+    if (d >= GuestSockets::FirstDescriptor) return GuestSockets::Close(d) == 0 ? 0 : SceKernelError(*__error_nid_postfix());
     File::ForgetRandomDevice(d);
 #ifdef _WIN32
     File::ForgetDirectoryDescriptor(d);
