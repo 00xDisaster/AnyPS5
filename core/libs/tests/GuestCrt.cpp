@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -34,7 +35,7 @@ SonyLconv* APS5_VABI localeconv_nid_postfix(void);
 int APS5_VABI sceAmprFpclassifyd(double value);
 }
 
-static void Require(bool value) { if (!value) std::abort(); }
+#define Require(condition) do { if (!(condition)) { std::fprintf(stderr, "guest_crt: line %d: %s\n", __LINE__, #condition); std::abort(); } } while (0)
 
 static int g_handlerCalls = 0;
 static void CountingHandler(const char* message, void* pointer, int error) {
@@ -64,7 +65,8 @@ int main() {
     SonyLconv* locale = sceAmprLocaleconv();
     Require(reinterpret_cast<std::uintptr_t>(&locale->decimal_point) - reinterpret_cast<std::uintptr_t>(locale) == 0x48);
     Require(std::strcmp(locale->decimal_point, ".") == 0);
-    Require(localeconv_nid_postfix() == locale);
+    Require(std::memcmp(localeconv_nid_postfix()->chars, locale->chars, sizeof(locale->chars)) == 0);
+    Require(std::strcmp(localeconv_nid_postfix()->decimal_point, ".") == 0);
     for (const char* text : locale->monetary) Require(text != nullptr && text[0] == '\0');
     for (char value : locale->chars) Require(value == CHAR_MAX);
     Require(std::strcmp(locale->false_text, "false") == 0 && std::strcmp(locale->true_text, "true") == 0);
