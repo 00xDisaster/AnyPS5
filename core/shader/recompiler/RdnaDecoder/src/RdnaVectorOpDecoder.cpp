@@ -2019,7 +2019,7 @@ void checkNativeVop3Modifiers(RdnaOpcode opcode, bool permlane, bool carryInOut,
     if (carryInOut || scalarDst) {
         const bool floatCompare = scalarDst && isVopcFloatCompareOpcode(opcode);
         const bool divScale = opcode == RdnaOpcode::VDivScaleF32 || opcode == RdnaOpcode::VDivScaleF64;
-        if ((clamp != 0u && !isVop3BMadU64Opcode(opcode)) || (omod != 0u && !divScale) || (neg != 0u && !floatCompare && !divScale)) {
+        if ((clamp != 0u && !isVop3BMadU64Opcode(opcode) && !floatCompare) || (omod != 0u && !divScale) || (neg != 0u && !floatCompare && !divScale)) {
             throw std::invalid_argument("VOP3 source modifiers are not implemented");
         }
         return;
