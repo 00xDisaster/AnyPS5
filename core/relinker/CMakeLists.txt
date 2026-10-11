@@ -137,6 +137,16 @@ endif()
 
 
 if(BUILD_TESTING)
+    add_test_executable(elf_reader_bounds_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/ElfReaderBoundsTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/src/parsing/ElfReader.cpp)
+    target_include_directories(elf_reader_bounds_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/include)
+    add_test(NAME elf_reader_bounds COMMAND elf_reader_bounds_tests)
+    set_tests_properties(elf_reader_bounds PROPERTIES TIMEOUT 20)
+
     add_test_executable(autorun_exit_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/tests/AutorunExitTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/src/Autorun.cpp
