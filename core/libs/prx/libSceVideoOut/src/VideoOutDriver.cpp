@@ -200,7 +200,7 @@ void FlipRequest::Cancel() noexcept {
         std::lock_guard lock(cfg->mutex);
         ReleaseLocked();
     }
-    queue->changed.notify_all();
+    queue->changed.NotifyAll();
 }
 
 void FlipRequest::GpuReady(const std::shared_ptr<AgcDriver::FrameTiming>& frameTiming) {
