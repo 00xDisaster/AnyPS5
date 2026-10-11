@@ -63,6 +63,9 @@ double APS5_VABI asin_nid_postfix(double x) { return std::asin(x); }
 double APS5_VABI acos_nid_postfix(double x) { return std::acos(x); }
 double APS5_VABI sqrt_nid_postfix(double x) { return std::sqrt(x); }
 float APS5_VABI sqrtf_nid_postfix(float x) { return std::sqrt(x); }
+double APS5_VABI fabs_nid_postfix(double x) { return std::fabs(x); }
+double APS5_VABI trunc_nid_postfix(double x) { return std::trunc(x); }
+double APS5_VABI fma_nid_postfix(double x, double y, double z) { return std::fma(x, y, z); }
 long double APS5_VABI acosl_nid_postfix(long double x) { return std::acos(x); }
 
 long double APS5_VABI frexpl_nid_postfix(long double x, int* exponent) {
