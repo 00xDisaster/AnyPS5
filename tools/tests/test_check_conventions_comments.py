@@ -8,8 +8,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check_conventions import STUB_BODY, SYSTEM_DEPENDENCY, Check, function_body
-from check_conventions import Check, STUB_BODY, function_body, links, output
+from check_conventions import STUB_BODY, SYSTEM_DEPENDENCY, Check, function_body, links, output
 
 
 class FunctionBodyTests(unittest.TestCase):
