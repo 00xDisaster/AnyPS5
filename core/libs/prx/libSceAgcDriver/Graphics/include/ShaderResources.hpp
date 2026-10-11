@@ -445,6 +445,7 @@ private:
         std::array<std::uint32_t, 4> words{};
         bool compareEnable = false;
         bool unnormalized = false;
+        bool integerBorder = false;
         bool singleLevelImage = false;
         bool mipmappedImage = false;
     };
