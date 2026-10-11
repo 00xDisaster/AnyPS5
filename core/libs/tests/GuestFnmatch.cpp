@@ -57,6 +57,10 @@ int main() {
         {"[!]x", "x", 0x00, 1},
         {"*/", "dir/", 0x02, 0},
         {"*/", "dir", 0x02, 1},
+        {"[[:digit:]]", "7", 0x00, 1},
+        {"[[:digit:]]", "d]", 0x00, 0},
+        {"[[:digit:]]", ":]", 0x00, 0},
+        {"a[[:alpha:]]", "ab", 0x00, 1},
     };
     for (const Case& entry : cases) {
         if (fnmatch_nid_postfix(entry.pattern, entry.string, entry.flags) != entry.result) {
