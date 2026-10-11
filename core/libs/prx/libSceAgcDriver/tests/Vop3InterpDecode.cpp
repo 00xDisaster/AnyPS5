@@ -34,25 +34,25 @@ struct Refused {
 int main() {
     constexpr std::uint32_t Destination = 5;
     const std::vector<Accepted> accepted{
-        {{0xd6000005u, 0x00020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 0u},
-        {{0xd6010005u, 0x00020440u}, RdnaOpcode::VInterpP2F32, "v_interp_p2_f32_e64 v5, v2, attr0.y", RdnaOperandKind::VectorRegister, 2u, 0u, 1u, false, false, false, 0u},
-        {{0xd6020005u, 0x00000200u}, RdnaOpcode::VInterpMovF32, "v_interp_mov_f32_e64 v5, p20, attr0.x", RdnaOperandKind::IntegerInlineConstant, 1u, 0u, 0u, false, false, false, 0u},
-        {{0xd6000005u, 0x0002041fu}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr31.x", RdnaOperandKind::VectorRegister, 2u, 31u, 0u, false, false, false, 0u},
-        {{0xd6000005u, 0x00020420u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr32.x", RdnaOperandKind::VectorRegister, 2u, 32u, 0u, false, false, false, 0u},
-        {{0xd6000005u, 0x0003fe00u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v255, attr0.x", RdnaOperandKind::VectorRegister, 255u, 0u, 0u, false, false, false, 0u},
-        {{0xd6000205u, 0x00020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, |v2|, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, true, false, false, 0u},
-        {{0xd6000005u, 0x40020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, -v2, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, true, false, 0u},
-        {{0xd6008005u, 0x00020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x clamp", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, true, 0u},
-        {{0xd6000005u, 0x08020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x mul:2", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 1u},
+        {{0xd6000005u, 0x02020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 0u},
+        {{0xd6010005u, 0x02020440u}, RdnaOpcode::VInterpP2F32, "v_interp_p2_f32_e64 v5, v2, attr0.y", RdnaOperandKind::VectorRegister, 2u, 0u, 1u, false, false, false, 0u},
+        {{0xd6020005u, 0x02000200u}, RdnaOpcode::VInterpMovF32, "v_interp_mov_f32_e64 v5, p20, attr0.x", RdnaOperandKind::IntegerInlineConstant, 1u, 0u, 0u, false, false, false, 0u},
+        {{0xd6000005u, 0x0202041fu}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr31.x", RdnaOperandKind::VectorRegister, 2u, 31u, 0u, false, false, false, 0u},
+        {{0xd6000005u, 0x02020420u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr32.x", RdnaOperandKind::VectorRegister, 2u, 32u, 0u, false, false, false, 0u},
+        {{0xd6000005u, 0x0203fe00u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v255, attr0.x", RdnaOperandKind::VectorRegister, 255u, 0u, 0u, false, false, false, 0u},
+        {{0xd6000205u, 0x02020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, |v2|, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, true, false, false, 0u},
+        {{0xd6000005u, 0x42020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, -v2, attr0.x", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, true, false, 0u},
+        {{0xd6008005u, 0x02020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x clamp", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, true, 0u},
+        {{0xd6000005u, 0x0a020400u}, RdnaOpcode::VInterpP1F32, "v_interp_p1_f32_e64 v5, v2, attr0.x mul:2", RdnaOperandKind::VectorRegister, 2u, 0u, 0u, false, false, false, 1u},
     };
     const std::vector<Refused> refused{
-        {{0xd6000005u, 0x00000400u}, "not a vector register", "v_interp_p1_f32_e64 with a non-VGPR coordinate"},
-        {{0xd6020005u, 0x00000600u}, "not an interpolation parameter", "v_interp_mov_f32_e64 with a reserved parameter"},
-        {{0xd6000805u, 0x00020400u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with op_sel"},
-        {{0xd6000005u, 0x00020500u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with the packed-half selector"},
-        {{0xd6000005u, 0x00060400u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with a third source"},
-        {{0xd6000105u, 0x00020400u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with an absolute source 0"},
-        {{0xd6020005u, 0x20000000u}, "modifiers are not implemented", "v_interp_mov_f32_e64 with a negated parameter"},
+        {{0xd6000005u, 0x02000400u}, "not a vector register", "v_interp_p1_f32_e64 with a non-VGPR coordinate"},
+        {{0xd6020005u, 0x02000600u}, "not an interpolation parameter", "v_interp_mov_f32_e64 with a reserved parameter"},
+        {{0xd6000005u, 0x02060400u}, "third source is not the inline constant 0", "v_interp_p1_f32_e64 with a third source other than the inline constant 0"},
+        {{0xd6000805u, 0x02020400u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with op_sel"},
+        {{0xd6000005u, 0x02020500u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with the packed-half selector"},
+        {{0xd6000105u, 0x02020400u}, "modifiers are not implemented", "v_interp_p1_f32_e64 with an absolute source 0"},
+        {{0xd6020005u, 0x22000200u}, "modifiers are not implemented", "v_interp_mov_f32_e64 with a negated parameter"},
     };
     int failures = 0;
     for (const auto& test : accepted) {
