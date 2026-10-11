@@ -735,7 +735,7 @@ std::vector<ImageResource> ResourceMaterializer::RuntimeImageModes(const ImageRe
             modes.push_back(mode);
         }
     }
-    if (image.srgbDecodeFormats != 0u && (image.srgbDecodeCompatible || image.depthCompare) && !storage && !image.packed) {
+    if (image.srgbDecodeFormats != 0u && image.srgbDecodeCompatible && !image.depthCompare && !storage && !image.packed) {
         const auto count = modes.size();
         for (std::size_t index = 0; index < count; ++index) {
             const auto& base = modes[index];
