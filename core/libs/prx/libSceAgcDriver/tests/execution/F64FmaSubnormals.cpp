@@ -192,11 +192,15 @@ void Run(AgcDriver::VulkanDevice& device, const std::array<std::uint32_t, Words>
 }
 
 template <std::size_t Count>
-void Check(const char* name, const std::uint64_t (&rows)[Count][4]) {
+bool Check(const char* name, const std::uint64_t (&rows)[Count][4]) {
     for (std::uint32_t tid = 0; tid < Count; ++tid) {
         const std::uint64_t actual = Output[tid * Results] | (static_cast<std::uint64_t>(Output[tid * Results + 1]) << 32u);
-        Require(actual == rows[tid][3], std::string(name) + ": lane " + std::to_string(tid) + " (" + Hex(rows[tid][0]) + ", " + Hex(rows[tid][1]) + ", " + Hex(rows[tid][2]) + ") is " + Hex(actual) + ", expected " + Hex(rows[tid][3]));
+        if (actual != rows[tid][3]) {
+            std::cerr << name << ": lane " << tid << " (" << Hex(rows[tid][0]) << ", " << Hex(rows[tid][1]) << ", " << Hex(rows[tid][2]) << ") is " << Hex(actual) << ", expected " << Hex(rows[tid][3]) << '\n';
+            return false;
+        }
     }
+    return true;
 }
 
 }
@@ -210,14 +214,27 @@ int main(int argc, char** argv) {
         }
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        if (!device->Target().float64DenormPreserve) {
-            std::puts("skipped, the device has no shaderDenormPreserveFloat64");
+        if (!TargetHasCapability(device->Target(), spv::CapabilityFloat64)) {
+            std::puts("skipped, the device has no shaderFloat64");
             return VulkanTestSkipped;
         }
+        const bool canPreserveDenormals = device->Target().float64DenormPreserve;
         Run(*device, Code, Rows);
-        Check("v_fma_f64", Rows);
+        if (!Check("v_fma_f64", Rows)) {
+            if (!canPreserveDenormals) {
+                std::puts("skipped, the device flushes f64 subnormals without DenormPreserve support");
+                return VulkanTestSkipped;
+            }
+            return 1;
+        }
         Run(*device, FmasCode, FmasRows);
-        Check("v_div_fmas_f64 with VCC set", FmasRows);
+        if (!Check("v_div_fmas_f64 with VCC set", FmasRows)) {
+            if (!canPreserveDenormals) {
+                std::puts("skipped, the device flushes f64 subnormals without DenormPreserve support");
+                return VulkanTestSkipped;
+            }
+            return 1;
+        }
         std::puts("v_fma_f64 subnormal tests passed");
         return 0;
     } catch (const std::exception& error) {
