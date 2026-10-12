@@ -6,6 +6,11 @@ import sys
 from html import escape
 from pathlib import Path
 
+try:
+    from tools.nid_names import CPP_TOKEN
+except ImportError:
+    from nid_names import CPP_TOKEN
+
 ROOT = Path(__file__).resolve().parent.parent
 PRX = ROOT / "core" / "libs" / "prx"
 OPCODES = ROOT / "core" / "shader" / "recompiler" / "RdnaDecoder" / "include" / "RdnaDecoder" / "RdnaOpcode.hpp"
@@ -20,7 +25,6 @@ STUB_WRAPPER = re.compile(
     r"^[ \t]*(?:static\s+)?(?:\[\[noreturn\]\]\s+)?(?:(?!APS5_VABI)[\w:<>,\s*&])+?[\s*&]"
     r"(?!(?:if|while|for|switch|catch|return|else)\b)(\w+)\s*\([^;{]*\)\s*"
     r"(?:const\s*)?(?:noexcept\s*)?(?:->\s*[\w:<>*&\s]+?)?\{", re.M)
-NON_CODE = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|//[^\n]*|/\*.*?\*/', re.S)
 DISCARD = re.compile(r"\(void\)\s*\w+\s*;")
 EMPTY_RETURN = re.compile(r"return\s*;")
 CONST_RETURN = re.compile(r"return\s+(?:[+-]?\s*(?:0[xX][0-9a-fA-F]+|\d+)[uUlL]*|\w+|\"(?:\\.|[^\"\\])*\")\s*;")
@@ -73,14 +77,15 @@ DONE_COLOR, TODO_COLOR, BORDER, TEXT = "#2ea043", "#6e7681", "#0d1117", "#ffffff
 
 
 def blank(match):
-    if match.group(0).startswith(('"', "'")):
+    if match.group("code") is not None:
+        return match.group()
+    if match.group("comment") is None:
         return "LITERAL"
-    return re.sub(r"[^\n]", " ", match.group(0))
+    return re.sub(r"[^\n]", " ", match.group())
 
 
 def code(text):
-    return NON_CODE.sub(blank, text)
-
+    return CPP_TOKEN.sub(blank, text.replace("\\\n", "").replace("\\\r\n", ""))
 
 def body_end(text, start):
     depth = 0
