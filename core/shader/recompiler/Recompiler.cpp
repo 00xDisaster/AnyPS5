@@ -408,7 +408,7 @@ CompiledVariant compileVariant(const RecompileRequest& request, IrProgram progra
     shaderInfoCollector.Collect(program, inputInfo);
 
     constexpr BindingAllocator bindingAllocator;
-    bool registration = request.target.registrationModules;
+    bool registration = request.target.registrationModules && (request.shader.stage == ShaderStage::Vertex || request.shader.stage == ShaderStage::Fragment);
     auto bindings = bindingAllocator.Allocate(program, request.layout, registration);
 
     SpirvTargetOptions targetOptions {};

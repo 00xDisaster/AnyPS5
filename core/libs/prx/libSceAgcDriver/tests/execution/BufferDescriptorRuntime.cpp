@@ -72,8 +72,6 @@ void Run(AgcDriver::VulkanDevice& device, bool registrationModules) {
         {"records 64 base +2", 2, 64, true},
         {"absent", 0, 128, false},
     }};
-    const void* first = nullptr;
-    std::uint64_t variant = 0;
     for (const auto& test : cases) {
         Output.fill(Fill);
         const auto input = test.present ? BufferDescriptor(Input.data() + test.baseOffset, test.records) : std::array<std::uint32_t, 4>{0u, 0u, 0u, 0x31016facu};
@@ -84,11 +82,7 @@ void Run(AgcDriver::VulkanDevice& device, bool registrationModules) {
         runtime.userData = userData;
         const auto capture = ShaderRecompiler::CaptureResources(request, runtime, *handle);
         const auto result = ShaderRecompiler::MaterializeShader(request, *capture, *handle);
-        if (first == nullptr) {
-            first = result->spirv.data();
-            variant = result->PipelineVariantId();
-        }
-        if (registrationModules) Require(result->spirv.data() == first && result->PipelineVariantId() == variant, "buffer descriptor runtime, " + mode + ", " + test.name + ": the V# specialized the module");
+        Require(!result->registrationModule, "buffer descriptor runtime, " + mode + ", " + test.name + ": a compute shader was emitted in registration form");
         device.Dispatch(*result, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(Code.data()));
         device.WaitIdle();
         for (std::uint32_t lane = 0; lane < Lanes; ++lane) {
