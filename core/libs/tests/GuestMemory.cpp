@@ -451,6 +451,12 @@ static void CheckMtypeprotect() {
     Require(sceKernelMemoryPoolCommit(bytes + page * 2, page, 6, 3, 0) == 0);
     check(2, 6, 3);
     check(1, 3, 1);
+    KernelMemoryPoolBatchEntry commitEntry{};
+    commitEntry.op = 1;
+    commitEntry.commit.addr = bytes + page * 2;
+    commitEntry.commit.len = page;
+    commitEntry.commit.prot = 1;
+    commitEntry.commit.type = 7;
     Require(sceKernelMtypeprotect(bytes, page * 3, 2, 3) == 0);
     VirtualQueryInfo whole{};
     Require(sceKernelVirtualQuery(bytes, 0, &whole, sizeof(whole)) == 0);
