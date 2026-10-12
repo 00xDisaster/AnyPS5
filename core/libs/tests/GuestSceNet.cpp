@@ -370,13 +370,13 @@ int main() {
     }
     Require(sceNetInit_nid_postfix() == 0);
     CheckPoolStats();
-    CheckUnboundSocketName();
     CheckEmptyEpoll();
     CheckAddressText(2, "127.0.0.1");
     CheckAddressText(2, "255.255.255.255");
     CheckAddressText(28, "::1");
     CheckAddressText(28, "1234:5678:9abc:def0:1234:5678:9abc:def0");
     CheckLinkLocalAllNodesIpv6();
+    CheckUnboundSocketName();
     CheckUnspecifiedIpv6();
 
     const int closed = sceNetSocket("closed-by-kernel", 2, 2, 17);
