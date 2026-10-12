@@ -49,6 +49,8 @@ constexpr std::size_t ArrayOffset = 0x10000;
 constexpr std::size_t CubeOffset = 0x40000;
 constexpr std::size_t IntegerOffset = 0xa0000;
 constexpr std::size_t DepthBitsOffset = 0xb0000;
+constexpr std::size_t OneSliceOffset = 0xd0000;
+constexpr std::size_t FirstSliceOffset = 0xe0000;
 constexpr float DrawnDepth = 0.25f;
 constexpr float DrawnD16Depth = 0.2f;
 constexpr std::uint32_t DrawnD16Bits = 13107;
@@ -216,9 +218,10 @@ void DrawDepth(AgcDriver::VulkanDevice& device, std::uint64_t address, VkExtent2
     device.WaitIdle();
 }
 
-// Loads row 0 of `slice` of the texture `shape` describes at `texels` into `output` (one dword per thread).
-void Load(AgcDriver::VulkanDevice& device, std::uint8_t* texels, const Shape& shape, std::uint32_t slice, std::span<std::uint32_t> output) {
-    const auto& code = shape.type == TypeCube ? LoadCube : shape.type == Type2DArray ? LoadArray : Load2D;
+// Loads row 0 of `slice` of the texture `shape` describes at `texels` into `output` (one dword per thread). With
+// `shaderImage2D` the shader declares a 2D image whatever the T#'s type is.
+void Load(AgcDriver::VulkanDevice& device, std::uint8_t* texels, const Shape& shape, std::uint32_t slice, std::span<std::uint32_t> output, bool shaderImage2D = false) {
+    const auto& code = shaderImage2D ? Load2D : shape.type == TypeCube ? LoadCube : shape.type == Type2DArray ? LoadArray : Load2D;
     std::vector<std::uint32_t> userData(16, 0u);
     const auto out = std::array<std::uint32_t, 4>{static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(output.data())), static_cast<std::uint32_t>((reinterpret_cast<std::uintptr_t>(output.data()) >> 32u) & 0xffffu), static_cast<std::uint32_t>(output.size_bytes()), 0x31016facu};
     const auto texture = TextureDescriptor(texels, shape);
@@ -298,6 +301,21 @@ void DepthBitsArrayCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std:
     Expect(output, 0x1234u, "D16 depth-bits array slice 1");
 }
 
+// A 2D shader image over a 2D-array T# reads the array's first slice: a one-slice array, which samples the depth
+// image itself, and a 3-slice array, which samples the plane copy.
+void FirstSliceCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std::span<std::uint32_t> output) {
+    auto* one = block.At(OneSliceOffset);
+    DrawDepth(device, reinterpret_cast<std::uintptr_t>(one), {128, 128}, VK_FORMAT_D32_SFLOAT, DrawnDepth);
+    Load(device, one, {Format32Float, 128, 128, Type2DArray, 0, Swizzle64KbZX}, 0, output, true);
+    Expect(output, Bits(DrawnDepth), "one-slice D32 2D array through a 2D shader image");
+    auto* base = block.At(FirstSliceOffset);
+    DrawDepth(device, reinterpret_cast<std::uintptr_t>(base), {128, 128}, VK_FORMAT_D32_SFLOAT, DrawnDepth);
+    FillSlice(base + SliceBytes, SliceBytes, Bits(0.5f), 4u);
+    FillSlice(base + 2u * SliceBytes, SliceBytes, Bits(0.75f), 4u);
+    Load(device, base, {Format32Float, 128, 128, Type2DArray, 2, Swizzle64KbZX}, 0, output, true);
+    Expect(output, Bits(DrawnDepth), "3-slice D32 2D array through a 2D shader image");
+}
+
 // A plane array from a later base slice is still refused (its slice offsets are not modeled here).
 void RefusalCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std::span<std::uint32_t> output) {
     bool refused = false;
@@ -324,6 +342,7 @@ int main() {
         CubeCase(*device, block, output);
         IntegerCase(*device, block, output);
         DepthBitsArrayCase(*device, block, output);
+        FirstSliceCase(*device, block, output);
         RefusalCase(*device, block, output);
         std::puts("depth plane sampling tests passed");
         return 0;
