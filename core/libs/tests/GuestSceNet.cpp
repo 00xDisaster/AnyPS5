@@ -634,7 +634,7 @@ int main() {
     int resolver_error = -1;
     Require(sceNetResolverGetError(resolver, &resolver_error) == 0 && resolver_error == 0);
     std::array<std::uint8_t, 4> ipv4{};
-    Require(sceNetResolverStartNtoa(resolver, "guest-sce-net.invalid", ipv4.data(), 5000000, 1, 0) ==
+    Require(sceNetResolverStartNtoa(resolver, "guest-sce-net.invalid.", ipv4.data(), 5000000, 1, 0) ==
         static_cast<int>(0x804101E1));
     Require(sceNetResolverGetError(resolver, &resolver_error) == 0 &&
         resolver_error == static_cast<int>(0x804101E1));
@@ -667,7 +667,7 @@ int main() {
         static_cast<int>(0x80410116) && *sceNetErrnoLoc() == 22 && records == resolved);
     Require(sceNetResolverStartNtoaMultipleRecordsEx(resolver, "localhost", nullptr, 5000000, 1, 0) ==
         static_cast<int>(0x80410116) && *sceNetErrnoLoc() == 22);
-    Require(sceNetResolverStartNtoaMultipleRecordsEx(resolver, "guest-sce-net.invalid", records.data(), 5000000, 1, 0) ==
+    Require(sceNetResolverStartNtoaMultipleRecordsEx(resolver, "guest-sce-net.invalid.", records.data(), 5000000, 1, 0) ==
         static_cast<int>(0x804101E1) && records == resolved);
     Require(sceNetResolverGetError(resolver, nullptr) == static_cast<int>(0x80410116) && *sceNetErrnoLoc() == 22);
     Require(sceNetResolverDestroy(resolver) == 0);
