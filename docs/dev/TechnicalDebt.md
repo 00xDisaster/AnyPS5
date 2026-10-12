@@ -369,6 +369,7 @@ Throughout the project, every function at every stage either **does exactly what
 - [sceAppContentGetAddcontDownloadProgress](../../core/libs/prx/libSceAppContent/Export.cpp) (libSceAppContent) - imported by PPSA08755, which fails to load without it; added without an implementation because its behavior is unverified. [SharpProspero](https://github.com/SvenGDK/SharpProspero) lists `(uint32_t serviceLabel, entitlementLabel, SceAppContentAddcontDownloadProgress*)`, but no PS5 reference gives the progress layout or the error codes
 
 - [_sceFiberGetThreadFramePointerAddress](../../core/libs/prx/libSceFiber/Export.cpp) (libSceFiber, NID `0dy4JtMUcMQ`) forwards to `sceFiberGetThreadFramePointerAddress`; that the argument list matches is inferred from the export without the underscore, as for the underscore Ult exports, not measured
+- [sceAgcAcbWaitUntilSafeForRendering](../../core/libs/prx/libSceAgc/Acb/src/Control.cpp) (libSceAgc) - `(buffer, videoOutHandle, displayBufferIndex)`, the declared arguments, which PPSA12544 (01.000.010) passes inside `waitUntilSafeForRendering` and `waitUntilSafeForRendering VR` markers on an asynchronous compute command buffer, ignoring the result. It writes the same rendering-wait packet as `sceAgcDcbWaitUntilSafeForRendering`, which the driver now accepts on compute queues too; the wait blocks only that queue's worker. Whether the console encodes the compute variant differently is not known
 
 ### Functional
 
