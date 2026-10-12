@@ -723,12 +723,26 @@ public:
     }
 
     static RegistrationPreparePool& Prebuild() {
-        static auto* pool = new RegistrationPreparePool([] {
+        static auto* pool = [] {
             const char* text = std::getenv("APS5_PREBUILD_THREADS");
-            return text != nullptr ? std::max(1u, static_cast<unsigned>(std::strtoul(text, nullptr, 10))) : 1u;
-        }());
+            auto* created = new RegistrationPreparePool(text != nullptr ? std::max(1u, static_cast<unsigned>(std::strtoul(text, nullptr, 10))) : 1u);
+            PrebuildSlot().store(created);
+            return created;
+        }();
         return *pool;
     }
+
+    static RegistrationPreparePool* ExistingPrebuild() {
+        return PrebuildSlot().load();
+    }
+
+private:
+    static std::atomic<RegistrationPreparePool*>& PrebuildSlot() {
+        static std::atomic<RegistrationPreparePool*> slot{nullptr};
+        return slot;
+    }
+
+public:
 
     void Submit(std::function<void()> task) {
         {
@@ -837,7 +851,7 @@ void SubmitLibraryPrebuild(std::function<void()> task) {
 
 void CloseRegistrationPreparation() {
     RegistrationPreparePool::Instance().Close();
-    RegistrationPreparePool::Prebuild().Close();
+    if (auto* prebuild = RegistrationPreparePool::ExistingPrebuild()) prebuild->Close();
 }
 
 std::vector<PreparedGraphicsStage> PrepareGraphicsStages(const DrawDecode& decoded, const ShaderRecompiler::SpirvTarget& target) {
