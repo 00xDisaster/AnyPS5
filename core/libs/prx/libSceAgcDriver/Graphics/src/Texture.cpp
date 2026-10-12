@@ -2989,8 +2989,8 @@ const StorageDumpSelector& StorageDumpSelection() {
         StorageDumpSelector parsed;
         const char* text = std::getenv("APS5_DUMP_STORAGE");
         if (text == nullptr) return parsed;
-        if (std::sscanf(text, "%ux%ux%u:%u", &parsed.width, &parsed.height, &parsed.layers, &parsed.format) >= 3) {
-            parsed.anyFormat = std::strchr(text, ':') == nullptr;
+        if (const int fields = std::sscanf(text, "%ux%ux%u:%u", &parsed.width, &parsed.height, &parsed.layers, &parsed.format); fields >= 3) {
+            parsed.anyFormat = fields < 4;
             return parsed;
         }
         parsed.address = std::strtoull(text, nullptr, 16);
