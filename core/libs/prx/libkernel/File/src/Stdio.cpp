@@ -437,10 +437,6 @@ static int PathError(const char* path) {
 bool DescriptorIsOpen_nid_no_patch(int descriptor) {
     return descriptor >= 0 && WithoutParameterHandler([descriptor] { return ::_get_osfhandle(descriptor) == -1 ? -1 : 0; }) == 0;
 }
-static void RejectDirectoryDuplicate(int descriptor, const char* function) {
-    if (File::DirectoryDescriptorPath(descriptor))
-        throw std::runtime_error(std::string(function) + ": duplicating a directory descriptor is not supported on Windows");
-}
 #else
 bool DescriptorIsOpen_nid_no_patch(int descriptor) {
     return descriptor >= 0 && ::fcntl(descriptor, F_GETFD) >= 0;
@@ -550,8 +546,8 @@ int APS5_VABI dup_nid_postfix(int d) {
     if (d >= GuestSockets::FirstDescriptor) return GuestSockets::Duplicate(d);
     if (d < 0) return PosixFailure(GUEST_EBADF);
 #ifdef _WIN32
-    RejectDirectoryDuplicate(d, __func__);
     const int duplicate = WithoutParameterHandler([d] { return ::_dup(d); });
+    if (duplicate >= 0) File::DuplicateDirectoryDescriptor(d, duplicate);
 #else
     const int duplicate = ::dup(d);
 #endif
@@ -579,10 +575,10 @@ int APS5_VABI dup2_nid_postfix(int from, int to) {
 #ifdef _WIN32
     if (WithoutParameterHandler([from] { return ::_get_osfhandle(from) == -1 ? -1 : 0; }) != 0) return PosixFailure(GUEST_EBADF);
     if (from == to) return to;
-    RejectDirectoryDuplicate(from, __func__);
     if (to == 2) PreserveHostStandardError();
     if (WithoutParameterHandler([from, to] { return ::_dup2(from, to); }) != 0) return PosixFailure(SceErrorFromErrno(errno) & 0xffff);
     File::ForgetDirectoryDescriptor(to);
+    File::DuplicateDirectoryDescriptor(from, to);
     File::ForgetFileLock(to);
     File::ForgetRandomDevice(to);
     if (sourceIsRandom) File::RememberRandomDevice(to);
