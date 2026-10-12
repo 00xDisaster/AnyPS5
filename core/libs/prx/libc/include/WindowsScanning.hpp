@@ -16,6 +16,14 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
     std::vector<void*> pointers;
     std::vector<int> suppressedEnds(static_cast<size_t>(std::count(format, format + std::strlen(format), '%')), -1);
     size_t suppressedCount = 0;
+    struct NarrowInteger {
+        void* destination;
+        size_t size;
+        long long value;
+        int end;
+    };
+    std::vector<NarrowInteger> narrowIntegers;
+    narrowIntegers.reserve(suppressedEnds.size());
     FormatArguments args(source);
     while (*format) {
         const char value = *format++;
@@ -26,7 +34,7 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
         if (suppressed) translated += *format++;
         while (*format >= '0' && *format <= '9') translated += *format++;
         std::string length;
-        if (*format && std::strchr("hljztL", *format)) {
+        if (*format && std::strchr("hljztLq", *format)) {
             length += *format++;
             if ((length == "h" && *format == 'h') || (length == "l" && *format == 'l')) length += *format++;
         }
@@ -37,7 +45,8 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
             return EOF;
         }
         ++format;
-        if (std::strchr("diouxXn", conversion) && (length == "l" || length == "j" || length == "z" || length == "t"))
+        const bool narrow = !suppressed && std::strchr("diouxX", conversion) && (length.empty() || length == "h" || length == "hh");
+        if (narrow || (std::strchr("diouxXn", conversion) && (length == "l" || length == "j" || length == "z" || length == "t" || length == "q")))
             translated += "ll";
         else translated += length;
         translated += conversion;
@@ -48,13 +57,24 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
             if (*format != ']') { errno = 22; return EOF; }
             translated += *format++;
         }
-        if (!suppressed) pointers.push_back(args.Next<void*>());
+        if (narrow) {
+            narrowIntegers.push_back({args.Next<void*>(), length.empty() ? sizeof(int) : length == "h" ? sizeof(short) : sizeof(char), 0, -1});
+            translated += "%n";
+            pointers.push_back(&narrowIntegers.back().value);
+            pointers.push_back(&narrowIntegers.back().end);
+        } else if (!suppressed) pointers.push_back(args.Next<void*>());
         else if (conversion != 'n') {
             translated += "%n";
             pointers.push_back(&suppressedEnds[suppressedCount++]);
         }
     }
     const int result = scan(translated.c_str(), reinterpret_cast<char*>(pointers.data()));
+    for (const auto& integer : narrowIntegers) {
+        if (integer.end < 0) continue;
+        if (integer.size == sizeof(char)) *static_cast<char*>(integer.destination) = static_cast<char>(integer.value);
+        else if (integer.size == sizeof(short)) *static_cast<short*>(integer.destination) = static_cast<short>(integer.value);
+        else *static_cast<int*>(integer.destination) = static_cast<int>(integer.value);
+    }
     if (result == EOF && std::any_of(suppressedEnds.begin(), suppressedEnds.begin() + suppressedCount, [](int end) { return end >= 0; }))
         return 0;
     return result;
