@@ -109,7 +109,7 @@ private:
         if (request.shader.stage == ShaderStage::Local) return;
         append(key, tessellation->patchesPerGroup);
         append(key, tessellation->primitiveGroupSize);
-        append(key, tessellation->breakAtInstance);
+        append(key, TessellationInstancePatches(request));
     }
 
     template<typename TValue>
