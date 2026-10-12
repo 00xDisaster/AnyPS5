@@ -9,10 +9,6 @@
   - libwinpthread-1.dll
 - winpthreads initializes a statically initialized rwlock on its first lock and fails a concurrent first lock with `EINVAL`, which `std::shared_mutex` and `std::shared_timed_mutex` ignore, so that lock does not exclude. Guest rwlocks ([Pthread.hpp](../../core/libs/prx/libkernel/Pthread/include/Pthread.hpp)) are locked once when created. The host `std::shared_mutex` objects in [Recompiler.cpp](../../core/shader/recompiler/Recompiler.cpp) and [GuestWriteWatch.cpp](../../core/libs/prx/libc/src/GuestWriteWatch.cpp) are not, and can still race on their first contended use.
 
-### Shutdown
-
-- On Windows, console-control termination can run function-local static destructors through `ExitProcess`. `Driver::~Driver()` stops GPU state, which can access the guest write tracker. `Driver::Driver()` therefore initializes the tracker before the `Driver` singleton finishes construction, so reverse static-destruction order keeps the tracker alive through driver teardown.
-
 ### Silent stubs
 
 Throughout the project, every function at every stage either **does exactly what it's supposed to or throws an exception**. Everywhere... except:
