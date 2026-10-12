@@ -23,38 +23,6 @@
 #include <io.h>
 #include <sys/stat.h>
 #include <windows.h>
-static int OpenError(DWORD error) {
-    switch (error) {
-    case ERROR_FILE_NOT_FOUND:
-    case ERROR_PATH_NOT_FOUND:
-    case ERROR_INVALID_DRIVE:
-    case ERROR_BAD_NETPATH:
-    case ERROR_BAD_NET_NAME:
-    case ERROR_BAD_PATHNAME:
-    case ERROR_FILENAME_EXCED_RANGE:
-        return ENOENT;
-    case ERROR_ACCESS_DENIED:
-    case ERROR_SHARING_VIOLATION:
-    case ERROR_LOCK_VIOLATION:
-    case ERROR_WRITE_PROTECT:
-    case ERROR_NETWORK_ACCESS_DENIED:
-    case ERROR_CANNOT_MAKE:
-    case ERROR_DRIVE_LOCKED:
-        return EACCES;
-    case ERROR_FILE_EXISTS:
-    case ERROR_ALREADY_EXISTS:
-        return EEXIST;
-    case ERROR_TOO_MANY_OPEN_FILES:
-        return EMFILE;
-    case ERROR_NOT_ENOUGH_MEMORY:
-    case ERROR_OUTOFMEMORY:
-        return ENOMEM;
-    case ERROR_DISK_FULL:
-        return ENOSPC;
-    default:
-        return EINVAL;
-    }
-}
 static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint16_t mode) {
     const int access = nativeFlags & (_O_RDONLY | _O_WRONLY | _O_RDWR);
     const DWORD desired = access == _O_RDONLY ? GENERIC_READ : access == _O_WRONLY ? GENERIC_WRITE : GENERIC_READ | GENERIC_WRITE;
@@ -65,7 +33,7 @@ static int NativeOpen(const std::filesystem::path& p, int nativeFlags, std::uint
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     const auto handle = CreateFileW(p.c_str(), desired, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &security, disposition, attributes, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-        errno = OpenError(GetLastError());
+        errno = WindowsOpenError_nid_no_patch(GetLastError());
         return -1;
     }
     const int descriptor = ::_open_osfhandle(reinterpret_cast<std::intptr_t>(handle), nativeFlags & (_O_APPEND | _O_RDONLY | _O_BINARY));
