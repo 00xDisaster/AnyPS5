@@ -431,8 +431,19 @@ std::uint32_t formattedCall(SpirvValueEmitContext& context, const IrValue& instr
         }
         EmitLabel(state, state.module.AllocateId());
         state.memoryByteOffsets.at(element) = parameters[4];
-        state.bufferMisalignment = parameters[9];
-        const RuntimeDescriptor shared{ConstantU32(state, 0u), parameters[3], parameters[5], parameters[6], nonzero(state, parameters[7]), parameters[0], nonzero(state, parameters[8]), parameters[1], parameters[2]};
+        const auto first = PipelineSpecialization::BufferBase + memory.resource * PipelineSpecialization::BufferWords;
+        RuntimeDescriptor shared{};
+        if (state.registrationModules) {
+            state.bufferMisalignment = parameters[9];
+            const auto word3 = state.program.Info().buffers.at(memory.resource).descriptorFormatted ? state.module.SpecializationConstant(u32, first + 1u, 0u) : parameters[6];
+            shared = {ConstantU32(state, 0u), parameters[3], parameters[5], word3, nonzero(state, parameters[7]), parameters[0], nonzero(state, parameters[8]), parameters[1], parameters[2]};
+        } else {
+            const auto word1 = state.module.SpecializationConstant(u32, first, 0u);
+            const auto stride = field(state, word1, 16u, 14u);
+            const auto swizzle = both(state, nonzero(state, stride), nonzero(state, field(state, word1, 31u, 1u)));
+            const auto valid = nonzero(state, state.module.SpecializationConstant(u32, first + 2u, 0u));
+            shared = {ConstantU32(state, 0u), parameters[3], stride, state.module.SpecializationConstant(u32, first + 1u, 0u), swizzle, parameters[0], valid, parameters[1], parameters[2]};
+        }
         const auto value = formatSwitch(context, instruction, shared, components, store, store ? parameters[10] : 0u);
         if (store) state.module.AddFunction(spv::OpReturn);
         else state.module.AddFunction(spv::OpReturnValue, value);
