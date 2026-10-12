@@ -311,7 +311,9 @@ int APS5_VABI strcat_s_nid_postfix(char* dest, size_t destsz, const char* src) {
 int APS5_VABI memcpy_s_nid_postfix(void* dest, size_t destsz, const void* src, size_t count) {
     constexpr int GuestEinval = 22;
     constexpr int GuestErange = 34;
+    constexpr size_t RsizeMax = SIZE_MAX >> 1;
     if (!dest) return GuestEinval;
+    if (destsz > RsizeMax) return GuestErange;
     if (!src || count > destsz) {
         std::memset(dest, 0, destsz);
         return src ? GuestErange : GuestEinval;
@@ -330,7 +332,9 @@ int APS5_VABI memcpy_s_nid_postfix(void* dest, size_t destsz, const void* src, s
 int APS5_VABI memmove_s_nid_postfix(void* dest, size_t destsz, const void* src, size_t count) {
     constexpr int GuestEinval = 22;
     constexpr int GuestErange = 34;
+    constexpr size_t RsizeMax = SIZE_MAX >> 1;
     if (!dest) return GuestEinval;
+    if (destsz > RsizeMax) return GuestErange;
     if (!src || count > destsz) {
         std::memset(dest, 0, destsz);
         return src ? GuestErange : GuestEinval;
