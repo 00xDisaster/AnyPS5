@@ -2574,9 +2574,7 @@ void RunColorMetadataPass(const Context& context, const ColorMetadataPass& pass)
         return;
     }
     if (pass.mode == ColorMetadataPass::Mode::FmaskDecompress) {
-        if (context.device != VK_NULL_HANDLE) {
-            for (const auto& color : pass.targets) MaterializeMultisampleTargetClear(context, color);
-        }
+        for (const auto& color : pass.targets) MaterializeMultisampleTargetClear(context, color);
         return;
     }
     for (const auto& color : pass.targets) {

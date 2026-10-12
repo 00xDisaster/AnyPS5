@@ -5969,7 +5969,7 @@ void fmaskDecompressMsaaTests(const Device& device, Recorder& recorder) {
         std::cout << "4x color targets or host imports unavailable: FMASK decompress not tested\n";
         return;
     }
-    constexpr std::uint32_t side = 64;
+    constexpr std::uint32_t side = 128;
     constexpr std::size_t targetBytes = 65536u;
     constexpr std::size_t cmaskBytes = 4096u;
     constexpr std::size_t destBytes = targetBytes;
@@ -6035,7 +6035,9 @@ void fmaskDecompressMsaaTests(const Device& device, Recorder& recorder) {
     {
         std::lock_guard gpu(GpuMutex());
         RunColorMetadataPass(context, {ColorMetadataPass::Mode::FmaskDecompress, {source}});
-        RunColorMetadataPass(context, {ColorMetadataPass::Mode::Resolve, {destination}, source});
+        auto recolored = source;
+        recolored.clearWords = {0x55667788u, 0};
+        RunColorMetadataPass(context, {ColorMetadataPass::Mode::Resolve, {destination}, recolored});
         recorder.Submit();
         device.WaitQueue();
         recorder.Sync();

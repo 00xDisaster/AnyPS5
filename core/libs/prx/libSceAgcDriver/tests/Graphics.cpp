@@ -2533,7 +2533,6 @@ void multisampleTests() {
     auto fmaskPass = DecodeColorMetadataPass(queue);
     Require(fmaskPass.has_value() && fmaskPass->mode == ColorMetadataPass::Mode::FmaskDecompress && fmaskPass->targets.size() == 1 && fmaskPass->targets[0].samples == 4 && fmaskPass->targets[0].cmaskAddress == cmaskAddress && fmaskPass->targets[0].dccAddress != 0, "an FMASK decompress of a 4x multisampled target with CMASK and DCC did not decode");
     Require(fmaskPass->targets[0].clearWords[0] == 0x3f800000 && fmaskPass->targets[0].clearWords[1] == 0x3f800000, "fast clear words changed");
-    AgcDriver::Graphics::RunColorMetadataPass({}, *fmaskPass);
     queue = makeState();
     queue.context[0x0] = 0;
     queue.context[0x202] = 0x00cc0050;
@@ -2542,9 +2541,9 @@ void multisampleTests() {
     queue.context[0x2f8] = 0;
     queue.context[0x0] = 0;
     queue.context[0x202] = 0x00cc0050;
-    queue.context[0x31c] = 0x1002e028;
+    queue.context[0x31c] = 0x00008028;
     queue.context[0x31d] = 0x00012000;
-    expectFailure([&] { DecodeColorMetadataPass(queue); }, "without a CMASK address");
+    expectFailure([&] { DecodeColorMetadataPass(queue); }, "FMASK decompress of a target without a CMASK address");
 
     using AgcDriver::Graphics::DccKeys;
     using AgcDriver::Graphics::MultisampledCmask;
