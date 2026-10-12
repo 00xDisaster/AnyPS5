@@ -57,13 +57,99 @@ def elf_sections(path, data):
     return [unpack("<IIQQQQIIQQ", data, section_offset + index * 64, path, f"section header {index}") for index in range(section_count)]
 
 
+def elf_program_dynamic_symbols(path, data):
+    header = unpack("<16sHHIQQQIHHHHHH", data, 0, path, "ELF header")
+    ident, program_offset, program_size, program_count = header[0], header[5], header[9], header[10]
+    if ident[4] != 2 or ident[5] != 1 or program_size != 56 or not program_offset or not program_count:
+        raise AuditError(f"{path}: sectionless ELF needs little-endian ELF64 program headers")
+    take(data, program_offset, program_count * program_size, path, "program header table")
+    segments = [unpack("<IIQQQQQQ", data, program_offset + index * program_size, path, f"program header {index}") for index in range(program_count)]
+    loads = [segment for segment in segments if segment[0] == 1]
+
+    def file_offset(address, size, what):
+        for segment in loads:
+            _, _, offset, virtual, _, file_size, _, _ = segment
+            if address >= virtual and address - virtual <= file_size and size <= file_size - (address - virtual):
+                result = offset + address - virtual
+                take(data, result, size, path, what)
+                return result
+        raise AuditError(f"{path}: {what} address 0x{address:x} is outside file-backed load segments")
+
+    dynamic_segments = [segment for segment in segments if segment[0] == 2]
+    if len(dynamic_segments) != 1:
+        raise AuditError(f"{path}: expected one dynamic segment, found {len(dynamic_segments)}")
+    _, _, dynamic_offset, _, _, dynamic_size, _, _ = dynamic_segments[0]
+    if dynamic_size % 16:
+        raise AuditError(f"{path}: dynamic segment size {dynamic_size} is not a multiple of 16")
+    dynamic = {}
+    needed_offsets = []
+    for position in range(0, dynamic_size, 16):
+        tag, value = unpack("<qQ", data, dynamic_offset + position, path, "dynamic entry")
+        if tag == 0:
+            break
+        if tag == 1:
+            needed_offsets.append(value)
+        else:
+            dynamic[tag] = value
+    string_address = dynamic.get(5)
+    string_size = dynamic.get(10)
+    symbol_address = dynamic.get(6)
+    symbol_size = dynamic.get(11)
+    if None in (string_address, string_size, symbol_address, symbol_size) or symbol_size != 24 or string_size == 0:
+        raise AuditError(f"{path}: incomplete dynamic string or symbol table")
+    string_offset = file_offset(string_address, string_size, "dynamic string table")
+
+    symbol_count = None
+    if 4 in dynamic:
+        hash_offset = file_offset(dynamic[4], 8, "SysV hash table")
+        buckets, chains = unpack("<II", data, hash_offset, path, "SysV hash header")
+        take(data, hash_offset, 8 + 4 * (buckets + chains), path, "SysV hash table")
+        symbol_count = chains
+    elif 0x6ffffef5 in dynamic:
+        hash_offset = file_offset(dynamic[0x6ffffef5], 16, "GNU hash header")
+        buckets, first_symbol, bloom_count, _ = unpack("<IIII", data, hash_offset, path, "GNU hash header")
+        bucket_offset = hash_offset + 16 + bloom_count * 8
+        bucket_data = take(data, bucket_offset, buckets * 4, path, "GNU hash buckets")
+        chain_offset = bucket_offset + buckets * 4
+        maximum = first_symbol - 1
+        for index in struct.unpack(f"<{buckets}I", bucket_data) if buckets else ():
+            if index == 0:
+                continue
+            if index < first_symbol:
+                raise AuditError(f"{path}: GNU hash bucket index {index} precedes symbol offset {first_symbol}")
+            symbol_index = index
+            while True:
+                chain_address = dynamic[0x6ffffef5] + (chain_offset - hash_offset) + (symbol_index - first_symbol) * 4
+                chain_file_offset = file_offset(chain_address, 4, "GNU hash chain")
+                chain_value = unpack("<I", data, chain_file_offset, path, "GNU hash chain entry")[0]
+                maximum = max(maximum, symbol_index)
+                if chain_value & 1:
+                    break
+                symbol_index += 1
+        symbol_count = maximum + 1
+    if symbol_count is None:
+        raise AuditError(f"{path}: dynamic symbol table has no supported hash table")
+    symbol_offset = file_offset(symbol_address, symbol_count * symbol_size, "dynamic symbol table")
+    imports = set()
+    exports = set()
+    for index in range(symbol_count):
+        name, info, other, section_index, _, _ = unpack("<IBBHQQ", data, symbol_offset + index * symbol_size, path, "dynamic symbol")
+        if name == 0:
+            continue
+        symbol = cstring(data, string_offset + name, string_offset + string_size, path, "dynamic symbol name").split(MODULE_SUFFIX, 1)[0]
+        if section_index == 0:
+            imports.add(symbol)
+        elif info >> 4 in (1, 2, 10) and other & 3 in (0, 3):
+            exports.add(symbol)
+    needed = {cstring(data, string_offset + value, string_offset + string_size, path, "needed library name") for value in needed_offsets}
+    return imports, exports, needed
+
+
 def elf_exports(path, data):
-    try:
-        sections = elf_sections(path, data)
-    except AuditError as error:
-        if "without a section header table" in str(error):
-            return set()
-        raise
+    header = unpack("<16sHHIQQQIHHHHHH", data, 0, path, "ELF header")
+    if not header[6]:
+        return elf_program_dynamic_symbols(path, data)[1]
+    sections = elf_sections(path, data)
     names = set()
     for section_index, section in enumerate(sections):
         kind, offset, size, link, entry = section[1], section[4], section[5], section[6], section[9]
@@ -94,12 +180,11 @@ def elf_exports(path, data):
 
 
 def elf_imports(path, data):
-    try:
-        sections = elf_sections(path, data)
-    except AuditError as error:
-        if "without a section header table" in str(error):
-            return None
-        raise
+    header = unpack("<16sHHIQQQIHHHHHH", data, 0, path, "ELF header")
+    if not header[6]:
+        imports, _, needed = elf_program_dynamic_symbols(path, data)
+        return imports, needed
+    sections = elf_sections(path, data)
     symbols = set()
     needed = set()
     for section in sections:
@@ -240,9 +325,8 @@ def read_modules(directories):
         for file in directory_files(directory, "*"):
             data = file.read_bytes()
             own = elf_imports(file, data)
-            if own is not None:
-                symbols, needed = own
-                imports[file.name] = (sorted(symbols), sorted(needed))
+            symbols, needed = own
+            imports[file.name] = (sorted(symbols), sorted(needed))
             for name in elf_exports(file, data):
                 exports[name].add(file.name)
     return imports, {name: sorted(files) for name, files in exports.items()}

@@ -53,6 +53,50 @@ def build_elf(symbols, needed=()):
     return bytes(image)
 
 
+def build_sectionless_elf(symbols, needed=(), gnu_hash=False):
+    strings = b"\0"
+    entries = [struct.pack("<IBBHQQ", 0, 0, 0, 0, 0, 0)]
+    for name, index, info in symbols:
+        entries.append(struct.pack("<IBBHQQ", len(strings), info, 0, index, 0, 0))
+        strings += name.encode() + b"\0"
+    libraries = []
+    for library in needed:
+        libraries.append(len(strings))
+        strings += library.encode() + b"\0"
+    program_offset = 64
+    content_offset = program_offset + 2 * 56
+    strings_offset = content_offset
+    symbols_offset = (strings_offset + len(strings) + 7) & ~7
+    symbol_table = b"".join(entries)
+    hash_offset = (symbols_offset + len(symbol_table) + 3) & ~3
+    if gnu_hash:
+        hash_table = struct.pack("<IIII", 1, 1, 1, 0) + bytes(8)
+        hash_table += struct.pack("<I", 1) + b"".join(struct.pack("<I", 1 if index == len(entries) - 1 else 0) for index in range(1, len(entries)))
+        hash_tag = 0x6ffffef5
+    else:
+        hash_table = struct.pack("<II", 1, len(entries)) + struct.pack("<I", 0) + bytes(4 * len(entries))
+        hash_tag = 4
+    dynamic_offset = (hash_offset + len(hash_table) + 7) & ~7
+    dynamic = b"".join(struct.pack("<qQ", 1, value) for value in libraries)
+    dynamic += b"".join(struct.pack("<qQ", tag, value) for tag, value in (
+        (5, 0x400000 + strings_offset),
+        (10, len(strings)),
+        (6, 0x400000 + symbols_offset),
+        (11, 24),
+        (hash_tag, 0x400000 + hash_offset),
+        (0, 0),
+    ))
+    image = bytearray(dynamic_offset + len(dynamic))
+    image[strings_offset:strings_offset + len(strings)] = strings
+    image[symbols_offset:symbols_offset + len(symbol_table)] = symbol_table
+    image[hash_offset:hash_offset + len(hash_table)] = hash_table
+    image[dynamic_offset:dynamic_offset + len(dynamic)] = dynamic
+    image[program_offset:program_offset + 56] = struct.pack("<IIQQQQQQ", 1, 7, 0, 0x400000, 0x400000, len(image), len(image), 0x1000)
+    image[program_offset + 56:program_offset + 112] = struct.pack("<IIQQQQQQ", 2, 6, dynamic_offset, 0x400000 + dynamic_offset, 0x400000 + dynamic_offset, len(dynamic), len(dynamic), 8)
+    image[:64] = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01\x01" + bytes(9), 3, 0x3e, 1, 0, program_offset, 0, 0, 64, 56, 2, 64, 0, 0)
+    return bytes(image)
+
+
 def exporting(*names):
     return build_elf([(name, 1, GLOBAL_FUNCTION) for name in names])
 
@@ -207,23 +251,29 @@ class ImportAuditTests(unittest.TestCase):
         self.assertIn("guest.prx", err)
         self.assertIn("ELF", err)
 
-    def test_module_without_section_headers_is_skipped(self):
+    def test_sectionless_module_imports_and_exports_are_audited(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(exporting("AAAAAAAAAAA"))
-        raw = bytearray(build_elf([("AAAAAAAAAAA", 0, GLOBAL_FUNCTION)], []))
-        struct.pack_into("<Q", raw, 40, 0)
-        struct.pack_into("<H", raw, 60, 0)
-        (work.modules / "stripped.prx").write_bytes(bytes(raw))
+        (work.modules / "stripped.prx").write_bytes(build_sectionless_elf([
+            ("AAAAAAAAAAA", 0, GLOBAL_FUNCTION), ("BBBBBBBBBBB", 1, GLOBAL_FUNCTION)], ["libSceA.prx"]))
         (work.modules / "main.prx").write_bytes(build_elf([("BBBBBBBBBBB", 0, GLOBAL_FUNCTION)], []))
         registry = work.root / "game.json"
         write_registry(registry, [])
         result = work.root / "audit.json"
         code, out, err = work.run(registry, "--json", str(result))
-        self.assertEqual((code, err), (1, ""))
+        self.assertEqual((code, err), (0, ""))
         data = json.loads(result.read_text())
-        stripped = [record for record in data["imports"] if record["module"] == "stripped.prx"]
-        self.assertEqual(stripped, [])
-        self.assertIn("BBBBBBBBBBB  (imported by main.prx)", out)
+        self.assertEqual(data["references"], 2)
+        records = {(record["nid"], record["module"]): record for record in data["imports"]}
+        self.assertEqual(records[("AAAAAAAAAAA", "stripped.prx")]["class"], "implemented")
+        self.assertEqual(records[("BBBBBBBBBBB", "main.prx")]["class"], "implemented")
+
+    def test_sectionless_elf_gnu_hash(self):
+        image = build_sectionless_elf([
+            ("AAAAAAAAAAA", 0, GLOBAL_FUNCTION), ("BBBBBBBBBBB", 1, GLOBAL_FUNCTION)],
+            ["libSceA.prx"], gnu_hash=True)
+        self.assertEqual(import_audit.elf_program_dynamic_symbols(Path("module.prx"), image),
+                         ({"AAAAAAAAAAA"}, {"BBBBBBBBBBB"}, {"libSceA.prx"}))
 
     def test_module_symbol_suffix_is_stripped(self):
         work = self.work
