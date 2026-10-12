@@ -192,6 +192,55 @@ int main(int argc, char** argv) {
                 "receive releases the host write guard");
         }
     }
+    if (from && !stream) {
+        std::int64_t outputPhysical = 0;
+        Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 2, 0, 0, &outputPhysical) == 0,
+            "allocate sender output memory");
+        void* outputMapping = nullptr;
+        Require(sceKernelMapDirectMemory(&outputMapping, page * 2, 3, 0, outputPhysical, 0) == 0,
+            "map sender output memory");
+        const auto collectOutputs = [&] {
+            std::array<void*, 16> pages{};
+            std::size_t count = pages.size();
+            Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(outputMapping), page * 2,
+                pages.data(), &count, true), "collect sender output writes");
+            return count;
+        };
+        for (const int mask : {1, 2, 3}) {
+            std::array<unsigned char, 32> hostAddress{};
+            std::uint32_t hostLength = hostAddress.size();
+            auto* address = (mask & 1) ? static_cast<unsigned char*>(outputMapping) + 16 : hostAddress.data();
+            auto* length = (mask & 2) ? reinterpret_cast<std::uint32_t*>(static_cast<unsigned char*>(outputMapping) + page + 16) :
+                &hostLength;
+            {
+                const GuestArena::HostWrite addressDestination(address, hostAddress.size());
+                const GuestArena::HostWrite lengthDestination(length, sizeof(*length));
+                Require(addressDestination.Open() && lengthDestination.Open(), "initialize sender outputs");
+                std::memset(address, 0xa5, hostAddress.size());
+                *length = hostAddress.size();
+            }
+            collectOutputs();
+            Require(collectOutputs() == 0, "sender outputs initially clean");
+            if (mask & 1) Require(Protection(address) == PAGE_READONLY, "sender address is watched and armed");
+            if (mask & 2) Require(Protection(length) == PAGE_READONLY, "sender length is watched and armed");
+            send();
+            waitForPacket();
+            reset();
+            collect();
+            *error = 123;
+            Require(receive(buffer, capacity, 0, address, length) == sizeof(payload) && *error == 123 &&
+                std::memcmp(buffer, payload, sizeof(payload)) == 0, "receive into watched sender outputs");
+            Require(*length == senderAddress.size() && std::memcmp(address, senderAddress.data(), *length) == 0,
+                "watched sender outputs are correct");
+            const auto expectedPages = static_cast<std::size_t>(((mask & 1) != 0) + ((mask & 2) != 0)) * (page / 4096);
+            Require(collectOutputs() == expectedPages, "each watched sender output is tracked");
+            Require(collectOutputs() == 0, "sender output writes cleared");
+            if (mask & 1) Require(Protection(address) == PAGE_READONLY, "sender address rearmed");
+            if (mask & 2) Require(Protection(length) == PAGE_READONLY, "sender length rearmed");
+        }
+        Require(sceKernelMunmap(outputMapping, page * 2) == 0, "unmap sender outputs");
+        Require(sceKernelReleaseDirectMemory(outputPhysical, page * 2) == 0, "release sender output memory");
+    }
     reset();
     collect();
     *error = 0;
