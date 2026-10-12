@@ -1,4 +1,5 @@
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -6,10 +7,10 @@ import sys
 from html import escape
 from pathlib import Path
 
-try:
-    from tools.nid_names import CPP_TOKEN
-except ImportError:
-    from nid_names import CPP_TOKEN
+tokenizer_spec = importlib.util.spec_from_file_location("anyps5_cpp_tokenizer", Path(__file__).with_name("nid_names.py"))
+tokenizer = importlib.util.module_from_spec(tokenizer_spec)
+tokenizer_spec.loader.exec_module(tokenizer)
+CPP_TOKEN = tokenizer.CPP_TOKEN
 
 ROOT = Path(__file__).resolve().parent.parent
 PRX = ROOT / "core" / "libs" / "prx"
