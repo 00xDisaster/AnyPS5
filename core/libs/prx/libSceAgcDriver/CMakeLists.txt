@@ -265,6 +265,9 @@ target_link_libraries(libSceAgcDriver PRIVATE
         jpeg_turbo
         ${CMAKE_DL_LIBS}
 )
+if(APS5_ENABLE_TRACY)
+    target_link_libraries(libSceAgcDriver PUBLIC TracyClient)
+endif()
 
 set_target_properties(libSceAgcDriver PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(libSceAgcDriver)
