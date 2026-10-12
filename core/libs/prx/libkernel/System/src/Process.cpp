@@ -107,14 +107,22 @@ ProcessArguments& getProcessArguments() {
     return arguments;
 }
 
-void validateSchedulingPolicy(int policy) {
-    if (policy < 1 || policy > 3)
-        throw std::invalid_argument("Unsupported guest scheduling policy");
+bool hasPriorityRange(int policy) {
+    return policy == 1 || policy == 3;
 }
 
 constexpr int guestFault = 14;
 constexpr int guestInvalid = 22;
+constexpr int guestRlimitCpu = 0;
+constexpr int guestRlimitFsize = 1;
 constexpr int guestRlimitData = 2;
+constexpr int guestRlimitCore = 4;
+constexpr int guestRlimitSbsize = 9;
+constexpr int guestRlimitVmem = 10;
+constexpr int guestRlimitNpts = 11;
+constexpr int guestRlimitSwap = 12;
+constexpr int guestRlimitKqueues = 13;
+constexpr int guestRlimitUmtxp = 14;
 constexpr int guestRlimitCount = 15;
 constexpr std::int64_t guestRlimitInfinity = std::numeric_limits<std::int64_t>::max();
 
@@ -363,13 +371,19 @@ void APS5_VABI sync_nid_postfix(void) {
 }
 
 int APS5_VABI sched_get_priority_max_nid_postfix(int policy) {
-    validateSchedulingPolicy(policy);
-    return 256;
+    if (!hasPriorityRange(policy)) {
+        *__error_nid_postfix() = guestInvalid;
+        return -1;
+    }
+    return 767;
 }
 
 int APS5_VABI sched_get_priority_min_nid_postfix(int policy) {
-    validateSchedulingPolicy(policy);
-    return 767;
+    if (!hasPriorityRange(policy)) {
+        *__error_nid_postfix() = guestInvalid;
+        return -1;
+    }
+    return 256;
 }
 
 int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
@@ -451,20 +465,36 @@ int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
         *__error_nid_postfix() = guestFault;
         return -1;
     }
-    if (resource != guestRlimitData)
-        throw std::runtime_error("getrlimit: unsupported resource " + std::to_string(resource));
+    switch (resource) {
+    case guestRlimitData: {
 #ifdef _WIN32
-    const std::int64_t memory = hostMemoryLimit();
-    limit->rlim_cur = memory;
-    limit->rlim_max = memory;
+        const std::int64_t memory = hostMemoryLimit();
+        limit->rlim_cur = memory;
+        limit->rlim_max = memory;
 #else
-    rlimit native{};
-    if (::getrlimit(RLIMIT_DATA, &native) != 0)
-        throw std::system_error(errno, std::generic_category(), "getrlimit: getrlimit failed");
-    limit->rlim_cur = toGuestLimit(native.rlim_cur);
-    limit->rlim_max = toGuestLimit(native.rlim_max);
+        rlimit native{};
+        if (::getrlimit(RLIMIT_DATA, &native) != 0)
+            throw std::system_error(errno, std::generic_category(), "getrlimit: getrlimit failed");
+        limit->rlim_cur = toGuestLimit(native.rlim_cur);
+        limit->rlim_max = toGuestLimit(native.rlim_max);
 #endif
-    return 0;
+        return 0;
+    }
+    case guestRlimitCpu:
+    case guestRlimitFsize:
+    case guestRlimitCore:
+    case guestRlimitSbsize:
+    case guestRlimitVmem:
+    case guestRlimitNpts:
+    case guestRlimitSwap:
+    case guestRlimitKqueues:
+    case guestRlimitUmtxp:
+        limit->rlim_cur = guestRlimitInfinity;
+        limit->rlim_max = guestRlimitInfinity;
+        return 0;
+    default:
+        throw std::runtime_error("getrlimit: unsupported resource " + std::to_string(resource));
+    }
 }
 
 int APS5_VABI sceKernelIsTrinityMode(void) {
