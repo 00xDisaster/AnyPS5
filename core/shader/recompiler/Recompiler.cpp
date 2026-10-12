@@ -458,8 +458,8 @@ std::uint64_t nextVariantId() {
     return variants.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-template <typename Step>
-auto recordEmissionFailure(std::exception_ptr* emissionFailure, Step&& step) -> decltype(step()) {
+template<typename TStep>
+auto recordEmissionFailure(std::exception_ptr* emissionFailure, TStep&& step) -> decltype(step()) {
     try {
         return step();
     } catch (const std::bad_alloc&) {
