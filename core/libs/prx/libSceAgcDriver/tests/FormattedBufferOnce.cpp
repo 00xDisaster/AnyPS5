@@ -35,6 +35,7 @@ struct Counts {
     std::size_t calls = 0;
     std::size_t functions = 0;
     std::size_t notInlined = 0;
+    std::size_t compareExchanges = 0;
 };
 
 Counts Count(std::span<const std::uint32_t> words) {
@@ -46,6 +47,7 @@ Counts Count(std::span<const std::uint32_t> words) {
         const auto opcode = words[offset] & spv::OpCodeMask;
         if (opcode == spv::OpSwitch) ++counts.switches;
         if (opcode == spv::OpFunctionCall) ++counts.calls;
+        if (opcode == spv::OpAtomicCompareExchange) ++counts.compareExchanges;
         if (opcode == spv::OpFunction) {
             ++counts.functions;
             if (count > 3 && (words[offset + 3] & spv::FunctionControlDontInlineMask) != 0) ++counts.notInlined;
@@ -91,6 +93,7 @@ int main() {
         const auto gpuOne = Compile(1, false, true);
         const auto vertexSpecialized = Compile(1, false, false, true, false);
         const auto vertexRegistration = Compile(1, false, false, true, true);
+        Check(vertexRegistration.compareExchanges == vertexSpecialized.compareExchanges, "formatted buffer once: in registration form a store through an aligned V# kept the unaligned compare-exchange path (" + std::to_string(vertexRegistration.compareExchanges) + " compare-exchanges, " + std::to_string(vertexSpecialized.compareExchanges) + " specialized)");
         Check(vertexRegistration.words < vertexSpecialized.words + vertexSpecialized.words / 2u, "formatted buffer once: in registration form a formatted load from a known descriptor kept every format's decoder (" + std::to_string(vertexRegistration.words) + " words, " + std::to_string(vertexSpecialized.words) + " specialized)");
         Check(one.words < gpuOne.words / 2u, "formatted buffer once: a formatted load from a known descriptor kept every format's decoder (" + std::to_string(one.words) + " words, a GPU-selected descriptor needs " + std::to_string(gpuOne.words) + ")");
         Check(one.calls == none.calls + 1 && one.functions == none.functions + 1, "formatted buffer once: one formatted load emitted " + std::to_string(one.calls - none.calls) + " calls and " + std::to_string(one.functions - none.functions) + " functions more than none, expected one call to one shared function");

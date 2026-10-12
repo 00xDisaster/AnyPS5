@@ -93,7 +93,6 @@ struct SpirvEmitterState {
     bool float64DenormPreserve = false;
     bool registrationModules = false;
     bool fragmentDescriptorSet = false;
-    std::uint32_t bufferMisalignment = 0;
     std::unordered_set<const IrValue*> sharedLaneValues;
     std::uint32_t laneHalf = 0;
     // The target's SPIR-V version and what the device accepts, for capabilities an emitter adds

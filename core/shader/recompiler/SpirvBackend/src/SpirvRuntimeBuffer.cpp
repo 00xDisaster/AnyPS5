@@ -144,8 +144,6 @@ std::uint32_t baseMisalignment(SpirvValueEmitContext& context, const IrValue& in
     const auto& memory = context.Memory(instruction);
     if (memory.kind == ResourceKind::ScalarBuffer) return ConstantU32(context.state, 0u);
     auto& state = context.state;
-    if (state.bufferMisalignment != 0u) return state.bufferMisalignment;
-    if (state.registrationModules) return Binary(state, spv::OpBitwiseAnd, TypeU32(state), context.Arg(*instruction.Argument(0)->Resolve(), 0u), ConstantU32(state, 3u));
     return state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::BufferBase + memory.resource * PipelineSpecialization::BufferWords + 3u, 0u);
 }
 
@@ -406,7 +404,7 @@ std::uint32_t formattedCall(SpirvValueEmitContext& context, const IrValue& instr
     auto function = state.formattedBufferFunctions.find(key);
     if (function == state.formattedBufferFunctions.end()) {
         const auto id = state.module.AllocateId();
-        const auto functionType = store ? state.module.Type(spv::OpTypeFunction, resultType, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, valueType) : state.module.Type(spv::OpTypeFunction, resultType, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
+        const auto functionType = store ? state.module.Type(spv::OpTypeFunction, resultType, u32, u32, u32, u32, u32, u32, u32, u32, u32, valueType) : state.module.Type(spv::OpTypeFunction, resultType, u32, u32, u32, u32, u32, u32, u32, u32, u32);
         const auto label = state.currentLabel;
         const auto byteOffset = state.memoryByteOffsets.at(element);
         struct Restore {
@@ -417,24 +415,22 @@ std::uint32_t formattedCall(SpirvValueEmitContext& context, const IrValue& instr
             ~Restore() {
                 state.module.EndHelperFunction();
                 state.memoryByteOffsets.at(element) = byteOffset;
-                state.bufferMisalignment = 0u;
                 state.currentLabel = label;
             }
         };
         state.module.BeginHelperFunction();
         const Restore restore{state, element, label, byteOffset};
         state.module.AddFunction(spv::OpFunction, resultType, id, spv::FunctionControlDontInlineMask, functionType);
-        std::array<std::uint32_t, 11> parameters{};
-        for (std::uint32_t index = 0; index < (store ? 11u : 10u); ++index) {
+        std::array<std::uint32_t, 10> parameters{};
+        for (std::uint32_t index = 0; index < (store ? 10u : 9u); ++index) {
             parameters[index] = state.module.AllocateId();
-            state.module.AddFunction(spv::OpFunctionParameter, index == 10u ? valueType : u32, parameters[index]);
+            state.module.AddFunction(spv::OpFunctionParameter, index == 9u ? valueType : u32, parameters[index]);
         }
         EmitLabel(state, state.module.AllocateId());
         state.memoryByteOffsets.at(element) = parameters[4];
         const auto first = PipelineSpecialization::BufferBase + memory.resource * PipelineSpecialization::BufferWords;
         RuntimeDescriptor shared{};
         if (state.registrationModules) {
-            state.bufferMisalignment = parameters[9];
             const auto word3 = state.program.Info().buffers.at(memory.resource).descriptorFormatted ? state.module.SpecializationConstant(u32, first + 1u, 0u) : parameters[6];
             shared = {ConstantU32(state, 0u), parameters[3], parameters[5], word3, nonzero(state, parameters[7]), parameters[0], nonzero(state, parameters[8]), parameters[1], parameters[2]};
         } else {
@@ -444,7 +440,7 @@ std::uint32_t formattedCall(SpirvValueEmitContext& context, const IrValue& instr
             const auto valid = nonzero(state, state.module.SpecializationConstant(u32, first + 2u, 0u));
             shared = {ConstantU32(state, 0u), parameters[3], stride, state.module.SpecializationConstant(u32, first + 1u, 0u), swizzle, parameters[0], valid, parameters[1], parameters[2]};
         }
-        const auto value = formatSwitch(context, instruction, shared, components, store, store ? parameters[10] : 0u);
+        const auto value = formatSwitch(context, instruction, shared, components, store, store ? parameters[9] : 0u);
         if (store) state.module.AddFunction(spv::OpReturn);
         else state.module.AddFunction(spv::OpReturnValue, value);
         state.module.AddFunction(spv::OpFunctionEnd);
@@ -455,9 +451,8 @@ std::uint32_t formattedCall(SpirvValueEmitContext& context, const IrValue& instr
     const auto flag = [&](std::uint32_t condition) { return Select(state, u32, condition, ConstantU32(state, 1u), ConstantU32(state, 0u)); };
     const auto swizzle = flag(resource.swizzle);
     const auto valid = flag(resource.valid);
-    const auto misalignment = baseMisalignment(context, instruction);
-    if (store) state.module.AddFunction(spv::OpFunctionCall, resultType, result, function->second, resource.index, offset, context.Arg(instruction, 3u), resource.records, state.memoryByteOffsets.at(element), resource.stride, resource.word3, swizzle, valid, misalignment, data);
-    else state.module.AddFunction(spv::OpFunctionCall, resultType, result, function->second, resource.index, offset, context.Arg(instruction, 3u), resource.records, state.memoryByteOffsets.at(element), resource.stride, resource.word3, swizzle, valid, misalignment);
+    if (store) state.module.AddFunction(spv::OpFunctionCall, resultType, result, function->second, resource.index, offset, context.Arg(instruction, 3u), resource.records, state.memoryByteOffsets.at(element), resource.stride, resource.word3, swizzle, valid, data);
+    else state.module.AddFunction(spv::OpFunctionCall, resultType, result, function->second, resource.index, offset, context.Arg(instruction, 3u), resource.records, state.memoryByteOffsets.at(element), resource.stride, resource.word3, swizzle, valid);
     return store ? ConstantU32(state, 0u) : result;
 }
 
