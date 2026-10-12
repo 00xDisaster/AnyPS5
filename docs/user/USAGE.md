@@ -106,6 +106,8 @@ Windows PowerShell:
 .\app.exe
 ```
 
+A Windows executable started without a standard output or error handle, such as a `--windows-gui` build started from Explorer, writes that output to `anyps5.log` beside it, replacing the previous run's file. Without write access to that directory it runs without the log.
+
 ### Controller input for test runs
 
 Set `APS5_PAD_INPUT_FILE` to an absolute path before launching the application to enable controller pulses from a local command file. Once the application is reading controller input, send a button with the helper from the repository root:
@@ -118,8 +120,6 @@ python3 tools/pad_input.py /tmp/anyps5-pad release
 ```
 
 Run the helper in a second terminal. Commands are polled at most every 100 ms during controller reads and add to physical controller input. A press lasts 300 ms by default, starting when the application reads it, and releases automatically; `--hold-ms` accepts 1–5000 ms. Wait for the application to observe a release before sending another press. The file holds only the latest command; rapid commands can replace one another. Commands left over when the application first reads the controller are ignored. Without the environment variable, file input is disabled.
-
-A Windows executable started without a standard output or error handle, such as a `--windows-gui` build started from Explorer, writes that output to `anyps5.log` beside it, replacing the previous run's file. Without write access to that directory it runs without the log.
 
 ### System fonts
 
