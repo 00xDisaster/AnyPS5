@@ -385,6 +385,8 @@ public:
         return local;
     }
 
+    static void StopOutput();
+
 private:
     inline static std::atomic<bool> recording{false};
     inline static std::atomic<std::uint64_t> presentCount{0};
