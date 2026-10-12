@@ -448,6 +448,7 @@ static void CheckMtypeprotect() {
     Require(sceKernelMemoryPoolBatch(&poolEntry, 1, &processed, 0) == 0 && processed == 1);
     check(1, 3, 1);
     check(2, 4, 1);
+    Require(sceKernelMemoryPoolCommit(bytes + page * 2, page, 6, 3, 0) == 0);
     Require(sceKernelMtypeprotect(bytes, page * 3, 2, 3) == 0);
     VirtualQueryInfo whole{};
     Require(sceKernelVirtualQuery(bytes, 0, &whole, sizeof(whole)) == 0);
