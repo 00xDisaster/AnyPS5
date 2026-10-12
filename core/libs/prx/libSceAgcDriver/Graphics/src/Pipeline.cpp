@@ -197,6 +197,9 @@ bool libraryKeys(PipelineLibraryKeys& keys, const Context& context, const State&
     if (state.stages.tessellation) appendKey(keys.preRasterization, state.stages.tessellation->inputControlPoints);
     appendKey(keys.fragmentShader, state.samples);
     appendKey(keys.fragmentOutput, state.samples);
+    const auto sampleLocationsEnabled = ValidateSampleLocations(context, state);
+    appendKey(keys.fragmentShader, sampleLocationsEnabled);
+    appendKey(keys.fragmentOutput, sampleLocationsEnabled);
     appendKey(keys.fragmentShader, state.customSampleLocations);
     appendKey(keys.fragmentOutput, state.customSampleLocations);
     if (state.customSampleLocations) {
