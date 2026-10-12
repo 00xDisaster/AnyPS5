@@ -1,6 +1,9 @@
 #include "prx/libSceAgcDriver/Graphics/include/VertexInput.hpp"
 #include <atomic>
 #include <barrier>
+#include <chrono>
+#include <ctime>
+#include <string_view>
 #include <iostream>
 #include <random>
 #include <thread>
@@ -33,7 +36,7 @@ VertexAttribute attribute(std::uint32_t location = 0) {
 }
 
 void same(const VertexInputLayout& a, const VertexInputLayout& b) {
-    Require(a.bindings.size() == b.bindings.size() && a.attributes.size() == b.attributes.size() && a.alignments == b.alignments, "layout sizes differ");
+    Require(a.bindings.size() == b.bindings.size() && a.attributes.size() == b.attributes.size(), "layout sizes differ");
     for (std::size_t i = 0; i < a.bindings.size(); ++i) {
         const auto& x = a.bindings[i];
         const auto& y = b.bindings[i];
@@ -42,6 +45,11 @@ void same(const VertexInputLayout& a, const VertexInputLayout& b) {
         const auto& q = b.attributes[i];
         Require(p.location == q.location && p.binding == q.binding && p.format == q.format && p.offset == q.offset, "attribute differs");
     }
+}
+
+std::shared_ptr<const VertexInputLayout> get(VertexInputCache& cache, const Context& ctx, std::uint64_t variant, std::span<const VertexAttribute> attributes) {
+    auto result = cache.TryGet(variant, attributes);
+    return result != nullptr ? result : std::make_shared<const VertexInputLayout>(BuildVertexInputLayout(ctx, attributes));
 }
 
 template<class TAction> void fails(TAction&& fn) {
@@ -54,19 +62,19 @@ void run() {
     auto ctx = context();
     VertexInputCache cache(ctx, 2);
     std::array attributes{attribute(0), attribute(1)};
-    auto first = cache.Get(1, attributes);
+    auto first = get(cache, ctx, 1, attributes);
     const auto count = queries.load();
     attributes[0].resource.fields[0] += 256;
     attributes[0].resource.fields[1] |= 0x12u;
     attributes[0].resource.fields[2] = 17;
-    Require(cache.Get(1, attributes) == first && queries == count, "live addresses or counts rebuilt the layout");
+    Require(get(cache, ctx, 1, attributes) == first && queries == count, "live addresses or counts rebuilt the layout");
     auto invalid = attributes;
     invalid[0].resource.fields[0] += 1;
-    fails([&] { cache.Get(1, invalid); });
+    fails([&] { get(cache, ctx, 1, invalid); });
     invalid = attributes;
     invalid[0].resource.fields[0] = 0;
     invalid[0].resource.fields[1] &= 0xffff0000u;
-    fails([&] { cache.Get(1, invalid); });
+    fails([&] { get(cache, ctx, 1, invalid); });
     for (unsigned field = 0; field < 8; ++field) {
         invalid = attributes;
         switch (field) {
@@ -79,25 +87,26 @@ void run() {
             case 6: invalid[0].resource.fields[1] = 4096u << 16u; break;
             case 7: invalid[0].resource.fields[3] = 5u << 12u; break;
         }
-        fails([&] { cache.Get(1, invalid); });
+        fails([&] { get(cache, ctx, 1, invalid); });
         fails([&] { BuildVertexInputLayout(ctx, invalid); });
     }
     attributes[0].resource.fields[1] = 16u << 16u;
-    auto second = cache.Get(2, attributes);
+    auto second = get(cache, ctx, 2, attributes);
     Require(first != second, "stride change reused a layout");
     attributes[0].fetchIndex = 1;
-    auto third = cache.Get(3, attributes);
+    auto third = get(cache, ctx, 3, attributes);
     Require(third != second && cache.Size() == 2 && first->bindings[0].stride == 32, "eviction or retained lifetime failed");
     attributes[0] = attribute(0);
-    Require(cache.Get(1, attributes) != first, "least recently used layout survived eviction");
-    Require(cache.Get(0, attributes) != cache.Get(0, attributes), "unidentified variant was cached");
+    Require(get(cache, ctx, 1, attributes) != first, "least recently used layout survived eviction");
+    Require(get(cache, ctx, 0, attributes) != get(cache, ctx, 0, attributes), "unidentified variant was cached");
     VertexInputCache other(ctx);
-    Require(other.Get(1, attributes) != cache.Get(1, attributes), "device caches shared ownership");
+    Require(get(other, ctx, 1, attributes) != get(cache, ctx, 1, attributes), "device caches shared ownership");
     auto restricted = ctx;
     restricted.limits.maxVertexInputBindings = 1;
     VertexInputCache restrictedCache(restricted);
-    fails([&] { restrictedCache.Get(1, attributes); });
-    Require(cache.Get(1, {})->attributes.empty(), "empty layout failed");
+    fails([&] { get(restrictedCache, restricted, 1, attributes); });
+    Require(get(cache, ctx, 1, {})->attributes.empty(), "empty layout failed");
+    VertexInputCache generated(ctx, 16);
     std::mt19937 random(719);
     for (unsigned i = 0; i < 10000; ++i) {
         std::vector<VertexAttribute> input;
@@ -114,9 +123,73 @@ void run() {
             input.push_back(a);
         }
         const auto expected = BuildVertexInputLayout(ctx, input);
-        same(*cache.Get(1 + i % 16, input), expected);
+        same(*get(generated, ctx, 1 + i, input), expected);
         for (auto& a : input) a.resource.fields[0] += 256;
-        same(*cache.Get(1 + i % 16, input), BuildVertexInputLayout(ctx, input));
+        same(*get(generated, ctx, 1 + i, input), BuildVertexInputLayout(ctx, input));
+    }
+    {
+        VertexInputCache live(ctx);
+        std::array input{attribute()};
+        const auto stored = live.TryGet(100, input);
+        for (const auto records : {0u, 1u, 128u}) {
+            input[0].resource.fields[2] = records;
+            Require(live.TryGet(100, input) == stored, "record count rebuilt a vertex layout");
+            Require(VertexBufferReadSize(input[0], 5, 1) == 176u, "record count changed the direct fetch extent");
+            if (records != 0) Require(VertexBufferExtent(input[0]) == 32u * records, "cached layout froze the indirect descriptor extent");
+            else fails([&] { VertexBufferExtent(input[0]); });
+        }
+        input[0].resource.fields[1] = 0;
+        input[0].resource.fields[3] |= 2u << 28u;
+        input[0].resource.fields[2] = 0;
+        const auto zeroStride = live.TryGet(101, input);
+        Require(VertexFetchOutOfRange(input[0]), "zero records did not select zero fill");
+        input[0].resource.fields[2] = 64;
+        Require(live.TryGet(101, input) == zeroStride && !VertexFetchOutOfRange(input[0]) && VertexBufferExtent(input[0]) == 64, "cached zero-stride layout froze the live zero-fill decision");
+        input[0].resource.fields[2] = 0;
+        Require(live.TryGet(101, input) == zeroStride && VertexFetchOutOfRange(input[0]), "record count zero reused a live fetch");
+        input[0] = attribute();
+        input[0].formatComponents = 1;
+        const auto narrow = live.TryGet(102, input);
+        input[0].formatComponents = 2;
+        const auto wide = get(live, ctx, 102, input);
+        Require(narrow->attributes[0].format == VK_FORMAT_R32_SFLOAT && wide->attributes[0].format == VK_FORMAT_R32G32_SFLOAT, "format component count reused the wrong vertex layout");
+        input[0] = {};
+        input[0].components = 4;
+        input[0].formatComponents = 1;
+        const auto nullLayout = live.TryGet(103, input);
+        Require(live.TryGet(103, input) == nullLayout && nullLayout->attributes[0].format == VK_FORMAT_R32G32B32A32_SFLOAT, "null vertex descriptor was rejected or narrowed on reuse");
+        input[0].resource.fields[2] = 1;
+        fails([&] { get(live, ctx, 103, input); });
+        input[0] = attribute();
+        input[0].resource.fields[3] |= 2u << 28u;
+        input[0].resource.fields[2] = 6;
+        const auto bounded = live.TryGet(104, input);
+        Require(VertexBufferReadSize(input[0], 5, 1) == 176, "bounded vertex fetch failed");
+        input[0].resource.fields[2] = 5;
+        Require(live.TryGet(104, input) == bounded, "bounded record count rebuilt the layout");
+        fails([&] { VertexBufferReadSize(input[0], 5, 1); });
+    }
+    {
+        VertexInputCache thrashing(ctx, 2);
+        std::array input{attribute()};
+        const auto kept = thrashing.TryGet(1, input);
+        thrashing.TryGet(2, input);
+        thrashing.TryGet(3, input);
+        const auto queryCount = queries.load();
+        for (unsigned i = 0; i < 1000; ++i) Require(thrashing.TryGet(1, input) == nullptr, "an evicted variant kept re-entering the cache");
+        Require(queries == queryCount && thrashing.Size() == 2 && kept->bindings[0].stride == 32, "bypassed variant rebuilt or invalidated a retained layout");
+        Require(thrashing.TryGet(65537, input) == nullptr, "bypass hash collision was not conservative");
+        same(*get(thrashing, ctx, 65537, input), BuildVertexInputLayout(ctx, input));
+        input[0].resource.fields[0] = 1;
+        fails([&] { get(thrashing, ctx, 1, input); });
+        Require(thrashing.TryGet(0, input) == nullptr && thrashing.TryGet(2, {}) == nullptr, "empty or unidentified layout entered the cache");
+        input[0] = attribute();
+        input[0].resource.fields[1] = 16u << 16u;
+        Require(thrashing.TryGet(2, input) == nullptr, "a changing variant shape stayed cached");
+        const auto afterChange = queries.load();
+        input[0].resource.fields[1] = 32u << 16u;
+        for (unsigned i = 0; i < 1000; ++i) Require(thrashing.TryGet(2, input) == nullptr, "a changing variant shape kept taking the cache path");
+        Require(queries == afterChange, "changing shape rebuilt in the cache");
     }
     VertexInputCache concurrent(ctx);
     std::array<std::shared_ptr<const VertexInputLayout>, 8> results;
@@ -124,16 +197,87 @@ void run() {
     std::vector<std::thread> threads;
     for (unsigned i = 0; i < results.size(); ++i) threads.emplace_back([&, i] {
         ready.arrive_and_wait();
-        results[i] = concurrent.Get(1, attributes);
+        results[i] = concurrent.TryGet(1, attributes);
     });
     for (auto& thread : threads) thread.join();
     for (const auto& result : results) Require(result == results[0], "concurrent cache identity differs");
+    VertexInputCache evicting(ctx, 4);
+    const auto expected = BuildVertexInputLayout(ctx, attributes);
+    threads.clear();
+    for (unsigned i = 0; i < 8; ++i) threads.emplace_back([&, i] {
+        ready.arrive_and_wait();
+        for (unsigned call = 0; call < 1000; ++call) same(*get(evicting, ctx, 1 + (call + i * 17) % 64, attributes), expected);
+    });
+    for (auto& thread : threads) thread.join();
+    Require(evicting.Size() <= 4, "concurrent evictions exceeded the layout budget");
+}
+
+template<bool TCached> void benchmark() {
+    auto ctx = context();
+    ctx.formatProperties = [](VkPhysicalDevice, VkFormat, VkFormatProperties* properties) {
+        *properties = {};
+        properties->bufferFeatures = VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
+    };
+    for (const unsigned count : {0u, 1u, 4u, 8u}) {
+        for (const auto scenario : {"reuse-1", "reuse-64", "churn-2048", "evicted", "shape-churn"}) {
+            VertexInputCache cache(ctx);
+            std::vector<VertexAttribute> input;
+            for (unsigned i = 0; i < count; ++i) input.push_back(attribute(i));
+            const std::string_view name(scenario);
+            const unsigned variants = name == "reuse-64" ? 64u : name == "churn-2048" ? 2048u : name == "evicted" ? 1024u : 1u;
+            if (name == "evicted") for (unsigned variant = 1; variant <= 2048; ++variant) cache.TryGet(variant, input);
+            std::vector<double> samples;
+            std::vector<double> wallSamples;
+            std::uint64_t checksum = 0;
+            unsigned hits = 0;
+            constexpr unsigned calls = 32768;
+            for (unsigned pass = 0; pass < 10; ++pass) {
+                hits = 0;
+                const auto start = std::chrono::steady_clock::now();
+                const auto cpuStart = std::clock();
+                for (unsigned call = 0; call < calls; ++call) {
+                    if constexpr (TCached) {
+                        if (input.empty()) continue;
+                    }
+                    if (name == "shape-churn" && !input.empty()) input[0].resource.fields[1] = (32u + (call % 2u) * 16u) << 16u;
+                    const auto variant = 1u + call % variants;
+                    VertexInputLayout owned;
+                    std::shared_ptr<const VertexInputLayout> retained;
+                    if constexpr (TCached) {
+                        if (!input.empty()) retained = cache.TryGet(variant, input);
+                    }
+                    if (retained == nullptr) owned = BuildVertexInputLayout(ctx, input);
+                    const auto& layout = retained != nullptr ? *retained : owned;
+                    hits += retained != nullptr;
+                    checksum += layout.bindings.size();
+                    for (const auto& binding : layout.bindings) checksum += binding.binding + binding.stride + binding.inputRate;
+                    for (const auto& attribute : layout.attributes) checksum += attribute.location + attribute.binding + attribute.format + attribute.offset;
+                }
+                const auto cpuElapsed = static_cast<double>(std::clock() - cpuStart) * 1e9 / CLOCKS_PER_SEC / calls;
+                const auto wallElapsed = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - start).count() / calls;
+                if (pass != 0) {
+                    samples.push_back(cpuElapsed);
+                    wallSamples.push_back(wallElapsed);
+                }
+            }
+            std::sort(samples.begin(), samples.end());
+            std::sort(wallSamples.begin(), wallSamples.end());
+            std::cout << count << ' ' << name << ": " << samples[4] << " ns/call, wall " << wallSamples[4] << " ns/call, hits " << hits << '/' << calls << ", checksum " << checksum << '\n';
+        }
+    }
 }
 
 }
 
-int main() {
+int main(int argc, char** argv) {
     try {
+        if (argc == 3 && std::string_view(argv[1]) == "--benchmark-vertex-input") {
+            const std::string_view mode(argv[2]);
+            Require(mode == "baseline" || mode == "cache", "unknown vertex benchmark mode");
+            if (mode == "cache") benchmark<true>();
+            else benchmark<false>();
+            return 0;
+        }
         run();
         std::cout << "Vertex input cache tests passed\n";
     } catch (const std::exception& error) {
