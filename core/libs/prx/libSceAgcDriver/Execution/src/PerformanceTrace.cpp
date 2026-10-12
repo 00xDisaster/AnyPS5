@@ -166,4 +166,8 @@ void PerformanceTrace::Present(std::uint32_t width, std::uint32_t height, const 
     output->Write(std::move(events));
 }
 
+void PerformanceTrace::StopOutput() {
+    if (writer()) writer()->Stop();
+}
+
 }
