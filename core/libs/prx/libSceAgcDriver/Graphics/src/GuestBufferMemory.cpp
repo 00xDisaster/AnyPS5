@@ -234,7 +234,7 @@ bool releaseParkedImports(HostImports& state, std::uint64_t begin, std::uint64_t
         for (auto device = state.parked.begin(); device != state.parked.end();) {
             auto& list = device->second;
             for (auto it = list.begin(); it != list.end();) {
-                if ((*it)->entry.base < end && begin < (*it)->entry.base + (*it)->entry.bytes) {
+                if ((*it)->node.mapped().base < end && begin < (*it)->node.mapped().base + (*it)->node.mapped().bytes) {
                     released.push_back(std::move(*it));
                     it = list.erase(it);
                 } else {
