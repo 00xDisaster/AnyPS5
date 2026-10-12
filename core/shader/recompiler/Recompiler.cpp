@@ -162,6 +162,10 @@ std::uint64_t FrontEndBuilds() {
     return frontEndBuilds.load(std::memory_order_relaxed);
 }
 
+std::uint32_t ShaderPreparationContext::ResourcePrograms() const {
+    return resourcePrograms;
+}
+
 IrProgram PrepareResourceProgram(const RecompileRequest& request) {
     return PrepareResourceProgram(request, nullptr);
 }
@@ -169,7 +173,11 @@ IrProgram PrepareResourceProgram(const RecompileRequest& request) {
 IrProgram PrepareResourceProgram(const RecompileRequest& request, ShaderPreparationContext* preparation) {
     frontEndBuilds.fetch_add(1, std::memory_order_relaxed);
     ShaderPreparationContext local;
-    const auto frontend = (preparation != nullptr ? *preparation : local).AcquireFrontend(request);
+    auto& context = preparation != nullptr ? *preparation : local;
+    ++context.resourcePrograms;
+    context.interfaceSource.reset();
+    context.interfaceProgram.reset();
+    const auto frontend = context.AcquireFrontend(request);
     const auto stageKind = toShaderStageKind(request.shader.stage);
     const auto inputInfo = RequestInputInfo(request);
     const auto& decoded = frontend->decoded;
@@ -295,7 +303,7 @@ struct EmissionFailure {
     std::exception_ptr failure;
 };
 
-struct SourceEntry {
+struct SourceEntry : std::enable_shared_from_this<SourceEntry> {
     std::mutex mutex;
     // The code the entry was built for: the key carries only a hash of it, so a candidate entry is
     // accepted only when its code matches word for word. Owned here because the request's span
@@ -480,6 +488,7 @@ CompiledVariant emitVariant(const RecompileRequest& request, IrProgram& program)
     const auto inputInfo = RequestInputInfo(request);
     constexpr BindingAllocator bindingAllocator;
     bool registration = request.target.registrationModules && (request.shader.stage == ShaderStage::Vertex || request.shader.stage == ShaderStage::Fragment);
+    program.Metadata().bindingLayoutComplete = false;
     auto bindings = bindingAllocator.Allocate(program, request.layout, registration);
 
     SpirvTargetOptions targetOptions {};
@@ -944,6 +953,29 @@ bool sameLayout(const BindingLayout& left, const BindingLayout& right) {
     return left.descriptorSet == right.descriptorSet && left.firstBinding == right.firstBinding && left.pushConstantOffsetBytes == right.pushConstantOffsetBytes && left.pushConstantSizeBytes == right.pushConstantSizeBytes;
 }
 
+}
+
+struct PreparedInterface {
+    static CompiledVariant Compile(SourceEntry& source, const RecompileRequest& request, ShaderPreparationContext& preparation, std::exception_ptr* emissionFailure) {
+        if (preparation.interfaceSource.get() != &source || preparation.interfaceProgram->Resources().shaderHash != request.shader.codeAddress) {
+            preparation.interfaceSource.reset();
+            preparation.interfaceProgram.reset();
+            auto program = source.program != nullptr ? std::move(source.program) : std::make_unique<IrProgram>(PrepareResourceProgram(request, &preparation));
+            recordEmissionFailure(emissionFailure, [&] { prepareInterface(request, *program); });
+            preparation.interfaceSource = source.shared_from_this();
+            preparation.interfaceProgram = std::move(program);
+        }
+        auto& program = *preparation.interfaceProgram;
+        return recordEmissionFailure(emissionFailure, [&] {
+            auto variant = emitVariant(request, program);
+            variant.info = program.CompiledInfo();
+            return variant;
+        });
+    }
+};
+
+namespace {
+
 std::shared_ptr<const CompiledVariant> findOrCompileVariant(SourceEntry& source, const RecompileRequest& request, bool& cacheHit, ShaderPreparationContext* preparation = nullptr) {
     for (const auto& candidate : source.variants) {
         if (sameLayout(candidate->layout, request.layout)) {
@@ -968,11 +1000,16 @@ std::shared_ptr<const CompiledVariant> findOrCompileVariant(SourceEntry& source,
         }
     }
     if (variant == nullptr) {
-        auto program = source.program != nullptr ? std::move(*source.program) : PrepareResourceProgram(request, preparation);
-        source.program.reset();
+        static const bool layoutPair = std::getenv("APS5_NO_PERF_LAYOUT_PAIR") == nullptr;
         std::exception_ptr emissionFailure;
         try {
-            variant = std::make_shared<const CompiledVariant>(compileVariant(request, std::move(program), &emissionFailure));
+            if (layoutPair && preparation != nullptr) {
+                variant = std::make_shared<const CompiledVariant>(PreparedInterface::Compile(source, request, *preparation, &emissionFailure));
+            } else {
+                auto program = source.program != nullptr ? std::move(*source.program) : PrepareResourceProgram(request, preparation);
+                source.program.reset();
+                variant = std::make_shared<const CompiledVariant>(compileVariant(request, std::move(program), &emissionFailure));
+            }
         } catch (...) {
             if (emissionFailure != nullptr && FailureMemo()) source.emissionFailures.push_back({request.shader.codeAddress, request.layout, emissionFailure});
             throw;
