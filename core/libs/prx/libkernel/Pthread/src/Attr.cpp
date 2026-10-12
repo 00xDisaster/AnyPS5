@@ -116,7 +116,7 @@ int APS5_VABI scePthreadAttrGetschedparam(const PthreadAttr* attr, KernelSchedPa
 }
 
 int APS5_VABI scePthreadAttrGetsolosched(const PthreadAttr* attr, int* solosched) {
-    if (!attr || !*attr) throw std::runtime_error(std::string(__func__) + ": null attr");
+    if (!attr || !*attr) return SCE_KERNEL_ERROR_EINVAL;
     if (!solosched) throw std::runtime_error(std::string(__func__) + ": null output");
     *solosched = (*attr)->_solosched;
     return SCE_OK;
@@ -162,7 +162,10 @@ int APS5_VABI scePthreadAttrSetschedpolicy(PthreadAttr* attr, int policy) {
 }
 
 int APS5_VABI scePthreadAttrSetsolosched(PthreadAttr* attr, int solosched) {
-    if (!attr || !*attr) throw std::runtime_error(std::string(__func__) + ": null attr");
+    if (!attr || !*attr) return SCE_KERNEL_ERROR_EINVAL;
+    constexpr int SoloSchedOff = 0;
+    constexpr int SoloSchedOn = 16;
+    if (solosched != SoloSchedOff && solosched != SoloSchedOn) return SCE_KERNEL_ERROR_EOPNOTSUPP;
     (*attr)->_solosched = solosched;
     return SCE_OK;
 }
