@@ -147,7 +147,7 @@ std::uint32_t ColorWriteMask(const Registers& context);
 GuestTextureResource SurfaceForTarget(const ColorTarget& color);
 
 struct ColorMetadataPass {
-    enum class Mode { EliminateFastClear, DccDecompress, Resolve };
+    enum class Mode { EliminateFastClear, DccDecompress, Resolve, FmaskDecompress };
     Mode mode;
     std::vector<ColorTarget> targets;
     std::optional<ColorTarget> source;
