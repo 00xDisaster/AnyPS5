@@ -8,6 +8,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Pm4.hpp"
 #include "Optimization/ResourceProgram.hpp"
 #include <algorithm>
+#include <bit>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -162,7 +163,7 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
             if (program.merged) InitializeMerged(queue, program, program.mergedPointer, program.mergedPointerRequired, false);
         }
         if (verifyDrawDataHits()) {
-            const auto full = decodeDraw(queue, submission);
+            const auto full = decodeDraw(queue, submission, localDevice->graphicsContext());
             if (!sameDecode(*refreshed, *full)) {
                 std::size_t differing = 0;
                 while (differing < full->programs.size() && differing < refreshed->programs.size() && full->programs[differing].userData == refreshed->programs[differing].userData) ++differing;
@@ -173,7 +174,7 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
         }
         decode = std::move(refreshed);
     }
-    resolveDrawDecode(queue, submission, decode, registerKey, drawKey, profile);
+    resolveDrawDecode(queue, submission, localDevice->graphicsContext(), decode, registerKey, drawKey, profile);
     const auto& graphics = decode->state;
     auto pixel = decode->pixel;
     std::vector<DrawProgram> programs = decode->programs;
@@ -241,6 +242,11 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
         decodeReads[i].clear();
         vertexInfos[i] = Graphics::DecodeVertexStageInfo(program.binary.header, program.binary.headerAddress, program.userData, &decodeReads[i], false, 8u - program.firstUserSgpr);
         if (vertexInfos[i]) vertexInfos[i]->paClVsOutCntl = PositionExportLayout(program.snapshot.get(), program.codeOffset, program.binary.code, readRegister(queue.context, 0x207), program.tailContinuation.get()) | graphics.layerExports;
+        if (vertexInfos[i]) {
+            vertexInfos[i]->depthRemapMode = graphics.depthRemap.mode;
+            vertexInfos[i]->depthRemapScale = std::bit_cast<std::uint32_t>(graphics.depthRemap.scale);
+            vertexInfos[i]->depthRemapOffset = std::bit_cast<std::uint32_t>(graphics.depthRemap.offset);
+        }
     };
     if (!registerKey) {
         for (std::size_t i = 0; i < programs.size(); ++i) decodeVertexInfo(i);

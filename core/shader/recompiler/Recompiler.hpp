@@ -196,6 +196,9 @@ struct ShaderVertexStageInfo {
     std::uint32_t fetchBufferReg;
     bool fetchEmbedded;
     std::uint32_t paClVsOutCntl = 0;
+    std::uint32_t depthRemapMode = 0;
+    std::uint32_t depthRemapScale = 0;
+    std::uint32_t depthRemapOffset = 0;
 };
 
 struct ShaderFloatMode {
@@ -270,6 +273,7 @@ struct SpirvTarget {
     bool float16DenormPreserve = false;
     bool spannedWaves = false;
     bool robustBufferAccess2 = false;
+    bool depthRangeRemap = false;
 };
 
 struct BindingLayout {
