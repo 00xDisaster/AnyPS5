@@ -73,7 +73,6 @@ alignas(256) constexpr std::array<std::uint32_t, 11> SampleSecondTexelCode{
 };
 
 constexpr std::array<std::uint32_t, 4> PointSampler{0x00000092u, 0x00fff000u, 0u, 0u};
-constexpr std::size_t SampledOutputOffset = SurfaceBytes + 8192;
 
 std::uint64_t AddressOf(const void* data) {
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(data));
@@ -415,10 +414,11 @@ void RunSingleKeys(AgcDriver::VulkanDevice& device, std::uint8_t* block) {
     Require(wrong == 0, message);
 }
 
-void RunSingleKeysSampled(AgcDriver::VulkanDevice& device, std::uint8_t* block, const char* memory) {
+void RunSingleKeysSampled(AgcDriver::VulkanDevice& device, std::uint8_t* block, std::uint8_t* outputBlock, const char* memory) {
     auto* texels = block;
     auto* keys = block + KeysOffset;
-    auto* output = reinterpret_cast<std::uint32_t*>(block + SampledOutputOffset);
+    auto* output = reinterpret_cast<std::uint32_t*>(outputBlock);
+    const bool watched = AgcDriver::GuestMemory::Watched(AddressOf(texels), SurfaceBytes);
     const AgcDriver::Graphics::ColorTargetLayout layout(Side, Side, AgcDriver::Graphics::ColorTileMode::RenderTarget, 4);
     const auto first = layout.Offset(1, 0) / 256 * 256;
     std::memset(texels, 0x00, SurfaceBytes);
@@ -442,6 +442,7 @@ void RunSingleKeysSampled(AgcDriver::VulkanDevice& device, std::uint8_t* block, 
         }
     };
     sample(0x3f800000u, "before the first texel of the block changed");
+    Require(!watched || AgcDriver::GuestMemory::Watched(AddressOf(texels), SurfaceBytes), "comp-to-single keys sampled from write-watched memory: the first sampling left the surface unwatched");
     std::memset(texels + first, 0x00, 4);
     sample(0u, "after the first texel of the block changed");
 }
@@ -592,7 +593,9 @@ int main() {
         RunSingleKeys(*device, single->Data());
         std::optional<GuestBlock> sampled;
         sampled.emplace(false);
-        RunSingleKeysSampled(*device, sampled->Data(), "unwatched");
+        std::optional<GuestBlock> sampledOutput;
+        sampledOutput.emplace(false);
+        RunSingleKeysSampled(*device, sampled->Data(), sampledOutput->Data(), "unwatched");
 #ifdef _WIN32
         shared.emplace(true, true);
         RunSharedImport(*device, shared->Data());
@@ -603,7 +606,7 @@ int main() {
             Run(*device, watched->Data());
             std::optional<GuestBlock> sampledWatched;
             sampledWatched.emplace(true);
-            RunSingleKeysSampled(*device, sampledWatched->Data(), "write-watched");
+            RunSingleKeysSampled(*device, sampledWatched->Data(), sampledOutput->Data(), "write-watched");
 #ifndef _WIN32
             window.emplace(true);
             RunImportWindow(*device, window->Data());
