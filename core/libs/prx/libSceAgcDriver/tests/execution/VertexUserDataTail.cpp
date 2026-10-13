@@ -27,20 +27,22 @@ alignas(256) std::array<std::uint32_t, 64> Reference{};
 alignas(256) std::array<std::uint32_t, 64> Continuation{0xbf840003u, 0x7e08020cu, 0xf80008cfu, 0x04030201u, 0xbf810000u};
 alignas(256) const std::array<std::uint32_t, 64> OtherContinuation{0xbf840003u, 0x7e0802f4u, 0xf80008cfu, 0x04030201u, 0xbf810000u};
 alignas(256) constexpr std::array<std::uint32_t, 8> PixelCode{0x7e000200u, 0x7e020280u, 0xf800180fu, 0x00010100u, 0xbf810000u, 0xbf810000u, 0xbf810000u, 0xbf810000u};
+alignas(256) constexpr std::array<std::uint32_t, 5> VertexColorPixelCode{0xc8080000u, 0xc8090001u, 0xf800180fu, 0x02020202u, 0xbf810000u};
 
 void Append(std::vector<std::uint32_t>& commands, std::uint32_t opcode, std::initializer_list<std::uint32_t> payload) {
     commands.push_back(0xc0000000u | (static_cast<std::uint32_t>(payload.size() - 1) << 16u) | (opcode << 8u));
     commands.insert(commands.end(), payload);
 }
 
-Image Draw(const std::uint32_t* code, const std::uint32_t* continuation, std::uint32_t distanceLayout = 0) {
+Image Draw(const std::uint32_t* code, const std::uint32_t* continuation, std::uint32_t distanceLayout = 0, bool vertexColor = false) {
     Pixels.fill(Kept);
     const auto vertex = reinterpret_cast<std::uintptr_t>(code);
-    const auto pixel = reinterpret_cast<std::uintptr_t>(PixelCode.data());
+    const auto pixel = reinterpret_cast<std::uintptr_t>(vertexColor ? VertexColorPixelCode.data() : PixelCode.data());
     const auto next = reinterpret_cast<std::uintptr_t>(continuation);
     const std::vector<std::pair<std::uint32_t, std::uint32_t>> context{
         {0x2d5, 0x2000},
-        {0x1b6, 0}, {0x207, distanceLayout}, {0x200, 0}, {0x203, 0x800},
+        {0x1b6, vertexColor ? 1u : 0u}, {0x1b3, 2}, {0x1b4, 2}, {0x191, 0},
+        {0x207, distanceLayout}, {0x200, 0}, {0x203, 0x800},
         {0x2dc, 0xaa00}, {0x2f8, 0}, {0x292, 2}, {0x293, 0},
         {0x80, 0}, {0x8d, 0}, {0x83, 0xffff}, {0x8c, 0xa},
         {0x2f9, 0x2d}, {0x313, 0x6000}, {0x30e, 0xffffffff}, {0x30f, 0xffffffff},
@@ -79,19 +81,48 @@ Image Draw(const std::uint32_t* code, const std::uint32_t* continuation, std::ui
     return Pixels;
 }
 
-Image Check(std::span<const std::uint32_t> prefix, std::span<const std::uint32_t> continuation, std::uint32_t distanceLayout = 0, std::size_t continuationWords = 5) {
+Image Check(std::span<const std::uint32_t> prefix, std::span<const std::uint32_t> continuation, std::uint32_t distanceLayout = 0, std::size_t continuationWords = 5, bool vertexColor = false) {
     Prolog.fill(0xbf9f0000u);
     Reference.fill(0xbf9f0000u);
     std::copy(prefix.begin(), prefix.end(), Prolog.begin());
     Prolog[prefix.size()] = 0xbe802008u;
     std::copy(prefix.begin(), prefix.end(), Reference.begin());
     std::copy_n(continuation.begin(), continuationWords, Reference.begin() + prefix.size());
-    const auto expected = Draw(Reference.data(), continuation.data(), distanceLayout);
+    const auto expected = Draw(Reference.data(), continuation.data(), distanceLayout, vertexColor);
     for (unsigned repeat = 0; repeat < 2u; ++repeat) {
-        const auto actual = Draw(Prolog.data(), continuation.data(), distanceLayout);
+        const auto actual = Draw(Prolog.data(), continuation.data(), distanceLayout, vertexColor);
         Require(actual == expected, "linked vertex tail pixels differ from the monolithic shader");
     }
     return expected;
+}
+
+void CheckBranchColors(const Image& written, const Image& skipped, const char* state) {
+    std::size_t covered = 0;
+    for (std::size_t pixel = 0; pixel < written.size(); pixel += 4) {
+        const bool untouched = written[pixel] == Kept;
+        for (std::size_t component = 0; component < 4; ++component) {
+            Require(written[pixel + component] == (untouched ? Kept : std::byte{0xff}) &&
+                    skipped[pixel + component] == (untouched ? Kept : std::byte{0}), std::string(state) + " did not select the expected vertex color");
+        }
+        if (!untouched) ++covered;
+    }
+    Require(covered != 0 && covered != written.size() / 4, std::string(state) + " reference triangle did not cross the render target");
+}
+
+void ControlStateDraws(std::vector<std::uint32_t> prefix) {
+    alignas(256) const std::array<std::uint32_t, 7> sccContinuation{0xbf840001u, 0x7e0c02f2u, 0xf800020fu, 0x06060606u, 0xf80008cfu, 0x04030201u, 0xbf810000u};
+    prefix.insert(prefix.end() - 1, 0x7e0c0280u);
+    const auto trueScc = Check(prefix, sccContinuation, 0, sccContinuation.size(), true);
+    prefix.back() = 0xbf070c0cu;
+    const auto falseScc = Check(prefix, sccContinuation, 0, sccContinuation.size(), true);
+    CheckBranchColors(trueScc, falseScc, "SCC");
+    alignas(256) const std::array<std::uint32_t, 7> execContinuation{0x7e0c02f2u, 0xbefe040eu, 0xf800020fu, 0x06060606u, 0xf80008cfu, 0x04030201u, 0xbf810000u};
+    prefix.back() = 0xbf060c0cu;
+    prefix.push_back(0xbe8e047eu);
+    const auto activeExec = Check(prefix, execContinuation, 0, execContinuation.size(), true);
+    prefix.push_back(0xbefe0480u);
+    const auto emptyExec = Check(prefix, execContinuation, 0, execContinuation.size(), true);
+    CheckBranchColors(activeExec, emptyExec, "EXEC");
 }
 
 void VertexTailDraws() {
@@ -113,13 +144,7 @@ void VertexTailDraws() {
     Require(clipped != original && std::count(clipped.begin(), clipped.end(), Kept) > kept, "a clip distance exported by the continuation did not clip the triangle");
     const auto culled = Check(prefix, clipContinuation, 0x00400100u, clipContinuation.size());
     Require(culled == original, "a mixed-sign cull distance discarded the triangle");
-    prefix.back() = 0xbf070c0cu;
-    const auto falseScc = Check(prefix, Continuation);
-    Require(std::ranges::all_of(falseScc, [](std::byte value) { return value == Kept; }), "SCC was not preserved across the tail jump");
-    prefix.back() = 0xbf060c0cu;
-    prefix.push_back(0xbefe0480u);
-    const auto emptyExec = Check(prefix, Continuation);
-    Require(std::ranges::all_of(emptyExec, [](std::byte value) { return value == Kept; }), "EXEC was not preserved across the tail jump");
+    ControlStateDraws(prefix);
 }
 
 }
