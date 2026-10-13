@@ -102,7 +102,7 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
     if (macos) {
         patcher = std::make_shared<Elfpatcher::MacOs::MacOsMachOPatcher>();
     } else if (windows) {
-        patcher = std::make_shared<Elfpatcher::Windows::WindowsPePatcher>(options.WindowsGui, std::move(input.Icon), input.InputPath.parent_path() / "sce_sys" / "icon0.png");
+        patcher = std::make_shared<Elfpatcher::Windows::WindowsPePatcher>(options.WindowsGui, std::move(input.Icon), input.InputPath.parent_path() / "sce_sys" / "icon0.png", [&](auto completed, auto total) { inputProgress.Report({Domain::ProgressStage::Image, {}, completed, total}); });
     } else {
         patcher = std::make_shared<Elfpatcher::Linux::LinuxElfPatcher>(
             std::make_shared<Elfpatcher::EntryStubBuilder>(),
@@ -115,7 +115,7 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
         );
     }
 
-    inputProgress.Report({Domain::ProgressStage::Image, Io::Utf8Path(input.InputPath), 0, 1});
+    if (!windows) inputProgress.Report({Domain::ProgressStage::Image, Io::Utf8Path(input.InputPath), 0, 1});
     std::vector<std::uint8_t> executableBytes;
     try {
         executableBytes = patcher->Patch(sourceBytes, result.OriginalHeaders, result.DynamicSection, result.OriginalPltGotVaddr, options.RunPath, options.LazyBinding, options.WindowsDiagnostics, trampolines);
@@ -124,7 +124,7 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
         throw;
     }
 
-    inputProgress.Report({Domain::ProgressStage::Image, Io::Utf8Path(input.InputPath), 1, 1});
+    if (!windows) inputProgress.Report({Domain::ProgressStage::Image, Io::Utf8Path(input.InputPath), 1, 1});
     std::string diagnostics;
     if (windows) diagnostics = std::static_pointer_cast<Elfpatcher::Windows::WindowsPePatcher>(patcher)->GetDiagnostics();
     inputProgress.Report({Domain::ProgressStage::Executable, Io::Utf8Path(input.InputPath), 1, 1});

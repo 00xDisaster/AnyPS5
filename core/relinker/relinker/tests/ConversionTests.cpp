@@ -1,6 +1,7 @@
 #include "TestProgress.hpp"
 #include <relinker/pipeline/Conversion.hpp>
 #include <relinker/analysis/SyscallScanner.hpp>
+#include <relinker/analysis/CodeInstructionCollector.hpp>
 #include <io/BufferUtils.hpp>
 #include <codegen/IAmd64OnlyConverter.hpp>
 #include <algorithm>
@@ -85,6 +86,19 @@ void convert() {
         require(output.Modules.front().Bytes.front() == output.Executable.front(), "Wrong module format");
         require(progress.Events.back().Stage == Domain::ProgressStage::Executable && progress.Events.back().Completed == 1, "Conversion did not finish");
         for (const auto& event : progress.Events) require(event.Completed <= event.Total, "Invalid counters");
+        if (target == Relinker::TargetSystem::Windows) {
+            std::uint64_t previous = 0;
+            bool intermediate = false;
+            for (const auto& event : progress.Events) {
+                if (event.Stage != Domain::ProgressStage::Image) continue;
+                require(event.Input == "virtual/title/custom-name.bin", "Lost image input identity");
+                require(event.Total == 10000 && event.Completed >= previous, "Image progress moved backwards");
+                intermediate |= event.Completed > 0 && event.Completed < event.Total;
+                previous = event.Completed;
+            }
+            require(intermediate && previous == 10000, "Missing image progress");
+        }
+        progress.Events.clear();
     }
     auto source = input();
     source.Modules.push_back({"virtual/escaped.prx", fixture()});
@@ -126,6 +140,21 @@ void scanning() {
     }
     require(previous == progress.Events.back().Total, "Instruction conversion progress did not finish");
     reject([&] { scanner->ScanCodeSectionForSyscalls(code, 0, (std::uint64_t{1} << 32) + code.size()); });
+    auto image = code;
+    image.resize(code.size() + 64, 0x90);
+    image.back() = 0xc3;
+    Io::WriteU64(image, 24, 64);
+    header.Offset = 64;
+    header.MappedAddress = 64;
+    previous = 0;
+    std::size_t updates = 0;
+    const auto instructions = Relinker::CodeInstructionCollector().Collect(image, {header}, [&](auto completed, auto total) {
+        require(completed >= previous && completed <= total, "Image analysis progress moved backwards");
+        previous = completed;
+        ++updates;
+    });
+    require(instructions.size() == code.size(), "Progress changed image code analysis");
+    require(updates > 10 && previous == 10000, "Missing intermediate image analysis progress");
     code[70000] = 0x0f;
     code[70001] = 0x05;
     progress.Events.clear();
@@ -135,20 +164,26 @@ void scanning() {
 
 class CancellingProgress final : public Domain::IProgress {
 public:
+    Domain::ProgressStage Stage = Domain::ProgressStage::Decode;
     void Report(const Domain::ProgressEvent& event) override {
-        if (event.Stage == Domain::ProgressStage::Decode && event.Completed > 0) throw std::runtime_error("cancelled");
+        if (event.Stage == Stage && event.Completed > 0) throw std::runtime_error("cancelled");
     }
     void Message(std::string_view) override {}
 };
 
 void cancellation() {
-    CancellingProgress progress;
-    try { Relinker::Conversion(progress).Convert(input(), {}); }
-    catch (const std::runtime_error& error) {
-        require(std::string(error.what()) == "cancelled", "Callback exception was replaced");
-        return;
+    for (const auto stage : {Domain::ProgressStage::Decode, Domain::ProgressStage::Image}) {
+        CancellingProgress progress;
+        progress.Stage = stage;
+        Relinker::ConversionOptions options;
+        options.Target = Relinker::TargetSystem::Windows;
+        try { Relinker::Conversion(progress).Convert(input(), options); }
+        catch (const std::runtime_error& error) {
+            require(std::string(error.what()) == "cancelled", "Callback exception was replaced");
+            continue;
+        }
+        throw std::runtime_error("Callback exception was swallowed");
     }
-    throw std::runtime_error("Callback exception was swallowed");
 }
 
 }
