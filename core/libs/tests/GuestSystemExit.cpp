@@ -43,7 +43,7 @@ void UnexpectedCleanup() { std::_Exit(3); }
 void WINAPI UnexpectedDetach(PVOID) { TerminateProcess(GetCurrentProcess(), 4); }
 #endif
 constexpr char RelaunchMarker[] = "ANYPS5_TEST_RELAUNCH_MARKER";
-constexpr char Relaunched[] = "ANYPS5_TEST_RELAUNCHED";
+constexpr char MainExecutable[] = "ANYPS5_TEST_MAIN_EXECUTABLE";
 void SetVariable(const char* name, const char* value) {
 #ifdef _WIN32
     Require(SetEnvironmentVariableA(name, value) != 0);
@@ -52,22 +52,29 @@ void SetVariable(const char* name, const char* value) {
     Require(setenv(name, value, 1) == 0);
 #endif
 }
-void AppendMarker(const char* line) {
+std::filesystem::path OwnExecutable() {
+#ifdef _WIN32
+    std::wstring executable(32768, L'\0');
+    executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
+    return executable;
+#else
+    return std::filesystem::read_symlink("/proc/self/exe");
+#endif
+}
+void AppendMarker(const std::string& line) {
     const char* marker = std::getenv(RelaunchMarker);
     Require(marker != nullptr);
     std::ofstream(marker, std::ios::app) << line << '\n';
 }
-void RelaunchedShutdown() { AppendMarker("shutdown"); }
-int RunRelaunchingChild(const char* self) {
+void MainShutdown() { AppendMarker("shutdown"); }
+void SecondaryShutdown() { AppendMarker("secondary shutdown"); }
+int RunRelaunchingChild(const std::filesystem::path& self) {
 #ifdef _WIN32
-    (void)self;
-    std::wstring executable(32768, L'\0');
-    executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
-    std::wstring commandLine = L"\"" + executable + L"\" --relaunch";
+    std::wstring commandLine = L"\"" + self.wstring() + L"\" --relaunch";
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
-    Require(CreateProcessW(executable.c_str(), commandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process) != 0);
+    Require(CreateProcessW(self.c_str(), commandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process) != 0);
     WaitForSingleObject(process.hProcess, INFINITE);
     DWORD code = 1;
     GetExitCodeProcess(process.hProcess, &code);
@@ -78,7 +85,7 @@ int RunRelaunchingChild(const char* self) {
     const pid_t child = fork();
     Require(child >= 0);
     if (child == 0) {
-        execl(self, self, "--relaunch", static_cast<char*>(nullptr));
+        execl(self.c_str(), self.c_str(), "--relaunch", static_cast<char*>(nullptr));
         std::_Exit(127);
     }
     int status = 0;
@@ -86,9 +93,13 @@ int RunRelaunchingChild(const char* self) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 #endif
 }
-int DriveRelaunch(const char* self) {
+int DriveRelaunch() {
+    const auto self = OwnExecutable();
+    const auto secondary = self.parent_path() / ("picker.picker.bin" + self.extension().string());
+    std::filesystem::copy_file(self, secondary, std::filesystem::copy_options::overwrite_existing);
     const auto marker = std::filesystem::temp_directory_path() / ("anyps5-relaunch-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt");
     SetVariable(RelaunchMarker, marker.string().c_str());
+    SetVariable(MainExecutable, self.string().c_str());
     Require(RunRelaunchingChild(self) == 0);
     std::string text;
     for (int attempt = 0; attempt < 200 && text.find("relaunched") == std::string::npos; ++attempt) {
@@ -98,7 +109,9 @@ int DriveRelaunch(const char* self) {
     }
     std::error_code ignored;
     std::filesystem::remove(marker, ignored);
-    Require(text == "shutdown\nrelaunched\n");
+    for (int attempt = 0; attempt < 100 && std::filesystem::exists(secondary) && !std::filesystem::remove(secondary, ignored); ++attempt)
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    Require(text == "shutdown\narguments: --secondary|two words|quote\"d\\|\nsecondary shutdown\nrelaunched\n");
     std::puts("Guest relaunch completed");
     return 0;
 }
@@ -125,17 +138,29 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (argc > 1 && std::strcmp(argv[1], "--relaunch-driver") == 0) {
-        return DriveRelaunch(argv[0]);
+        return DriveRelaunch();
     }
     if (argc > 1 && std::strcmp(argv[1], "--relaunch") == 0) {
-        if (std::getenv(Relaunched) != nullptr) {
-            AppendMarker("relaunched");
-            return 0;
-        }
-        LibcRegisterShutdown_nid_postfix(RelaunchedShutdown);
-        SetVariable(Relaunched, "1");
-        sceSystemServiceLoadExec("/app0/eboot.bin", nullptr);
+        LibcRegisterShutdown_nid_postfix(MainShutdown);
+        const char* const arguments[] = {"--secondary", "two words", "quote\"d\\", "", nullptr};
+        sceSystemServiceLoadExec("/app0/picker/picker.bin", arguments);
         return 2;
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--secondary") == 0) {
+        Require(OwnExecutable().filename().string().starts_with("picker.picker.bin"));
+        std::string received = "arguments:";
+        for (int index = 1; index < argc; ++index) received += std::string(index == 1 ? " " : "|") + argv[index];
+        AppendMarker(received);
+        LibcRegisterShutdown_nid_postfix(SecondaryShutdown);
+        const char* const arguments[] = {"--relaunched", nullptr};
+        sceSystemServiceLoadExec("/app0/eboot.bin", arguments);
+        return 2;
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--relaunched") == 0) {
+        const char* main = std::getenv(MainExecutable);
+        Require(main != nullptr && std::filesystem::equivalent(OwnExecutable(), main));
+        AppendMarker("relaunched");
+        return 0;
     }
     if (argc > 1) {
         LibcRegisterShutdown_nid_postfix(Cleanup);
@@ -145,13 +170,15 @@ int main(int argc, char** argv) {
     }
     Require(sceSystemServiceLoadExec(nullptr, nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
     Require(sceSystemServiceLoadExec("", nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
-    bool rejected = false;
-    try { sceSystemServiceLoadExec("/app0/another.bin", nullptr); }
-    catch (const std::runtime_error&) { rejected = true; }
-    Require(rejected);
-    rejected = false;
-    const char* const arguments[] = {"--mode", nullptr};
-    try { sceSystemServiceLoadExec("/app0/eboot.bin", arguments); }
-    catch (const std::runtime_error&) { rejected = true; }
-    Require(rejected);
+    for (const char* path : {"/app0/another.bin", "/data/eboot.bin", "/app0/../eboot.bin", "/app0//eboot.bin"}) {
+        bool rejected = false;
+        try { sceSystemServiceLoadExec(path, nullptr); }
+        catch (const std::runtime_error&) { rejected = true; }
+        Require(rejected);
+    }
+#ifdef _WIN32
+    Require(GetEnvironmentVariableA("APS5_EBOOT", nullptr, 0) == 0);
+#else
+    Require(std::getenv("APS5_EBOOT") == nullptr);
+#endif
 }
