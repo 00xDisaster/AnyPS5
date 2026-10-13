@@ -1029,7 +1029,7 @@ bool decodePlan(Reader& reader, IrResourcePlan& plan) {
     if (!valid || !reader.Done() || fill.words > plan.uniformFill.values.size()) return false;
     const auto knownSource = [&](std::uint32_t source) { return source < plan.descriptorSources.size(); };
     if (!std::ranges::all_of(plan.materializationSources, knownSource)) return false;
-    if (!std::ranges::all_of(plan.descriptorSources, [](const DescriptorSource& source) { return source.dwordCount <= source.dwords.size(); })) return false;
+    if (!std::ranges::all_of(plan.descriptorSources, [&](const DescriptorSource& source) { return source.dwordCount <= source.dwords.size() && (!source.indirectImage.has_value() || (knownSource(source.indirectImage->heapSource) && knownSource(source.indirectImage->materialSource))); })) return false;
     if (!std::ranges::all_of(plan.info.buffers, [&](const BufferResource& buffer) { return knownSource(buffer.source); })) return false;
     if (!std::ranges::all_of(plan.info.images, [&](const ImageResource& image) { return knownSource(image.source); })) return false;
     if (!std::ranges::all_of(plan.info.samplers, [&](const SamplerResource& sampler) { return knownSource(sampler.source); })) return false;
