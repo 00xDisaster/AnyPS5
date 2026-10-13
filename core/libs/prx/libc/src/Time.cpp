@@ -479,7 +479,7 @@ GuestTm* APS5_VABI localtime_s_nid_postfix(const int64_t* timer, GuestTm* result
     }
     const std::int64_t year = host.tm_year + cycles * CALENDAR_CYCLE_YEARS;
     if (year < std::numeric_limits<int>::min() || year > std::numeric_limits<int>::max()) {
-        errno = EINVAL;
+        errno = callerError;
         return nullptr;
     }
     host.tm_year = static_cast<int>(year);
