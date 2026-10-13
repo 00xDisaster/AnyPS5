@@ -19,6 +19,7 @@ public:
             case Domain::ProgressStage::Modules: label = "PRX conversion"; break;
             case Domain::ProgressStage::Syscalls: label = "Syscall scan"; break;
             case Domain::ProgressStage::Decode: label = "Instruction scan"; break;
+            case Domain::ProgressStage::Lowering: label = "Instruction conversion"; break;
             case Domain::ProgressStage::Imports: label = "Import analysis"; break;
             case Domain::ProgressStage::Image: label = "Output image"; break;
             case Domain::ProgressStage::Write: label = "Write output"; break;

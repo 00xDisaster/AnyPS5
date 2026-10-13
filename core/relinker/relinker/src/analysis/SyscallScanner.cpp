@@ -71,9 +71,7 @@ static constexpr std::array<std::uint8_t, 43> SDK_MMAP_EXEC_INLINE{
 };
 
 template<std::size_t TSize>
-static bool MatchesSdkInlineStub(const std::vector<std::uint8_t>& code, std::size_t syscallOffset, std::size_t limit,
-                                  const std::array<std::uint8_t, TSize>& pattern, std::size_t beforeSyscall,
-                                  const std::vector<Codegen::InstructionMatch>& matches, FileByteOffset codeOffset) {
+static bool MatchesSdkInlineStub(const std::vector<std::uint8_t>& code, std::size_t syscallOffset, std::size_t limit, const std::array<std::uint8_t, TSize>& pattern, std::size_t beforeSyscall, const std::vector<Codegen::InstructionMatch>& matches, FileByteOffset codeOffset) {
     if (syscallOffset < beforeSyscall || syscallOffset > limit) return false;
     const auto start = syscallOffset - beforeSyscall;
     if (pattern.size() > limit - start || !std::equal(pattern.begin(), pattern.end(), code.begin() + static_cast<std::ptrdiff_t>(start))) return false;
@@ -82,17 +80,11 @@ static bool MatchesSdkInlineStub(const std::vector<std::uint8_t>& code, std::siz
     return instruction != matches.end() && instruction->Offset == codeOffset + start;
 }
 
-static bool IsSdkMmanSyscallStub(const std::vector<std::uint8_t>& code, std::size_t syscallOffset, std::size_t limit,
-                                 const std::vector<Codegen::InstructionMatch>& matches, FileByteOffset codeOffset) {
-    return MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MPROTECT_INLINE, 42, matches, codeOffset)
-        || MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MMAP_INLINE, 17, matches, codeOffset)
-        || MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MMAP_EXEC_INLINE, 23, matches, codeOffset);
+static bool IsSdkMmanSyscallStub(const std::vector<std::uint8_t>& code, std::size_t syscallOffset, std::size_t limit, const std::vector<Codegen::InstructionMatch>& matches, FileByteOffset codeOffset) {
+    return MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MPROTECT_INLINE, 42, matches, codeOffset) || MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MMAP_INLINE, 17, matches, codeOffset) || MatchesSdkInlineStub(code, syscallOffset, limit, SDK_MMAP_EXEC_INLINE, 23, matches, codeOffset);
 }
 
-static ForbiddenInstruction ClassifyForbiddenInstruction(
-    const std::vector<std::uint8_t>& codeSection,
-    const std::size_t opcodeOffset,
-    const std::size_t limit) {
+static ForbiddenInstruction ClassifyForbiddenInstruction(const std::vector<std::uint8_t>& codeSection, const std::size_t opcodeOffset, const std::size_t limit) {
     if (opcodeOffset + 1 >= limit)
         return ForbiddenInstruction::None;
 
@@ -133,11 +125,7 @@ static std::optional<std::uint32_t> ConstantRaxLoad(const std::uint8_t* bytes, c
     return std::nullopt;
 }
 
-static std::optional<std::uint32_t> ConstantSyscallNumber(
-    const std::vector<std::uint8_t>& codeSection,
-    const FileByteOffset codeSectionOffset,
-    const std::vector<Codegen::InstructionMatch>& matches,
-    const std::size_t syscallIndex) {
+static std::optional<std::uint32_t> ConstantSyscallNumber(const std::vector<std::uint8_t>& codeSection, const FileByteOffset codeSectionOffset, const std::vector<Codegen::InstructionMatch>& matches, const std::size_t syscallIndex) {
     for (std::size_t step = 1; step <= SYSCALL_NUMBER_LOOKBACK && step <= syscallIndex; ++step) {
         const auto& match = matches[syscallIndex - step];
         const std::size_t start = static_cast<std::size_t>(match.Offset - codeSectionOffset);
@@ -166,20 +154,14 @@ class SyscallScanner : public ISyscallScanner {
 public:
     SyscallScanner(Domain::IProgress& progress, const bool trapSdkStubs) : progress(progress), trapSdkStubs(trapSdkStubs) {}
 
-    std::vector<std::size_t> ScanCodeSectionForSyscalls(
-        const std::vector<std::uint8_t>& codeSection,
-        FileByteOffset codeSectionOffset,
-        FileByteOffset codeSectionSize, std::string_view input) override;
+    std::vector<std::size_t> ScanCodeSectionForSyscalls(const std::vector<std::uint8_t>& codeSection, FileByteOffset codeSectionOffset, FileByteOffset codeSectionSize, std::string_view input) override;
 
 private:
     Domain::IProgress& progress;
     bool trapSdkStubs;
 };
 
-std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
-    const std::vector<std::uint8_t>& codeSection,
-    const FileByteOffset codeSectionOffset,
-    const FileByteOffset codeSectionSize, std::string_view input) {
+std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::vector<std::uint8_t>& codeSection, const FileByteOffset codeSectionOffset, const FileByteOffset codeSectionSize, std::string_view input) {
     const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
 
     const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, std::string(input), completed, total}); });
@@ -228,12 +210,7 @@ std::unique_ptr<ISyscallScanner> MakeSyscallScanner(Domain::IProgress& progress,
 
 class NullSyscallScanner : public ISyscallScanner {
 public:
-    std::vector<std::size_t> ScanCodeSectionForSyscalls(
-        const std::vector<std::uint8_t>&,
-        FileByteOffset,
-        FileByteOffset,
-        std::string_view
-    ) override { return {}; }
+    std::vector<std::size_t> ScanCodeSectionForSyscalls(const std::vector<std::uint8_t>&, FileByteOffset, FileByteOffset, std::string_view) override { return {}; }
 };
 
 std::unique_ptr<ISyscallScanner> MakeNullSyscallScanner() {

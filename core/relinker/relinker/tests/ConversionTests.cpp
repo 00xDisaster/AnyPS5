@@ -2,6 +2,7 @@
 #include <relinker/pipeline/Conversion.hpp>
 #include <relinker/analysis/SyscallScanner.hpp>
 #include <io/BufferUtils.hpp>
+#include <codegen/IAmd64OnlyConverter.hpp>
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -73,6 +74,7 @@ void convert() {
     for (const auto target : {Relinker::TargetSystem::Windows, Relinker::TargetSystem::Linux}) {
         Relinker::ConversionOptions options;
         options.Target = target;
+        options.ToIntel = true;
         auto source = input();
         source.Modules.push_back({"virtual/title/sce_module/plugin.prx", fixture()});
         const auto output = converter.Convert(std::move(source), options);
@@ -109,6 +111,20 @@ void scanning() {
     require(scanner->ScanCodeSectionForSyscalls(code, 0, code.size(), "sample.prx").empty(), "Unexpected syscall trap");
     require(std::any_of(progress.Events.begin(), progress.Events.end(), [](const auto& event) { return event.Completed > 0 && event.Completed < event.Total; }), "Only start and finish were reported");
     for (const auto& event : progress.Events) require(event.Input == "sample.prx", "Lost scanner input identity");
+    progress.Events.clear();
+    Domain::ProgramHeader header{};
+    header.Type = 1;
+    header.Flags = 1;
+    header.FileSize = code.size();
+    header.MemorySize = code.size();
+    const auto converter = Codegen::MakeAmd64OnlyConverter(Codegen::Amd64OnlyTarget::Intel, [&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Lowering, "sample.prx", completed, total}); });
+    require(converter->Convert(code, {header}).Bytes == code, "Progress changed instruction conversion");
+    std::uint64_t previous = 0;
+    for (const auto& event : progress.Events) {
+        require(event.Completed >= previous && event.Completed <= event.Total, "Instruction conversion progress moved backwards");
+        previous = event.Completed;
+    }
+    require(previous == progress.Events.back().Total, "Instruction conversion progress did not finish");
     code[70000] = 0x0f;
     code[70001] = 0x05;
     progress.Events.clear();

@@ -7,7 +7,7 @@
 
 namespace Domain {
 
-enum class ProgressStage { Executable, Modules, Syscalls, Decode, Imports, Image, Write };
+enum class ProgressStage { Executable, Modules, Syscalls, Decode, Lowering, Imports, Image, Write };
 
 struct ProgressEvent {
     ProgressStage Stage;

@@ -10,21 +10,13 @@ namespace Codegen {
 class InstructionScanner : public IInstructionScanner {
 public:
     explicit InstructionScanner(std::function<void(std::uint64_t, std::uint64_t)> progress) : progress(std::move(progress)) {}
-    [[nodiscard]] std::vector<InstructionMatch> ScanCodeSection(
-        const std::vector<std::uint8_t>& codeSection,
-        Domain::FileByteOffset codeSectionOffset,
-        Domain::FileByteOffset codeSectionSize
-    ) const override;
+    [[nodiscard]] std::vector<InstructionMatch> ScanCodeSection(const std::vector<std::uint8_t>& codeSection, Domain::FileByteOffset codeSectionOffset, Domain::FileByteOffset codeSectionSize) const override;
 
 private:
     std::function<void(std::uint64_t, std::uint64_t)> progress;
 };
 
-std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(
-    const std::vector<std::uint8_t>& codeSection,
-    const Domain::FileByteOffset codeSectionOffset,
-    const Domain::FileByteOffset codeSectionSize
-) const {
+std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(const std::vector<std::uint8_t>& codeSection, const Domain::FileByteOffset codeSectionOffset, const Domain::FileByteOffset codeSectionSize) const {
     const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
 
     const X64InstructionDecoder decoder;
