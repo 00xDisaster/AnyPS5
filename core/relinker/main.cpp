@@ -33,7 +33,7 @@ struct ConvertedExecutable {
     std::string Diagnostics;
 };
 
-ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable, Domain::IProgress& progress) {
+ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable, Cli::ConsoleProgress& progress) {
     Io::FileReader fileReader;
     Relinker::ConversionInput input;
     input.Executable = fileReader.Read(inputPath);
@@ -59,6 +59,9 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
     options.WindowsGui = args.windowsGui;
     options.WindowsDiagnostics = args.windowsDiagnostics && mainExecutable;
     options.ExcludedModules = args.excludedSceModules;
+    progress.IncludeFile(Io::Utf8Path(input.InputPath));
+    progress.IncludeFile(Io::Utf8Path(input.OutputPath));
+    for (const auto& module : input.Modules) progress.IncludeFile(Io::Utf8Path(module.Path));
     auto converted = Relinker::Conversion(progress).Convert(std::move(input), options);
     return {inputPath, absPath, std::move(converted.Analysis), std::move(converted.Modules), std::move(converted.Executable), std::move(converted.WindowsDiagnostics)};
 }
@@ -121,6 +124,12 @@ int Run(const int argc, char* argv[]) {
             extraExecutables.push_back({executable, relative, input, output});
         }
 
+        progress.IncludeFile(args.inputPath);
+        progress.IncludeFile(absPath);
+        for (const auto& extra : extraExecutables) {
+            progress.IncludeFile(Io::Utf8Path(extra.Input));
+            progress.IncludeFile(Io::Utf8Path(extra.Output));
+        }
         std::vector<ConvertedExecutable> executables;
         executables.push_back(Convert(args, args.inputPath, absPath, true, progress));
         for (const auto& [executable, relative, input, output] : extraExecutables) {

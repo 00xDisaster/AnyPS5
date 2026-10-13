@@ -6,12 +6,20 @@
 #include <chrono>
 #include <sstream>
 #include <stdexcept>
+#include <algorithm>
+#include <iomanip>
 
 namespace Cli {
 
 class ConsoleProgress final : public Domain::IProgress {
 public:
     explicit ConsoleProgress(std::ostream& stream) : stream(stream) {}
+
+    void IncludeFile(std::string_view path) {
+        const auto separator = path.find_last_of("/\\");
+        const auto name = path.substr(separator == std::string_view::npos ? 0 : separator + 1);
+        nameWidth = std::max(nameWidth, textWidth(name));
+    }
 
     void Report(const Domain::ProgressEvent& event) override {
         if (event.Completed > event.Total) throw std::logic_error("Invalid progress counters");
@@ -51,9 +59,9 @@ public:
         if (!changed && !complete && now - lastUpdate < std::chrono::milliseconds(80)) return;
         if (changed || messages) Finish();
         std::ostringstream line;
-        line << label;
-        if (!name.empty()) line << " | " << name;
-        line << " | " << percent << '%';
+        line << std::left << std::setw(22) << label;
+        line << " | " << name << std::string(nameWidth > textWidth(name) ? nameWidth - textWidth(name) : 0, ' ');
+        line << " | " << std::right << std::setw(3) << percent << '%';
         if (event.Stage == Domain::ProgressStage::Modules) line << " (" << event.Completed << '/' << event.Total << ')';
         const auto text = line.str();
         stream << '\r' << text;
@@ -84,6 +92,11 @@ public:
     }
 
 private:
+    static std::size_t textWidth(std::string_view text) {
+        return static_cast<std::size_t>(std::count_if(text.begin(), text.end(), [](unsigned char character) { return (character & 0xc0) != 0x80; }));
+    }
+
+    std::size_t nameWidth = 0;
     std::ostream& stream;
     Domain::ProgressStage lastStage = Domain::ProgressStage::Write;
     std::string lastInput;
