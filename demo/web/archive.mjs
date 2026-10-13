@@ -1,4 +1,4 @@
-import { BlobReader, Uint8ArrayReader, ZipReader, ZipWriter, configure } from "./vendor/zip/zip-no-worker.js";
+import { BlobReader, Uint8ArrayReader, ZipReader, ZipWriter, configure } from "https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.57/lib/zip-no-worker.js/+esm";
 
 configure({ useWebWorkers: false, useCompressionStream: false, chunkSize: 65536 });
 

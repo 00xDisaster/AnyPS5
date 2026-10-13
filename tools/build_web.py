@@ -16,23 +16,6 @@ def copy_sources(output):
     for file in source.iterdir():
         if file.is_file():
             shutil.copy2(file, output / file.name)
-    library = ROOT / "3rdparty/zip.js/lib"
-    pending = [library / "zip-no-worker.js"]
-    copied = set()
-    while pending:
-        file = pending.pop().resolve()
-        if file in copied:
-            continue
-        if not file.is_relative_to(library.resolve()):
-            raise ValueError(f"ZIP source import escapes library: {file}")
-        text = file.read_text(encoding="utf-8")
-        copied.add(file)
-        destination = output / "vendor/zip" / file.relative_to(library.resolve())
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(file, destination)
-        for name in re.findall(r"(?:from\s+|import\s*)[\"'](\.[^\"']+)[\"']", text):
-            pending.append(file.parent / name)
-    shutil.copy2(ROOT / "3rdparty/zip.js/LICENSE", output / "vendor/zip/LICENSE")
     (output / ".nojekyll").touch()
 
 

@@ -37,6 +37,3 @@
 [submodule "3rdparty/libusb-cmake"]
 	path = 3rdparty/libusb-cmake
 	url = https://github.com/libusb/libusb-cmake.git
-[submodule "3rdparty/zip.js"]
-	path = 3rdparty/zip.js
-	url = https://github.com/gildas-lormeau/zip.js.git
