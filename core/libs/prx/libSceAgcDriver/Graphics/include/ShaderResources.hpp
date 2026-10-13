@@ -431,10 +431,10 @@ private:
     Context context;
     std::vector<std::uint32_t> layoutKey;
     GuestBufferMemory guestMemory;
+    std::size_t maxDrawSnapshotBytes = MaxDrawSnapshotBytes();
     std::unique_ptr<BdaResources> bda;
     bool usesBda = false;
     bool usesFaultBuffer = false;
-    std::size_t maxDrawSnapshotBytes = MaxDrawSnapshotBytes();
     VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
     // Whether the layout is this object's own (no cache) and destroyed with it.
     bool ownsLayout = false;
