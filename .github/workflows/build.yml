@@ -103,7 +103,7 @@ jobs:
             }
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number, per_page: 100 });
             const paths = files.flatMap((file) => [file.filename, file.previous_filename].filter(Boolean));
-            const touches = (...prefixes) => manual || files.length >= 3000 ||
+            const touches = (...prefixes) => files.length >= 3000 ||
               paths.some((path) => prefixes.some((prefix) => prefix.endsWith('/') ? path.startsWith(prefix) : path === prefix));
             const workflow = '.github/workflows/build.yml';
             const libc = 'core/libs/prx/libc/';
