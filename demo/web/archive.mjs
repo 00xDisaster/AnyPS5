@@ -190,14 +190,69 @@ async function appendEntry(writer, name, entry, report) {
     entry.getData(stream.writable, { checkSignature: true }),
     writer.add(name, stream.readable.pipeThrough(limit), {
       versionMadeBy: 0x31e, externalFileAttributes: entry.externalFileAttributes,
-      onprogress: completed => report({ phase: "Compressing ZIP", input: name, completed, total: entry.uncompressedSize })
+      onprogress: completed => report({ phase: writer instanceof DirectoryWriter ? "Writing files" : "Compressing ZIP", input: name, completed, total: entry.uncompressedSize })
     })
   ]);
 }
 
-export async function packageArchive(archive, converted, outputName, libraryFile, destination, report) {
+class DirectoryWriter {
+  constructor(destination) {
+    this.destination = destination;
+  }
+
+  async add(name, source, options = {}) {
+    if (options.directory) {
+      await this.destination.directory(name);
+      return;
+    }
+    const output = await this.destination.file(name);
+    if (source instanceof ReadableStream) {
+      let completed = 0;
+      const reader = source.getReader();
+      const writer = output.getWriter();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          for (let offset = 0; offset < value.length; offset += 65536) {
+            const chunk = value.subarray(offset, offset + 65536);
+            await writer.write(chunk);
+            completed += chunk.length;
+            options.onprogress?.(completed);
+          }
+        }
+        await writer.close();
+      } catch (error) {
+        await reader.cancel(error);
+        await writer.abort(error);
+        throw error;
+      } finally {
+        reader.releaseLock();
+        writer.releaseLock();
+      }
+    } else {
+      await source.init();
+      const writer = output.getWriter();
+      try {
+        for (let offset = 0; offset < source.size; offset += 65536) {
+          await writer.write(await source.readUint8Array(offset, Math.min(65536, source.size - offset)));
+        }
+        await writer.close();
+      } catch (error) {
+        await writer.abort(error);
+        throw error;
+      } finally {
+        writer.releaseLock();
+      }
+    }
+  }
+
+  async close() {}
+}
+
+export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false) {
   const libraries = new ZipReader(new BoundedBlobReader(libraryFile));
-  const writer = new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
+  const writer = directory ? new DirectoryWriter(destination) : new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
   const names = new Set();
   const claim = name => {
     validPath(name);

@@ -75,9 +75,38 @@ for (const target of ["windows", "linux"]) {
   assert.deepEqual(await byName.get("app0/content/resource.bin").getData(new Uint8ArrayWriter(), { checkSignature: true }), resource);
   assert.equal((byName.get(input.outputName).externalFileAttributes >>> 16) & 0o777, 0o755);
   assert(maxChunk < resource.length);
+  const saved = new Map();
+  let active = false;
+  let directoryChunk = 0;
+  await packageArchive(archive, converted, input.outputName, libraries, {
+    async directory(name) { saved.set(name, null); },
+    async file(name) {
+      assert.equal(active, false);
+      active = true;
+      const pieces = [];
+      return new WritableStream({
+        async write(chunk) {
+          directoryChunk = Math.max(directoryChunk, chunk.length);
+          pieces.push(chunk.slice());
+          await new Promise(resolve => setTimeout(resolve, 1));
+        },
+        async close() {
+          saved.set(name, new Uint8Array(await new Blob(pieces).arrayBuffer()));
+          active = false;
+        }
+      });
+    }
+  }, () => {}, true);
+  assert.equal(active, false);
+  assert(directoryChunk < resource.length);
+  assert.equal(saved.size, entries.length);
+  for (const entry of entries) {
+    assert(saved.has(entry.filename));
+    if (!entry.directory) assert.deepEqual(saved.get(entry.filename), await entry.getData(new Uint8ArrayWriter(), { checkSignature: true }));
+  }
   await reader.close();
   await archive.close();
-  console.log(`${kind}, ${target}: conversion, original files, modules, permissions and streamed ZIP verified`);
+  console.log(`${kind}, ${target}: conversion, original files, modules, permissions, streamed ZIP and directory output verified`);
 }
 }
 
@@ -100,3 +129,13 @@ assert(memoryEstimate(200 * 1024 ** 3, 1024, 1024, 100) > MEMORY_LIMIT);
 const invalid = native.Convert({ target: "unsupported" }, () => {});
 assert.equal(invalid.ok, false);
 console.log("Archive validation, missing-folder warnings and large-download budget verified");
+
+const workerMessages = [];
+globalThis.self = { postMessage: message => workerMessages.push(message) };
+await import(site("worker.mjs"));
+await self.onmessage({ data: { type: "convert", target: "windows", mode: "disk" } });
+assert.equal(workerMessages.length, 1);
+assert.equal(workerMessages[0].type, "error");
+assert.match(workerMessages[0].message, /browsers block DLL creation/u);
+delete globalThis.self;
+console.log("Windows folder output rejected before conversion or file writes");

@@ -52,10 +52,11 @@ self.onmessage = async ({ data }) => {
       const summary = await archive.inspect(report);
       self.postMessage({ type: "inspected", summary });
     } else if (data.type === "convert") {
+      if (data.target === "windows" && data.mode === "disk") throw new Error("Windows folder output is unavailable because browsers block DLL creation. Choose a ZIP save mode.");
       if (!archive) throw new Error("Select a ZIP or folder first");
       const libraries = await downloadLibraries(data.target);
       const estimate = memoryEstimate(archive.totalBytes, archive.selectedBytes, libraries.expandedBytes, archive.entries.length);
-      if (data.mode === "memory" && estimate > MEMORY_LIMIT) throw new Error("This result exceeds the 256 MiB memory-download budget. Use Save directly to disk in desktop Chrome or Edge.");
+      if (data.mode === "memory" && estimate > MEMORY_LIMIT) throw new Error("This result exceeds the 256 MiB memory-download budget. Use Save ZIP to disk in desktop Chrome or Edge.");
       report({ phase: "Loading converter" });
       const { default: createRelinker } = await import("./native/relinker_wasm.mjs");
       const native = await createRelinker();
@@ -66,24 +67,43 @@ self.onmessage = async ({ data }) => {
       if (!converted.ok) throw new Error(converted.error);
       const chunks = [];
       let size = 0;
-      const destination = new WritableStream({
-        async write(chunk) {
-          size += chunk.byteLength;
-          if (data.mode === "memory") {
-            if (size > MEMORY_LIMIT) throw new Error("The compressed ZIP exceeded 256 MiB. Use Save directly to disk.");
-            chunks.push(chunk.slice());
-          } else if (data.mode === "disk") {
-            const bytes = chunk.slice();
-            await new Promise(resolve => {
-              pendingWrite = resolve;
-              self.postMessage({ type: "write", bytes }, [bytes.buffer]);
-            });
-          } else throw new Error("Unknown save mode");
-        }
+      const send = (event, transfer = []) => new Promise(resolve => {
+        pendingWrite = resolve;
+        self.postMessage(event, transfer);
       });
-      await packageArchive(archive, converted, outputName, libraries.file, destination, report);
-      await destination.close();
-      self.postMessage({ type: "complete", blob: data.mode === "memory" ? new Blob(chunks, { type: "application/zip" }) : null, outputName, size, release: libraries.release.tag });
+      if (data.mode === "disk") {
+        const destination = {
+          directory: name => send({ type: "directory", name }),
+          async file(name) {
+            await send({ type: "open-file", name });
+            return new WritableStream({
+              async write(chunk) {
+                size += chunk.byteLength;
+                const bytes = chunk.slice();
+                await send({ type: "write", bytes }, [bytes.buffer]);
+              },
+              close: () => send({ type: "close-file" })
+            });
+          }
+        };
+        await packageArchive(archive, converted, outputName, libraries.file, destination, report, true);
+      } else if (data.mode === "memory" || data.mode === "zip") {
+        const destination = new WritableStream({
+          async write(chunk) {
+            size += chunk.byteLength;
+            if (data.mode === "zip") {
+              const bytes = chunk.slice();
+              await send({ type: "write", bytes }, [bytes.buffer]);
+              return;
+            }
+            if (size > MEMORY_LIMIT) throw new Error("The compressed ZIP exceeded 256 MiB. Use Save ZIP to disk.");
+            chunks.push(chunk.slice());
+          }
+        });
+        await packageArchive(archive, converted, outputName, libraries.file, destination, report);
+        await destination.close();
+      } else throw new Error("Unknown save mode");
+      self.postMessage({ type: "complete", mode: data.mode, blob: data.mode === "memory" ? new Blob(chunks, { type: "application/zip" }) : null, outputName, size, release: libraries.release.tag });
       await archive.close();
       archive = null;
     } else throw new Error("Unknown worker request");
