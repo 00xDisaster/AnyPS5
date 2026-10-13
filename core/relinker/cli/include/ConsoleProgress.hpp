@@ -3,6 +3,8 @@
 
 #include <domain/IProgress.hpp>
 #include <ostream>
+#include <chrono>
+#include <sstream>
 #include <stdexcept>
 
 namespace Cli {
@@ -25,16 +27,56 @@ public:
             case Domain::ProgressStage::Write: label = "Write output"; break;
             default: throw std::logic_error("Unknown progress stage");
         }
+        const auto separator = event.Input.find_last_of("/\\");
+        const auto name = event.Input.substr(separator == std::string::npos ? 0 : separator + 1);
+        if (event.Stage == Domain::ProgressStage::Executable) {
+            if (event.Completed == 0) Message("Converting " + name + "\n");
+            else Finish();
+            return;
+        }
+        if (event.Stage == Domain::ProgressStage::Imports) {
+            if (event.Completed == 0) Message("Import analysis\n");
+            else Finish();
+            return;
+        }
         const auto percent = event.Total == 0 ? 100u : static_cast<unsigned>(100.0L * event.Completed / event.Total);
-        if (lastStage == event.Stage && lastInput == event.Input && lastPercent == percent && event.Completed != 0) return;
-        stream << label << " [" << event.Input << "]: " << percent << "% (" << event.Completed << '/' << event.Total << ")\n" << std::flush;
+        const bool changed = lastStage != event.Stage || lastInput != event.Input;
+        const bool complete = event.Completed == event.Total;
+        const auto now = std::chrono::steady_clock::now();
+        if (!changed && lastPercent == percent && event.Completed != 0) return;
+        if (!changed && !complete && now - lastUpdate < std::chrono::milliseconds(80)) return;
+        if (changed || messages) Finish();
+        std::ostringstream line;
+        line << label;
+        if (!name.empty()) line << " | " << name;
+        line << " | " << percent << '%';
+        if (event.Stage == Domain::ProgressStage::Modules) line << " (" << event.Completed << '/' << event.Total << ')';
+        const auto text = line.str();
+        stream << '\r' << text;
+        if (lineWidth > text.size()) stream << std::string(lineWidth - text.size(), ' ') << '\r' << text;
+        stream << std::flush;
+        lineWidth = text.size();
+        active = true;
         lastStage = event.Stage;
         lastInput = event.Input;
         lastPercent = percent;
+        lastUpdate = now;
+        if (complete) Finish();
     }
 
     void Message(std::string_view message) override {
-        stream << message << std::flush;
+        Finish();
+        stream << message;
+        if (!message.empty() && message.back() != '\n') stream << '\n';
+        stream << std::flush;
+        messages = true;
+    }
+
+    void Finish() {
+        if (active || messages) stream << (active ? "\n\n" : "\n") << std::flush;
+        active = false;
+        messages = false;
+        lineWidth = 0;
     }
 
 private:
@@ -42,6 +84,10 @@ private:
     Domain::ProgressStage lastStage = Domain::ProgressStage::Write;
     std::string lastInput;
     unsigned lastPercent = 101;
+    std::size_t lineWidth = 0;
+    bool active = false;
+    bool messages = false;
+    std::chrono::steady_clock::time_point lastUpdate{};
 };
 
 }

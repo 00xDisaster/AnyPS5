@@ -1,4 +1,5 @@
 #include <ConsoleProgress.hpp>
+#include <RuntimeLayout.hpp>
 #include <NativeModules.hpp>
 #include <relinker/pipeline/Conversion.hpp>
 #include <Cli.hpp>
@@ -177,7 +178,6 @@ int Run(const int argc, char* argv[]) {
             std::filesystem::create_directories(artifact.Path.parent_path());
             fileWriter.Write(Io::Utf8Path(artifact.Path), artifact.Bytes);
             progress.Report({Domain::ProgressStage::Write, absPath, ++written, outputCount});
-            std::cout << "Guest module: " << Io::Utf8Path(artifact.Path) << '\n';
         }
         for (const auto& executable : executables) {
             fileWriter.Write(executable.OutputPath, executable.Bytes);
@@ -190,34 +190,43 @@ int Run(const int argc, char* argv[]) {
             for (std::size_t index = 0; index < guestArtifacts.size(); ++index)
                 fileWriter.Write(Io::Utf8Path(registryPaths[executables.size() + index]), registryWriter->WriteModuleImports(guestArtifacts[index].Imports));
         }
+        progress.Finish();
         if (desktopEntry) std::cout << "Desktop entry: " << Io::Utf8Path(desktopEntryWriter.Write(*desktopEntry)) << '\n';
-        std::cout << "External prx references: " << executables.front().Result.RegistryEntries.size() << "\nOutput file: " << absPath << '\n';
-        for (std::size_t index = 1; index < executables.size(); ++index) std::cout << "Executable file: " << executables[index].OutputPath << '\n';
-        std::cout << "Expected runtime layout (relative to the output executable):\n";
-        for (const auto& executable : executables) std::cout << Io::Utf8Path(Io::NativePath(executable.OutputPath).filename()) << "\n";
-        std::cout << "libs/\n    *.prx\napp0/\n    <game resources>\n";
+        std::cout << "Conversion complete\n\n"
+                  << "  Output file: " << absPath << '\n'
+                  << "  External prx references: " << executables.front().Result.RegistryEntries.size() << '\n'
+                  << "  Converted modules: " << guestArtifacts.size() << "\n\n";
+        std::vector<std::string> extraPaths;
+        for (std::size_t index = 1; index < executables.size(); ++index) {
+            std::cout << "Executable file: " << executables[index].OutputPath << '\n';
+            extraPaths.push_back(Io::Utf8Path(Io::NativePath(executables[index].OutputPath).filename()));
+        }
+        std::vector<std::string> modulePaths;
         for (const auto& artifact : guestArtifacts) {
             std::string relative = Io::Utf8Path(artifact.Path.lexically_relative(Io::NativePath(absPath).parent_path() / "app0"));
             std::replace(relative.begin(), relative.end(), '\\', '/');
-            std::cout << "    " << relative << '\n';
+            modulePaths.push_back(std::move(relative));
         }
-        std::cout << "Game resources and system libraries must be placed in this layout separately.\n";
+        Cli::RuntimeLayout::Print(std::cout, Io::Utf8Path(Io::NativePath(absPath).filename()), modulePaths, extraPaths);
         if (args.runPath != "$ORIGIN/libs") std::cout << "Custom library search path (--rpath): " << args.runPath << '\n';
 
         if (args.autorun) return Cli::Autorun(absPath, args.toWindows);
 
     } catch (const Domain::RelinkerException& e) {
+        progress.Finish();
         std::cerr << "FAIL: " << e.what();
         if (e.FailureOffset != 0) std::cerr << " (offset 0x" << std::hex << e.FailureOffset << ")";
         std::cerr << "\n";
         if (!e.InputPath.empty()) std::cerr << "Input: " << e.InputPath << '\n';
         return 2;
     } catch (const Codegen::CodegenException& e) {
+        progress.Finish();
         std::cerr << "FAIL: " << e.what();
         if (e.FailureOffset != 0) std::cerr << " (offset 0x" << std::hex << e.FailureOffset << ")";
         std::cerr << "\n";
         return 2;
     } catch (const std::exception& e) {
+        progress.Finish();
         std::cerr << "FAIL: " << e.what() << "\n";
         return 2;
     }
