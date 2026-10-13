@@ -69,11 +69,13 @@ emscripten::val Convert(const emscripten::val& request, const emscripten::val& c
         if (!request["icon"].isNull()) input.Icon = ReadBytes(request["icon"], remaining);
         Relinker::ConversionOptions options;
         options.Target = target == "windows" ? Relinker::TargetSystem::Windows : Relinker::TargetSystem::Linux;
-        options.WindowsGui = target == "windows";
+        options.WindowsGui = false;
+        options.WindowsDiagnostics = target == "windows";
         options.ToIntel = request["toIntel"].as<bool>();
         BrowserProgress progress(callback);
         auto output = Relinker::Conversion(progress).Convert(std::move(input), options);
         result.set("executable", CopyBytes(output.Executable));
+        result.set("diagnostics", output.WindowsDiagnostics);
         auto artifacts = emscripten::val::array();
         for (const auto& module : output.Modules) {
             auto artifact = emscripten::val::object();

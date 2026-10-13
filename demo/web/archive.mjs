@@ -216,12 +216,14 @@ export async function packageArchive(archive, converted, outputName, libraryFile
     const originalFiles = archive.files.filter(item => !replaced.has("app0/" + item.name));
     for (const item of originalFiles) claim("app0/" + item.name);
     claim(outputName);
+    if (converted.diagnostics) claim("windows-diagnostics-imports.txt");
     for (const module of converted.modules) {
       if (!module.name.startsWith("app0/sce_module/")) throw new Error("Invalid converted module path");
       claim(module.name);
     }
     const binary = { versionMadeBy: 0x31e, externalFileAttributes: (0o100755 << 16) >>> 0 };
     await writer.add(outputName, new Uint8ArrayReader(converted.executable), binary);
+    if (converted.diagnostics) await writer.add("windows-diagnostics-imports.txt", new Uint8ArrayReader(new TextEncoder().encode(converted.diagnostics)));
     for (const module of converted.modules) await writer.add(module.name, new Uint8ArrayReader(module.bytes), binary);
     for (const entry of libraryEntries) {
       if (entry.directory) await writer.add(entry.filename, undefined, { directory: true });

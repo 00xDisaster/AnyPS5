@@ -48,6 +48,10 @@ for (const target of ["windows", "linux"]) {
   const converted = native.Convert(input, event => events.push(event));
   assert.equal(converted.ok, true, converted.error);
   assert.equal(converted.executable[0], target === "windows" ? 77 : 127);
+  if (target === "windows") {
+    const image = new DataView(converted.executable.buffer, converted.executable.byteOffset, converted.executable.byteLength);
+    assert.equal(image.getUint16(image.getUint32(60, true) + 24 + 68, true), 3);
+  }
   assert(events.some(event => event.stage === 6 && event.completed > 0));
   const libraries = await zip([["libs/system.prx", new Uint8Array([1, 2, 3])]]);
   const chunks = [];
