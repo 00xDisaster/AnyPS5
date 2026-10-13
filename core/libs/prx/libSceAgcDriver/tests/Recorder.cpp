@@ -5675,6 +5675,24 @@ void sliceDirtyTests(const Device& device, Recorder& recorder) {
             device.WaitQueue();
             recorder.Sync();
             Require(stored(0, {255, 0, 0, 255}) && stored(1, {0, 255, 0, 255}), what + ": the second slice was not stored once a draw wrote it");
+            auto other = StorageTexture::Create(context, detiler, resource, 0);
+            static_cast<void>(recorder.Commands());
+            recorder.Keep(image);
+            recorder.Keep(other);
+            image->MarkSliceDirty(1);
+            other->MarkSliceDirty(1);
+            std::string ambiguous;
+            try {
+                static_cast<void>(StorageTexture::FindPendingSlice(address + geometry.GuestLayerOffset(1), sliceBytes));
+            } catch (const std::runtime_error& error) {
+                ambiguous = error.what();
+            }
+            Require(ambiguous.find("is a slice of the pending array images") != std::string::npos, what + ": a slice of two pending array images did not throw: " + ambiguous);
+            image->WriteBack();
+            other->WriteBack();
+            recorder.Submit();
+            device.WaitQueue();
+            recorder.Sync();
         }
         recorder.Sync();
     }
