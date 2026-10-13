@@ -192,6 +192,7 @@ private:
         append(key, value.stencilRefExportEnable);
         append(key, value.ditheredAlphaToCoverage);
         append(key, value.quadPixelMask);
+        append(key, value.quadSampleMask);
         append(key, value.targetOutputMode);
     }
 

@@ -2605,6 +2605,12 @@ void verifyMeshConfiguration() {
         std::vector<std::uint64_t> full;
         RecompileCacheKey::Build(fragment, full);
         require(masked != full, "the quad pixel mask is not part of the recompile cache key");
+        fragment.context.pixel->quadSampleMask = {0x1u, 0x2u, 0x0u, 0xffffu};
+        const auto sampled = RequestSerializer{}.Deserialize(RequestSerializer{}.Serialize(fragment));
+        require(sampled.request.context.pixel.has_value() && sampled.request.context.pixel->quadSampleMask == std::array<std::uint16_t, 4>{0x1u, 0x2u, 0x0u, 0xffffu}, "the quad sample masks were lost in serialization");
+        std::vector<std::uint64_t> partial;
+        RecompileCacheKey::Build(fragment, partial);
+        require(partial != full, "the quad sample masks are not part of the recompile cache key");
     }
     std::vector<std::uint64_t> key;
     RecompileCacheKey::Build(request, key);
@@ -2986,7 +2992,7 @@ void verifyPixelRequestSerialization() {
     minimal.context.pixel->layerExported = true;
     minimal.context.pixel->ditheredAlphaToCoverage = true;
     const auto encoded = serializer.Serialize(minimal);
-    require(requestPrefix(encoded, 8u) == "NVNQQRwAAAA=", "new requests did not use serialization version 28");
+    require(requestPrefix(encoded, 8u) == "NVNQQR0AAAA=", "new requests did not use serialization version 29");
     const std::array<std::uint32_t, 2> fallbacks{0x40u, 0x1ac4u};
     auto withFallbacks = minimal;
     withFallbacks.context.linkedCallFallbacks = fallbacks;
@@ -3101,10 +3107,10 @@ void verifyPixelRequestSerialization() {
         require(RecompileCacheKey::ContextHash(legacy19.request) == RecompileCacheKey::ContextHash(upgraded19.request), "upgrading version19 changed shader identity");
     }
     constexpr std::size_t mappingOffset = 8u + 37u + 18u + 163u;
-    for (std::size_t bytes = 0; bytes < 25u; ++bytes) {
-        expectFailure([&] { static_cast<void>(serializer.Deserialize(requestPrefix(encoded, mappingOffset + bytes))); }, "truncated data", "a truncated pixel mapping, packing, dual-source, alpha-to-coverage, stencil reference export flag, primitive class, layer export, dither or front-face flag, or quad pixel mask was accepted");
+    for (std::size_t bytes = 0; bytes < 41u; ++bytes) {
+        expectFailure([&] { static_cast<void>(serializer.Deserialize(requestPrefix(encoded, mappingOffset + bytes))); }, "truncated data", "a truncated pixel mapping, packing, dual-source, alpha-to-coverage, stencil reference export flag, primitive class, layer export, dither or front-face flag, quad pixel mask or quad sample mask was accepted");
     }
-    for (const auto unsupported : {"NVNQQQAAAAA=", "NVNQQR0AAAA="}) {
+    for (const auto unsupported : {"NVNQQQAAAAA=", "NVNQQR4AAAA="}) {
         expectFailure([&] { static_cast<void>(serializer.Deserialize(unsupported)); }, "serialization version", "an unsupported request version was accepted");
     }
     static constexpr std::string_view version18Request{
@@ -3229,7 +3235,7 @@ void verifyVertexInfoVersion19() {
     std::size_t allBitsOffset = 0;
     while (allBitsOffset < version26Pixel.size() && version26Pixel[allBitsOffset] == allBitsBytes[allBitsOffset]) ++allBitsOffset;
     require(allBitsOffset == flagOffset + 2u, "the front-face all-bits flag does not follow the dithered coverage flag");
-    version26Pixel.erase(version26Pixel.begin() + static_cast<std::ptrdiff_t>(allBitsOffset), version26Pixel.begin() + static_cast<std::ptrdiff_t>(allBitsOffset + 2u));
+    version26Pixel.erase(version26Pixel.begin() + static_cast<std::ptrdiff_t>(allBitsOffset), version26Pixel.begin() + static_cast<std::ptrdiff_t>(allBitsOffset + 2u + 16u));
     version26Pixel[4] = 26u;
     const auto replay26 = serializer.Deserialize(encodeBase64(version26Pixel));
     require(replay26.request.context.pixel.has_value() && replay26.request.context.pixel->rasterPrimitive == RasterPrimitive::Rectangle && !replay26.request.context.pixel->frontFaceAllBits, "a version 26 request lost its pixel primitive class or read a front-face all-bits flag");
@@ -3240,12 +3246,21 @@ void verifyVertexInfoVersion19() {
     std::size_t maskOffset = 0;
     while (maskOffset < legacyPixel.size() && legacyPixel[maskOffset] == maskedBytes[maskOffset]) ++maskOffset;
     require(maskOffset == flagOffset + 3u && maskOffset < legacyPixel.size(), "the quad pixel mask is not the byte after the front-face all-bits flag");
+    constexpr std::size_t sampleMaskBytes = 16u;
+    auto sampledPixel = maskedPixel;
+    sampledPixel.context.pixel->quadSampleMask = {0x1u, 0x2u, 0x4u, 0x8u};
+    auto version28 = decodeBase64(serializer.Serialize(sampledPixel));
+    require(std::equal(maskedBytes.begin(), maskedBytes.begin() + static_cast<std::ptrdiff_t>(maskOffset + 1u), version28.begin()) && version28[maskOffset + 1u] == 0x1u && version28[maskOffset + 5u] == 0x2u && version28[maskOffset + 9u] == 0x4u && version28[maskOffset + 13u] == 0x8u, "the quad sample masks are not the four words after the quad pixel mask");
+    version28.erase(version28.begin() + static_cast<std::ptrdiff_t>(maskOffset + 1u), version28.begin() + static_cast<std::ptrdiff_t>(maskOffset + 1u + sampleMaskBytes));
+    version28[4] = 28u;
+    const auto replay28 = serializer.Deserialize(encodeBase64(version28));
+    require(replay28.request.context.pixel.has_value() && replay28.request.context.pixel->quadPixelMask == 0x2u && replay28.request.context.pixel->quadSampleMask == std::array<std::uint16_t, 4>{0xffffu, 0xffffu, 0xffffu, 0xffffu} && decodeBase64(serializer.Serialize(replay28.request)) == maskedBytes, "a version 28 request read quad sample masks or misread the fields after them");
     auto version27 = maskedBytes;
-    version27.erase(version27.begin() + static_cast<std::ptrdiff_t>(maskOffset));
+    version27.erase(version27.begin() + static_cast<std::ptrdiff_t>(maskOffset), version27.begin() + static_cast<std::ptrdiff_t>(maskOffset + 1u + sampleMaskBytes));
     version27[4] = 27u;
     const auto replay27 = serializer.Deserialize(encodeBase64(version27));
     require(replay27.request.context.pixel.has_value() && replay27.request.context.pixel->quadPixelMask == 0xfu && serializer.Serialize(replay27.request) == encodedPixel, "a version 27 request read a quad pixel mask or misread the fields after it");
-    legacyPixel.erase(legacyPixel.begin() + static_cast<std::ptrdiff_t>(flagOffset), legacyPixel.begin() + static_cast<std::ptrdiff_t>(flagOffset + 4u));
+    legacyPixel.erase(legacyPixel.begin() + static_cast<std::ptrdiff_t>(flagOffset), legacyPixel.begin() + static_cast<std::ptrdiff_t>(flagOffset + 4u + sampleMaskBytes));
     legacyPixel.resize(legacyPixel.size() - sizeof(std::uint64_t));
     for (const auto version : {19u, 20u, 21u, 22u}) {
         auto versionPixel = legacyPixel;
