@@ -69,8 +69,9 @@ std::optional<DwordPatternFill> MatchZeroDwordFill(std::span<const std::uint32_t
     const bool swizzled = ((userData[1] >> 31u) & 1u) != 0;
     const bool addTid = ((userData[3] >> 23u) & 1u) != 0;
     const auto outOfBounds = (userData[3] >> 28u) & 3u;
+    const auto format = (userData[3] >> 12u) & 0x7fu;
     const auto type = userData[3] >> 30u;
-    if (type != 0 || stride != 4 || swizzled || addTid || outOfBounds != 0 || (packet[4] & 0x20u) != 0 || packet[2] != 1 || packet[3] != 1) return std::nullopt;
+    if (type != 0 || stride != 4 || swizzled || addTid || outOfBounds != 0 || format < 20u || format > 22u || (packet[4] & 0x20u) != 0 || packet[2] != 1 || packet[3] != 1) return std::nullopt;
     const auto dwords = std::min<std::uint64_t>(static_cast<std::uint64_t>(packet[1]) * 64u, userData[2]);
     const auto base = userData[0] | (static_cast<std::uint64_t>(userData[1] & 0xffffu) << 32u);
     if (dwords == 0 || dwords % 4u != 0 || base % 16u != 0) return std::nullopt;

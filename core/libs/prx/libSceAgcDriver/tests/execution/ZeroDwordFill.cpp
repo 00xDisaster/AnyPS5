@@ -41,6 +41,10 @@ void MatchTests() {
     Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x00814204u), compute), "an add-tid descriptor matched");
     Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x30014204u), compute), "a raw out-of-bounds mode matched");
     Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data() + 1, 1024), compute), "an unaligned destination matched");
+    Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x00011204u), compute), "an 8-bit output format matched");
+    Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x00017204u), compute), "an output format above 32_FLOAT matched");
+    Require(MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x00015204u), compute).has_value(), "32_SINT output did not match");
+    Require(MatchZeroDwordFill(packet, Code, UserData(Output.data(), 1024, 4, 0x00016204u), compute).has_value(), "32_FLOAT output did not match");
     Require(!MatchZeroDwordFill(packet, Code, UserData(Output.data(), 102), compute), "a record count not filling 16-byte units matched");
     auto extra = data;
     extra.push_back(0);
