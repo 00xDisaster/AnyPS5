@@ -3,6 +3,7 @@
 #include <io/NativePath.hpp>
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 
 namespace Cli {
 
