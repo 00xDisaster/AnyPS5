@@ -1,3 +1,4 @@
+#include <NativeModules.hpp>
 #include <ConsoleProgress.hpp>
 #include <Cli.hpp>
 #include <domain/Types.hpp>
@@ -102,7 +103,8 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
 
     std::vector<Relinker::GuestArtifact> guestArtifacts;
     if (!args.skipSceModule) {
-        guestArtifacts = Relinker::GuestModuleBuilder().Build(Io::NativePath(inputPath), Io::NativePath(absPath), result.DynamicSection, args.toWindows, args.toMacos, args.toIntel, args.toRosetta, *syscallScanner, args.lazyBinding, args.runPath, args.excludedSceModules, Io::NativePath(args.sceModulePath), args.moduleDirectories);
+        auto modules = Cli::ReadModules(std::filesystem::absolute(Io::NativePath(inputPath)), Io::NativePath(args.sceModulePath), args.excludedSceModules, args.moduleDirectories);
+        guestArtifacts = Relinker::GuestModuleBuilder().Build(std::filesystem::absolute(Io::NativePath(inputPath)), Io::NativePath(absPath), result.DynamicSection, args.toWindows, args.toMacos, args.toIntel, args.toRosetta, *syscallScanner, args.lazyBinding, args.runPath, args.excludedSceModules, modules.Root, modules.RuntimeDirectories, std::move(modules.Modules), progress);
     }
 
     return {inputPath, absPath, std::move(sourceBytes), std::move(trampolines), std::move(result), std::move(guestArtifacts), {}};
@@ -243,6 +245,9 @@ int Run(const int argc, char* argv[]) {
                 registryPaths.push_back(outFsPath.parent_path() / Io::NativePath(Io::Utf8Path(outFsPath.stem()) + "." + Io::Utf8Path(artifact.Path.filename()) + ".registry.json"));
             for (const auto& path : registryPaths) checkOutputInputs(path, "Registry");
         }
+
+        checkOutputInputs(Io::NativePath(absPath), "Executable");
+        for (const auto& artifact : guestArtifacts) checkOutputInputs(artifact.Path, "Guest module");
 
         for (std::size_t index = 0; index < executables.size(); ++index) Patch(args, executables[index], index == 0);
         if (args.windowsDiagnostics) fileWriter.Write("windows-diagnostics-imports.txt", executables.front().Diagnostics);
