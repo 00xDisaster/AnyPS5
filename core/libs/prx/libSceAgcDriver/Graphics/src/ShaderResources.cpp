@@ -14,6 +14,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -152,6 +153,26 @@ struct TextureCache {
 TextureCache& Textures() {
     static TextureCache cache;
     return cache;
+}
+
+thread_local unsigned sampledCacheHeld = 0;
+thread_local unsigned storageCacheHeld = 0;
+
+struct CacheHold {
+    unsigned& depth;
+    explicit CacheHold(unsigned& depth) : depth(depth) { ++depth; }
+    ~CacheHold() { --depth; }
+    CacheHold(const CacheHold&) = delete;
+    CacheHold& operator=(const CacheHold&) = delete;
+};
+
+bool AcquireCache(std::mutex& mutex) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(20);
+    do {
+        if (mutex.try_lock()) return true;
+        std::this_thread::yield();
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
 }
 
 struct UncachedImages {
@@ -704,6 +725,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     auto& cache = Textures();
     const auto key = MakeTextureKey(context.device, words, components, depthCompare);
     std::lock_guard lock(cache.mutex);
+    const CacheHold held(sampledCacheHeld);
     dropUncachedViews(cache);
     if (auto it = findTexture(cache, key); it != cache.entries.end()) {
         if (it->source != nullptr) {
@@ -944,6 +966,7 @@ std::shared_ptr<StorageTexture> cachedStorageTexture(const Context& context, std
     std::shared_ptr<StorageTexture> texture;
     {
         std::lock_guard lock(cache.mutex);
+        const CacheHold held(storageCacheHeld);
         if (resource.mipCount > AllocatedLevels(resource)) {
             auto allocated = resource;
             allocated.mipCount = AllocatedLevels(resource);
@@ -1093,6 +1116,79 @@ void ClearCachedTextures(VkDevice device) {
             for (auto& resource : resources) recorder->Keep(std::move(resource));
         }
     }
+}
+
+std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
+    thread_local bool releasing = false;
+    if (releasing) return 0;
+    releasing = true;
+    struct Done {
+        bool& flag;
+        ~Done() { flag = false; }
+    } done{releasing};
+    std::uint64_t freed = 0;
+    std::size_t sampledEntries = 0;
+    std::size_t storageEntries = 0;
+    bool sampledSkipped = false;
+    bool storageSkipped = false;
+    {
+        auto& cache = Textures();
+        if (sampledCacheHeld != 0 || !AcquireCache(cache.mutex)) {
+            sampledSkipped = true;
+        } else {
+            std::lock_guard lock(cache.mutex, std::adopt_lock);
+            dropUncachedViews(cache);
+            while (freed < bytes && !cache.entries.empty()) {
+                const auto back = std::prev(cache.entries.end());
+                const auto accounted = back->accounted;
+                const bool last = back->texture.use_count() == 1;
+                eraseTexture(cache, back);
+                ++cache.counts.evicted;
+                ++sampledEntries;
+                if (last) freed += accounted;
+            }
+        }
+    }
+    if (freed < bytes) {
+        auto& cache = StorageTextures();
+        std::unique_lock<GuestMemory::GpuMutexType> gpu(GuestMemory::GpuMutex(), std::defer_lock);
+        if (storageCacheHeld != 0 || !gpu.try_lock()) {
+            storageSkipped = true;
+        } else {
+            bool more = true;
+            while (more && freed < bytes) {
+                std::vector<std::pair<std::shared_ptr<StorageTexture>, std::uint64_t>> evicted;
+                {
+                    if (!AcquireCache(cache.mutex)) {
+                        storageSkipped = true;
+                        break;
+                    }
+                    std::lock_guard lock(cache.mutex, std::adopt_lock);
+                    std::uint64_t batch = 0;
+                    while (batch + freed < bytes && !cache.entries.empty()) {
+                        const auto back = std::prev(cache.entries.end());
+                        const auto accounted = back->accounted;
+                        evicted.emplace_back(evictStorage(cache, back), accounted);
+                        batch += accounted;
+                    }
+                    more = !cache.entries.empty();
+                }
+                for (auto& [image, accounted] : evicted) {
+                    std::vector<std::shared_ptr<ShaderResources>> resources;
+                    SharedResourceCache().RemoveImage(image.get(), &resources);
+                    if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->Recording()) {
+                        for (auto& resource : resources) recorder->Keep(std::move(resource));
+                    }
+                    resources.clear();
+                    ++storageEntries;
+                    if (image.use_count() == 1) freed += accounted;
+                    image.reset();
+                }
+            }
+        }
+    }
+    std::fprintf(stderr, "[gpu] texture caches released %llu MiB of the %llu MiB asked for: %zu sampled entries%s, %zu storage images%s\n", static_cast<unsigned long long>(freed >> 20u), static_cast<unsigned long long>(bytes >> 20u), sampledEntries, sampledSkipped ? " (cache busy, skipped)" : "", storageEntries, storageSkipped ? " (cache or device busy, skipped)" : "");
+    return freed;
 }
 
 bool StorageImageCached(const Context& context, const StorageTexture* image) {

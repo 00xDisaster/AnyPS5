@@ -126,6 +126,15 @@ int main() {
                 Require(cached == (surface >= 2u), "surface " + std::to_string(surface) + (cached ? " is still cached" : " was evicted") + " after " + std::to_string(capacity + 2u) + " surfaces under a budget of " + std::to_string(capacity) + " of them");
                 Require(cached == !images[surface].expired(), "surface " + std::to_string(surface) + (cached ? " is cached but its weak image expired" : " was evicted but its resource cache image is still alive"));
             }
+            const auto released = AgcDriver::Graphics::ReleaseTextureCaches(held);
+            Require(released >= held, "a release of one image's bytes freed " + std::to_string(released >> 20u) + " MiB, less than the " + std::to_string(held >> 20u) + " MiB of the oldest image");
+            Require(StorageTexture::FindLive(base + 2u * Stride, SurfaceBytes) == nullptr && images[2].expired(), "the oldest cached storage image survived a release of its bytes");
+            Require(StorageTexture::FindLive(base + 3u * Stride, SurfaceBytes) != nullptr && !images[3].expired(), "a release of one image's bytes evicted more than the oldest image");
+            Require(StorageTexture::FindLive(base + (capacity + 1u) * Stride, SurfaceBytes) != nullptr, "a release of one image's bytes evicted the newest image");
+            const auto rest = AgcDriver::Graphics::ReleaseTextureCaches(~std::uint64_t{0});
+            Require(rest >= held * (capacity - 1u), "a release of everything freed " + std::to_string(rest >> 20u) + " MiB of the " + std::to_string((held * (capacity - 1u)) >> 20u) + " MiB cached");
+            for (std::uint32_t surface = 0; surface < capacity + 2u; ++surface) Require(StorageTexture::FindLive(base + surface * Stride, SurfaceBytes) == nullptr && images[surface].expired(), "surface " + std::to_string(surface) + " survived a release of everything");
+            Require(AgcDriver::Graphics::ReleaseTextureCaches(held) == 0, "a release from empty caches reported freed bytes");
         } catch (...) {
             release();
             throw;

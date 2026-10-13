@@ -1,6 +1,7 @@
 #include "prx/libSceAgcDriver/Execution/include/ProfileOutput.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cstdio>
@@ -57,7 +58,9 @@ VkDeviceMemory BufferPool::AllocateMemory(const VkMemoryAllocateInfo& allocation
     const auto initialResult = result;
     unsigned attempts = 1;
     VkDeviceSize reclaimed = 0;
-    if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY || result == VK_ERROR_OUT_OF_HOST_MEMORY) {
+    VkDeviceSize released = 0;
+    const auto exhausted = [](VkResult value) { return value == VK_ERROR_OUT_OF_DEVICE_MEMORY || value == VK_ERROR_OUT_OF_HOST_MEMORY; };
+    if (exhausted(result)) {
         reclaimed = trim();
         if (reclaimed != 0) {
             memory = VK_NULL_HANDLE;
@@ -65,14 +68,35 @@ VkDeviceMemory BufferPool::AllocateMemory(const VkMemoryAllocateInfo& allocation
             ++attempts;
         }
     }
+    if (exhausted(result)) {
+        if (const auto reclaim = cacheReclaim().load(std::memory_order_acquire); reclaim != nullptr) released = reclaim(ReclaimTarget(allocation.allocationSize));
+        if (released != 0) {
+            memory = VK_NULL_HANDLE;
+            result = allocateMemory(device, &allocation, nullptr, &memory);
+            ++attempts;
+        }
+    }
     if (result == VK_SUCCESS) {
-        if (attempts == 2) std::fprintf(stderr, "[bufferpool] %s recovered: allocation=%llu reclaimed=%llu initialResult=%d attempts=%u\n", operation, static_cast<unsigned long long>(allocation.allocationSize), static_cast<unsigned long long>(reclaimed), static_cast<int>(initialResult), attempts);
+        if (attempts > 1) std::fprintf(stderr, "[bufferpool] %s recovered: allocation=%llu reclaimed=%llu released=%llu initialResult=%d attempts=%u\n", operation, static_cast<unsigned long long>(allocation.allocationSize), static_cast<unsigned long long>(reclaimed), static_cast<unsigned long long>(released), static_cast<int>(initialResult), attempts);
         return memory;
     }
     char details[512];
-    std::snprintf(details, sizeof(details), "%s: allocation=%llu memoryType=%u reclaimed=%llu initialResult=%d attempts=%u", operation, static_cast<unsigned long long>(allocation.allocationSize), allocation.memoryTypeIndex, static_cast<unsigned long long>(reclaimed), static_cast<int>(initialResult), attempts);
+    std::snprintf(details, sizeof(details), "%s: allocation=%llu memoryType=%u reclaimed=%llu released=%llu initialResult=%d attempts=%u", operation, static_cast<unsigned long long>(allocation.allocationSize), allocation.memoryTypeIndex, static_cast<unsigned long long>(reclaimed), static_cast<unsigned long long>(released), static_cast<int>(initialResult), attempts);
     Check(result, details);
     return VK_NULL_HANDLE;
+}
+
+std::atomic<BufferPool::CacheReclaim>& BufferPool::cacheReclaim() {
+    static std::atomic<CacheReclaim> reclaim{nullptr};
+    return reclaim;
+}
+
+void BufferPool::SetCacheReclaim(CacheReclaim reclaim) {
+    cacheReclaim().store(reclaim, std::memory_order_release);
+}
+
+VkDeviceSize BufferPool::ReclaimTarget(VkDeviceSize bytes) {
+    return bytes + std::max<VkDeviceSize>(bytes, VkDeviceSize{256} << 20u);
 }
 
 bool BufferPool::SlabEligible(std::size_t capacity, VkDeviceSize alignment, VkDeviceSize size, VkDeviceSize atom) {
