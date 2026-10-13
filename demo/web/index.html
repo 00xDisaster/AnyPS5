@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">
+<meta name="description" content="Convert a decrypted PS5 app for Windows or Linux, locally in your browser.">
+<title>AnyPS5 · Converter</title><link rel="stylesheet" href="app.css"><script type="module" src="app.mjs"></script>
+</head>
+<body>
+<header><div class="bar"><a class="brand" href="./"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>AnyPS5 <span>/ Converter</span></a><nav aria-label="Main navigation"><a href="https://alxcbtw.github.io/anyps5-roadmap/">Compatibility ↗</a><a href="https://github.com/boykopovar/AnyPS5">GitHub</a><a href="https://discord.gg/BHFztBPUe">Discord</a><button id="theme" class="plain" aria-label="Switch color theme">◐</button></nav></div></header>
+<main>
+<div class="intro"><p class="eyebrow">LOCAL CONVERSION</p><h1>Your app. Windows or Linux.</h1><p>Drop a ZIP of your decrypted PS5 app. Get an executable, your original files and the system libraries in one archive.</p></div>
+<div id="browser-note" class="notice" role="status" hidden></div>
+<section class="converter" aria-label="App converter">
+<div class="panel-heading"><h2>Convert an app</h2><span class="private"><b aria-hidden="true">●</b> Files stay on your device</span></div>
+<div id="drop" class="drop"><span class="archive-icon" aria-hidden="true">↓</span><h3>Drop your ZIP here</h3><p>One executable ELF, <code>sce_sys/</code> and <code>sce_module/</code>.<br>Other app files can stay in the archive.</p><button id="choose" class="button">Choose ZIP file</button><input id="file" type="file" accept=".zip,application/zip" hidden><p class="fine">ZIP &amp; ZIP64 · Decrypted ELF files only</p></div>
+<div id="selection" class="selection" hidden><div><p class="eyebrow">SELECTED ARCHIVE</p><h3 id="archive-name"></h3><p id="archive-info" class="muted"></p></div><button id="change" class="plain">Change file</button></div>
+<div id="warnings" class="warnings" hidden><ul id="warning-list"></ul><label><input id="acknowledge" type="checkbox"> I understand and want to continue.</label></div>
+<div class="settings"><fieldset id="target"><legend>Convert for</legend><div class="choices"><label><input type="radio" name="target" value="windows" checked> Windows <span>.exe</span></label><label><input type="radio" name="target" value="linux"> Linux <span>.elf</span></label></div></fieldset><div class="save-settings"><label for="save">Save the result</label><select id="save"><option value="memory">Download in memory · small apps</option><option value="disk">Save directly to disk · large apps</option></select><p id="save-note" class="fine"></p></div></div>
+<div class="options"><label><input type="checkbox" id="intel"> Convert AMD-specific instructions for Intel CPUs</label></div>
+<div class="action-row"><p id="ready-note" class="muted">Choose an archive to get started.</p><button id="convert" class="button" disabled>Convert &amp; save →</button><button id="cancel" class="plain" hidden>Cancel</button></div>
+<div id="status" class="status" hidden><div class="status-line"><strong id="phase" role="status"></strong><span id="percent"></span></div><progress id="progress" max="100"></progress><p id="current-file" class="fine"></p><details><summary>Conversion log</summary><pre id="log"></pre></details></div>
+<div id="error" class="error" role="alert" hidden></div>
+<div id="done" class="done" hidden><h3>Ready to run.</h3><p id="result-info"></p><a id="download" class="button" hidden>Download ZIP</a><p class="fine">Extract the entire ZIP before launching the executable.</p></div>
+</section>
+<section class="notes" aria-label="Before you convert"><article><span class="number">01</span><h2>Bring the original files</h2><p>The executable can have any name. Include the original <code>sce_module</code> folder if the app uses one. Its icon comes from <code>sce_sys/icon0.png</code>.</p></article><article><span class="number">02</span><h2>Keep the layout</h2><p>The result contains your executable beside <code>libs/</code> and <code>app0/</code>. All original files go into <code>app0/</code>, along with converted modules.</p></article><article><span class="number">03</span><h2>Check compatibility</h2><p>Conversion does not guarantee that an app runs. Check the <a href="https://alxcbtw.github.io/anyps5-roadmap/">community compatibility list</a> for known blockers and reports.</p></article></section>
+<p class="limits">Memory downloads have a 256 MiB budget, checked against expanded files and output overhead. Larger results require desktop Chrome or Edge with direct disk saving. Executable, modules and icon are limited to 256 MiB combined; use the native relinker for larger conversion inputs.</p>
+</main><footer><span>AnyPS5</span><div><a href="progress.html">Implementation progress</a><a href="history.html">Progress history</a><a href="https://github.com/boykopovar/AnyPS5/releases/latest">Latest release</a></div></footer>
+<noscript><p class="notice">JavaScript is required. You can also use the native relinker from GitHub Releases.</p></noscript>
+</body></html>
