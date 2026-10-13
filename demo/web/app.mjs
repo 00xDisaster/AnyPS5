@@ -30,11 +30,11 @@ function update() {
   $("browser-note").hidden = supported && canStream && !memoryBlocked;
   $("browser-note").textContent = !supported ? "This browser or connection does not support the converter. Use a current browser over HTTPS, or use the native relinker." : memoryBlocked ? "This archive exceeds the memory-download limit. Choose Save directly to disk. If that option is unavailable, open this page in desktop Chrome or Edge." : "Direct disk saving is unavailable in this browser or context. Small apps can still be downloaded in memory. For larger apps, use desktop Chrome or Edge over HTTPS.";
   $("convert").disabled = !supported || working || !summary || !release || memoryBlocked || (summary.warnings.length > 0 && !$("acknowledge").checked);
-  $("ready-note").textContent = summary ? (memoryBlocked ? "A direct disk save is required for this archive." : release ? `Libraries: ${release.tag} · ZIP compression level 9` : "Loading release information…") : "Choose an archive to get started.";
+  $("ready-note").textContent = summary ? (memoryBlocked ? "A direct disk save is required for this archive." : release ? `Libraries: ${release.tag} · ZIP compression level 9` : "Loading release information…") : "Choose a ZIP or folder to get started.";
 }
 
 function lock(value) {
-  for (const id of ["choose", "change", "target", "save", "intel"]) $(id).disabled = value || !supported;
+  for (const id of ["choose", "choose-folder", "change", "target", "save", "intel"]) $(id).disabled = value || !supported || (id === "choose-folder" && !("webkitdirectory" in $("folder")));
 }
 
 async function fail(message) {
@@ -115,9 +115,9 @@ async function onMessage({ data }) {
   } catch (error) { await fail(error.message); }
 }
 
-async function selectFile(selected) {
+async function selectFile(selected, files) {
   if (working || !supported || !selected) return;
-  if (!selected.name.toLowerCase().endsWith(".zip")) { await fail("Choose a ZIP archive."); return; }
+  if (!files && !selected.name.toLowerCase().endsWith(".zip")) { await fail("Choose a ZIP archive."); return; }
   worker?.terminate();
   if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
   summary = null;
@@ -129,7 +129,7 @@ async function selectFile(selected) {
   $("acknowledge").checked = false;
   $("status").hidden = false;
   $("cancel").hidden = false;
-  $("phase").textContent = "Inspecting archive";
+  $("phase").textContent = "Inspecting files";
   $("current-file").textContent = file.name;
   $("percent").textContent = "";
   $("progress").removeAttribute("value");
@@ -138,17 +138,22 @@ async function selectFile(selected) {
   worker = new Worker(new URL("./worker.mjs", import.meta.url), { type: "module" });
   worker.onmessage = onMessage;
   worker.onerror = event => fail(event.message || "The converter worker stopped. Try a smaller app or use the native relinker.");
-  worker.postMessage({ type: "inspect", file });
+  worker.postMessage(files ? { type: "inspect", files } : { type: "inspect", file });
 }
 
 $("choose").onclick = () => $("file").click();
-$("change").onclick = () => { $("file").value = ""; $("file").click(); };
+$("change").onclick = () => { $("drop").hidden = false; };
+$("choose-folder").onclick = () => { $("folder").value = ""; $("folder").click(); };
+$("folder").onchange = () => {
+  const files = [...$("folder").files].map(file => ({ path: file.webkitRelativePath, file }));
+  if (files.length) selectFile({ name: files[0].path.split("/")[0] }, files);
+};
 $("file").onchange = () => selectFile($("file").files[0]);
 for (const type of ["dragenter", "dragover"]) $("drop").addEventListener(type, event => { event.preventDefault(); if (!working) $("drop").classList.add("dragging"); });
 $("drop").ondragleave = () => $("drop").classList.remove("dragging");
 $("drop").ondrop = event => { event.preventDefault(); $("drop").classList.remove("dragging"); if (working) return; if (event.dataTransfer.files.length !== 1) { fail("Drop one ZIP archive at a time."); return; } selectFile(event.dataTransfer.files[0]); };
 for (const id of ["save", "target", "acknowledge"]) $(id).addEventListener("change", update);
-$("cancel").onclick = () => fail("Cancelled. No completed ZIP was saved. Choose the archive again to restart.");
+$("cancel").onclick = () => fail("Cancelled. No completed ZIP was saved. Choose the ZIP or folder again to restart.");
 $("convert").onclick = async () => {
   if ($("convert").disabled) return;
   working = true;
@@ -179,3 +184,8 @@ if (supported) fetch("./release.json", { cache: "no-cache" }).then(response => {
   release = value;
   update();
 }).catch(error => fail(error.message));
+
+if (!("webkitdirectory" in $("folder"))) {
+  $("choose-folder").disabled = true;
+  $("choose-folder").title = "Folder selection is unavailable in this browser. Choose a ZIP instead.";
+}

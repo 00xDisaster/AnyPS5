@@ -65,9 +65,30 @@ async function boundedBytes(entry, limit) {
   return bytes;
 }
 
+class FolderReader {
+  constructor(files) {
+    this.files = files;
+  }
+
+  async *getEntriesGenerator() {
+    for (const { path, file } of this.files) {
+      if (!(file instanceof Blob)) throw new Error(`Invalid folder file: ${path}`);
+      yield {
+        filename: path, uncompressedSize: file.size, directory: false, compressionMethod: 0,
+        externalFileAttributes: (0o100644 << 16) >>> 0,
+        getData(destination, options = {}) {
+          return file.stream().pipeTo(destination, { signal: options.signal });
+        }
+      };
+    }
+  }
+
+  async close() {}
+}
+
 export class Archive {
   constructor(file) {
-    this.reader = new ZipReader(new BoundedBlobReader(file));
+    this.reader = Array.isArray(file) ? new FolderReader(file) : new ZipReader(new BoundedBlobReader(file));
     this.entries = [];
   }
 
@@ -75,7 +96,7 @@ export class Archive {
     const paths = new Map();
     let total = 0;
     for await (const entry of this.reader.getEntriesGenerator()) {
-      if (this.entries.length >= MAX_ENTRIES) throw new Error("ZIP contains more than 100,000 entries");
+      if (this.entries.length >= MAX_ENTRIES) throw new Error("Input contains more than 100,000 entries");
       validPath(entry.filename);
       const key = entry.filename.replace(/\/$/u, "").toLowerCase();
       if (paths.has(key)) throw new Error(`Duplicate ZIP path: ${entry.filename}`);
@@ -87,7 +108,7 @@ export class Archive {
       total = safeSize(total + safeSize(entry.uncompressedSize));
       this.entries.push(entry);
     }
-    if (!this.entries.some(entry => !entry.directory)) throw new Error("The ZIP is empty");
+    if (!this.entries.some(entry => !entry.directory)) throw new Error("No files were selected");
     for (const entry of this.entries) {
       const parts = entry.filename.split("/");
       for (let index = 1; index < parts.length; index++) {
@@ -107,11 +128,11 @@ export class Archive {
     this.modules = [];
     for (let index = 0; index < this.files.length; index++) {
       const item = this.files[index];
-      report({ phase: "Inspecting archive", input: item.name, completed: index, total: this.files.length });
+      report({ phase: "Inspecting files", input: item.name, completed: index, total: this.files.length });
       if (item.entry.directory || item.name.startsWith("sce_sys/")) continue;
       const elf = await signature(item.entry);
       if (item.name.startsWith("sce_module/")) {
-        if (item.name.endsWith(".guest.prx")) throw new Error("Use the original archive, without previously converted .guest.prx files");
+        if (item.name.endsWith(".guest.prx")) throw new Error("Use the original files, without previously converted .guest.prx files");
         if (elf) this.modules.push(item);
         else if (/\.(elf|prx|sprx|suprx|debug_prx)$/iu.test(item.name)) throw new Error(`The module is not a decrypted ELF: ${item.name}`);
       } else if (elf) executables.push(item);

@@ -23,8 +23,15 @@ async function zip(entries) {
 }
 
 const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.elf", module], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/content/resource.bin", resource]]);
+const folder = [
+  { path: "title/program.dat", file: new Blob([executable]) },
+  { path: "title/sce_module/library.elf", file: new Blob([module]) },
+  { path: "title/sce_sys/param.json", file: new Blob(["{}"]) },
+  { path: "title/content/resource.bin", file: new Blob([resource]) }
+];
+for (const [kind, selected] of [["ZIP", source], ["folder", folder]]) {
 for (const target of ["windows", "linux"]) {
-  const archive = new Archive(source);
+  const archive = new Archive(selected);
   const summary = await archive.inspect(() => {});
   assert.equal(summary.name, "program.dat");
   assert.equal(summary.root, "title/");
@@ -61,7 +68,8 @@ for (const target of ["windows", "linux"]) {
   assert(maxChunk < resource.length);
   await reader.close();
   await archive.close();
-  console.log(`${target}: conversion, original files, modules, permissions and streamed ZIP verified`);
+  console.log(`${kind}, ${target}: conversion, original files, modules, permissions and streamed ZIP verified`);
+}
 }
 
 for (const [entries, error] of [

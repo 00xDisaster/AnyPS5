@@ -48,11 +48,11 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === "inspect") {
       if (archive) await archive.close();
-      archive = new Archive(data.file);
+      archive = new Archive(data.files ?? data.file);
       const summary = await archive.inspect(report);
       self.postMessage({ type: "inspected", summary });
     } else if (data.type === "convert") {
-      if (!archive) throw new Error("Select an archive first");
+      if (!archive) throw new Error("Select a ZIP or folder first");
       const libraries = await downloadLibraries(data.target);
       const estimate = memoryEstimate(archive.totalBytes, archive.selectedBytes, libraries.expandedBytes, archive.entries.length);
       if (data.mode === "memory" && estimate > MEMORY_LIMIT) throw new Error("This result exceeds the 256 MiB memory-download budget. Use Save directly to disk in desktop Chrome or Edge.");
