@@ -125,6 +125,7 @@ void scanning() {
         previous = event.Completed;
     }
     require(previous == progress.Events.back().Total, "Instruction conversion progress did not finish");
+    reject([&] { scanner->ScanCodeSectionForSyscalls(code, 0, (std::uint64_t{1} << 32) + code.size()); });
     code[70000] = 0x0f;
     code[70001] = 0x05;
     progress.Events.clear();

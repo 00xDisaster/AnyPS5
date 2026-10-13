@@ -3,6 +3,7 @@
 #include <codegen/x86/X64InstructionDecoder.hpp>
 #include <algorithm>
 #include <memory>
+#include <limits>
 #include <string>
 
 namespace Codegen {
@@ -17,14 +18,16 @@ private:
 };
 
 std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(const std::vector<std::uint8_t>& codeSection, const Domain::FileByteOffset codeSectionOffset, const Domain::FileByteOffset codeSectionSize) const {
-    const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
+    if (codeSectionSize > codeSection.size()) throw CodegenException("Code section exceeds the input buffer", codeSectionOffset);
+    if (codeSectionSize > std::numeric_limits<Domain::FileByteOffset>::max() - codeSectionOffset) throw CodegenException("Code section offset overflow", codeSectionOffset);
+    const auto limit = static_cast<std::size_t>(codeSectionSize);
 
     const X64InstructionDecoder decoder;
     std::vector<InstructionMatch> matches;
     std::size_t i = 0;
 
     if (progress) progress(0, limit);
-    std::size_t nextReport = 65536;
+    std::size_t lastReport = 0;
     while (i < limit) {
         const std::uint8_t* cursor = codeSection.data() + i;
         const std::size_t available = limit - i;
@@ -40,9 +43,9 @@ std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(const std::vec
         matches.push_back({codeSectionOffset + i, length});
 
         i += length;
-        if (progress && i >= nextReport) {
+        if (progress && i - lastReport >= 65536) {
             progress(i, limit);
-            nextReport = i + 65536;
+            lastReport = i;
         }
     }
 

@@ -296,10 +296,10 @@ void Amd64OnlyConverter::_convertSegment(
     std::uint64_t completed,
     std::uint64_t total
 ) const {
+    if (ph.Offset > fileBytes.size() || ph.FileSize > fileBytes.size() - ph.Offset)
+        throw CodegenException("Code segment exceeds the file", ph.Offset);
     const auto segOffset = static_cast<std::size_t>(ph.Offset);
     const auto segSize = static_cast<std::size_t>(ph.FileSize);
-    if (segOffset > fileBytes.size() || segSize > fileBytes.size() - segOffset)
-        throw CodegenException("Code segment exceeds the file", ph.Offset);
 
     std::vector<std::uint8_t> seg(
         fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset),
@@ -318,9 +318,9 @@ void Amd64OnlyConverter::_convertSegment(
         if (substitution.has_value())
             pending.push_back({index, match, std::move(*substitution)});
     }
-    if (progress) progress(completed + 2 * segSize, total);
+    if (progress) progress(completed + std::uint64_t{2} * segSize, total);
     if (pending.empty()) {
-        if (progress) progress(completed + 3 * segSize, total);
+        if (progress) progress(completed + std::uint64_t{3} * segSize, total);
         return;
     }
 
@@ -337,7 +337,7 @@ void Amd64OnlyConverter::_convertSegment(
 
     std::size_t processed = 0;
     for (const auto& item : pending) {
-        if (progress && processed != 0 && processed % 256 == 0) progress(completed + 2 * segSize + item.Instruction.Offset, total);
+        if (progress && processed != 0 && processed % 256 == 0) progress(completed + std::uint64_t{2} * segSize + item.Instruction.Offset, total);
         ++processed;
         if (consumed.contains(item.Index))
             continue;
@@ -439,7 +439,7 @@ void Amd64OnlyConverter::_convertSegment(
     if (seg.size() != segSize)
         throw CodegenException("Code segment size changed during Intel conversion", ph.Offset);
     std::copy(seg.begin(), seg.end(), fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset));
-    if (progress) progress(completed + 3 * segSize, total);
+    if (progress) progress(completed + std::uint64_t{3} * segSize, total);
 }
 
 ConvertResult Amd64OnlyConverter::Convert(

@@ -162,7 +162,8 @@ private:
 };
 
 std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::vector<std::uint8_t>& codeSection, const FileByteOffset codeSectionOffset, const FileByteOffset codeSectionSize, std::string_view input) {
-    const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
+    if (codeSectionSize > codeSection.size()) throw RelinkerException("Code section exceeds the input buffer", codeSectionOffset);
+    const auto limit = static_cast<std::size_t>(codeSectionSize);
 
     const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, std::string(input), completed, total}); });
     const auto matches = scanner->ScanCodeSection(codeSection, codeSectionOffset, codeSectionSize);
