@@ -108,6 +108,10 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
+        if (device->Target().subgroupSize < 32u) {
+            std::printf("skipped, subgroup size %u cannot hold a wave32\n", device->Target().subgroupSize);
+            return VulkanTestSkipped;
+        }
         Run(*device, 32, 32);
         Check(32, 32);
         Run(*device, 64, 64);

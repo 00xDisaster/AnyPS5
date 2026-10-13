@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
     });
 
     passed &= run("a sampler dword spilled into a relatively read register keeps its definition through v_readlane", [] {
-        const std::array<std::uint32_t, 14> code{MoveM0Two, MoveV2Zero, MoveV3Zero, WritelaneV4, FromS8Lane0, MovrelsV1V4, ReadlaneS8, FromV4Lane0, ImageSampleLz2d, SampleV8V2S0S8, AddV8V1V8, BufferStoreDword, StoreV8WithS12, EndProgram};
+        const std::array<std::uint32_t, 14> code{MoveM0GroupX, MoveV2Zero, MoveV3Zero, WritelaneV4, FromS8Lane0, MovrelsV1V4, ReadlaneS8, FromV4Lane0, ImageSampleLz2d, SampleV8V2S0S8, AddV8V1V8, BufferStoreDword, StoreV8WithS12, EndProgram};
         const std::array<std::uint32_t, 16> userData{};
         const auto shape = Scan(RecompileProgram(code, userData));
         return shape.functionArrays == 1;
