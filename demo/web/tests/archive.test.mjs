@@ -1,0 +1,82 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+
+const site = name => pathToFileURL(path.join(process.argv[2], name)).href;
+const { Archive, memoryEstimate, MEMORY_LIMIT, packageArchive } = await import(site("archive.mjs"));
+const { BlobReader, BlobWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } = await import(site("vendor/zip/zip-no-worker.js"));
+const { default: createRelinker } = await import(site("native/relinker_wasm.mjs"));
+const native = await createRelinker();
+const executable = new Uint8Array(await readFile(path.join(process.argv[3], "main.elf")));
+const module = new Uint8Array(await readFile(path.join(process.argv[3], "module.elf")));
+const resource = new Uint8Array(2 * 1024 * 1024).fill(65);
+
+async function zip(entries) {
+  const output = new BlobWriter("application/zip");
+  const writer = new ZipWriter(output, { zip64: true, level: 9, useWebWorkers: false, useCompressionStream: false });
+  for (const [name, bytes, options] of entries) await writer.add(name, bytes ? new Uint8ArrayReader(bytes) : undefined, options);
+  return writer.close();
+}
+
+const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.elf", module], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/content/resource.bin", resource]]);
+for (const target of ["windows", "linux"]) {
+  const archive = new Archive(source);
+  const summary = await archive.inspect(() => {});
+  assert.equal(summary.name, "program.dat");
+  assert.equal(summary.root, "title/");
+  assert.equal(summary.modules, 1);
+  assert.equal(summary.selectedBytes, executable.length + module.length);
+  const input = await archive.conversionInput(target, false, () => {});
+  assert.equal(input.modules.length, 1);
+  assert.deepEqual(input.executable, executable);
+  assert.equal(input.modules[0].name, "sce_module/library.elf");
+  const events = [];
+  const converted = native.Convert(input, event => events.push(event));
+  assert.equal(converted.ok, true, converted.error);
+  assert.equal(converted.executable[0], target === "windows" ? 77 : 127);
+  assert(events.some(event => event.stage === 6 && event.completed > 0));
+  const libraries = await zip([["libs/system.prx", new Uint8Array([1, 2, 3])]]);
+  const chunks = [];
+  let maxChunk = 0;
+  const destination = new WritableStream({ async write(chunk) {
+    maxChunk = Math.max(maxChunk, chunk.length);
+    chunks.push(chunk.slice());
+    await new Promise(resolve => setTimeout(resolve, 1));
+  } });
+  await packageArchive(archive, converted, input.outputName, libraries, destination, () => {});
+  await destination.close();
+  const reader = new ZipReader(new BlobReader(new Blob(chunks)));
+  const entries = await reader.getEntries();
+  const byName = new Map(entries.map(entry => [entry.filename, entry]));
+  assert(byName.has(input.outputName));
+  assert(byName.has("libs/system.prx"));
+  assert(byName.has("app0/sce_module/library.elf.guest.prx"));
+  assert.deepEqual(await byName.get("app0/program.dat").getData(new Uint8ArrayWriter(), { checkSignature: true }), executable);
+  assert.deepEqual(await byName.get("app0/content/resource.bin").getData(new Uint8ArrayWriter(), { checkSignature: true }), resource);
+  assert.equal((byName.get(input.outputName).externalFileAttributes >>> 16) & 0o777, 0o755);
+  assert(maxChunk < resource.length);
+  await reader.close();
+  await archive.close();
+  console.log(`${target}: conversion, original files, modules, permissions and streamed ZIP verified`);
+}
+
+for (const [entries, error] of [
+  [[["one", executable], ["two", executable]], /exactly one/u],
+  [[["readme", new Uint8Array([1])]], /exactly one/u],
+  [[["app", executable], ["..\/escape", resource]], /Unsafe ZIP/u],
+  [[["app", executable], ["APP", resource]], /Duplicate ZIP/u],
+  [[["app", executable], ["folder", resource], ["folder/file", resource]], /also used as a folder/u],
+  [[["app", executable], ["link", resource, { versionMadeBy: 0x31e, externalFileAttributes: (0o120777 << 16) >>> 0 }]], /Links and special/u]
+]) {
+  const archive = new Archive(await zip(entries));
+  await assert.rejects(archive.inspect(() => {}), error);
+  await archive.close();
+}
+const missing = new Archive(await zip([["any-name", executable]]));
+assert.equal((await missing.inspect(() => {})).warnings.length, 2);
+await missing.close();
+assert(memoryEstimate(200 * 1024 ** 3, 1024, 1024, 100) > MEMORY_LIMIT);
+const invalid = native.Convert({ target: "unsupported" }, () => {});
+assert.equal(invalid.ok, false);
+console.log("Archive validation, missing-folder warnings and large-download budget verified");

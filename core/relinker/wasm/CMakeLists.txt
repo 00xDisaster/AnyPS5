@@ -19,3 +19,10 @@ set_target_properties(relinker_wasm PROPERTIES
     CXX_EXTENSIONS OFF
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/web/native"
 )
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_target(relinker_web
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/build_web.py" --build "${CMAKE_BINARY_DIR}"
+    DEPENDS relinker_wasm
+    VERBATIM
+)
