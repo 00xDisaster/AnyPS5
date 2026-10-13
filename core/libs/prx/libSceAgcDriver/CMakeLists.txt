@@ -1066,18 +1066,14 @@ target_link_libraries(agc_driver_bda_device_tests PRIVATE SDL2-static libc shade
 set_target_properties(agc_driver_bda_device_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_driver_bda_device_tests)
 
-add_test_executable(agc_driver_mesh_tests EXCLUDE_FROM_ALL
-        tests/Mesh.cpp
-        ${agcDriverSources}
-)
+add_test_executable(agc_driver_mesh_tests EXCLUDE_FROM_ALL tests/Mesh.cpp)
 target_include_directories(agc_driver_mesh_tests PRIVATE
         ${LIBS_INCLUDE_DIR}
-        ${agcTextureDetileGeneratedRoot}
+        ${CMAKE_SOURCE_DIR}/core/shader/recompiler
         ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
         ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR}
 )
-target_link_libraries(agc_driver_mesh_tests PRIVATE shader_recompiler_agc_driver SDL2-static libc libkernel jpeg_turbo ${CMAKE_DL_LIBS})
-add_dependencies(agc_driver_mesh_tests agc_trace_revision)
+target_link_libraries(agc_driver_mesh_tests PRIVATE libSceAgcDriver SDL2-static libc)
 set_target_properties(agc_driver_mesh_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_driver_mesh_tests)
 
