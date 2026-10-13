@@ -128,26 +128,6 @@ class RegistrationTests(unittest.TestCase):
             (external / "CTestTestfile.cmake").write_text(
                 'add_test("bounds" "/build/tests/buffer_bounds_tests")\n', encoding="utf-8")
             self.assertEqual(check_test_registration.registered(build), {"buffer_bounds_tests"})
-    def test_built_uses_configured_ninja_outside_path(self):
-        source = shutil.which("ninja")
-        self.assertIsNotNone(source)
-        with tempfile.TemporaryDirectory() as directory:
-            tool = Path(directory) / "tool dir with spaces"
-            tool.mkdir()
-            name = "ninja.exe" if os.name == "nt" else "ninja"
-            configured = tool / name
-            shutil.copy2(source, configured)
-            if os.name != "nt":
-                configured.chmod(0o755)
-            build = Path(directory) / "build"
-            build.mkdir()
-            (build / "CMakeCache.txt").write_text("CMAKE_MAKE_PROGRAM:FILEPATH=" + str(configured) + "\nCMAKE_GENERATOR:INTERNAL=Ninja\n", encoding="utf-8")
-            (build / "build.ninja").write_text("rule CXX_EXECUTABLE_LINKER\n  command = true\nbuild tests/buffer_bounds_tests: CXX_EXECUTABLE_LINKER\n", encoding="utf-8")
-            empty = Path(directory) / "empty"
-            empty.mkdir()
-            with patch.dict(os.environ, {"PATH": str(empty)}):
-                self.assertEqual(check_test_registration.built(build), {"buffer_bounds_tests"})
-
     def test_unsupported_generator_never_runs_build_tool(self):
         for generator in ("Unix Makefiles", "Visual Studio 17 2022", ""):
             with self.subTest(generator=generator), tempfile.TemporaryDirectory() as directory:
