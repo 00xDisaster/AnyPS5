@@ -2985,6 +2985,21 @@ void StorageTexture::MarkDirty() {
     markLayersPending(0, trackedLayers);
 }
 
+void StorageTexture::MarkSliceDirty(std::uint32_t slice) {
+    if (geometry.thick || geometry.imageLayers <= 1 || slice >= geometry.imageLayers || geometry.layerBytes == 0 || trackedLayerBytes == 0 || descriptor.dccAddress != 0) {
+        MarkDirty();
+        return;
+    }
+    const auto begin = geometry.GuestLayerOffset(slice);
+    const auto first = static_cast<std::uint32_t>(begin / trackedLayerBytes);
+    const auto last = static_cast<std::uint32_t>(std::min<std::uint64_t>((begin + geometry.layerBytes + trackedLayerBytes - 1) / trackedLayerBytes, trackedLayers));
+    if (first >= last) {
+        MarkDirty();
+        return;
+    }
+    markLayersPending(first, last - first);
+}
+
 bool StorageTexture::anyLayerPending() const {
     return std::any_of(layerPending.begin(), layerPending.end(), [](bool pending) { return pending; });
 }

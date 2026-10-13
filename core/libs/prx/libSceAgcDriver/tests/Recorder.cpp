@@ -5577,6 +5577,101 @@ void firstLayerViewTests(const Device& device, Recorder& recorder) {
     expectRed(program.Red(flatTexture.View(), flatTexture.Layout(), 0.0f), 0x20 / 255.0f, "a 2D texture over the surface does not read its first layer");
 }
 
+void sliceDirtyTests(const Device& device, Recorder& recorder) {
+    const auto& base = device.GetContext();
+    constexpr std::uint32_t side = 128;
+    constexpr std::size_t sliceBytes = 65536;
+    constexpr std::size_t bytes = 4 * sliceBytes;
+    constexpr std::uint8_t untouched = 0x11;
+    for (const auto tileMode : {TextureTileMode::kLinear, TextureTileMode::kR64KBX}) {
+        const std::string what = tileMode == TextureTileMode::kLinear ? "a linear two-slice image" : "a tiled two-slice image";
+        void* block = AllocateWatched(bytes, 65536);
+        if (block == nullptr) {
+            std::cout << "no write watching: slice dirty marking not tested\n";
+            return;
+        }
+        auto* memory = static_cast<std::uint8_t*>(block);
+        std::memset(memory, untouched, bytes);
+        const auto address = reinterpret_cast<std::uint64_t>(block);
+        {
+            GuestAllocations::Mutation mutation;
+            mutation.Add(block, bytes, true, true, true);
+        }
+        struct Unregister {
+            const Context& context;
+            void* block;
+            std::uint64_t address;
+            std::size_t bytes;
+            ~Unregister() {
+                {
+                    GuestAllocations::Mutation mutation;
+                    mutation.Remove(block);
+                }
+                HostImportFor(context, address, bytes);
+                ReleaseWatched(block, bytes);
+            }
+        } unregister{base, block, address, bytes};
+        AgcDriver::GuestMemory::CollectWritesUncached(address, bytes);
+        TextureDetiler detiler(base);
+        auto context = base;
+        context.hostImportAlignment = 0;
+        context.detiler = &detiler;
+        GuestTextureResource resource{};
+        resource.baseAddress = address;
+        resource.width = side;
+        resource.height = side;
+        resource.depthOrLastArray = 1;
+        resource.mipCount = 1;
+        resource.tileMode = tileMode;
+        resource.dimension = TextureDimension::k2DArray;
+        resource.format = 56;
+        resource.dstSelX = 4;
+        resource.dstSelY = 5;
+        resource.dstSelZ = 6;
+        resource.dstSelW = 7;
+        const auto geometry = DescribeSurface(resource);
+        Require(geometry.imageLayers == 2 && geometry.layerBytes == sliceBytes && geometry.guestBytes == 2 * sliceBytes, what + " does not hold two 64 KiB slices");
+        const auto stored = [&](std::uint32_t slice, std::array<std::uint8_t, 4> color) {
+            std::vector<std::byte> read(sliceBytes);
+            AgcDriver::GuestMemory::Read(address + geometry.GuestLayerOffset(slice), read);
+            for (std::size_t at = 0; at < read.size(); ++at) {
+                if (std::to_integer<std::uint8_t>(read[at]) != color[at % 4]) return false;
+            }
+            return true;
+        };
+        {
+            auto image = StorageTexture::Create(context, detiler, resource, 0);
+            const auto commands = recorder.Commands();
+            recorder.Keep(image);
+            RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+            const VkClearColorValue red{{1.0f, 0.0f, 0.0f, 1.0f}};
+            const VkClearColorValue green{{0.0f, 1.0f, 0.0f, 1.0f}};
+            const VkImageSubresourceRange first{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            const VkImageSubresourceRange second{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1, 1};
+            context.Function<PFN_vkCmdClearColorImage>("vkCmdClearColorImage")(commands, image->Image(), VK_IMAGE_LAYOUT_GENERAL, &red, 1, &first);
+            context.Function<PFN_vkCmdClearColorImage>("vkCmdClearColorImage")(commands, image->Image(), VK_IMAGE_LAYOUT_GENERAL, &green, 1, &second);
+            RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+            image->MarkSliceDirty(0);
+            image->WriteBack();
+            recorder.Submit();
+            device.WaitQueue();
+            recorder.Sync();
+            Require(stored(0, {255, 0, 0, 255}), what + ": the slice a draw wrote was not stored");
+            Require(stored(1, {untouched, untouched, untouched, untouched}), what + ": a slice no draw wrote was stored over guest memory");
+            static_cast<void>(recorder.Commands());
+            recorder.Keep(image);
+            image->MarkSliceDirty(1);
+            image->WriteBack();
+            recorder.Submit();
+            device.WaitQueue();
+            recorder.Sync();
+            Require(stored(0, {255, 0, 0, 255}) && stored(1, {0, 255, 0, 255}), what + ": the second slice was not stored once a draw wrote it");
+        }
+        recorder.Sync();
+    }
+    std::cout << "slice dirty marking: ok\n";
+}
+
 void atomicViewTests(const Device& device, Recorder& recorder) {
     const auto& context = device.GetContext();
     TextureDetiler detiler(context);
@@ -6442,6 +6537,10 @@ int main(int argc, char** argv) {
             hostImportUnmapTests(device, recorder);
             return 0;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--slice-dirty-only") {
+            sliceDirtyTests(device, recorder);
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--resident-present-only") {
             RunResidentPresentTests(device.GetContext());
             return 0;
@@ -6521,6 +6620,7 @@ int main(int argc, char** argv) {
         drawInputReuseTests(device, recorder);
         drawInputInPlaceTests(device, recorder);
         RunResidentPresentTests(device.GetContext());
+        sliceDirtyTests(device, recorder);
         storeRunTests(device, recorder);
         queuedWriteGroupTests();
         remappedImportTests(device);
