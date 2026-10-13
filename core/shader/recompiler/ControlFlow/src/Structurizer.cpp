@@ -22,6 +22,29 @@ std::vector<std::uint32_t> allBlockIds(std::uint32_t count) {
     return ids;
 }
 
+std::vector<std::uint32_t> reversePostOrder(const ControlFlowGraph& graph);
+
+std::vector<std::uint32_t> analysisOrder(const ControlFlowGraph& graph, bool successorsFirst) {
+    const auto count = static_cast<std::uint32_t>(graph.blocks.size());
+    std::vector<std::uint32_t> order;
+    std::vector<bool> placed(count, false);
+    if (graph.entryBlock < count) {
+        order = reversePostOrder(graph);
+        if (successorsFirst) {
+            std::reverse(order.begin(), order.end());
+        }
+        for (const auto id : order) {
+            placed[id] = true;
+        }
+    }
+    for (std::uint32_t id = 0; id < count; ++id) {
+        if (!placed[id]) {
+            order.push_back(id);
+        }
+    }
+    return order;
+}
+
 bool inPlaceIntersections() {
     static const bool enabled = std::getenv("APS5_NO_PERF_DOM_INTERSECTION") == nullptr;
     return enabled;
@@ -316,43 +339,47 @@ bool reachesWithinIteration(const ControlFlowGraph& graph, const NaturalLoop& lo
 }
 
 std::uint32_t joinWithinIteration(const ControlFlowGraph& graph, const NaturalLoop& loop, std::uint32_t trueTarget, std::uint32_t falseTarget, std::uint32_t globalMerge) {
-    std::vector<std::uint32_t> reached;
+    std::vector<bool> reached(graph.blocks.size(), false);
     std::vector<std::uint32_t> pending = {trueTarget, falseTarget};
     while (!pending.empty()) {
         const auto blockId = pending.back();
         pending.pop_back();
-        if (blockId == globalMerge || contains(reached, blockId) || !isInsideLoopConstruct(graph, loop, blockId)) {
+        if (blockId == globalMerge || reached[blockId] || !isInsideLoopConstruct(graph, loop, blockId)) {
             continue;
         }
-        reached.push_back(blockId);
+        reached[blockId] = true;
         const auto& successors = graph.FindBlock(blockId).successors;
         pending.insert(pending.end(), successors.begin(), successors.end());
     }
+    std::vector<bool> joins(graph.blocks.size(), false);
     std::vector<std::uint32_t> joining = {globalMerge};
+    joins[globalMerge] = true;
     for (std::size_t index = 0; index < joining.size(); ++index) {
         for (const auto predecessor : graph.FindBlock(joining[index]).predecessors) {
-            if (contains(reached, predecessor) && !contains(joining, predecessor)) {
+            if (reached[predecessor] && !joins[predecessor]) {
+                joins[predecessor] = true;
                 joining.push_back(predecessor);
             }
         }
     }
     sortUnique(joining);
-    if (!contains(joining, trueTarget) || !contains(joining, falseTarget)) {
+    if (!joins[trueTarget] || !joins[falseTarget]) {
         return globalMerge;
     }
     std::vector<std::vector<std::uint32_t>> postDominators(graph.blocks.size());
     for (const auto blockId : joining) {
         postDominators[blockId] = blockId == globalMerge ? std::vector<std::uint32_t>{globalMerge} : joining;
     }
+    const auto order = analysisOrder(graph, true);
     for (bool changed = true; changed;) {
         changed = false;
-        for (const auto blockId : joining) {
-            if (blockId == globalMerge) {
+        for (const auto blockId : order) {
+            if (!joins[blockId] || blockId == globalMerge) {
                 continue;
             }
             auto next = joining;
             for (const auto successor : graph.FindBlock(blockId).successors) {
-                if (contains(joining, successor)) {
+                if (joins[successor]) {
                     next = intersectSorted(next, postDominators[successor]);
                 }
             }
@@ -433,9 +460,11 @@ std::uint32_t mergeBesideReturns(const ControlFlowGraph& graph, const BasicBlock
             postDominators[block.id] = {block.id};
         }
     }
+    const auto order = analysisOrder(graph, true);
     for (bool changed = true; changed;) {
         changed = false;
-        for (const auto& block : graph.blocks) {
+        for (const auto blockId : order) {
+            const auto& block = graph.blocks[blockId];
             if (kept[block.id].empty()) {
                 continue;
             }
@@ -443,8 +472,7 @@ std::uint32_t mergeBesideReturns(const ControlFlowGraph& graph, const BasicBlock
             for (std::size_t i = 1; i < kept[block.id].size(); ++i) {
                 intersectAnalysisSet(next, postDominators[kept[block.id][i]]);
             }
-            addUnique(next, block.id);
-            sortUnique(next);
+            addSortedUnique(next, block.id);
             if (next != postDominators[block.id]) {
                 replaceAnalysisSet(postDominators[block.id], std::move(next));
                 changed = true;
@@ -506,9 +534,11 @@ std::uint32_t iterationSelectionMerge(const ControlFlowGraph& graph, const Natur
     }
     std::vector<std::vector<std::uint32_t>> postDominators(count, allBlockIds(count));
     postDominators[join] = {join};
+    const auto order = analysisOrder(graph, true);
     for (bool changed = true; changed;) {
         changed = false;
-        for (const auto& block : graph.blocks) {
+        for (const auto blockId : order) {
+            const auto& block = graph.blocks[blockId];
             if (!joins[block.id] || block.id == join) {
                 continue;
             }
@@ -810,6 +840,8 @@ constexpr std::uint32_t CloneWordLimit = 1024u;
 constexpr std::uint32_t CloneWordFloor = 256u;
 constexpr std::uint32_t CloneShareDivisor = 8u;
 constexpr std::uint32_t CloneBudgetDivisor = 4u;
+constexpr std::uint32_t SplitGrowthFactor = 16u;
+constexpr std::uint32_t SplitGrowthFloor = 64u;
 
 struct SplitBudget {
     std::uint32_t programWords = 0;
@@ -1974,10 +2006,12 @@ void Structurizer::computeDominatorTree(ControlFlowGraph& graph) const {
         block.dominators = block.id == graph.entryBlock ? std::vector<std::uint32_t>{block.id} : all;
     }
 
+    const auto order = analysisOrder(graph, false);
     bool changed = true;
     while (changed) {
         changed = false;
-        for (auto& block : graph.blocks) {
+        for (const auto id : order) {
+            auto& block = graph.blocks[id];
             if (block.id == graph.entryBlock) {
                 continue;
             }
@@ -2044,19 +2078,7 @@ void Structurizer::computePostDominators(ControlFlowGraph& graph) const {
         block.postDominators = block.successors.empty() ? std::vector<std::uint32_t>{block.id} : all;
     }
 
-    std::vector<std::uint32_t> order;
-    order.reserve(count);
-    std::vector<bool> ordered(count, false);
-    if (graph.entryBlock < count) {
-        const auto forward = reversePostOrder(graph);
-        for (auto it = forward.rbegin(); it != forward.rend(); ++it) {
-            order.push_back(*it);
-            ordered[*it] = true;
-        }
-    }
-    for (std::uint32_t id = 0; id < count; ++id) {
-        if (!ordered[id]) order.push_back(id);
-    }
+    const auto order = analysisOrder(graph, true);
 
     bool changed = true;
     while (changed) {
@@ -2207,11 +2229,15 @@ void Structurizer::canonicalizeNaturalLoops(ControlFlowGraph& graph, bool routeL
 void Structurizer::splitSharedMergeBlocks(ControlFlowGraph& graph, bool routeLeavingExits, bool routeSharedExits, bool relaxReturnJoins) const {
     const auto originalBlockCount = static_cast<std::uint32_t>(graph.blocks.size());
     const auto splitBudget = std::max<std::uint32_t>(16u, originalBlockCount * 4u);
+    const auto growthBudget = std::max<std::uint32_t>(SplitGrowthFloor, originalBlockCount * SplitGrowthFactor);
     const auto programWords = estimatedSpirvWords(graph, allBlockIds(originalBlockCount));
     SplitBudget budget{programWords, std::max(CloneWordLimit, programWords / CloneBudgetDivisor), std::max(CloneWordLimit, programWords), nextGotoVariable(graph)};
     for (std::uint32_t splits = 0; splits < splitBudget; ++splits) {
         if (!splitOneLoopMerge(graph) && !splitOneSelectionMerge(graph, budget, [this](ControlFlowGraph& candidate) { recomputeAnalyses(candidate); }, routeLeavingExits, routeSharedExits) && !splitOneReturnJoin(graph, relaxReturnJoins)) {
             return;
+        }
+        if (graph.blocks.size() > growthBudget) {
+            throw std::runtime_error("CFG shared merge splitting exceeded growth budget: originalBlocks=" + std::to_string(originalBlockCount) + " currentBlocks=" + std::to_string(graph.blocks.size()) + " growthBudget=" + std::to_string(growthBudget));
         }
         rebuildPredecessors(graph);
         recomputeAnalyses(graph);
