@@ -3256,6 +3256,18 @@ std::shared_ptr<StorageTexture> StorageTexture::FindPending(std::uint64_t addres
     return containing != nullptr ? containing->weak_from_this().lock() : nullptr;
 }
 
+std::shared_ptr<StorageTexture> StorageTexture::FindPendingSlice(std::uint64_t address, std::uint64_t bytes) {
+    if (auto whole = FindPending(address, bytes)) return whole;
+    auto& pending = Pending();
+    std::lock_guard lock(pending.mutex);
+    for (auto* texture : pending.textures) {
+        const auto base = texture->descriptor.baseAddress;
+        if (texture->geometry.thick || texture->geometry.imageLayers <= 1 || address <= base || address - base >= texture->guestBytes || bytes > texture->guestBytes - (address - base)) continue;
+        return texture->weak_from_this().lock();
+    }
+    return nullptr;
+}
+
 bool PendingStorageOverlaps(std::uint64_t address, std::size_t bytes, const StorageTexture* except) {
     auto& pending = Pending();
     std::lock_guard lock(pending.mutex);

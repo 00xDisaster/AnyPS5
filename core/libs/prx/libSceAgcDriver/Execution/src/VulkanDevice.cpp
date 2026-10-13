@@ -2507,7 +2507,7 @@ ResidentPresent ResidentPresentable(const Graphics::Context& context, const Grap
 }
 
 std::shared_ptr<Graphics::StorageTexture> PresentableResident(const Graphics::Context& context, const DisplayBuffer& buffer, VkFilter& filter, bool& pending, bool& convert, std::uint32_t& layer) {
-    auto resident = Graphics::StorageTexture::FindPending(buffer.address, DisplayBufferSize(buffer));
+    auto resident = Graphics::StorageTexture::FindPendingSlice(buffer.address, DisplayBufferSize(buffer));
     pending = resident != nullptr;
     convert = false;
     layer = 0;
