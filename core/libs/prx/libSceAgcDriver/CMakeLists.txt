@@ -331,7 +331,11 @@ target_include_directories(agc_driver_register_key_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/core/shader/recompiler
         ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR}
 )
-target_link_libraries(agc_driver_register_key_tests PRIVATE libSceAgcDriver)
+target_link_libraries(agc_driver_register_key_tests PRIVATE
+        libSceAgcDriver
+        libc
+        libkernel
+)
 set_target_properties(agc_driver_register_key_tests PROPERTIES CXX_EXTENSIONS OFF)
 configure_windows_unwind(agc_driver_register_key_tests)
 if(BUILD_TESTING)
