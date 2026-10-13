@@ -1107,7 +1107,7 @@ GuestTextureResource SurfaceForTarget(const ColorTarget& color) {
     return surface;
 }
 
-ColorTarget DecodeColorBuffer(const Registers& cx, std::uint32_t slot) {
+ColorTarget DecodeColorBuffer(const Registers& cx, std::uint32_t slot, bool allowMultisampleDcc) {
     const auto stride = slot * 0xfu;
     ColorTarget color{};
     color.slot = slot;
@@ -1123,6 +1123,7 @@ ColorTarget DecodeColorBuffer(const Registers& cx, std::uint32_t slot) {
     Require(color.samples <= 8u, "color targets with more than eight samples are unsupported");
     Require((1u << ((attrib >> 15u) & 3u)) == color.samples, "color targets with fewer fragments than samples (EQAA) are unsupported");
     const auto multisampleInfo = color.samples > 1 ? 0x0c006000u : 0u;
+    Require(allowMultisampleDcc || color.samples == 1 || (info & 0x10000000u) == 0, "DCC over a multisampled color target is unsupported");
     // ROUND_MODE (bit 18) only affects unorm rounding. With DCC_ENABLE (bit 28) the target is written
     if ((info & ~(0x00039f7cu | 0x00040000u | 0x10000000u | 0x00002000u | multisampleInfo)) != 0) throw std::runtime_error("AGC graphics: color compression, DCC, endian conversion, nonstandard rounding or color optimization is unsupported (CB_COLOR_INFO 0x" + [&] { char text[16]; std::snprintf(text, sizeof(text), "%08x", info); return std::string(text); }() + ")");
     Require((info & 0x8000u) != 0 || number == 7 || number == 4 || number == 5, "unclamped normalized color is unsupported");
@@ -1299,7 +1300,7 @@ std::optional<ColorMetadataPass> DecodeColorMetadataPass(const QueueState& queue
     const auto targetMask = read(cx, 0x8e);
     for (std::uint32_t slot = 0; slot < 8; ++slot) {
         if (((targetMask >> (4u * slot)) & 0xfu) == 0 || ((read(cx, 0x31c + slot * 0xfu) >> 2u) & 0x1fu) == 0) continue;
-        const auto target = DecodeColorBuffer(cx, slot);
+        const auto target = DecodeColorBuffer(cx, slot, fmaskDecompress);
         if (fmaskDecompress) {
             Require(target.samples > 1, "CB metadata pass over a single-sample target");
             Require(target.cmaskAddress != 0, "FMASK decompress of a target without a CMASK address");

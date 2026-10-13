@@ -2259,6 +2259,7 @@ VKAPI_ATTR VkResult VKAPI_CALL sampleLocationDepthProperties(VkPhysicalDevice, V
 
 void multisampleTests() {
     using AgcDriver::Graphics::ColorMetadataPass;
+    using AgcDriver::Graphics::DecodeColorBuffer;
     using AgcDriver::Graphics::DecodeColorMetadataPass;
     using AgcDriver::Graphics::DecodeState;
     const auto multisampled = [] {
@@ -2475,6 +2476,10 @@ void multisampleTests() {
     queue.context[0x31f] = 0;
     expectFailure([&] { DecodeState(queue); }, "without a CMASK address");
     queue = multisampled();
+    queue.context[0x31c] |= 0x10000000u;
+    expectFailure([&] { DecodeState(queue); }, "DCC over a multisampled color target is unsupported");
+    expectFailure([&] { DecodeColorBuffer(queue.context, 0); }, "DCC over a multisampled color target is unsupported");
+    queue = multisampled();
     queue.context[0x31c] |= 0x2000;
     setCmaskAddress(queue);
     std::vector<AgcDriver::Graphics::RegisterRead> reads;
@@ -2505,6 +2510,9 @@ void multisampleTests() {
     queue = rasterizedResolve;
     queue.context[0x32b] = queue.context[0x31c] ^ (1u << 8u);
     expectFailure([&] { DecodeColorMetadataPass(queue); }, "different formats or extents");
+    queue = rasterizedResolve;
+    queue.context[0x31c] |= 0x10000000u;
+    expectFailure([&] { DecodeColorMetadataPass(queue); }, "DCC over a multisampled color target is unsupported");
     queue = multisampled();
     queue.context[0x0] = 0;
     queue.context[0x202] = 0xcc0030;
@@ -2520,6 +2528,8 @@ void multisampleTests() {
     queue.context[0x0] = 0;
     queue.context[0x202] = 0xcc0020;
     expectFailure([&] { DecodeColorMetadataPass(queue); }, "multisampled color target");
+    queue.context[0x31c] |= 0x10000000u;
+    expectFailure([&] { DecodeColorMetadataPass(queue); }, "DCC over a multisampled color target is unsupported");
     queue = multisampled();
     queue.context[0x2f8] = 0;
     queue.context[0x0] = 0;
