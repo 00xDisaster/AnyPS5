@@ -107,8 +107,8 @@ static_assert(sizeof(IrResourcePlan) == 584, "IrResourcePlan changed: update Enc
 static_assert(sizeof(IrValue) == 152, "IrValue changed: update the plan value encoder");
 static_assert(sizeof(GuestRegister) == 8, "GuestRegister changed: update the plan value encoder");
 static_assert(sizeof(MemoryInfo) == 80, "MemoryInfo changed: update the plan encoder");
-static_assert(sizeof(DescriptorSource) == 144, "DescriptorSource changed: update the plan encoder");
-static_assert(sizeof(TableColumn) == 64, "TableColumn changed: update the plan encoder");
+static_assert(sizeof(DescriptorSource) == 152, "DescriptorSource changed: update the plan encoder");
+static_assert(sizeof(TableColumn) == 72, "TableColumn changed: update the plan encoder");
 static_assert(sizeof(KeyDomain) == 16, "KeyDomain changed: update the plan encoder");
 static_assert(sizeof(ResourceBlock) == 80, "ResourceBlock changed: update the plan encoder");
 static_assert(sizeof(SrtRead) == 16, "SrtRead changed: update the plan encoder");
@@ -148,7 +148,7 @@ static_assert(fieldCount<IrResourcePlan>() == 21, "IrResourcePlan changed: updat
 static_assert(fieldCount<GuestRegister>() == 2, "GuestRegister changed: update the plan value encoder");
 static_assert(fieldCount<MemoryInfo>() == 30, "MemoryInfo changed: update the plan encoder");
 static_assert(fieldCount<DescriptorSource>() == 3, "DescriptorSource changed: update the plan encoder");
-static_assert(fieldCount<TableColumn>() == 10, "TableColumn changed: update the plan encoder");
+static_assert(fieldCount<TableColumn>() == 13, "TableColumn changed: update the plan encoder");
 static_assert(fieldCount<KeyDomain>() == 4, "KeyDomain changed: update the plan encoder");
 static_assert(fieldCount<ResourceBlock>() == 4, "ResourceBlock changed: update the plan encoder");
 static_assert(fieldCount<SrtRead>() == 2, "SrtRead changed: update the plan encoder");
@@ -1019,6 +1019,9 @@ bool encodePlan(Writer& writer, const IrResourcePlan& plan) {
             domains.Value(domain.value);
         });
         out.Value(column.unkeyed);
+        out.Value(column.indirect);
+        out.Value(column.indirectOffset);
+        out.Value(column.indirectImmediate);
     });
     writer.List(plan.controlFlow, [&](Writer& out, const ResourceBlock& block) {
         out.Value(valueIndex(block.condition));
@@ -1169,6 +1172,9 @@ bool decodePlan(Reader& reader, IrResourcePlan& plan) {
             domains.Value(domain.value);
         });
         in.Value(column.unkeyed);
+        in.Value(column.indirect);
+        in.Value(column.indirectOffset);
+        in.Value(column.indirectImmediate);
         source.tableColumn = table ? std::optional(std::move(column)) : std::nullopt;
     });
     reader.List(plan.controlFlow, 28, [&](Reader& in, ResourceBlock& block) {

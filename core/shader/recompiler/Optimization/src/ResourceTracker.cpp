@@ -599,6 +599,10 @@ private:
         std::uint32_t stride = 0;
         std::uint32_t addend = 0;
         bool masked = false;
+        std::uint32_t descriptorOffset = 0;
+        if (address && immediateU32(offset, descriptorOffset)) {
+            return TryMakeIndirectColumn(handle, *heapHandle, sampler, words, descriptorOffset, first, plan);
+        }
         if (!MatchAffineOffset(offset, key, stride, addend)) {
             if (!MatchMaskedOffset(offset, key, stride)) {
                 return false;
@@ -620,6 +624,68 @@ private:
         column.sampler = sampler;
         column.address = address;
         const auto domain = masked ? std::optional<KeyDomain>{} : MatchKeyDomain(key);
+        DescriptorSource columnSource = heapSource;
+        columnSource.tableColumn = column;
+        plan.handle = &handle;
+        plan.source = InternSource(columnSource);
+        plan.keyDomain = domain;
+        auto& shared = *m_sources[plan.source].tableColumn;
+        shared.maxKey = std::max(shared.maxKey, column.maxKey);
+        if (!domain.has_value()) {
+            shared.unkeyed = true;
+            shared.keyDomains.clear();
+        } else if (!shared.unkeyed && std::find(shared.keyDomains.begin(), shared.keyDomains.end(), *domain) == shared.keyDomains.end()) {
+            shared.keyDomains.push_back(*domain);
+        }
+        plan.offset = offset;
+        return true;
+    }
+
+    bool TryMakeIndirectColumn(IrValue& handle, IrValue& pointer, bool sampler, std::uint32_t words, std::uint32_t descriptorOffset, std::uint32_t descriptorImmediate, TableColumnPlan& plan) {
+        if (pointer.Opcode() != IrOpcode::GetAddressResource || pointer.ArgumentCount() != 2u) {
+            return false;
+        }
+        IrValue* bufferHandle = nullptr;
+        IrValue* offset = nullptr;
+        std::uint32_t first = 0;
+        for (std::uint32_t dword = 0; dword < 2u; dword++) {
+            IrValue* read = pointer.Argument(dword)->Resolve();
+            std::uint32_t memoryIndex = 0;
+            const MemoryInfo* memory = ScalarReadMemory(*read, memoryIndex);
+            if (memory == nullptr || !MemoryIndexBelongsTo(memoryIndex, *read)) {
+                return false;
+            }
+            if (dword == 0u) {
+                first = memory->offset;
+                bufferHandle = read->Argument(0)->Resolve();
+                offset = read->Argument(1)->Resolve();
+            } else if (memory->offset != first + static_cast<std::uint32_t>(sizeof(std::uint32_t)) || read->Argument(0)->Resolve() != bufferHandle || !EquivalentValue(m_program.Resources(), offset, read->Argument(1))) {
+                return false;
+            }
+        }
+        IrValue* key = nullptr;
+        std::uint32_t stride = 0;
+        std::uint32_t addend = 0;
+        if (!MatchAffineOffset(offset, key, stride, addend)) {
+            return false;
+        }
+        DescriptorSource heapSource;
+        std::uint32_t heapIndex = 0;
+        if (!MakeRuntimeSource(*bufferHandle, IrOpcode::GetBufferResource, 4u, heapIndex, heapSource)) {
+            return false;
+        }
+        TableColumn column;
+        column.heapSource = heapIndex;
+        column.stride = stride;
+        column.addend = addend;
+        column.offset = first;
+        column.dwordCount = words;
+        column.maxKey = possibleU32Bits(key);
+        column.sampler = sampler;
+        column.indirect = true;
+        column.indirectOffset = descriptorOffset;
+        column.indirectImmediate = descriptorImmediate;
+        const auto domain = MatchKeyDomain(key);
         DescriptorSource columnSource = heapSource;
         columnSource.tableColumn = column;
         plan.handle = &handle;
