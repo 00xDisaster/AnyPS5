@@ -130,11 +130,10 @@ export class Archive {
       const item = this.files[index];
       report({ phase: "Inspecting files", input: item.name, completed: index, total: this.files.length });
       if (item.entry.directory || item.name.startsWith("sce_sys/")) continue;
+      if (item.name.startsWith("sce_module/") && item.name.endsWith(".guest.prx")) continue;
       const elf = await signature(item.entry);
       if (item.name.startsWith("sce_module/")) {
-        if (item.name.endsWith(".guest.prx")) throw new Error("Use the original files, without previously converted .guest.prx files");
         if (elf) this.modules.push(item);
-        else if (/\.(elf|prx|sprx|suprx|debug_prx)$/iu.test(item.name)) throw new Error(`The module is not a decrypted ELF: ${item.name}`);
       } else if (elf) executables.push(item);
     }
     if (executables.length !== 1) throw new Error(`Expected exactly one executable ELF outside sce_module; found ${executables.length}`);
@@ -212,7 +211,9 @@ export async function packageArchive(archive, converted, outputName, libraryFile
       if (!entry.filename.startsWith("libs/") || entry.encrypted || ((entry.externalFileAttributes >>> 16) & 0xf000) === 0xa000) throw new Error("Invalid library archive layout");
       claim(entry.filename);
     }
-    for (const item of archive.files) claim("app0/" + item.name);
+    const replaced = new Set(converted.modules.map(module => module.name));
+    const originalFiles = archive.files.filter(item => !replaced.has("app0/" + item.name));
+    for (const item of originalFiles) claim("app0/" + item.name);
     claim(outputName);
     for (const module of converted.modules) {
       if (!module.name.startsWith("app0/sce_module/")) throw new Error("Invalid converted module path");
@@ -225,7 +226,7 @@ export async function packageArchive(archive, converted, outputName, libraryFile
       if (entry.directory) await writer.add(entry.filename, undefined, { directory: true });
       else await appendEntry(writer, entry.filename, entry, report);
     }
-    for (const { entry, name } of archive.files) {
+    for (const { entry, name } of originalFiles) {
       if (entry.directory) await writer.add("app0/" + name, undefined, { directory: true });
       else await appendEntry(writer, "app0/" + name, entry, report);
     }

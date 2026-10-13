@@ -22,10 +22,12 @@ async function zip(entries) {
   return writer.close();
 }
 
-const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.elf", module], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/content/resource.bin", resource]]);
+const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.prx.esbak", module], ["title/sce_module/library.prx", new Uint8Array([79, 21, 61, 29])], ["title/sce_module/library.prx.esbak.guest.prx", new Uint8Array([77, 90, 0, 0])], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/content/resource.bin", resource]]);
 const folder = [
   { path: "title/program.dat", file: new Blob([executable]) },
-  { path: "title/sce_module/library.elf", file: new Blob([module]) },
+  { path: "title/sce_module/library.prx.esbak", file: new Blob([module]) },
+  { path: "title/sce_module/library.prx", file: new Blob([new Uint8Array([79, 21, 61, 29])]) },
+  { path: "title/sce_module/library.prx.esbak.guest.prx", file: new Blob([new Uint8Array([77, 90, 0, 0])]) },
   { path: "title/sce_sys/param.json", file: new Blob(["{}"]) },
   { path: "title/content/resource.bin", file: new Blob([resource]) }
 ];
@@ -40,7 +42,7 @@ for (const target of ["windows", "linux"]) {
   const input = await archive.conversionInput(target, false, () => {});
   assert.equal(input.modules.length, 1);
   assert.deepEqual(input.executable, executable);
-  assert.equal(input.modules[0].name, "sce_module/library.elf");
+  assert.equal(input.modules[0].name, "sce_module/library.prx.esbak");
   const events = [];
   const converted = native.Convert(input, event => events.push(event));
   assert.equal(converted.ok, true, converted.error);
@@ -61,7 +63,8 @@ for (const target of ["windows", "linux"]) {
   const byName = new Map(entries.map(entry => [entry.filename, entry]));
   assert(byName.has(input.outputName));
   assert(byName.has("libs/system.prx"));
-  assert(byName.has("app0/sce_module/library.elf.guest.prx"));
+  assert.deepEqual(await byName.get("app0/sce_module/library.prx.esbak.guest.prx").getData(new Uint8ArrayWriter(), { checkSignature: true }), converted.modules[0].bytes);
+  assert.deepEqual(await byName.get("app0/sce_module/library.prx").getData(new Uint8ArrayWriter(), { checkSignature: true }), new Uint8Array([79, 21, 61, 29]));
   assert.deepEqual(await byName.get("app0/program.dat").getData(new Uint8ArrayWriter(), { checkSignature: true }), executable);
   assert.deepEqual(await byName.get("app0/content/resource.bin").getData(new Uint8ArrayWriter(), { checkSignature: true }), resource);
   assert.equal((byName.get(input.outputName).externalFileAttributes >>> 16) & 0o777, 0o755);
