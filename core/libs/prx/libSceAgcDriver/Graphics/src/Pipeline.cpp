@@ -73,6 +73,7 @@ Framebuffer::Framebuffer(const Context& context, VkRenderPass renderPass, std::s
     // Cached objects outlive their device's teardown; they must not keep its buffer pool alive past it.
     this->context.bufferPool.reset();
     Require(extent.width != 0 && extent.height != 0 && extent.width <= context.limits.maxFramebufferWidth && extent.height <= context.limits.maxFramebufferHeight, "framebuffer extent exceeds device limits");
+    Require(layers != 0 && layers <= context.limits.maxFramebufferLayers, "framebuffer layers exceed device limits");
     views.assign(targets.begin(), targets.end());
     if (renderPass == VK_NULL_HANDLE) return;
     VkFramebufferCreateInfo framebufferInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
@@ -81,7 +82,6 @@ Framebuffer::Framebuffer(const Context& context, VkRenderPass renderPass, std::s
     framebufferInfo.pAttachments = targets.empty() ? nullptr : targets.data();
     framebufferInfo.width = extent.width;
     framebufferInfo.height = extent.height;
-    Require(layers != 0 && layers <= context.limits.maxFramebufferLayers, "framebuffer layers exceed device limits");
     framebufferInfo.layers = layers;
     Check(context.Function<PFN_vkCreateFramebuffer>("vkCreateFramebuffer")(context.device, &framebufferInfo, nullptr, &framebuffer), "vkCreateFramebuffer");
 }

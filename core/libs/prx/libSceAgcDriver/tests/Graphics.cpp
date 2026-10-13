@@ -2278,6 +2278,18 @@ void clipDistanceTests() {
     Require(AgcDriver::Graphics::DrawRejection(queue, false).find("more than eight") != std::string::npos, "nine clip distances passed the precheck");
 }
 
+void framebufferLayerTests() {
+    AgcDriver::Graphics::Context context{};
+    context.limits.maxFramebufferWidth = 64;
+    context.limits.maxFramebufferHeight = 64;
+    context.limits.maxFramebufferLayers = 3;
+    AgcDriver::Graphics::Framebuffer accepted(context, VK_NULL_HANDLE, {}, {64, 64}, 3);
+    for (const VkRenderPass pass : std::array<VkRenderPass, 2>{VK_NULL_HANDLE, reinterpret_cast<VkRenderPass>(1)}) {
+        expectFailure([&] { AgcDriver::Graphics::Framebuffer rejected(context, pass, {}, {64, 64}, 0); }, "framebuffer layers exceed device limits");
+        expectFailure([&] { AgcDriver::Graphics::Framebuffer rejected(context, pass, {}, {64, 64}, 4); }, "framebuffer layers exceed device limits");
+    }
+}
+
 void DepthClipTests() {
     auto queue = makeState();
     const auto direct = AgcDriver::Graphics::DecodeState(queue);
@@ -5490,6 +5502,7 @@ int main(int argc, char** argv) {
         multisampleTests();
         MsaaEnableSingleSampleTests();
         clipDistanceTests();
+        framebufferLayerTests();
         ShaderStageTests();
         NggVertexWorkgroupTests();
         TuningFieldTests();
