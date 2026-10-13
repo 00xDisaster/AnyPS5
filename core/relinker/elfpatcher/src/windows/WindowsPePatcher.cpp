@@ -8,26 +8,13 @@
 #include <elfpatcher/windows/WindowsTrampolineBuilder.hpp>
 #include <io/BufferUtils.hpp>
 #include <filesystem>
-#include <fstream>
-#include <iostream>
+
+
 #include <utility>
 
 namespace Elfpatcher::Windows {
 
 namespace {
-
-void writeDiagnosticsImports(const std::vector<PeImport>& imports) {
-    const std::filesystem::path path = std::filesystem::absolute("windows-diagnostics-imports.txt");
-    std::ofstream stream(path, std::ios::trunc);
-    if (!stream)
-        throw Domain::RelinkerException("Cannot open windows-diagnostics-imports.txt for writing");
-    for (const auto& import : imports)
-        stream << import.Name << '\n';
-    if (!stream)
-        throw Domain::RelinkerException("Cannot write windows-diagnostics-imports.txt");
-    stream.close();
-    std::cout << "Wrote Windows import diagnostics to " << path.string() << '\n';
-}
 
 void writeGotStub(std::vector<PeSection>& sections, const std::uint32_t targetRva, const std::uint32_t stubRva) {
     for (auto& section : sections) {
@@ -41,10 +28,13 @@ void writeGotStub(std::vector<PeSection>& sections, const std::uint32_t targetRv
 
 }
 
-WindowsPePatcher::WindowsPePatcher(const bool windowsGui, std::filesystem::path iconPath) : _windowsGui(windowsGui), _iconPath(std::move(iconPath)) {
+WindowsPePatcher::WindowsPePatcher(const bool windowsGui, std::optional<std::vector<std::uint8_t>> icon) : windowsGui(windowsGui), icon(std::move(icon)) {
 }
 
+const std::string& WindowsPePatcher::GetDiagnostics() const { return diagnostics; }
+
 std::vector<std::uint8_t> WindowsPePatcher::Patch(const std::vector<std::uint8_t>& sourceElf, const std::vector<Domain::ProgramHeader>& originalHeaders, const Domain::SysVDynamicSection& dynamicSection, const std::uint64_t originalPltGotVaddr, const std::string& runPath, const bool lazyBinding, const bool dependencyDiagnostics, const std::vector<Codegen::TrampolineSite>& trampolines) {
+    diagnostics.clear();
     WindowsLoadImage image(sourceElf, originalHeaders);
     if (originalPltGotVaddr != 0)
         image.GetRva(originalPltGotVaddr, 8);
@@ -87,7 +77,7 @@ std::vector<std::uint8_t> WindowsPePatcher::Patch(const std::vector<std::uint8_t
     }
     libraries.insert(libraries.begin(), guestPaths.begin(), guestPaths.end());
     if (dependencyDiagnostics)
-        writeDiagnosticsImports(relocations.Imports);
+        for (const auto& import : relocations.Imports) diagnostics += import.Name + '\n';
     auto entry = WindowsEntryStubBuilder().Build(nextRva, image.GetEntryRva(), nativeImports, libraries, relocations.Imports, runPath, lazyBinding, dependencyDiagnostics, dynamicSection.GuestModules, dynamicSection.UnmatchedImportModules);
     directories[3] = entry.ExceptionDirectory;
     const auto entryRva = entry.Code.Rva;
@@ -105,8 +95,8 @@ std::vector<std::uint8_t> WindowsPePatcher::Patch(const std::vector<std::uint8_t
         sections.push_back({".reloc", nextRva, SectionRead | 0x02000040u, std::move(relocationData)});
         nextRva = AlignRva(nextRva + sections.back().Data.size());
     }
-    directories[2] = WindowsIconResourceBuilder().Build(_iconPath, sections, nextRva);
-    return WindowsPeWriter().Write(sections, entryRva, directories, _windowsGui);
+    directories[2] = icon ? WindowsIconResourceBuilder().Build(*icon, "icon0.png", sections, nextRva) : PeDirectory{};
+    return WindowsPeWriter().Write(sections, entryRva, directories, windowsGui);
 }
 
 }

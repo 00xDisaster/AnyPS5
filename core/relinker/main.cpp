@@ -47,6 +47,7 @@ struct ConvertedExecutable {
     Relinker::RelinkResult Result;
     std::vector<Relinker::GuestArtifact> GuestArtifacts;
     std::vector<std::uint8_t> Bytes;
+    std::string Diagnostics;
 };
 
 ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable, Domain::IProgress& progress) {
@@ -114,7 +115,10 @@ void Patch(const Cli::Args& args, ConvertedExecutable& converted, const bool mai
     if (args.toMacos) {
         patcher = std::make_shared<Elfpatcher::MacOs::MacOsMachOPatcher>();
     } else if (args.toWindows) {
-        patcher = std::make_shared<Elfpatcher::Windows::WindowsPePatcher>(args.windowsGui, Io::NativePath(args.inputPath).parent_path() / "sce_sys" / "icon0.png");
+        const auto iconPath = Io::NativePath(args.inputPath).parent_path() / "sce_sys" / "icon0.png";
+        std::optional<std::vector<std::uint8_t>> icon;
+        if (std::filesystem::exists(iconPath)) icon = Io::FileReader().Read(Io::Utf8Path(iconPath));
+        patcher = std::make_shared<Elfpatcher::Windows::WindowsPePatcher>(args.windowsGui, std::move(icon));
     } else {
         patcher = std::make_shared<Elfpatcher::Linux::LinuxElfPatcher>(
             std::make_shared<Elfpatcher::EntryStubBuilder>(),
@@ -133,6 +137,7 @@ void Patch(const Cli::Args& args, ConvertedExecutable& converted, const bool mai
         error.InputPath = converted.InputPath;
         throw;
     }
+    if (args.windowsDiagnostics && mainExecutable) converted.Diagnostics = std::static_pointer_cast<Elfpatcher::Windows::WindowsPePatcher>(patcher)->GetDiagnostics();
 }
 
 int Run(const int argc, char* argv[]) {
@@ -240,6 +245,7 @@ int Run(const int argc, char* argv[]) {
         }
 
         for (std::size_t index = 0; index < executables.size(); ++index) Patch(args, executables[index], index == 0);
+        if (args.windowsDiagnostics) fileWriter.Write("windows-diagnostics-imports.txt", executables.front().Diagnostics);
         for (const auto& artifact : guestArtifacts) {
             std::filesystem::create_directories(artifact.Path.parent_path());
             fileWriter.Write(Io::Utf8Path(artifact.Path), artifact.Bytes);
