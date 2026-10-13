@@ -35,7 +35,11 @@ public:
             return;
         }
         if (event.Stage == Domain::ProgressStage::Imports) {
-            if (event.Completed == 0) Message("Import analysis\n");
+            if (event.Completed == 0) {
+                Finish();
+                stream << '\n';
+                Message("Import analysis\n");
+            }
             else Finish();
             return;
         }
@@ -65,7 +69,7 @@ public:
     }
 
     void Message(std::string_view message) override {
-        Finish();
+        if (active) Finish();
         stream << message;
         if (!message.empty() && message.back() != '\n') stream << '\n';
         stream << std::flush;
@@ -73,7 +77,7 @@ public:
     }
 
     void Finish() {
-        if (active || messages) stream << (active ? "\n\n" : "\n") << std::flush;
+        if (active || messages) stream << '\n' << std::flush;
         active = false;
         messages = false;
         lineWidth = 0;
