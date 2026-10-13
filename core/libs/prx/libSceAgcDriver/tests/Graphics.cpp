@@ -1594,6 +1594,8 @@ void DepthBoundsBiasTests() {
     queue.context[0x80] = 0;
     queue.userConfig[0x242] = 2;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "polygon mode, depth bias or nonstandard rasterization");
+    queue.userConfig[0x242] = 3;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "polygon mode, depth bias or nonstandard rasterization");
     queue.userConfig[0x242] = 4;
     queue.context[0x205] = 0x00001a4au;
     queue.context[0x2de] = 0x1f0u;
@@ -4354,6 +4356,23 @@ void aliasedBufferViewTests() {
     }
 }
 
+void LineStripTests() {
+    using namespace AgcDriver::Graphics;
+    auto queue = makeState();
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    queue.userConfig[0x242] = 3;
+    auto state = DecodeState(queue);
+    Require(state.topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP && !state.rectList && !state.primitiveRestart, "primitive type 3 did not decode as a line strip");
+    Require(RasterPrimitiveOf(state) == ShaderRecompiler::RasterPrimitive::Line, "a line strip draw did not get the line primitive class");
+    queue.userConfig[0x24b] = 1;
+    queue.context[0x103] = 0xffffffffu;
+    state = DecodeState(queue);
+    Require(state.topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP && state.primitiveRestart, "primitive restart was lost on a line strip");
+    const auto rejection = DrawRejection(queue, true);
+    Require(rejection.empty(), "the draw precheck rejected an indexed line strip with primitive restart: " + rejection);
+}
+
 void ProvokingVertexTests() {
     using namespace AgcDriver::Graphics;
     constexpr std::uint32_t lastVertex = 1u << 19u;
@@ -4362,7 +4381,7 @@ void ProvokingVertexTests() {
     queue.context[0x1b4] = 2;
     const auto first = DecodeState(queue);
     Require(first.provokingVertexMode == VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT, "the default provoking vertex is not first");
-    for (const auto primitive : {2u, 4u, 5u, 6u}) {
+    for (const auto primitive : {2u, 3u, 4u, 5u, 6u}) {
         queue.userConfig[0x242] = primitive;
         for (const auto last : {false, true, false}) {
             queue.context[0x205] = 0x240u | (last ? lastVertex : 0u);
@@ -5429,6 +5448,7 @@ int main(int argc, char** argv) {
         orderedPixelShaderTests();
         stencilRefExportTests();
         aliasedBufferViewTests();
+        LineStripTests();
         ProvokingVertexTests();
         ProvokingVertexRenderPassTests();
         ConservativeRasterizationTests();
