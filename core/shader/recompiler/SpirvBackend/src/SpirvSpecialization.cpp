@@ -655,8 +655,8 @@ private:
                     retainMerge = !linearSelection(target, instruction.at(1));
                     if (!retainMerge) instruction.clear();
                 }
-                const auto replacement = !retainMerge ? Make(spv::OpBranch, {target}) : op == spv::OpSwitch ?
-                    Make(spv::OpSwitch, {terminal.at(1), target}) : Make(spv::OpBranchConditional, {terminal.at(1), target, target});
+                const auto replacement = !retainMerge ? Make(spv::OpBranch, {target}) : op == spv::OpSwitch ? Make(spv::OpSwitch, {terminal.at(1), target}) :
+                    header.at(1) >= 0x00010600u ? terminal : Make(spv::OpBranchConditional, {terminal.at(1), target, target});
                 if (terminal != replacement) {
                     terminal = replacement;
                     changed = true;
