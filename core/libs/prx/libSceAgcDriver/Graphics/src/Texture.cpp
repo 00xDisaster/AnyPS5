@@ -3055,6 +3055,7 @@ void StorageTexture::markLayersPending(std::uint32_t first, std::uint32_t count)
         if (superseded) source->reconcilePending();
     }
     if (eager) {
+        ++version;
         WriteBack();
         return;
     }
