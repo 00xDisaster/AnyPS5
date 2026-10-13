@@ -1155,35 +1155,46 @@ std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
         if (storageCacheHeld != 0 || !gpu.try_lock()) {
             storageSkipped = true;
         } else {
-            bool more = true;
-            while (more && freed < bytes) {
-                std::vector<std::pair<std::shared_ptr<StorageTexture>, std::uint64_t>> evicted;
-                {
-                    if (!AcquireCache(cache.mutex)) {
-                        storageSkipped = true;
-                        break;
+            try {
+                bool dirtyToo = false;
+                while (freed < bytes) {
+                    std::vector<std::pair<std::shared_ptr<StorageTexture>, std::uint64_t>> evicted;
+                    {
+                        if (!AcquireCache(cache.mutex)) {
+                            storageSkipped = true;
+                            break;
+                        }
+                        std::lock_guard lock(cache.mutex, std::adopt_lock);
+                        std::uint64_t batch = 0;
+                        for (auto it = cache.entries.end(); it != cache.entries.begin() && batch + freed < bytes;) {
+                            --it;
+                            if (!dirtyToo && it->texture->Dirty()) continue;
+                            const auto accounted = it->accounted;
+                            const auto next = std::next(it);
+                            evicted.emplace_back(evictStorage(cache, it), accounted);
+                            batch += accounted;
+                            it = next;
+                        }
+                        if (evicted.empty()) {
+                            if (dirtyToo || cache.entries.empty()) break;
+                            dirtyToo = true;
+                            continue;
+                        }
                     }
-                    std::lock_guard lock(cache.mutex, std::adopt_lock);
-                    std::uint64_t batch = 0;
-                    while (batch + freed < bytes && !cache.entries.empty()) {
-                        const auto back = std::prev(cache.entries.end());
-                        const auto accounted = back->accounted;
-                        evicted.emplace_back(evictStorage(cache, back), accounted);
-                        batch += accounted;
+                    for (auto& [image, accounted] : evicted) {
+                        std::vector<std::shared_ptr<ShaderResources>> resources;
+                        SharedResourceCache().RemoveImage(image.get(), &resources);
+                        if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->Recording()) {
+                            for (auto& resource : resources) recorder->Keep(std::move(resource));
+                        }
+                        resources.clear();
+                        ++storageEntries;
+                        if (image.use_count() == 1) freed += accounted;
+                        image.reset();
                     }
-                    more = !cache.entries.empty();
                 }
-                for (auto& [image, accounted] : evicted) {
-                    std::vector<std::shared_ptr<ShaderResources>> resources;
-                    SharedResourceCache().RemoveImage(image.get(), &resources);
-                    if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->Recording()) {
-                        for (auto& resource : resources) recorder->Keep(std::move(resource));
-                    }
-                    resources.clear();
-                    ++storageEntries;
-                    if (image.use_count() == 1) freed += accounted;
-                    image.reset();
-                }
+            } catch (const std::exception& error) {
+                std::fprintf(stderr, "[gpu] texture cache release stopped: %s\n", error.what());
             }
         }
     }

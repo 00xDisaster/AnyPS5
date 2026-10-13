@@ -51,7 +51,7 @@ std::array<std::uint32_t, 8> TextureDescriptor(std::uint64_t address) {
     };
 }
 
-std::shared_ptr<StorageTexture> Store(AgcDriver::VulkanDevice& device, std::uint64_t base, std::uint32_t surface) {
+std::shared_ptr<StorageTexture> Store(AgcDriver::VulkanDevice& device, std::uint64_t base, std::uint32_t surface, bool flush = true) {
     const auto address = base + surface * Stride;
     std::vector<std::uint32_t> userData(16, 0u);
     const auto texture = TextureDescriptor(address);
@@ -69,6 +69,7 @@ std::shared_ptr<StorageTexture> Store(AgcDriver::VulkanDevice& device, std::uint
     const auto result = ShaderRecompiler::Recompile(request);
     device.Dispatch(result, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(code.data()));
     device.WaitIdle();
+    if (!flush) return StorageTexture::FindLive(address, SurfaceBytes);
     StorageTexture::FlushPending(address, static_cast<std::size_t>(SurfaceBytes), nullptr, "test");
     device.WaitIdle();
     return StorageTexture::FindLive(address, SurfaceBytes);
@@ -131,9 +132,19 @@ int main() {
             Require(StorageTexture::FindLive(base + 2u * Stride, SurfaceBytes) == nullptr && images[2].expired(), "the oldest cached storage image survived a release of its bytes");
             Require(StorageTexture::FindLive(base + 3u * Stride, SurfaceBytes) != nullptr && !images[3].expired(), "a release of one image's bytes evicted more than the oldest image");
             Require(StorageTexture::FindLive(base + (capacity + 1u) * Stride, SurfaceBytes) != nullptr, "a release of one image's bytes evicted the newest image");
+            {
+                const auto dirty = Store(*device, base, 3, false);
+                Require(dirty != nullptr && dirty->Dirty(), "a store without a flush left no pending results on surface 3");
+                Require(Store(*device, base, 4) != nullptr, "surface 4 is not cached");
+                for (std::uint32_t surface = 5; surface < capacity + 2u; ++surface) Require(Store(*device, base, surface) != nullptr, "surface " + std::to_string(surface) + " is not cached");
+            }
+            Require(AgcDriver::Graphics::ReleaseTextureCaches(held) >= held, "a release with a dirty oldest image freed nothing");
+            Require(StorageTexture::FindLive(base + 3u * Stride, SurfaceBytes) != nullptr, "a release took the dirty oldest image before a clean one");
+            Require(StorageTexture::FindLive(base + 4u * Stride, SurfaceBytes) == nullptr && images[4].expired(), "a release did not take the oldest clean image");
             const auto rest = AgcDriver::Graphics::ReleaseTextureCaches(~std::uint64_t{0});
-            Require(rest >= held * (capacity - 1u), "a release of everything freed " + std::to_string(rest >> 20u) + " MiB of the " + std::to_string((held * (capacity - 1u)) >> 20u) + " MiB cached");
-            for (std::uint32_t surface = 0; surface < capacity + 2u; ++surface) Require(StorageTexture::FindLive(base + surface * Stride, SurfaceBytes) == nullptr && images[surface].expired(), "surface " + std::to_string(surface) + " survived a release of everything");
+            Require(rest >= held * (capacity - 3u), "a release of everything freed " + std::to_string(rest >> 20u) + " MiB of the " + std::to_string((held * (capacity - 3u)) >> 20u) + " MiB cached");
+            device->WaitIdle();
+            for (std::uint32_t surface = 0; surface < capacity + 2u; ++surface) Require(StorageTexture::FindLive(base + surface * Stride, SurfaceBytes) == nullptr && (surface == 3u || images[surface].expired()), "surface " + std::to_string(surface) + " survived a release of everything");
             Require(AgcDriver::Graphics::ReleaseTextureCaches(held) == 0, "a release from empty caches reported freed bytes");
         } catch (...) {
             release();
