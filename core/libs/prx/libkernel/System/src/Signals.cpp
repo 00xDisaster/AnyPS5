@@ -38,8 +38,13 @@ constexpr int MaxSignal = 128;
 constexpr int GuestSigkill = 9;
 constexpr int GuestSigstop = 17;
 constexpr int SaRestart = 0x2;
+constexpr int SaResethand = 0x4;
+constexpr int SaNodefer = 0x10;
 constexpr int SaSiginfo = 0x40;
 std::atomic<GuestHandler> handlers[MaxSignal + 1]{};
+std::atomic<std::uint32_t> handlerMasks[MaxSignal + 1]{};
+std::atomic<int> handlerFlags[MaxSignal + 1]{};
+std::atomic<bool> handlerReset[MaxSignal + 1]{};
 static_assert(std::atomic<GuestHandler>::is_always_lock_free);
 std::atomic<std::uint32_t> blockedMask{0};
 static_assert(std::atomic<std::uint32_t>::is_always_lock_free);
@@ -138,6 +143,20 @@ int NativeSignal(int guest) {
         default: return 0;
     }
 }
+void ResetToDefault(int guest) {
+    handlerReset[guest].store(true);
+    handlers[guest].store(nullptr);
+    if (const int native = NativeSignal(guest)) std::signal(native, SIG_DFL);
+}
+void RunHandler(int guest, GuestHandler handler) {
+    const int flags = handlerFlags[guest].load();
+    std::uint32_t mask = handlerMasks[guest].load();
+    if ((flags & SaNodefer) == 0 && guest <= 32) mask |= SignalBit(guest);
+    if ((flags & SaResethand) != 0) ResetToDefault(guest);
+    const std::uint32_t saved = blockedMask.fetch_or(mask);
+    handler(guest);
+    blockedMask.store(saved);
+}
 void Dispatch(int native) {
     int guest = 0;
     for (int candidate : {2, 4, 6, 8, 11, 15})
@@ -152,12 +171,15 @@ void Dispatch(int native) {
         return;
     }
     const auto callback = handlers[guest].load();
-    if (reinterpret_cast<std::uintptr_t>(callback) > 1) callback(guest);
+    if (reinterpret_cast<std::uintptr_t>(callback) > 1) RunHandler(guest, callback);
 }
 bool Delivered(const GuestSigaction& action) {
     return action.handler > 1 && (action.flags & SaSiginfo) == 0;
 }
 bool Install(int guest, const GuestSigaction& action) {
+    handlerReset[guest].store(false);
+    handlerMasks[guest].store(action.mask.bits[0]);
+    handlerFlags[guest].store(action.flags);
     const int native = NativeSignal(guest);
     if (!native) return true;
     const auto previous = handlers[guest].exchange(Delivered(action) ? reinterpret_cast<GuestHandler>(action.handler) : nullptr);
@@ -172,8 +194,15 @@ bool Install(int guest, const GuestSigaction& action) {
 
 namespace {
 
+void SettleReset(int guest) {
+    if (!handlerReset[guest].exchange(false)) return;
+    dispositions[guest].handler = 0;
+    dispositions[guest].flags &= ~SaSiginfo;
+}
+
 GuestSigaction Disposition(int guest) {
     std::lock_guard lock(registration);
+    SettleReset(guest);
     return dispositions[guest];
 }
 
@@ -205,10 +234,17 @@ bool DeliverPendingSignal(int guest) {
         return action.handler > 1;
     }
     if (action.handler > 1) {
-        reinterpret_cast<GuestHandler>(action.handler)(guest);
+        RunHandler(guest, reinterpret_cast<GuestHandler>(action.handler));
         return true;
     }
     return false;
+}
+
+void DeliverUnblockedPending() {
+    for (int guest = 1; guest <= MaxSignal; ++guest) {
+        if (SignalBlocked(guest) || !Deliverable(guest) || !TakePending(guest)) continue;
+        DeliverPendingSignal(guest);
+    }
 }
 
 int WaitForPendingInSet(const GuestSignalSet& set, bool waitForever, const GuestTimespec* timeout, int* guest) {
@@ -435,6 +471,7 @@ GuestHandler APS5_VABI signal_nid_postfix(int guest, GuestHandler handler) {
     const auto invalid = reinterpret_cast<GuestHandler>(static_cast<std::uintptr_t>(-1));
     if (guest < 1 || guest > MaxSignal || ((guest == GuestSigkill || guest == GuestSigstop) && handler != nullptr)) { *__error_nid_postfix() = 22; return invalid; }
     std::lock_guard lock(registration);
+    SettleReset(guest);
     const GuestSigaction action{reinterpret_cast<std::uintptr_t>(handler), SaRestart, {}};
     if (!Install(guest, action)) { *__error_nid_postfix() = 22; return invalid; }
     const auto previous = reinterpret_cast<GuestHandler>(dispositions[guest].handler);
@@ -445,6 +482,7 @@ int APS5_VABI sigaction_nid_postfix(int guest, const GuestSigaction* action, Gue
     if (guest < 1 || guest > MaxSignal) { *__error_nid_postfix() = 22; return -1; }
     if (action && (guest == GuestSigkill || guest == GuestSigstop) && action->handler != 0) { *__error_nid_postfix() = 22; return -1; }
     std::lock_guard lock(registration);
+    SettleReset(guest);
     const GuestSigaction old = dispositions[guest];
     if (action) {
         if (!Install(guest, *action)) { *__error_nid_postfix() = 22; return -1; }
@@ -464,11 +502,13 @@ int APS5_VABI raise_nid_postfix(int guest) {
     const int native = NativeSignal(guest);
     if (native != 0) {
         const int result = std::raise(native);
-        if (result) *__error_nid_postfix() = 22;
-        return result ? -1 : 0;
+        if (result) { *__error_nid_postfix() = 22; return -1; }
+        DeliverUnblockedPending();
+        return 0;
     }
     if (!CaughtByGuest(guest)) { *__error_nid_postfix() = 22; return -1; }
     DeliverPendingSignal(guest);
+    DeliverUnblockedPending();
     return 0;
 }
 int APS5_VABI kill_nid_postfix(int pid, int guest) {
@@ -520,10 +560,7 @@ int APS5_VABI _sigprocmask_nid_postfix(int how, const GuestSignalSet* set, Guest
             }
         }
     }
-    for (int guest = 1; guest <= MaxSignal; ++guest) {
-        if (SignalBlocked(guest) || !Deliverable(guest) || !TakePending(guest)) continue;
-        DeliverPendingSignal(guest);
-    }
+    DeliverUnblockedPending();
     return 0;
 }
 
