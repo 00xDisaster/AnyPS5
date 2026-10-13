@@ -169,7 +169,7 @@ public:
     std::vector<std::size_t> ScanCodeSectionForSyscalls(
         const std::vector<std::uint8_t>& codeSection,
         FileByteOffset codeSectionOffset,
-        FileByteOffset codeSectionSize) override;
+        FileByteOffset codeSectionSize, std::string_view input) override;
 
 private:
     Domain::IProgress& progress;
@@ -179,16 +179,16 @@ private:
 std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
     const std::vector<std::uint8_t>& codeSection,
     const FileByteOffset codeSectionOffset,
-    const FileByteOffset codeSectionSize) {
+    const FileByteOffset codeSectionSize, std::string_view input) {
     const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
 
-    const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, {}, completed, total}); });
+    const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, std::string(input), completed, total}); });
     const auto matches = scanner->ScanCodeSection(codeSection, codeSectionOffset, codeSectionSize);
 
-    progress.Report({Domain::ProgressStage::Syscalls, {}, 0, matches.size()});
+    progress.Report({Domain::ProgressStage::Syscalls, std::string(input), 0, matches.size()});
     std::vector<std::size_t> trapped;
     for (std::size_t index = 0; index < matches.size(); ++index) {
-        if (index % 4096 == 0) progress.Report({Domain::ProgressStage::Syscalls, {}, index, matches.size()});
+        if (index != 0 && index % 4096 == 0) progress.Report({Domain::ProgressStage::Syscalls, std::string(input), index, matches.size()});
         const auto& match = matches[index];
         const std::size_t start = static_cast<std::size_t>(match.Offset - codeSectionOffset);
         const auto opcodeOffset = Codegen::DecodedInstruction{codeSection.data() + start, match.Length}.OpcodeOffset();
@@ -218,7 +218,7 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
 
         throw RelinkerException(msg.str(), match.Offset);
     }
-    progress.Report({Domain::ProgressStage::Syscalls, {}, matches.size(), matches.size()});
+    progress.Report({Domain::ProgressStage::Syscalls, std::string(input), matches.size(), matches.size()});
     return trapped;
 }
 
@@ -231,7 +231,8 @@ public:
     std::vector<std::size_t> ScanCodeSectionForSyscalls(
         const std::vector<std::uint8_t>&,
         FileByteOffset,
-        FileByteOffset
+        FileByteOffset,
+        std::string_view
     ) override { return {}; }
 };
 

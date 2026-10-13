@@ -61,7 +61,8 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
     progress.Report({Domain::ProgressStage::Modules, {}, 0, modules.size()});
     for (auto& module : modules) {
         const auto path = module.Path.lexically_normal();
-        if (path == inputPath.lexically_normal() || path == outputPath.lexically_normal()) throw Domain::RelinkerException("Module path collides with executable: " + Io::Utf8Path(path));
+        if (path == inputPath.lexically_normal()) throw Domain::RelinkerException("Module path collides with the input executable: " + Io::Utf8Path(path));
+        if (path == outputPath.lexically_normal()) throw Domain::RelinkerException("Executable output would overwrite an input module: " + Io::Utf8Path(path));
         const auto relative = path.lexically_relative(root);
         if (relative.empty() || relative.has_root_path() || *relative.begin() == "..") throw Domain::RelinkerException("Module is outside module root: " + Io::Utf8Path(path));
         if (excludedModules.contains(Io::Utf8Path(path.filename()))) throw Domain::RelinkerException("Excluded module supplied to converter: " + Io::Utf8Path(path));
@@ -299,7 +300,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         }
         for (const auto& header : codeHeaders) {
             const std::vector<std::uint8_t> code(image.Bytes.begin() + header.Offset, image.Bytes.begin() + header.Offset + header.FileSize);
-            for (const auto offset : syscallScanner.ScanCodeSectionForSyscalls(code, header.MappedAddress, header.FileSize)) {
+            for (const auto offset : syscallScanner.ScanCodeSectionForSyscalls(code, header.MappedAddress, header.FileSize, Io::Utf8Path(image.SourcePath))) {
                 if (offset > code.size() || code.size() - offset < 2u)
                     throw Domain::RelinkerException("Syscall trap patch exceeds guest executable segment", header.MappedAddress + offset);
                 image.Bytes[header.Offset + offset] = 0x0F;

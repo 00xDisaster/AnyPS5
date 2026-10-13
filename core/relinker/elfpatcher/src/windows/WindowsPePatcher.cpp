@@ -28,7 +28,7 @@ void writeGotStub(std::vector<PeSection>& sections, const std::uint32_t targetRv
 
 }
 
-WindowsPePatcher::WindowsPePatcher(const bool windowsGui, std::optional<std::vector<std::uint8_t>> icon) : windowsGui(windowsGui), icon(std::move(icon)) {
+WindowsPePatcher::WindowsPePatcher(const bool windowsGui, std::optional<std::vector<std::uint8_t>> icon, std::filesystem::path iconName) : windowsGui(windowsGui), icon(std::move(icon)), iconName(std::move(iconName)) {
 }
 
 const std::string& WindowsPePatcher::GetDiagnostics() const { return diagnostics; }
@@ -95,7 +95,7 @@ std::vector<std::uint8_t> WindowsPePatcher::Patch(const std::vector<std::uint8_t
         sections.push_back({".reloc", nextRva, SectionRead | 0x02000040u, std::move(relocationData)});
         nextRva = AlignRva(nextRva + sections.back().Data.size());
     }
-    directories[2] = icon ? WindowsIconResourceBuilder().Build(*icon, "icon0.png", sections, nextRva) : PeDirectory{};
+    directories[2] = icon ? WindowsIconResourceBuilder().Build(*icon, iconName, sections, nextRva) : PeDirectory{};
     return WindowsPeWriter().Write(sections, entryRva, directories, windowsGui);
 }
 

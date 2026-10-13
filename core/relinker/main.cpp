@@ -1,30 +1,13 @@
-#include <NativeModules.hpp>
 #include <ConsoleProgress.hpp>
+#include <NativeModules.hpp>
+#include <relinker/pipeline/Conversion.hpp>
 #include <Cli.hpp>
 #include <domain/Types.hpp>
 #include <io/FileReader.hpp>
 #include <io/NativePath.hpp>
-#include <elfpatcher/linux/LinuxElfPatcher.hpp>
 #include <elfpatcher/linux/LinuxDesktopEntryWriter.hpp>
-#include <elfpatcher/general/SegmentFilter.hpp>
-#include <elfpatcher/general/EntryStubBuilder.hpp>
-#include <elfpatcher/general/ProgramHeaderLayoutBuilder.hpp>
-#include <elfpatcher/general/SectionHeaderTableBuilder.hpp>
-#include <elfpatcher/windows/WindowsElfPatcher.hpp>
-#include <elfpatcher/macos/MacOsMachOPatcher.hpp>
-#include <io/ByteWriter.hpp>
 #include <io/FileWriter.hpp>
-#include <relinker/parsing/ElfReader.hpp>
-#include <relinker/analysis/ValidationPolicy.hpp>
-#include <relinker/analysis/SyscallScanner.hpp>
-#include <relinker/analysis/CallSiteResolver.hpp>
-#include <relinker/analysis/UnusedNidFilter.hpp>
-#include <relinker/output/SysVDynamicSectionBuilder.hpp>
 #include <relinker/output/CallRegistryWriter.hpp>
-#include <relinker/pipeline/RelinkerPipeline.hpp>
-#include <relinker/guest/GuestImage.hpp>
-#include <codegen/IAmd64OnlyConverter.hpp>
-#include <map>
 #include <codegen/CodegenException.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -43,8 +26,6 @@ namespace {
 struct ConvertedExecutable {
     std::string InputPath;
     std::string OutputPath;
-    std::vector<std::uint8_t> Source;
-    std::vector<Codegen::TrampolineSite> Trampolines;
     Relinker::RelinkResult Result;
     std::vector<Relinker::GuestArtifact> GuestArtifacts;
     std::vector<std::uint8_t> Bytes;
@@ -53,93 +34,32 @@ struct ConvertedExecutable {
 
 ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable, Domain::IProgress& progress) {
     Io::FileReader fileReader;
-    auto sourceBytes = fileReader.Read(inputPath);
-
-    std::vector<Codegen::TrampolineSite> trampolines;
-    if (args.toIntel) {
-        const auto segments = Relinker::ElfReader(sourceBytes).ReadProgramHeaders();
-        auto converted = Codegen::MakeAmd64OnlyConverter(args.toRosetta ? Codegen::Amd64OnlyTarget::Rosetta : Codegen::Amd64OnlyTarget::Intel)->Convert(std::move(sourceBytes), segments);
-        sourceBytes = std::move(converted.Bytes);
-        trampolines = std::move(converted.Trampolines);
-        std::map<std::string, std::size_t> stubsByName;
-        const auto counted = [](const std::string& name) { return name == "VRSQRTPS" || name == "VRCPPS" || name == "256-bit store"; };
-        for (const auto& report : converted.Reports) {
-            if (report.Lowering == Codegen::Amd64OnlyLowering::Kept)
-                std::cout << "Intel substitution: " << report.InstructionName << " at 0x" << std::hex << report.Offset << std::dec << " (" << report.OriginalLength << " bytes) kept: no room for a jump\n";
-            else if (counted(report.InstructionName))
-                ++stubsByName[report.InstructionName];
-            else
-                std::cout << "Intel substitution: " << report.InstructionName << " at 0x" << std::hex << report.Offset << std::dec << " (" << report.OriginalLength << " bytes) -> " << (report.Lowering == Codegen::Amd64OnlyLowering::InPlace ? "in place " : "stub ") << report.ReplacementLength << " bytes\n";
-        }
-        for (const auto& [name, count] : stubsByName)
-            std::cout << "Intel substitution: " << name << " -> stub at " << count << " sites\n";
-        std::cout << "Intel conversion: " << converted.ReplacedCount << " in place, " << trampolines.size() << " stubs, " << converted.KeptCount << " kept\n";
-    }
-
-    auto elfReader = std::make_shared<Relinker::ElfReader>(sourceBytes);
-    const std::shared_ptr<Relinker::ISyscallScanner> syscallScanner = args.skipSyscallCheck ? Relinker::MakeNullSyscallScanner() : Relinker::MakeSyscallScanner(progress, args.trapSdkSyscallStubs);
-
-    const auto pipeline = std::make_shared<Relinker::RelinkerPipeline>(
-        elfReader,
-        syscallScanner,
-        Relinker::MakeCallSiteResolver(),
-        std::make_shared<Relinker::ValidationPolicy>(),
-        std::make_shared<Relinker::SysVDynamicSectionBuilder>(),
-        args.unusedFilterLevel == 2 ? Relinker::MakeStrictUnusedNidFilter(progress) : Relinker::MakeUnusedNidFilter(),
-        args.unusedFilterLevel, progress
-    );
-
-    if (mainExecutable) {
-        std::cout << "System: " << (args.toWindows ? "Windows" : args.toMacos ? "macOS" : "Linux") << "; unused-filter=" << args.unusedFilterLevel << "\n";
-        std::cout << Relinker::GuestModulePattern << " processing: " << (args.skipSceModule ? "disabled (--skip-sce-module)" : "enabled") << '\n';
-        for (const auto& name : args.excludedSceModules) std::cout << "Guest module excluded: " << name << '\n';
-    }
-    auto result = pipeline->Relink(sourceBytes);
-    for (const auto& patch : result.Patches) {
-        if (patch.Offset > sourceBytes.size() || patch.Bytes.size() > sourceBytes.size() - patch.Offset)
-            throw Domain::RelinkerException("Relinker patch exceeds source image", patch.Offset);
-        for (std::size_t index = 0; index < patch.Bytes.size(); ++index) sourceBytes[patch.Offset + index] = patch.Bytes[index];
-    }
-
-    std::vector<Relinker::GuestArtifact> guestArtifacts;
+    Relinker::ConversionInput input;
+    input.Executable = fileReader.Read(inputPath);
+    input.InputPath = std::filesystem::absolute(Io::NativePath(inputPath)).lexically_normal();
+    input.OutputPath = Io::NativePath(absPath);
     if (!args.skipSceModule) {
-        auto modules = Cli::ReadModules(std::filesystem::absolute(Io::NativePath(inputPath)), Io::NativePath(args.sceModulePath), args.excludedSceModules, args.moduleDirectories);
-        guestArtifacts = Relinker::GuestModuleBuilder().Build(std::filesystem::absolute(Io::NativePath(inputPath)), Io::NativePath(absPath), result.DynamicSection, args.toWindows, args.toMacos, args.toIntel, args.toRosetta, *syscallScanner, args.lazyBinding, args.runPath, args.excludedSceModules, modules.Root, modules.RuntimeDirectories, std::move(modules.Modules), progress);
+        auto modules = Cli::ReadModules(input.InputPath, Io::NativePath(args.sceModulePath), args.excludedSceModules, args.moduleDirectories);
+        input.ModuleRoot = std::move(modules.Root);
+        input.Modules = std::move(modules.Modules);
+        input.RuntimeDirectories = std::move(modules.RuntimeDirectories);
     }
-
-    return {inputPath, absPath, std::move(sourceBytes), std::move(trampolines), std::move(result), std::move(guestArtifacts), {}};
-}
-
-void Patch(const Cli::Args& args, ConvertedExecutable& converted, const bool mainExecutable) {
-    auto byteWriter = std::make_shared<Io::ByteWriter>();
-
-    std::shared_ptr<Elfpatcher::IElfPatcher> patcher;
-    if (args.toMacos) {
-        patcher = std::make_shared<Elfpatcher::MacOs::MacOsMachOPatcher>();
-    } else if (args.toWindows) {
-        const auto iconPath = Io::NativePath(args.inputPath).parent_path() / "sce_sys" / "icon0.png";
-        std::optional<std::vector<std::uint8_t>> icon;
-        if (std::filesystem::exists(iconPath)) icon = Io::FileReader().Read(Io::Utf8Path(iconPath));
-        patcher = std::make_shared<Elfpatcher::Windows::WindowsPePatcher>(args.windowsGui, std::move(icon));
-    } else {
-        patcher = std::make_shared<Elfpatcher::Linux::LinuxElfPatcher>(
-            std::make_shared<Elfpatcher::EntryStubBuilder>(),
-            std::make_shared<Elfpatcher::ProgramHeaderLayoutBuilder>(
-                std::make_shared<Elfpatcher::SegmentFilter>(),
-                byteWriter
-            ),
-            std::make_shared<Elfpatcher::SectionHeaderTableBuilder>(byteWriter),
-            byteWriter
-        );
-    }
-
-    try {
-        converted.Bytes = patcher->Patch(converted.Source, converted.Result.OriginalHeaders, converted.Result.DynamicSection, converted.Result.OriginalPltGotVaddr, args.runPath, args.lazyBinding, args.windowsDiagnostics && mainExecutable, converted.Trampolines);
-    } catch (Domain::RelinkerException& error) {
-        error.InputPath = converted.InputPath;
-        throw;
-    }
-    if (args.windowsDiagnostics && mainExecutable) converted.Diagnostics = std::static_pointer_cast<Elfpatcher::Windows::WindowsPePatcher>(patcher)->GetDiagnostics();
+    const auto iconPath = Io::NativePath(args.inputPath).parent_path() / "sce_sys" / "icon0.png";
+    if (args.toWindows && std::filesystem::exists(iconPath)) input.Icon = fileReader.Read(Io::Utf8Path(iconPath));
+    Relinker::ConversionOptions options;
+    options.Target = args.toWindows ? Relinker::TargetSystem::Windows : args.toMacos ? Relinker::TargetSystem::MacOs : Relinker::TargetSystem::Linux;
+    options.ToIntel = args.toIntel;
+    options.ToRosetta = args.toRosetta;
+    options.SkipSyscallCheck = args.skipSyscallCheck;
+    options.TrapSdkSyscallStubs = args.trapSdkSyscallStubs;
+    options.UnusedFilterLevel = args.unusedFilterLevel;
+    options.LazyBinding = args.lazyBinding;
+    options.RunPath = args.runPath;
+    options.WindowsGui = args.windowsGui;
+    options.WindowsDiagnostics = args.windowsDiagnostics && mainExecutable;
+    options.ExcludedModules = args.excludedSceModules;
+    auto converted = Relinker::Conversion(progress).Convert(std::move(input), options);
+    return {inputPath, absPath, std::move(converted.Analysis), std::move(converted.Modules), std::move(converted.Executable), std::move(converted.WindowsDiagnostics)};
 }
 
 int Run(const int argc, char* argv[]) {
@@ -249,14 +169,20 @@ int Run(const int argc, char* argv[]) {
         checkOutputInputs(Io::NativePath(absPath), "Executable");
         for (const auto& artifact : guestArtifacts) checkOutputInputs(artifact.Path, "Guest module");
 
-        for (std::size_t index = 0; index < executables.size(); ++index) Patch(args, executables[index], index == 0);
         if (args.windowsDiagnostics) fileWriter.Write("windows-diagnostics-imports.txt", executables.front().Diagnostics);
+        const auto outputCount = guestArtifacts.size() + executables.size();
+        progress.Report({Domain::ProgressStage::Write, absPath, 0, outputCount});
+        std::size_t written = 0;
         for (const auto& artifact : guestArtifacts) {
             std::filesystem::create_directories(artifact.Path.parent_path());
             fileWriter.Write(Io::Utf8Path(artifact.Path), artifact.Bytes);
+            progress.Report({Domain::ProgressStage::Write, absPath, ++written, outputCount});
             std::cout << "Guest module: " << Io::Utf8Path(artifact.Path) << '\n';
         }
-        for (const auto& executable : executables) fileWriter.Write(executable.OutputPath, executable.Bytes);
+        for (const auto& executable : executables) {
+            fileWriter.Write(executable.OutputPath, executable.Bytes);
+            progress.Report({Domain::ProgressStage::Write, absPath, ++written, outputCount});
+        }
         if (args.writeRegistry) {
             const auto registryWriter = std::make_shared<Relinker::CallRegistryWriter>();
             for (std::size_t index = 0; index < executables.size(); ++index)
