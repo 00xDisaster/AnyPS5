@@ -1,5 +1,5 @@
 name: Bug report
-description: A title, homebrew or test stops, crashes or renders wrongly
+description: A title, homebrew or test stops, crashes or renders wrongly.
 labels: [bug]
 body:
   - type: markdown
@@ -7,6 +7,7 @@ body:
       value: |
         Search open and closed issues and pull requests for the error text first, and comment there if it is already reported.
         Game bring-up progress belongs in [Discussions](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up), one thread per title.
+        A slow scene or a change in speed goes into the [Performance report](https://github.com/boykopovar/AnyPS5/issues/new?template=performance.yml) form, which asks for a [performance trace](https://github.com/boykopovar/AnyPS5/blob/main/docs/dev/BUILD.md#performance-trace) and its `tools/trace_digest.py` digest.
   - type: input
     id: summary
     attributes:
