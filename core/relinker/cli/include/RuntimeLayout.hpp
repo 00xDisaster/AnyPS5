@@ -24,12 +24,12 @@ public:
         }
         stream << "Arrange the files like this:\n"
                << "folder/\n"
-               << "    |-- " << executable << "\n";
-        for (const auto& extra : extraExecutables) stream << "    |-- " << extra << '\n';
-        stream << "    |-- libs/\n"
-               << "    |       *.prx (system libraries)\n"
-               << "    |-- app0/\n"
-               << "            <original game files>\n";
+               << "  |-- " << executable << "\n";
+        for (const auto& extra : extraExecutables) stream << "  |-- " << extra << '\n';
+        stream << "  |-- libs/\n"
+               << "        |-- *.prx (system libraries)\n"
+               << "  |-- app0/\n"
+               << "        |-- <another app files>\n";
         printChildren(stream, root, "        ");
         stream << '\n';
     }
@@ -42,7 +42,7 @@ private:
     static void printChildren(std::ostream& stream, const Node& node, const std::string& prefix) {
         for (const auto& [name, child] : node.children) {
             stream << prefix << "|-- " << name << (child.children.empty() ? "\n" : "/\n");
-            printChildren(stream, child, prefix + "    ");
+            printChildren(stream, child, prefix + "      ");
         }
     }
 };
