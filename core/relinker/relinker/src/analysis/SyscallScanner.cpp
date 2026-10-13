@@ -5,7 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <iostream>
+
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -164,7 +164,7 @@ static std::optional<std::uint32_t> ConstantSyscallNumber(
 
 class SyscallScanner : public ISyscallScanner {
 public:
-    explicit SyscallScanner(const bool trapSdkStubs) : _trapSdkStubs(trapSdkStubs) {}
+    SyscallScanner(Domain::IProgress& progress, const bool trapSdkStubs) : progress(progress), trapSdkStubs(trapSdkStubs) {}
 
     std::vector<std::size_t> ScanCodeSectionForSyscalls(
         const std::vector<std::uint8_t>& codeSection,
@@ -172,7 +172,8 @@ public:
         FileByteOffset codeSectionSize) override;
 
 private:
-    bool _trapSdkStubs;
+    Domain::IProgress& progress;
+    bool trapSdkStubs;
 };
 
 std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
@@ -181,11 +182,13 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
     const FileByteOffset codeSectionSize) {
     const std::size_t limit = std::min(codeSection.size(), static_cast<std::size_t>(codeSectionSize));
 
-    const auto scanner = Codegen::MakeInstructionScanner();
+    const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, {}, completed, total}); });
     const auto matches = scanner->ScanCodeSection(codeSection, codeSectionOffset, codeSectionSize);
 
+    progress.Report({Domain::ProgressStage::Syscalls, {}, 0, matches.size()});
     std::vector<std::size_t> trapped;
     for (std::size_t index = 0; index < matches.size(); ++index) {
+        if (index % 4096 == 0) progress.Report({Domain::ProgressStage::Syscalls, {}, index, matches.size()});
         const auto& match = matches[index];
         const std::size_t start = static_cast<std::size_t>(match.Offset - codeSectionOffset);
         const auto opcodeOffset = Codegen::DecodedInstruction{codeSection.data() + start, match.Length}.OpcodeOffset();
@@ -197,10 +200,12 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
         if (kind == ForbiddenInstruction::None)
             continue;
 
-        if (_trapSdkStubs && kind == ForbiddenInstruction::Invocation &&
+        if (trapSdkStubs && kind == ForbiddenInstruction::Invocation &&
             (IsSdkSyscallStub(codeSection, opcode) || IsSdkMmanSyscallStub(codeSection, opcode, limit, matches, codeSectionOffset))) {
             trapped.push_back(opcode);
-            std::cout << "Trapping SDK syscall instruction at code offset 0x" << std::hex << match.Offset << std::dec << '\n';
+            std::ostringstream message;
+            message << "Trapping SDK syscall instruction at code offset 0x" << std::hex << match.Offset << '\n';
+            progress.Message(message.str());
             continue;
         }
 
@@ -213,11 +218,12 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(
 
         throw RelinkerException(msg.str(), match.Offset);
     }
+    progress.Report({Domain::ProgressStage::Syscalls, {}, matches.size(), matches.size()});
     return trapped;
 }
 
-std::unique_ptr<ISyscallScanner> MakeSyscallScanner(const bool trapSdkStubs) {
-    return std::make_unique<SyscallScanner>(trapSdkStubs);
+std::unique_ptr<ISyscallScanner> MakeSyscallScanner(Domain::IProgress& progress, const bool trapSdkStubs) {
+    return std::make_unique<SyscallScanner>(progress, trapSdkStubs);
 }
 
 class NullSyscallScanner : public ISyscallScanner {

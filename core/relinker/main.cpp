@@ -1,3 +1,4 @@
+#include <ConsoleProgress.hpp>
 #include <Cli.hpp>
 #include <domain/Types.hpp>
 #include <io/FileReader.hpp>
@@ -48,7 +49,7 @@ struct ConvertedExecutable {
     std::vector<std::uint8_t> Bytes;
 };
 
-ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable) {
+ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath, const std::string& absPath, const bool mainExecutable, Domain::IProgress& progress) {
     Io::FileReader fileReader;
     auto sourceBytes = fileReader.Read(inputPath);
 
@@ -74,7 +75,7 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
     }
 
     auto elfReader = std::make_shared<Relinker::ElfReader>(sourceBytes);
-    const std::shared_ptr<Relinker::ISyscallScanner> syscallScanner = args.skipSyscallCheck ? Relinker::MakeNullSyscallScanner() : Relinker::MakeSyscallScanner(args.trapSdkSyscallStubs);
+    const std::shared_ptr<Relinker::ISyscallScanner> syscallScanner = args.skipSyscallCheck ? Relinker::MakeNullSyscallScanner() : Relinker::MakeSyscallScanner(progress, args.trapSdkSyscallStubs);
 
     const auto pipeline = std::make_shared<Relinker::RelinkerPipeline>(
         elfReader,
@@ -82,8 +83,8 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
         Relinker::MakeCallSiteResolver(),
         std::make_shared<Relinker::ValidationPolicy>(),
         std::make_shared<Relinker::SysVDynamicSectionBuilder>(),
-        args.unusedFilterLevel == 2 ? Relinker::MakeStrictUnusedNidFilter() : Relinker::MakeUnusedNidFilter(),
-        args.unusedFilterLevel
+        args.unusedFilterLevel == 2 ? Relinker::MakeStrictUnusedNidFilter(progress) : Relinker::MakeUnusedNidFilter(),
+        args.unusedFilterLevel, progress
     );
 
     if (mainExecutable) {
@@ -148,6 +149,7 @@ int Run(const int argc, char* argv[]) {
         return 0;
     }
 
+    Cli::ConsoleProgress progress(std::cout);
     try {
         auto extension = Io::Utf8Path(Io::NativePath(args.outputPath).extension());
         for (auto& character : extension) if (character >= 'A' && character <= 'Z') character = static_cast<char>(character + ('a' - 'A'));
@@ -192,10 +194,10 @@ int Run(const int argc, char* argv[]) {
         }
 
         std::vector<ConvertedExecutable> executables;
-        executables.push_back(Convert(args, args.inputPath, absPath, true));
+        executables.push_back(Convert(args, args.inputPath, absPath, true, progress));
         for (const auto& [executable, relative, input, output] : extraExecutables) {
             std::cout << "Executable: " << relative.generic_string() << '\n';
-            auto converted = Convert(args, Io::Utf8Path(input), Io::Utf8Path(output), false);
+            auto converted = Convert(args, Io::Utf8Path(input), Io::Utf8Path(output), false, progress);
             const auto& mainArtifacts = executables.front().GuestArtifacts;
             const bool shared = converted.GuestArtifacts.size() == mainArtifacts.size() && std::equal(mainArtifacts.begin(), mainArtifacts.end(), converted.GuestArtifacts.begin(), [](const auto& left, const auto& right) {
                 return left.Path == right.Path && left.Bytes == right.Bytes;

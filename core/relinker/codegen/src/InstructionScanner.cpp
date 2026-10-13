@@ -9,11 +9,15 @@ namespace Codegen {
 
 class InstructionScanner : public IInstructionScanner {
 public:
+    explicit InstructionScanner(std::function<void(std::uint64_t, std::uint64_t)> progress) : progress(std::move(progress)) {}
     [[nodiscard]] std::vector<InstructionMatch> ScanCodeSection(
         const std::vector<std::uint8_t>& codeSection,
         Domain::FileByteOffset codeSectionOffset,
         Domain::FileByteOffset codeSectionSize
     ) const override;
+
+private:
+    std::function<void(std::uint64_t, std::uint64_t)> progress;
 };
 
 std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(
@@ -27,6 +31,8 @@ std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(
     std::vector<InstructionMatch> matches;
     std::size_t i = 0;
 
+    if (progress) progress(0, limit);
+    std::size_t nextReport = 65536;
     while (i < limit) {
         const std::uint8_t* cursor = codeSection.data() + i;
         const std::size_t available = limit - i;
@@ -42,13 +48,18 @@ std::vector<InstructionMatch> InstructionScanner::ScanCodeSection(
         matches.push_back({codeSectionOffset + i, length});
 
         i += length;
+        if (progress && i >= nextReport) {
+            progress(i, limit);
+            nextReport = i + 65536;
+        }
     }
 
+    if (progress) progress(limit, limit);
     return matches;
 }
 
-std::unique_ptr<IInstructionScanner> MakeInstructionScanner() {
-    return std::make_unique<InstructionScanner>();
+std::unique_ptr<IInstructionScanner> MakeInstructionScanner(std::function<void(std::uint64_t, std::uint64_t)> progress) {
+    return std::make_unique<InstructionScanner>(std::move(progress));
 }
 
 }
