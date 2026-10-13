@@ -46,7 +46,6 @@ constexpr int NET_EBADF = 9;
 constexpr int NET_EACCES = 13;
 constexpr int NET_EFAULT = 14;
 constexpr int NET_EINVAL = 22;
-constexpr int NET_ENOSPC = 28;
 constexpr int NET_EDOM = 33;
 constexpr int NET_EAGAIN = 35;
 constexpr int NET_EINPROGRESS = 36;
@@ -326,6 +325,8 @@ int* errno_slot() {
 }
 
 extern "C" int* APS5_VABI __error_nid_postfix();
+extern "C" int APS5_VABI __inet_pton_nid_postfix(int family, const char* text, void* destination);
+extern "C" const char* APS5_VABI __inet_ntop_nid_postfix(int family, const void* source, char* destination, std::uint32_t capacity);
 
 void set_errno(int err) {
     *errno_slot() = err;
@@ -1211,11 +1212,7 @@ int APS5_VABI sceNetInetPton(int af, const char* src, void* dst) {
     if (af != NET_AF_INET && af != NET_AF_INET6) {
         return fail(NET_EAFNOSUPPORT);
     }
-#ifdef _WIN32
-    return InetPtonA(af == NET_AF_INET ? AF_INET : AF_INET6, src, dst);
-#else
-    return ::inet_pton(af == NET_AF_INET ? AF_INET : AF_INET6, src, dst);
-#endif
+    return __inet_pton_nid_postfix(af, src, dst);
 }
 
 const char* APS5_VABI sceNetInetNtop(int af, const void* src, char* dst, uint32_t size) {
@@ -1227,23 +1224,9 @@ const char* APS5_VABI sceNetInetNtop(int af, const void* src, char* dst, uint32_
         set_errno(NET_EAFNOSUPPORT);
         return nullptr;
     }
-    char text[INET6_ADDRSTRLEN];
-#ifdef _WIN32
-    const auto* result = InetNtopA(af == NET_AF_INET ? AF_INET : AF_INET6, const_cast<void*>(src), text, sizeof(text));
-#else
-    const auto* result = ::inet_ntop(af == NET_AF_INET ? AF_INET : AF_INET6, src, text, sizeof(text));
-#endif
-    if (!result) {
-        set_errno(native_error());
-        return nullptr;
-    }
-    const auto length = std::strlen(text) + 1;
-    if (length > size) {
-        set_errno(NET_ENOSPC);
-        return nullptr;
-    }
-    std::memcpy(dst, text, length);
-    return dst;
+    const char* result = __inet_ntop_nid_postfix(af, src, dst, size);
+    if (!result) set_errno(*__error_nid_postfix());
+    return result;
 }
 
 int APS5_VABI sceNetEtherNtostr(const NetEtherAddr* n, char* str, size_t len) {
