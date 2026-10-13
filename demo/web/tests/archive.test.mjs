@@ -22,13 +22,14 @@ async function zip(entries) {
   return writer.close();
 }
 
-const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.prx.esbak", module], ["title/sce_module/library.prx", new Uint8Array([79, 21, 61, 29])], ["title/sce_module/library.prx.esbak.guest.prx", new Uint8Array([77, 90, 0, 0])], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/content/resource.bin", resource]]);
+const source = await zip([["title/", null, { directory: true }], ["title/program.dat", executable], ["title/sce_module/library.prx.esbak", module], ["title/sce_module/library.prx", new Uint8Array([79, 21, 61, 29])], ["title/sce_module/library.prx.esbak.guest.prx", new Uint8Array([77, 90, 0, 0])], ["title/sce_sys/param.json", new TextEncoder().encode("{}")], ["title/shaders/example.frag", executable], ["title/content/resource.bin", resource]]);
 const folder = [
   { path: "title/program.dat", file: new Blob([executable]) },
   { path: "title/sce_module/library.prx.esbak", file: new Blob([module]) },
   { path: "title/sce_module/library.prx", file: new Blob([new Uint8Array([79, 21, 61, 29])]) },
   { path: "title/sce_module/library.prx.esbak.guest.prx", file: new Blob([new Uint8Array([77, 90, 0, 0])]) },
   { path: "title/sce_sys/param.json", file: new Blob(["{}"]) },
+  { path: "title/shaders/example.frag", file: new Blob([executable]) },
   { path: "title/content/resource.bin", file: new Blob([resource]) }
 ];
 for (const [kind, selected] of [["ZIP", source], ["folder", folder]]) {
@@ -63,6 +64,7 @@ for (const target of ["windows", "linux"]) {
   const byName = new Map(entries.map(entry => [entry.filename, entry]));
   assert(byName.has(input.outputName));
   assert(byName.has("libs/system.prx"));
+  assert.deepEqual(await byName.get("app0/shaders/example.frag").getData(new Uint8ArrayWriter(), { checkSignature: true }), executable);
   assert.deepEqual(await byName.get("app0/sce_module/library.prx.esbak.guest.prx").getData(new Uint8ArrayWriter(), { checkSignature: true }), converted.modules[0].bytes);
   assert.deepEqual(await byName.get("app0/sce_module/library.prx").getData(new Uint8ArrayWriter(), { checkSignature: true }), new Uint8Array([79, 21, 61, 29]));
   assert.deepEqual(await byName.get("app0/program.dat").getData(new Uint8ArrayWriter(), { checkSignature: true }), executable);

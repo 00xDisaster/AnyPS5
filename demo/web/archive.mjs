@@ -130,13 +130,14 @@ export class Archive {
       const item = this.files[index];
       report({ phase: "Inspecting files", input: item.name, completed: index, total: this.files.length });
       if (item.entry.directory || item.name.startsWith("sce_sys/")) continue;
+      if (!item.name.startsWith("sce_module/") && item.name.includes("/")) continue;
       if (item.name.startsWith("sce_module/") && item.name.endsWith(".guest.prx")) continue;
       const elf = await signature(item.entry);
       if (item.name.startsWith("sce_module/")) {
         if (elf) this.modules.push(item);
       } else if (elf) executables.push(item);
     }
-    if (executables.length !== 1) throw new Error(`Expected exactly one executable ELF outside sce_module; found ${executables.length}`);
+    if (executables.length !== 1) throw new Error(`Expected exactly one executable ELF in the app root; found ${executables.length}`);
     this.executable = executables[0];
     if (this.executable.name.includes("/")) throw new Error("Place the executable next to sce_sys and sce_module, not inside another folder");
     this.icon = this.files.find(item => item.name === "sce_sys/icon0.png" && !item.entry.directory);
