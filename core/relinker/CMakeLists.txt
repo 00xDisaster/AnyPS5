@@ -549,7 +549,6 @@ if(BUILD_TESTING)
 
     add_test_executable(windows_icon_resource_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/WindowsIconResourceTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/cli/src/NativeIcon.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/windows/WindowsIconResourceBuilder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/windows/WindowsPeFormat.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/BufferUtils.cpp
