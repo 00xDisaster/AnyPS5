@@ -122,6 +122,33 @@ static bool CheckWidePrecision() {
     return correct;
 }
 
+static void CheckIntegerScanWidths() {
+    int value = 7;
+    *__error_nid_postfix() = 0;
+    Require(sscanf_nid_postfix("2147483648", "%d", &value) == 1 && value == -2147483647 - 1 && *__error_nid_postfix() == 0);
+    Require(sscanf_nid_postfix("0xFFFFFFFF", "%i", &value) == 1 && value == -1 && *__error_nid_postfix() == 0);
+    Require(sscanf_nid_postfix("99999999999999999999", "%d", &value) == 1 && value == -1 && *__error_nid_postfix() == 34);
+    unsigned unsignedValue = 7;
+    Require(sscanf_nid_postfix("4294967296", "%u", &unsignedValue) == 1 && unsignedValue == 0);
+    Require(sscanf_nid_postfix("100000001", "%x", &unsignedValue) == 1 && unsignedValue == 1);
+    Require(sscanf_nid_postfix("40000000001", "%o", &unsignedValue) == 1 && unsignedValue == 1);
+    short shortValue = 7;
+    Require(sscanf_nid_postfix("5000000000", "%hd", &shortValue) == 1 && shortValue == -3584);
+    signed char charValue = 7;
+    Require(sscanf_nid_postfix("300", "%hhd", &charValue) == 1 && charValue == 44);
+    long long quad = 7;
+    Require(sscanf_nid_postfix("3000000000", "%qd", &quad) == 1 && quad == 3000000000ll);
+    unsigned long long unsignedQuad = 7;
+    Require(sscanf_nid_postfix("ffffffffff", "%qx", &unsignedQuad) == 1 && unsignedQuad == 0xffffffffffull);
+    int first = 7;
+    int second = 7;
+    int position = 0;
+    Require(sscanf_nid_postfix("12 34", "%d %d%n", &first, &second, &position) == 2 && first == 12 && second == 34 && position == 5);
+    value = 7;
+    Require(sscanf_nid_postfix("x", "%d", &value) == 0 && value == 7);
+    Require(sscanf_nid_postfix("1 x", "%d %d", &first, &value) == 1 && first == 1 && value == 7);
+}
+
 __attribute__((noinline)) static void APS5_VABI RunChecks() {
     char buffer[1024];
     Require(FormatList(buffer, sizeof(buffer), "Mount requested: %d", 0) == 18);
@@ -270,6 +297,7 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
     Require(ScanListS("123 test", "%d %s", &scanNum, scanWord, 8u) == 2 && scanNum == 123 && std::strcmp(scanWord, "test") == 0);
     char tooSmall[4] = {'x', 'x', 'x', 'x'};
     Require(ScanListS("abcdef", "%s", tooSmall, 4u) == 0 && tooSmall[0] == '\0');
+    CheckIntegerScanWidths();
     std::puts("Formatting checks passed: 10000 iterations");
 }
 
@@ -286,31 +314,4 @@ static void CheckAllocatingFormat() {
     free_nid_postfix(allocated);
 }
 
-static void CheckIntegerScanWidths() {
-    int value = 7;
-    *__error_nid_postfix() = 0;
-    Require(sscanf_nid_postfix("2147483648", "%d", &value) == 1 && value == -2147483647 - 1 && *__error_nid_postfix() == 0);
-    Require(sscanf_nid_postfix("0xFFFFFFFF", "%i", &value) == 1 && value == -1 && *__error_nid_postfix() == 0);
-    Require(sscanf_nid_postfix("99999999999999999999", "%d", &value) == 1 && value == -1 && *__error_nid_postfix() == 34);
-    unsigned unsignedValue = 7;
-    Require(sscanf_nid_postfix("4294967296", "%u", &unsignedValue) == 1 && unsignedValue == 0);
-    Require(sscanf_nid_postfix("100000001", "%x", &unsignedValue) == 1 && unsignedValue == 1);
-    Require(sscanf_nid_postfix("40000000001", "%o", &unsignedValue) == 1 && unsignedValue == 1);
-    short shortValue = 7;
-    Require(sscanf_nid_postfix("5000000000", "%hd", &shortValue) == 1 && shortValue == -3584);
-    signed char charValue = 7;
-    Require(sscanf_nid_postfix("300", "%hhd", &charValue) == 1 && charValue == 44);
-    long long quad = 7;
-    Require(sscanf_nid_postfix("3000000000", "%qd", &quad) == 1 && quad == 3000000000ll);
-    unsigned long long unsignedQuad = 7;
-    Require(sscanf_nid_postfix("ffffffffff", "%qx", &unsignedQuad) == 1 && unsignedQuad == 0xffffffffffull);
-    int first = 7;
-    int second = 7;
-    int position = 0;
-    Require(sscanf_nid_postfix("12 34", "%d %d%n", &first, &second, &position) == 2 && first == 12 && second == 34 && position == 5);
-    value = 7;
-    Require(sscanf_nid_postfix("x", "%d", &value) == 0 && value == 7);
-    Require(sscanf_nid_postfix("1 x", "%d %d", &first, &value) == 1 && first == 1 && value == 7);
-}
-
-int main() { RunChecks(); CheckAllocatingFormat(); CheckIntegerScanWidths(); return CheckWidePrecision() ? 0 : 1; }
+int main() { RunChecks(); CheckAllocatingFormat(); return CheckWidePrecision() ? 0 : 1; }
