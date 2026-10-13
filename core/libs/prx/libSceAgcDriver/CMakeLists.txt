@@ -342,6 +342,10 @@ if(BUILD_TESTING)
     set_target_properties(agc_driver_register_key_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
     add_test(NAME agc_driver_register_key COMMAND agc_driver_register_key_tests)
     set_tests_properties(agc_driver_register_key PROPERTIES TIMEOUT 30 ENVIRONMENT "APS5_VERIFY_REGISTER_KEYS=1")
+    if(WIN32)
+        set_tests_properties(agc_driver_register_key PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
 endif()
 
 add_test_executable(agc_driver_tests EXCLUDE_FROM_ALL
