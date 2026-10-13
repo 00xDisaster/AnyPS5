@@ -81,11 +81,9 @@ def main():
                 assert set(artifacts) == expected, artifacts
                 for artifact in artifacts:
                     assert artifact.read_bytes().startswith(b"MZ" if windows else b"\x7fELF")
-                    tree = result.stdout.split("Runtime layout\n\n", 1)[1]
+                    tree = result.stdout.split("Arrange the files like this:\n", 1)[1]
                     assert f"-- {artifact.parent.name}/\n" in tree, tree
-                    prefix = "      |   " if standard and artifact.name.startswith("consumer") else "          "
-                    branch = "|--" if artifact.name.startswith("consumer") and standard is None else "`--"
-                    assert f"{prefix}{branch} {artifact.name}\n" in tree, tree
+                    assert f"            |-- {artifact.name}\n" in tree, tree
                 if windows and os.name == "nt":
                     run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
                     assert run.returncode == 42, (run.returncode, run.stdout, run.stderr)

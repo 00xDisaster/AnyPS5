@@ -1,7 +1,6 @@
 #pragma once
 
 #include <map>
-#include <iterator>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -23,16 +22,16 @@ public:
                 start = end + 1;
             }
         }
-        stream << "Runtime layout\n\n"
-               << "  output/\n"
-               << "  |-- " << executable << "\n";
-        for (const auto& extra : extraExecutables) stream << "  |-- " << extra << '\n';
-        stream << "  |-- libs/\n"
-               << "  |   `-- *.prx (system libraries)\n"
-               << "  `-- app0/\n"
-               << (root.children.empty() ? "      `-- " : "      |-- ") << "<original game files>\n";
-        printChildren(stream, root, "      ");
-        stream << "\nCopy the original game files into app0/ and system libraries into libs/.\n\n";
+        stream << "Arrange the files like this:\n"
+               << "folder/\n"
+               << "    |-- " << executable << "\n";
+        for (const auto& extra : extraExecutables) stream << "    |-- " << extra << '\n';
+        stream << "    |-- libs/\n"
+               << "    |       *.prx (system libraries)\n"
+               << "    |-- app0/\n"
+               << "            <original game files>\n";
+        printChildren(stream, root, "        ");
+        stream << '\n';
     }
 
 private:
@@ -41,11 +40,9 @@ private:
     };
 
     static void printChildren(std::ostream& stream, const Node& node, const std::string& prefix) {
-        for (auto iterator = node.children.begin(); iterator != node.children.end(); ++iterator) {
-            const auto& [name, child] = *iterator;
-            const bool last = std::next(iterator) == node.children.end();
-            stream << prefix << (last ? "`-- " : "|-- ") << name << (child.children.empty() ? "\n" : "/\n");
-            printChildren(stream, child, prefix + (last ? "    " : "|   "));
+        for (const auto& [name, child] : node.children) {
+            stream << prefix << "|-- " << name << (child.children.empty() ? "\n" : "/\n");
+            printChildren(stream, child, prefix + "    ");
         }
     }
 };

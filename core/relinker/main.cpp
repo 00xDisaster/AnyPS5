@@ -192,7 +192,7 @@ int Run(const int argc, char* argv[]) {
         }
         progress.Finish();
         if (desktopEntry) std::cout << "Desktop entry: " << Io::Utf8Path(desktopEntryWriter.Write(*desktopEntry)) << '\n';
-        std::cout << "\nConversion complete\n\n"
+        std::cout << "\nConversion complete\n"
                   << "Output file: " << absPath << '\n'
                   << "External prx references: " << executables.front().Result.RegistryEntries.size() << '\n'
                   << "Converted modules: " << guestArtifacts.size() << "\n\n";
