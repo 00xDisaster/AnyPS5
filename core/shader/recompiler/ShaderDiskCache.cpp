@@ -20,7 +20,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
-#include "ShaderCacheVersion.hpp"
+#include "ShaderCacheSourceVersion.hpp"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
