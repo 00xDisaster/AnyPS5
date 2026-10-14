@@ -113,6 +113,7 @@ void OverlayStatistics::AddPresent(Clock::time_point at, std::uint64_t gpuNanose
         frameTimes[frameNext] = std::chrono::duration<double, std::milli>(at - window.back().at).count();
         frameNext = (frameNext + 1) % FrameHistory;
         frameCount = std::min(frameCount + 1, FrameHistory);
+        previous = window.back();
     }
     window.push_back({at, gpuNanoseconds, driverNanoseconds});
     while (at - window.front().at > Window) window.pop_front();
@@ -120,13 +121,17 @@ void OverlayStatistics::AddPresent(Clock::time_point at, std::uint64_t gpuNanose
 
 void OverlayStatistics::Reset() {
     window.clear();
+    previous.reset();
     frameTimes = {};
     frameCount = 0;
     frameNext = 0;
 }
 
 double OverlayStatistics::Fps() const {
-    if (window.size() < 2) return 0;
+    if (window.size() < 2) {
+        const auto frameMs = LastFrameMs();
+        return frameMs > 0 ? 1000.0 / frameMs : 0;
+    }
     const auto seconds = std::chrono::duration<double>(window.back().at - window.front().at).count();
     return seconds > 0 ? static_cast<double>(window.size() - 1) / seconds : 0;
 }
@@ -157,10 +162,12 @@ OverlayStatistics::Range OverlayStatistics::FrameTimeRange() const {
 }
 
 double OverlayStatistics::perFrameMs(std::uint64_t Sample::*counter) const {
-    if (window.size() < 2) return 0;
-    const auto first = window.front().*counter;
+    const bool windowed = window.size() >= 2;
+    if (!windowed && !previous) return 0;
+    const auto first = windowed ? window.front().*counter : (*previous).*counter;
     const auto last = window.back().*counter;
-    return last >= first ? static_cast<double>(last - first) / 1e6 / static_cast<double>(window.size() - 1) : 0;
+    const auto frames = windowed ? window.size() - 1 : std::size_t{1};
+    return last >= first ? static_cast<double>(last - first) / 1e6 / static_cast<double>(frames) : 0;
 }
 
 double OverlayStatistics::GpuMsPerFrame() const {
@@ -234,9 +241,16 @@ std::string FormatOverlayValue(double value) {
     return text;
 }
 
+std::string FormatOverlayRate(double value) {
+    if (!std::isfinite(value) || value <= 0 || value >= 0.995) return FormatOverlayValue(value);
+    char text[16];
+    std::snprintf(text, sizeof(text), "%.2f", value);
+    return text;
+}
+
 OverlayContent ComposeOverlay(const OverlayStatistics& statistics, bool gpu, bool driver) {
     OverlayContent content;
-    content.above.push_back("FPS: " + FormatOverlayValue(statistics.Fps()));
+    content.above.push_back("FPS: " + FormatOverlayRate(statistics.Fps()));
     content.above.push_back("FRAME: " + FormatOverlayValue(statistics.LastFrameMs()) + " MS");
     content.frameTimes = statistics.FrameTimes();
     const auto range = statistics.FrameTimeRange();

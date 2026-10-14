@@ -38,7 +38,7 @@ void fpsWindowTests() {
     statistics.AddPresent(Start + 1700ms, 0, 0);
     require(near(statistics.Fps(), 51.0), "after a 500 ms stall the last second holds 52 presents, read as " + std::to_string(statistics.Fps()) + " FPS, not 51");
     statistics.AddPresent(Start + 3700ms, 0, 0);
-    require(statistics.Fps() == 0, "presents older than 1 s still count after a 2 s stall");
+    require(near(statistics.Fps(), 0.5), "after a 2 s stall the last second holds one present, read as " + std::to_string(statistics.Fps()) + " FPS, not the last frame's 0.5");
     statistics.AddPresent(Start + 3750ms, 0, 0);
     require(near(statistics.Fps(), 20.0), "two presents 50 ms apart read as " + std::to_string(statistics.Fps()) + " FPS, not 20");
     bool refused = false;
@@ -86,6 +86,72 @@ void counterTests() {
 void formatTests() {
     const std::pair<double, const char*> cases[] = {{59.94, "59.9"}, {0, "0.0"}, {99.94, "99.9"}, {99.96, "100"}, {144.4, "144"}, {12345, "9999"}, {-3, "0.0"}, {std::nan(""), "0.0"}};
     for (const auto& [value, expected] : cases) require(AgcDriver::FormatOverlayValue(value) == expected, std::to_string(value) + " is shown as '" + AgcDriver::FormatOverlayValue(value) + "', not '" + expected + "'");
+    const std::pair<double, const char*> rates[] = {{0.5, "0.50"}, {1000.0 / 12000.0, "0.08"}, {0.05, "0.05"}, {0.004, "0.00"}, {0.994, "0.99"}, {0.996, "1.0"}, {1.5, "1.5"}, {59.94, "59.9"}, {144.4, "144"}, {12345, "9999"}, {0, "0.0"}, {-1, "0.0"}, {std::nan(""), "0.0"}};
+    for (const auto& [value, expected] : rates) require(AgcDriver::FormatOverlayRate(value) == expected, "a rate of " + std::to_string(value) + " is shown as '" + AgcDriver::FormatOverlayRate(value) + "', not '" + expected + "'");
+}
+
+void lowRateTests() {
+    OverlayStatistics slow;
+    constexpr std::uint64_t Gpu[] = {30'000'000u, 45'000'000u, 20'000'000u};
+    constexpr std::uint64_t Driver[] = {12'000'000u, 20'000'000u, 8'000'000u};
+    std::uint64_t gpuTotal = 0;
+    std::uint64_t driverTotal = 0;
+    slow.AddPresent(Start, 0, 0);
+    require(slow.Fps() == 0 && slow.GpuMsPerFrame() == 0 && slow.DriverMsPerFrame() == 0, "a single present reads as a frame");
+    for (int i = 0; i < 3; ++i) {
+        gpuTotal += Gpu[i];
+        driverTotal += Driver[i];
+        slow.AddPresent(Start + (i + 1) * 2s, gpuTotal, driverTotal);
+        require(near(slow.Fps(), 0.5) && near(slow.LastFrameMs(), 2000), "a present every 2 s reads as " + std::to_string(slow.Fps()) + " FPS and " + std::to_string(slow.LastFrameMs()) + " ms, not 0.5 and 2000");
+        require(near(slow.GpuMsPerFrame(), static_cast<double>(Gpu[i]) / 1e6) && near(slow.DriverMsPerFrame(), static_cast<double>(Driver[i]) / 1e6), "frame " + std::to_string(i + 1) + " every 2 s reads " + std::to_string(slow.GpuMsPerFrame()) + " ms of GPU and " + std::to_string(slow.DriverMsPerFrame()) + " ms of driver time, not its own");
+    }
+    const auto everyTwoSeconds = AgcDriver::ComposeOverlay(slow, true, true);
+    require(everyTwoSeconds.above[0] == "FPS: 0.50" && everyTwoSeconds.above[1] == "FRAME: 2000 MS", "a present every 2 s shows '" + everyTwoSeconds.above[0] + "' and '" + everyTwoSeconds.above[1] + "'");
+    require(everyTwoSeconds.below[0] == "MIN/AVG/MAX: 2000/2000/2000" && everyTwoSeconds.below[1] == "GPU: 20.0 MS" && everyTwoSeconds.below[2] == "DRIVER: 8.0 MS", "a present every 2 s shows '" + everyTwoSeconds.below[0] + "', '" + everyTwoSeconds.below[1] + "' and '" + everyTwoSeconds.below[2] + "'");
+
+    OverlayStatistics glacial;
+    glacial.AddPresent(Start, 0, 0);
+    for (int i = 1; i <= 5; ++i) glacial.AddPresent(Start + i * 12s, static_cast<std::uint64_t>(i) * 250'000'000u, static_cast<std::uint64_t>(i) * 12'500'000'000u);
+    require(near(glacial.Fps(), 1000.0 / 12000.0) && near(glacial.LastFrameMs(), 12000) && near(glacial.GpuMsPerFrame(), 250) && near(glacial.DriverMsPerFrame(), 12500), "a present every 12 s reads as " + std::to_string(glacial.Fps()) + " FPS, " + std::to_string(glacial.LastFrameMs()) + " ms, " + std::to_string(glacial.GpuMsPerFrame()) + " and " + std::to_string(glacial.DriverMsPerFrame()) + " ms");
+    const auto everyTwelveSeconds = AgcDriver::ComposeOverlay(glacial, true, true);
+    require(everyTwelveSeconds.above[0] == "FPS: 0.08" && everyTwelveSeconds.above[1] == "FRAME: 9999 MS", "a present every 12 s shows '" + everyTwelveSeconds.above[0] + "' and '" + everyTwelveSeconds.above[1] + "'");
+    require(everyTwelveSeconds.below[0] == "MIN/AVG/MAX: 9999/9999/9999" && everyTwelveSeconds.below[1] == "GPU: 250 MS" && everyTwelveSeconds.below[2] == "DRIVER: 9999 MS", "a present every 12 s shows '" + everyTwelveSeconds.below[0] + "', '" + everyTwelveSeconds.below[1] + "' and '" + everyTwelveSeconds.below[2] + "'");
+    require(everyTwelveSeconds.frameTimes == std::vector<double>(5, 12000.0), "the graph does not hold the five 12 s frames");
+    const auto layout = AgcDriver::LayOutOverlay(everyTwelveSeconds, {1920, 1080}, OverlayCorner::TopLeft);
+    std::size_t bars = 0;
+    for (const auto& rect : layout.rects) {
+        if (rect.color != static_cast<std::uint32_t>(AgcDriver::OverlayColor::Graph)) continue;
+        ++bars;
+        require(rect.height == OverlayMetrics::GraphHeight * layout.scale / 2, "steady 12 s frames do not reach half the graph");
+    }
+    require(bars == 5, "the graph has " + std::to_string(bars) + " bars for five 12 s frames");
+
+    OverlayStatistics rising;
+    auto at = Start;
+    std::uint64_t total = 0;
+    rising.AddPresent(at, 0, 0);
+    const auto step = [&](Clock::duration interval, std::uint64_t gpuNanoseconds) {
+        at += interval;
+        total += gpuNanoseconds;
+        rising.AddPresent(at, total, 0);
+    };
+    const auto check = [&](double fps, double gpuMs, const char* shown, const std::string& when) {
+        require(near(rising.Fps(), fps) && near(rising.GpuMsPerFrame(), gpuMs) && AgcDriver::FormatOverlayRate(rising.Fps()) == shown, when + " reads as " + std::to_string(rising.Fps()) + " FPS ('" + AgcDriver::FormatOverlayRate(rising.Fps()) + "') and " + std::to_string(rising.GpuMsPerFrame()) + " ms of GPU time, not " + std::to_string(fps) + " ('" + shown + "') and " + std::to_string(gpuMs));
+    };
+    step(2s, 40'000'000u);
+    check(0.5, 40, "0.50", "a 2 s frame");
+    step(1250ms, 30'000'000u);
+    check(0.8, 30, "0.80", "a 1.25 s frame");
+    step(1001ms, 20'000'000u);
+    check(1000.0 / 1001.0, 20, "1.0", "a 1.001 s frame, the last second holding one present");
+    step(1000ms, 10'000'000u);
+    check(1.0, 10, "1.0", "a 1 s frame, the last second holding two presents");
+    step(750ms, 6'000'000u);
+    check(1.0 / 0.75, 6, "1.3", "a 750 ms frame");
+    for (int i = 0; i < 8; ++i) step(250ms, i % 2 == 0 ? 2'000'000u : 6'000'000u);
+    check(4.0, 4.0, "4.0", "four presents a second, alternating 2 and 6 ms of GPU time");
+    step(3s, 9'000'000u);
+    check(1.0 / 3.0, 9, "0.33", "a 3 s frame after the fast ones");
 }
 
 void settingsTests() {
@@ -225,6 +291,7 @@ int main() {
         frameRingTests();
         counterTests();
         formatTests();
+        lowRateTests();
         settingsTests();
         composeTests();
         layoutTests();

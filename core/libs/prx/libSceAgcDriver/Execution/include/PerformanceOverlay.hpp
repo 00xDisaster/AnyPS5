@@ -11,6 +11,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -72,6 +73,7 @@ private:
     double perFrameMs(std::uint64_t Sample::*counter) const;
 
     std::deque<Sample> window;
+    std::optional<Sample> previous;
     std::array<double, FrameHistory> frameTimes{};
     std::size_t frameCount = 0;
     std::size_t frameNext = 0;
@@ -115,6 +117,7 @@ struct OverlayMetrics {
 
 const std::array<std::uint8_t, OverlayMetrics::GlyphHeight>& OverlayGlyph(char character);
 std::string FormatOverlayValue(double value);
+std::string FormatOverlayRate(double value);
 OverlayContent ComposeOverlay(const OverlayStatistics& statistics, bool gpu, bool driver);
 std::int32_t OverlayScale(VkExtent2D extent, const OverlayContent& content);
 OverlayLayout LayOutOverlay(const OverlayContent& content, VkExtent2D extent, OverlayCorner corner);
