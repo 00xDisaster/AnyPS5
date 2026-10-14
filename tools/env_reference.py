@@ -3,26 +3,53 @@ import re
 import sys
 from pathlib import Path
 
-PREFIXES = ("APS5_",)
+PREFIXES = ("APS5_", "ANYPS5_")
 DOC = "docs/dev/ENVIRONMENT.md"
 ROOTS = ("core",)
 EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".py"}
 SKIP = {"build", "build-linux", "build-relinker", "3rdparty", ".git"}
 
+READERS = {
+    "IsEnvironmentSet": "presence",
+    "kibSetting": "integer",
+    "MaskFromEnvironment": "integer",
+}
+NULL_TEST = re.compile(r"[!=]=\s*(nullptr|NULL|0)\b|!\s*(?:std::)?getenv\(")
+INTEGER_TEST = re.compile(r"\b(atoi|strtol|strtoul|strtoll|strtoull|stoi|stol|stoul|from_chars|atoi64)\s*\(")
+
 
 def pattern(prefixes):
     name = "(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ")[A-Za-z0-9_]+"
     return re.compile(
-        r"(?:std::)?getenv\(\s*\"(" + name + r")\"\s*\)"
-        r"|IsEnvironmentSet\(\s*\"(" + name + r")\"\s*\)"
-        r"|kibSetting\(\s*\"(" + name + r")\""
-        r"|MaskFromEnvironment\(\s*\"(" + name + r")\"\s*\)"
+        r"(?P<getenv>(?:std::)?getenv)\(\s*\"(?P<getenv_name>" + name + r")\"\s*\)"
+        r"|IsEnvironmentSet\(\s*\"(?P<presence_name>" + name + r")\"\s*\)"
+        r"|MaskFromEnvironment\(\s*\"(?P<mask_name>" + name + r")\"\s*\)"
+        r"|kibSetting\(\s*\"(?P<kib_name>" + name + r")\"\s*,\s*(?P<kib_default>[0-9]+)"
     )
 
 
 def documented_pattern(prefixes):
     name = "(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ")[A-Za-z0-9_]+"
     return re.compile(r"`(" + name + r")`")
+
+
+def kind_of(reader, window):
+    if reader == "IsEnvironmentSet":
+        return "presence"
+    if reader in ("kibSetting", "MaskFromEnvironment"):
+        return "integer"
+    if NULL_TEST.search(window):
+        return "presence"
+    if INTEGER_TEST.search(window):
+        return "integer"
+    return "string"
+
+
+def default_of(match, window):
+    if match.group("kib_default"):
+        return match.group("kib_default")
+    found = re.search(r"\?[\s\S]*?:\s*([0-9]+)", window)
+    return found.group(1) if found else ""
 
 
 def source_files(root):
@@ -44,10 +71,24 @@ def reads(roots, prefixes=PREFIXES):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            for number, line in enumerate(text.splitlines(), 1):
+            lines = text.splitlines()
+            for number, line in enumerate(lines, 1):
+                if not read.search(line):
+                    continue
+                window = "\n".join(lines[number - 1:number + 2])
                 for match in read.finditer(line):
-                    name = next(group for group in match.groups() if group)
-                    found.setdefault(name, []).append((path.as_posix(), number))
+                    name = (match.group("getenv_name") or match.group("presence_name") or
+                            match.group("mask_name") or match.group("kib_name"))
+                    if match.group("getenv"):
+                        reader = "getenv"
+                    elif match.group("presence_name"):
+                        reader = "IsEnvironmentSet"
+                    elif match.group("mask_name"):
+                        reader = "MaskFromEnvironment"
+                    else:
+                        reader = "kibSetting"
+                    found.setdefault(name, []).append(
+                        (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
     for sites in found.values():
         sites.sort()
     return found
@@ -60,10 +101,32 @@ def documented(path, prefixes=PREFIXES):
         return None
 
 
+def library_of(source):
+    parts = Path(source).parts
+    if len(parts) >= 4 and parts[0] == "core" and parts[1] == "libs" and parts[2] == "prx":
+        return parts[3]
+    if len(parts) >= 2 and parts[0] == "core":
+        return "core/" + parts[1]
+    return parts[0] if parts else source
+
+
 def list_names(found, out):
     for name in sorted(found):
-        for path, number in found[name]:
-            out.write(f"{name}\t{path}:{number}\n")
+        for source, number, kind, default in found[name]:
+            out.write(f"{name}\t{kind}\t{source}:{number}\t{default}\n")
+
+
+def table(found, out):
+    libraries = {}
+    for name, sites in found.items():
+        libraries.setdefault(library_of(sites[0][0]), []).append((name, sites[0]))
+    for library in sorted(libraries):
+        out.write(f"### {library}\n\n")
+        out.write("| Name | Kind | Source | Default | Description |\n")
+        out.write("|------|------|--------|---------|-------------|\n")
+        for name, (source, number, kind, default) in sorted(libraries[library]):
+            out.write(f"| `{name}` | {kind} | `{source}` | {default} | |\n")
+        out.write("\n")
 
 
 def check(found, doc, prefixes, out):
@@ -74,8 +137,8 @@ def check(found, doc, prefixes, out):
     missing = sorted(set(found) - names)
     stale = sorted(names - set(found))
     for name in missing:
-        path, number = found[name][0]
-        out.write(f"error: {name} is read at {path}:{number} but has no row in {doc}\n")
+        source, number, _, _ = found[name][0]
+        out.write(f"error: {name} is read at {source}:{number} but has no row in {doc}\n")
     for name in stale:
         out.write(f"error: {name} has a row in {doc} but the code no longer reads it\n")
     if missing or stale:
@@ -90,6 +153,8 @@ def main(argv=None):
         description="list the environment names the code reads, or check them against a reference document")
     parser.add_argument("--check", action="store_true",
                         help="compare the names the code reads with the document and fail on a mismatch")
+    parser.add_argument("--table", action="store_true",
+                        help="emit the reference table rows, grouped by library")
     parser.add_argument("--doc", default=DOC, help="reference document to check (default: %(default)s)")
     parser.add_argument("--root", action="append", default=None,
                         help="directory to scan (default: %s); repeatable" % ", ".join(ROOTS))
@@ -101,6 +166,9 @@ def main(argv=None):
     found = reads(roots, prefixes)
     if args.check:
         return check(found, args.doc, prefixes, sys.stdout)
+    if args.table:
+        table(found, sys.stdout)
+        return 0
     list_names(found, sys.stdout)
     return 0
 

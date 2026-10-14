@@ -37,11 +37,12 @@ class EnvReferenceTests(unittest.TestCase):
              "APS5_WORKER_AFFINITY_MASK", "ANYPS5_GPU"})
         self.assertEqual(found["APS5_PROFILE_DRAW"][0][1], 1)
 
-    def test_the_default_prefix_scans_only_aps5(self):
+    def test_the_default_prefixes_cover_both(self):
         root = self.fixture()
         found = env_reference.reads([root / "core"])
         self.assertTrue(found)
-        self.assertFalse([name for name in found if name.startswith("ANYPS5_")])
+        self.assertTrue([name for name in found if name.startswith("APS5_")])
+        self.assertTrue([name for name in found if name.startswith("ANYPS5_")])
 
     def test_check_passes_when_every_read_name_has_a_row(self):
         root = self.fixture()
