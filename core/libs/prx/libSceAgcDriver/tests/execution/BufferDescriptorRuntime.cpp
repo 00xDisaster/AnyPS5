@@ -104,15 +104,18 @@ void ScalarReads(AgcDriver::VulkanDevice& device) {
     request.useCache = false;
     std::uint32_t expected = 0;
     std::memcpy(&expected, Input.data() + 4u, sizeof(expected));
-    for (const auto word : {0u, 0x31016facu, 0x91b00f2eu, 0xffffffffu}) {
-        auto input = BufferDescriptor(Input.data(), InputBytes);
-        input[3] = word;
-        std::copy(input.begin(), input.end(), userData.begin());
-        Output.fill(Fill);
-        const auto result = ShaderRecompiler::Recompile(request);
-        device.Dispatch(result, 1, 1, 1);
-        device.WaitIdle();
-        Require(std::all_of(Output.begin(), Output.end(), [expected](std::uint32_t value) { return value == expected; }), "scalar buffer read changed with ignored descriptor word " + Hex(word));
+    for (const auto ignoredWord1 : {0u, 0x40000000u}) {
+        for (const auto word : {0u, 0x31016facu, 0x91b00f2eu, 0xffffffffu}) {
+            auto input = BufferDescriptor(Input.data(), InputBytes);
+            input[1] |= ignoredWord1;
+            input[3] = word;
+            std::copy(input.begin(), input.end(), userData.begin());
+            Output.fill(Fill);
+            const auto result = ShaderRecompiler::Recompile(request);
+            device.Dispatch(result, 1, 1, 1);
+            device.WaitIdle();
+            Require(std::all_of(Output.begin(), Output.end(), [expected](std::uint32_t value) { return value == expected; }), "scalar buffer read changed with ignored descriptor word " + Hex(word));
+        }
     }
     constexpr std::array<std::uint32_t, 13> mixedCode{0xf4200200u, 0xfa000004u, 0xbf8cc07fu, 0x34020082u, 0xe0301000u, 0x80000201u, 0xbf8c3f70u, 0xe0701000u, 0x80010201u, 0x7e060208u, 0xe0701000u, 0x80010301u, 0xbf810000u};
     for (const auto code : {std::span<const std::uint32_t>(Code), std::span<const std::uint32_t>(mixedCode)}) {
@@ -125,6 +128,21 @@ void ScalarReads(AgcDriver::VulkanDevice& device) {
             continue;
         }
         throw std::runtime_error("a vector or mixed buffer access accepted a non-buffer descriptor type");
+    }
+    for (const auto code : {std::span<const std::uint32_t>(Code), std::span<const std::uint32_t>(mixedCode)}) {
+        request.shader.code = code;
+        request.shader.codeAddress = reinterpret_cast<std::uintptr_t>(code.data());
+        auto input = BufferDescriptor(Input.data(), InputBytes);
+        input[1] |= 0x40000000u;
+        std::copy(input.begin(), input.end(), userData.begin());
+        const auto result = ShaderRecompiler::Recompile(request);
+        try {
+            device.Dispatch(result, 1, 1, 1);
+        } catch (const std::runtime_error& error) {
+            Require(std::string(error.what()).find("buffer descriptor has reserved bits set") != std::string::npos, "vector or mixed buffer descriptor failed for another reason");
+            continue;
+        }
+        throw std::runtime_error("a vector or mixed buffer access accepted reserved descriptor bits");
     }
 }
 
