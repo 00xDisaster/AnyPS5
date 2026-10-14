@@ -1,5 +1,6 @@
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/JumpBuffer.hpp"
 #include "prx/libkernel/Pthread/Posix/Common.hpp"
 #include "prx/libkernel/Pthread/include/Pthread.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
@@ -628,5 +629,14 @@ int APS5_VABI _is_signal_return_nid_postfix(std::uint64_t programCounter) {
     (void)programCounter;
     return 0;
 }
+
+}
+
+namespace {
+
+[[maybe_unused]] const bool RegisteredForJumps = [] {
+    JumpBuffer::GuestSigprocmaskRegister_nid_no_patch(sigprocmask_nid_postfix);
+    return true;
+}();
 
 }
