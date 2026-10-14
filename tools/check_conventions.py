@@ -62,8 +62,10 @@ ENV_PREFIX = r"(?:APS5|ANYPS5)_[A-Za-z0-9_]+"
 ENV_GREP = (r'(std::)?getenv\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
             r'|IsEnvironmentSet\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
             r'|kibSetting\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|MaskFromEnvironment\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"')
-ENV_READER = re.compile(r'(?:(?:std::)?getenv|IsEnvironmentSet|kibSetting|MaskFromEnvironment)\(\s*"(' + ENV_PREFIX + r')"')
+            r'|MaskFromEnvironment\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
+            r'|EnvInt\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
+            r'|GetEnvironmentVariableA\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"')
+ENV_READER = re.compile(r'(?:(?:std::)?getenv|IsEnvironmentSet|kibSetting|MaskFromEnvironment|EnvInt|GetEnvironmentVariableA)\(\s*"(' + ENV_PREFIX + r')"')
 ENV_NAME = re.compile(r"`(" + ENV_PREFIX + r")`")
 
 

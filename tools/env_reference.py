@@ -25,6 +25,8 @@ def pattern(prefixes):
         r"|IsEnvironmentSet\(\s*\"(?P<presence_name>" + name + r")\"\s*\)"
         r"|MaskFromEnvironment\(\s*\"(?P<mask_name>" + name + r")\"\s*\)"
         r"|kibSetting\(\s*\"(?P<kib_name>" + name + r")\"\s*,\s*(?P<kib_default>[0-9]+)"
+        r"|EnvInt\(\s*\"(?P<envint_name>" + name + r")\"\s*,\s*(?P<envint_default>-?[0-9]+)"
+        r"|GetEnvironmentVariableA\(\s*\"(?P<win_name>" + name + r")\""
     )
 
 
@@ -36,8 +38,10 @@ def documented_pattern(prefixes):
 def kind_of(reader, window):
     if reader == "IsEnvironmentSet":
         return "presence"
-    if reader in ("kibSetting", "MaskFromEnvironment"):
+    if reader in ("kibSetting", "MaskFromEnvironment", "EnvInt"):
         return "integer"
+    if reader == "GetEnvironmentVariableA":
+        return "string"
     if NULL_TEST.search(window):
         return "presence"
     if INTEGER_TEST.search(window):
@@ -46,8 +50,9 @@ def kind_of(reader, window):
 
 
 def default_of(match, window):
-    if match.group("kib_default"):
-        return match.group("kib_default")
+    for group in ("kib_default", "envint_default"):
+        if match.group(group):
+            return match.group(group)
     found = re.search(r"\?[\s\S]*?:\s*([0-9]+)", window)
     return found.group(1) if found else ""
 
@@ -78,13 +83,18 @@ def reads(roots, prefixes=PREFIXES):
                 window = "\n".join(lines[number - 1:number + 2])
                 for match in read.finditer(line):
                     name = (match.group("getenv_name") or match.group("presence_name") or
-                            match.group("mask_name") or match.group("kib_name"))
+                            match.group("mask_name") or match.group("kib_name") or
+                            match.group("envint_name") or match.group("win_name"))
                     if match.group("getenv"):
                         reader = "getenv"
                     elif match.group("presence_name"):
                         reader = "IsEnvironmentSet"
                     elif match.group("mask_name"):
                         reader = "MaskFromEnvironment"
+                    elif match.group("envint_name"):
+                        reader = "EnvInt"
+                    elif match.group("win_name"):
+                        reader = "GetEnvironmentVariableA"
                     else:
                         reader = "kibSetting"
                     found.setdefault(name, []).append(
