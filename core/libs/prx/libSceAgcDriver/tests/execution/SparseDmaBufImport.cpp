@@ -62,7 +62,7 @@ int main() {
     try {
         const int udmabuf = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
         if (udmabuf < 0) {
-            std::printf("skipped, /dev/udmabuf is not accessible\n");
+            std::printf("skipped, host imports are unavailable: /dev/udmabuf is not accessible\n");
             return VulkanTestSkipped;
         }
         close(udmabuf);
