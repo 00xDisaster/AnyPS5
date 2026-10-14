@@ -6822,6 +6822,15 @@ void pipelineLibraryTests(const Device& device) {
         Require(otherPattern != pattern && counters().built[2] == beforePatternChange[2] + 1u && counters().built[3] == beforePatternChange[3] + 1u && counters().built[0] == beforePatternChange[0] && counters().built[1] == beforePatternChange[1], "a custom sample pattern did not rebuild exactly the fragment shader and fragment output libraries");
         state.sampleLocations[0] = 0x10;
         Require(lookup() == pattern && counters().built[2] == beforePatternChange[2] + 1u && counters().built[3] == beforePatternChange[3] + 1u, "a cached custom sample pattern was not reused");
+        if ((context.sampleLocationGridSampleCounts & VK_SAMPLE_COUNT_4_BIT) != 0) {
+            state.sampleLocationGrid = true;
+            state.sampleLocations[3u * 8u] = 0x20;
+            const auto gridPattern = lookup();
+            Require(gridPattern != pattern && counters().built[2] == beforePatternChange[2] + 2u && counters().built[3] == beforePatternChange[3] + 2u, "a pattern varying between pixels shared a uniform pattern's fragment libraries");
+            state.sampleLocationGrid = false;
+            state.sampleLocations[3u * 8u] = 0;
+            Require(lookup() == pattern, "the uniform pattern was not reused after a grid pattern");
+        }
 
         std::optional<VkFormat> compatibleDepth, incompatibleDepth;
         state.customSampleLocations = false;
