@@ -7,6 +7,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/VertexInput.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/GuestBufferMemory.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/MultisampleTarget.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
@@ -22,6 +23,7 @@
 #include "BdaAbi.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libc/include/GuestHeap.hpp"
 #include <spirv/unified1/spirv.hpp>
 #include <algorithm>
 #include <array>
@@ -450,6 +452,58 @@ void hardwareScreenOffsetTests() {
     }
     queue.context.erase(0x8d);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "missing register");
+}
+
+void UnwrittenSampleLocationTests() {
+    using AgcDriver::Graphics::DecodeState;
+    using AgcDriver::Graphics::DrawRejection;
+    using AgcDriver::Graphics::SampleLocations;
+    const auto fresh = [](std::uint32_t config, std::uint32_t attributes, std::uint32_t scanMode = 3) {
+        auto written = makeState();
+        written.context[0x2f8] = config;
+        written.context[0x292] = scanMode;
+        written.context[0x3b8] = 0x0dc00000u;
+        written.context[0x31d] = attributes;
+        written.context[0x1b3] = 2;
+        written.context[0x1b4] = 2;
+        AgcDriver::QueueState queue;
+        queue.shader = written.shader;
+        queue.userConfig = written.userConfig;
+        written.context.ForEach([&](std::uint32_t offset, std::uint32_t value) { queue.context[offset] = value; });
+        return queue;
+    };
+    AgcDriver::QueueState initial;
+    for (std::uint32_t offset = 0x2fe; offset <= 0x30d; ++offset) Require(initial.context.contains(offset) && initial.context.at(offset) == 0, "an unwritten PA_SC_AA_SAMPLE_LOCS register did not hold its clear-state value 0");
+    for (const auto samples : {2u, 4u, 8u}) {
+        const auto log2 = static_cast<std::uint32_t>(std::countr_zero(samples));
+        auto queue = fresh((log2 << 20u) | log2, (log2 << 12u) | (log2 << 15u));
+        const auto state = DecodeState(queue);
+        Require(state.samples == samples && state.colors.size() == 1 && state.colors[0].samples == samples, "a multisampled draw with unwritten sample locations did not decode its sample count");
+        Require(state.customSampleLocations, "unwritten sample locations did not decode as the clear-state pattern");
+        for (std::uint32_t sample = 0; sample < samples; ++sample) Require(state.sampleLocations[sample] == 0, "an unwritten sample location was not at the pixel center");
+        const auto centered = SampleLocations(state);
+        for (std::uint32_t sample = 0; sample < samples; ++sample) Require(centered[sample].x == 0.5f && centered[sample].y == 0.5f, "unwritten sample locations did not place every sample at the pixel center");
+        const auto rejection = DrawRejection(queue, false);
+        Require(rejection.empty(), "the precheck refused a multisampled draw with unwritten sample locations: " + rejection);
+    }
+    auto queue = fresh(0x00200002, 0x12000);
+    for (std::uint32_t pixel = 0; pixel < 4; ++pixel) queue.context[0x2fe + pixel * 4u] = 0x622ae6ae;
+    auto state = DecodeState(queue);
+    Require(state.samples == 4 && !state.customSampleLocations, "explicit standard 4x sample locations changed");
+    queue = fresh(0x00200002, 0x12000);
+    for (std::uint32_t pixel = 0; pixel < 4; ++pixel) queue.context[0x2fe + pixel * 4u] = 0x22eea66a;
+    state = DecodeState(queue);
+    Require(state.samples == 4 && state.customSampleLocations, "explicit custom 4x sample locations changed");
+    const auto custom = SampleLocations(state);
+    const std::array<VkSampleLocationEXT, 4> expected{{{0.125f, 0.875f}, {0.875f, 0.125f}, {0.375f, 0.375f}, {0.625f, 0.625f}}};
+    for (std::size_t sample = 0; sample < expected.size(); ++sample) Require(custom[sample].x == expected[sample].x && custom[sample].y == expected[sample].y, "explicit custom 4x sample coordinates changed");
+    queue.ClearContext();
+    for (std::uint32_t offset = 0x2fe; offset <= 0x30d; ++offset) Require(queue.context.at(offset) == 0, "CLEAR_STATE did not reset PA_SC_AA_SAMPLE_LOCS");
+    expectFailure([&] { DecodeState(fresh(0x00400004, 0x12000)); }, "more than eight samples");
+    expectFailure([&] { DecodeState(fresh(0x00100002, 0x12000)); }, "exposing fewer samples");
+    queue = fresh(0, 0, 3);
+    state = DecodeState(queue);
+    Require(state.samples == 1 && DrawRejection(queue, false).empty(), "MSAA_ENABLE on a single-sample target with unwritten sample locations was refused");
 }
 
 void MsaaEnableSingleSampleTests() {
@@ -2826,6 +2880,32 @@ AgcDriver::Graphics::Context mockContext() {
     context.limits.maxPerStageResources = 128;
     context.limits.maxDescriptorSetStorageBuffers = 32;
     return context;
+}
+
+void addressSpaceTeardownTests() {
+#ifdef _WIN32
+    _putenv_s("APS5_NO_LEASE_MIRROR", "1");
+#else
+    setenv("APS5_NO_LEASE_MIRROR", "1", 1);
+#endif
+    auto context = mockContext();
+    context.device = makeHandle<VkDevice>();
+    context.bufferDeviceAddress = true;
+    context.limits.maxStorageBufferRange = 1u << 27;
+    void* block = GuestHeap::GuestHeapAlignForGpu_nid_postfix(16, 64);
+    const auto before = AgcDriver::Graphics::LeaseCounters().cacheDrops;
+    {
+        AgcDriver::Graphics::GuestBufferMemory memory(context);
+        memory.AcquireRegistered();
+        Require(memory.HoldsLease(), "address-based build holds no lease before device teardown");
+        memory.Upload(true);
+        memory.WriteBack();
+        Require(!memory.HoldsLease(), "completed address-based build kept its own lease");
+    }
+    AgcDriver::Graphics::ClearImageMirrors(context.device);
+    GuestHeap::GuestHeapFree_nid_postfix(block);
+    Require(AgcDriver::Graphics::LeaseCounters().cacheDrops == before, "device teardown left the cached address space pinning guest allocations");
+    Require(mock.live == 0, "address-space teardown test leaked Vulkan objects");
 }
 
 using Role = ShaderRecompiler::DescriptorRole;
@@ -5543,6 +5623,11 @@ int main(int argc, char** argv) {
             std::cout << "sparse buffer hole tests " << (passed ? "passed" : "failed") << '\n';
             return passed ? 0 : 1;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--address-space-teardown") {
+            addressSpaceTeardownTests();
+            std::cout << "address-space device teardown releases cached guest allocations\n";
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--descriptor-layout-flags") {
             descriptorLayoutFlagTests();
             std::cout << "Descriptor layout native and captured binding flags passed\n";
@@ -5627,6 +5712,7 @@ int main(int argc, char** argv) {
         MsaaEnableSingleSampleTests();
         clipDistanceTests();
         framebufferLayerTests();
+        UnwrittenSampleLocationTests();
         ShaderStageTests();
         NggVertexWorkgroupTests();
         TuningFieldTests();
