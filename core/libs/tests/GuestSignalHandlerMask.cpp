@@ -7,6 +7,8 @@ extern "C" {
 int APS5_VABI sigaction_nid_postfix(int, const void*, void*);
 int APS5_VABI sigprocmask_nid_postfix(int, const void*, void*);
 int APS5_VABI raise_nid_postfix(int);
+[[gnu::returns_twice]] int APS5_VABI setjmp_nid_postfix(std::uint64_t* buffer);
+[[noreturn]] void APS5_VABI longjmp_nid_postfix(std::uint64_t* buffer, int value);
 }
 
 struct GuestSignalSet {
@@ -52,6 +54,13 @@ static void APS5_VABI RaiseAgain(int signal) {
 
 static void APS5_VABI Count(int) {
     ++calls;
+}
+
+static std::uint64_t handlerExit[12];
+
+static void APS5_VABI LeaveWithLongjmp(int) {
+    ++calls;
+    longjmp_nid_postfix(handlerExit, 1);
 }
 
 static void APS5_VABI BlockFromOtherThread(int) {
@@ -110,11 +119,25 @@ static void CheckOtherThreadKept() {
     Require(CurrentMask() == 0);
 }
 
+static void CheckLeftWithLongjmp() {
+    calls = 0;
+    Install(SigUsr1, LeaveWithLongjmp, SaRestart, Bit(SigUsr2));
+    for (int round = 1; round <= 2; ++round) {
+        if (setjmp_nid_postfix(handlerExit) == 0) {
+            raise_nid_postfix(SigUsr1);
+            std::abort();
+        }
+        Require(calls == round);
+        Require(CurrentMask() == 0);
+    }
+}
+
 int main() {
     CheckDeferred(SigUsr2);
     CheckDeferred(SigTerm);
     CheckNodefer();
     CheckResethand();
     CheckOtherThreadKept();
+    CheckLeftWithLongjmp();
     return 0;
 }
