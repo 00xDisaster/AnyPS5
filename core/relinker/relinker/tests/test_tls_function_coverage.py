@@ -735,7 +735,6 @@ def main():
                 "rsp-displacement": fs_load(4, 40),
                 "rsp-alu": fs_alu(0x33, 4, 40),
                 "dword-load": bytes.fromhex("64 8b 04 25 28 00 00 00"),
-                "gs-load": bytes.fromhex("65 48 8b 04 25 28 00 00 00"),
                 "rex-b-load": bytes.fromhex("64 49 8b 04 25 28 00 00 00"),
                 "rsp-base-load": bytes.fromhex("64 48 8b 04 24"),
                 "rsp-register-address": bytes.fromhex("64 48 8b 20"),
