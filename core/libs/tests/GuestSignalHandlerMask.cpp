@@ -1,6 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdlib>
+#include <thread>
 
 extern "C" {
 int APS5_VABI sigaction_nid_postfix(int, const void*, void*);
@@ -25,6 +26,7 @@ static constexpr int SaRestart = 0x2;
 static constexpr int SaResethand = 0x4;
 static constexpr int SaNodefer = 0x10;
 static constexpr int SigBlock = 1;
+static constexpr int SigUnblock = 2;
 
 static std::uint32_t Bit(int signal) { return 1u << (signal - 1); }
 
@@ -50,6 +52,14 @@ static void APS5_VABI RaiseAgain(int signal) {
 
 static void APS5_VABI Count(int) {
     ++calls;
+}
+
+static void APS5_VABI BlockFromOtherThread(int) {
+    ++calls;
+    std::thread([] {
+        const GuestSignalSet set{{Bit(SigTerm), 0, 0, 0}};
+        Require(sigprocmask_nid_postfix(SigBlock, &set, nullptr) == 0);
+    }).join();
 }
 
 static void Install(int signal, void (APS5_VABI* handler)(int), int flags, std::uint32_t mask) {
@@ -89,10 +99,22 @@ static void CheckResethand() {
     Require((current.flags & SaResethand) != 0);
 }
 
+static void CheckOtherThreadKept() {
+    calls = 0;
+    Install(SigUsr1, BlockFromOtherThread, SaRestart, 0);
+    Require(raise_nid_postfix(SigUsr1) == 0);
+    Require(calls == 1);
+    Require(CurrentMask() == Bit(SigTerm));
+    const GuestSignalSet set{{Bit(SigTerm), 0, 0, 0}};
+    Require(sigprocmask_nid_postfix(SigUnblock, &set, nullptr) == 0);
+    Require(CurrentMask() == 0);
+}
+
 int main() {
     CheckDeferred(SigUsr2);
     CheckDeferred(SigTerm);
     CheckNodefer();
     CheckResethand();
+    CheckOtherThreadKept();
     return 0;
 }

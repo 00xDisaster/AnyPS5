@@ -153,9 +153,9 @@ void RunHandler(int guest, GuestHandler handler) {
     std::uint32_t mask = handlerMasks[guest].load();
     if ((flags & SaNodefer) == 0 && guest <= 32) mask |= SignalBit(guest);
     if ((flags & SaResethand) != 0) ResetToDefault(guest);
-    const std::uint32_t saved = blockedMask.fetch_or(mask);
+    const std::uint32_t added = mask & ~blockedMask.fetch_or(mask);
     handler(guest);
-    blockedMask.store(saved);
+    blockedMask.fetch_and(~added);
 }
 void Dispatch(int native) {
     int guest = 0;
