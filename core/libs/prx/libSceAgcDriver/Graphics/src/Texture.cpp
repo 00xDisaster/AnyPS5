@@ -3184,7 +3184,7 @@ void StorageTexture::SaveBeforeUnwatch(std::uint64_t address, std::size_t bytes)
         for (auto* texture : pending.flushing) take(texture);
     }
     if (overlapping.empty()) return;
-    Require(GuestMemory::GpuMutex().HeldByThisThread(), "AGC graphics: memory under pending storage image results leaves the write watch on a thread without the GPU lock");
+    std::lock_guard gpu(GuestMemory::GpuMutex());
     for (const auto& texture : overlapping) texture->saveBeforeUnwatch();
 }
 
