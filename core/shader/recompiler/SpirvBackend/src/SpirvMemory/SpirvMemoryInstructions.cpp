@@ -1850,7 +1850,6 @@ std::uint32_t EmitSharedAtomicFAdd32(SpirvValueEmitContext& ctx, const IrValue& 
     const auto& mem = SharedMemory(ctx, inst);
     const bool flushInputs = mem.flushDenormals;
     const bool flushResult = mem.flushDenormalResults;
-    // The parts that depend only on data are computed once, outside the CAS loop, to keep its body short.
     const AtomicFloatBits dataBits{ctx.state, false};
     const auto dataOperand = Unary(ctx.state, spv::OpBitcast, TypeF32(ctx.state), dataBits.flush(data, flushInputs));
     const auto dataNan = dataBits.nan(data);
