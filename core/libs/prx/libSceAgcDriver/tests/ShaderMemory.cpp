@@ -1034,7 +1034,7 @@ void verifyImageTableKeys() {
     large[1] = TableT(textures[2].bytes.data(), TableFormat11_11_10UInt, TableType2D);
     large[2] = TableT(textures[3].bytes.data(), TableFormat32UInt, TableType2D, 3u, 4u);
     large[3] = TableT(textures[3].bytes.data(), TableFormat8888UNorm, TableType3D);
-    large[4] = {0x1234u, 0x5678u, 0x9abcu, 0x0000ffacu, 0u, 0u, 0u, 0u};
+    large[4] = {0x1234u, 0x5678u, 0x9abcu, 0x1000ffacu, 0u, 0u, 0u, 0u};
     large[5] = TableT(textures[3].bytes.data(), 0u, TableType2D);
     for (std::uint32_t entry = 6; entry < Entries; entry++) large[entry] = TableT(textures[entry % 4u].bytes.data(), TableFormat8888UNorm, TableType2D, entry);
     const auto userData = TableUserData(guest);
@@ -1266,7 +1266,7 @@ void verifyImageTables() {
     static_cast<void>(ValidateAndOptimizeSpirv(query.result->spirv, request.target.vulkanVersion, request.target.spirvVersion));
 #endif
 
-    heap[0][3] &= 0x0fffffffu;
+    heap[0][3] = (heap[0][3] & 0x0fffffffu) | (1u << 28u);
     const auto invalid = CompileTable(request);
     const auto& invalidMap = TableMap(*invalid.result);
     const auto invalidCodes = TableCodes(invalidMap, 0);
@@ -1574,7 +1574,7 @@ void verifyPointerImageTable() {
     entry(0, TableT(textures[0].bytes.data(), TableFormat8888UNorm, TableType2D));
     entry(1, TableT(textures[0].bytes.data(), TableFormat8888UNorm, TableType2D));
     entry(2, TableT(textures[1].bytes.data(), TableFormat32UInt, TableType2D));
-    entry(4, {0x1234u, 0x5678u, 0x9abcu, 0x0000ffacu, 0u, 0u, 0u, 0u});
+    entry(4, {0x1234u, 0x5678u, 0x9abcu, 0x1000ffacu, 0u, 0u, 0u, 0u});
     entry(255, TableT(textures[1].bytes.data(), TableFormat32UInt, TableType2D));
     const auto address = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(root));
     const std::array<std::uint32_t, 2> userData{static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u)};
