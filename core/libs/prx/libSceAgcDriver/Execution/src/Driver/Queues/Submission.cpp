@@ -30,6 +30,10 @@ void writeCaptured(Driver& driver, SubmissionCapture& capture, const CapturedSub
     }
 }
 
+bool EopRelease(std::span<const std::uint32_t> words) {
+    return words.size() >= 8 && (words[0] >> 30u) == 3u && Pm4::PacketWords(words[0]) == 8u && ((words[0] >> 8u) & 0xffu) == 0x49u && ((words[2] >> 24u) & 7u) == 2u;
+}
+
 }
 
 void Driver::copyCommands(Submission& submission, const std::uint32_t* guest, std::size_t words) {
@@ -166,10 +170,19 @@ void Driver::noteAwaitingTitle(std::uint32_t queue, std::uint64_t awaited) {
 
 void Driver::holdFlipBehindWorker(const Submission& submission) {
     if (submission.queue != 0 || onWorkerThread()) return;
-    bool flips = false;
-    for (std::size_t cursor = 0; cursor < submission.commands.size() && !flips; cursor += Pm4::PacketWords(submission.commands[cursor])) flips = submission.commands[cursor] == FlipPacketHeader;
-    if (!flips) return;
+    bool candidate = false;
+    for (std::size_t cursor = 0; cursor < submission.commands.size() && !candidate; cursor += Pm4::PacketWords(submission.commands[cursor])) {
+        const auto words = std::span(submission.commands).subspan(cursor);
+        candidate = words[0] == FlipPacketHeader || EopRelease(words);
+    }
+    if (!candidate) return;
     std::unique_lock lock(mutex);
+    bool flips = false;
+    for (std::size_t cursor = 0; cursor < submission.commands.size() && !flips; cursor += Pm4::PacketWords(submission.commands[cursor])) {
+        const auto words = std::span(submission.commands).subspan(cursor);
+        flips = words[0] == FlipPacketHeader || (EopRelease(words) && eopFlips.contains(words[7]));
+    }
+    if (!flips) return;
     flipHolders.fetch_add(1, std::memory_order_acq_rel);
     changed.wait(lock, [&] { return failure != nullptr || stopping.load(std::memory_order_acquire) || shutdownToken.stop_requested() || flipsAhead.load(std::memory_order_acquire) == 0 || queue0AwaitsTitle.load(std::memory_order_acquire); });
     flipHolders.fetch_sub(1, std::memory_order_acq_rel);
@@ -182,6 +195,7 @@ void Driver::releaseFlipHold() {
 }
 
 void Driver::reserveOutputs(Submission& submission) {
+    std::set<std::uint32_t> eopTokens;
     for (std::size_t cursor = 0; cursor < submission.commands.size();) {
         const auto* words = submission.commands.data() + cursor;
         if (words[0] == RenderingWaitPacketHeader) {
@@ -190,6 +204,15 @@ void Driver::reserveOutputs(Submission& submission) {
             auto wait = output->second->CaptureRenderingWait(words[2]);
             require(wait != nullptr, "video output returned a null rendering wait");
             submission.renderingWaits.emplace(cursor, std::move(wait));
+        }
+        if (EopRelease(std::span(submission.commands).subspan(cursor))) {
+            const auto token = words[7];
+            const auto flip = eopFlips.find(token);
+            if (flip != eopFlips.end()) {
+                require(submission.queue == 0, "EOP flips on async queues are not implemented");
+                require(eopTokens.insert(token).second, "EOP flip token repeated in a submission");
+                submission.flips.emplace(cursor, flip->second.request);
+            }
         }
         noteHeldAtSubmit(submission, cursor);
         if (words[0] == FlipPacketHeader) {
@@ -202,6 +225,7 @@ void Driver::reserveOutputs(Submission& submission) {
         }
         cursor += Pm4::PacketWords(words[0]);
     }
+    for (const auto token : eopTokens) eopFlips.erase(token);
 }
 
 void Driver::executeRewindTail(const Submission& stalled) {
