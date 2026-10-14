@@ -2702,7 +2702,7 @@ void AlphaToCoverageTests() {
     expectFailure([&] { AgcDriver::Graphics::DecodeState(dithered); }, "custom sample locations");
     Require(AgcDriver::Graphics::DrawRejection(dithered, false).find("custom sample locations") != std::string::npos, "the precheck accepted unmeasured dithered sample locations");
     for (std::uint32_t pixel = 0; pixel < 4; ++pixel) dithered.context[0x2fe + pixel * 4u] ^= 1u;
-    for (const auto format : {5u, 6u}) {
+    for (const auto format : {3u, 5u, 6u}) {
         dithered.context[0x1c5] = format;
         expectFailure([&] { AgcDriver::Graphics::DecodeState(dithered); }, "FP16_ABGR or 32_ABGR");
         Require(AgcDriver::Graphics::DrawRejection(dithered, false).find("FP16_ABGR or 32_ABGR") != std::string::npos, "the precheck accepted an unmeasured dithered export format");
