@@ -655,6 +655,97 @@ void UnwrittenSampleLocationTests() {
     Require(state.samples == 1 && DrawRejection(queue, false).empty(), "MSAA_ENABLE on a single-sample target with unwritten sample locations was refused");
 }
 
+void msaaEnableClearOneSampleTargetTests() {
+    using AgcDriver::Graphics::DecodeState;
+    using AgcDriver::Graphics::DrawRejection;
+    const auto drawC = [](std::uint32_t config = 0x0020c002u) {
+        auto queue = makeState();
+        queue.context[0x2f8] = config;
+        queue.context[0x292] = 2;
+        for (std::uint32_t offset = 0x2fe; offset <= 0x30d; ++offset) queue.context[offset] = (offset - 0x2feu) % 4u == 0 ? 0x622ae6aeu : 0u;
+        queue.context[0x31c] = 0x8028;
+        queue.context[0x31d] = 0;
+        queue.context[0x010] = 0x80000183;
+        queue.context[0x200] = 0x710;
+        queue.context[0x201] = 0x00010002;
+        queue.context[0x1b3] = 2;
+        queue.context[0x1b4] = 2;
+        return queue;
+    };
+    const auto requireOneSample = [](const AgcDriver::QueueState& queue, const std::string& what) {
+        const auto state = DecodeState(queue);
+        Require(state.samples == 1 && state.colors.size() == 1 && state.colors[0].samples == 1 && !state.depth, what + " was not drawn as one sample");
+        Require(!state.customSampleLocations && !state.sampleLocationGrid && !state.perSampleShading && state.sampleLocations == decltype(state.sampleLocations){}, what + " kept the multisampled rasterizer's sample state");
+        const auto rejection = DrawRejection(queue, false);
+        Require(rejection.empty(), "the precheck refused " + what + ": " + rejection);
+    };
+    auto queue = drawC();
+    requireOneSample(queue, "PPSA18216's draw C (a one-sample color target under a 4x PA_SC_AA_CONFIG without MSAA_ENABLE)");
+    auto reference = drawC(0);
+    const auto state = DecodeState(queue);
+    const auto expected = DecodeState(reference);
+    Require(state.samples == expected.samples && state.customSampleLocations == expected.customSampleLocations && state.sampleLocations == expected.sampleLocations && state.perSampleShading == expected.perSampleShading && state.colors[0].format == expected.colors[0].format, "draw C decoded differently from the same draw with a one-sample PA_SC_AA_CONFIG");
+    for (const auto config : {0x00100001u, 0x00306003u}) requireOneSample(drawC(config), "a one-sample color target under a 2x or 8x PA_SC_AA_CONFIG without MSAA_ENABLE");
+    queue = drawC();
+    queue.context[0x302] = 0xae62e62a;
+    requireOneSample(queue, "a one-sample color target under a 4x pattern that varies between pixels");
+    for (const auto input : {ShaderRecompiler::PixelInput::PerspectiveSample, ShaderRecompiler::PixelInput::PerspectiveCentroid, ShaderRecompiler::PixelInput::LinearSample, ShaderRecompiler::PixelInput::LinearCentroid}) {
+        queue = drawC();
+        queue.context[0x1b3] = queue.context[0x1b4] = 2u | ShaderRecompiler::PixelInputBit(input);
+        requireOneSample(queue, "draw C with sample or centroid inputs");
+    }
+    queue = drawC();
+    queue.context[0x1b3] |= ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::Ancillary);
+    requireOneSample(queue, "draw C with an enabled but unaddressed ANCILLARY input");
+    constexpr std::string_view refused = "a one-sample color target under a multisampled rasterizer without MSAA_ENABLE is unsupported with PS_ITER_SAMPLE, a sample index or coverage input, or a sample-mask export";
+    for (const auto input : {ShaderRecompiler::PixelInput::Ancillary, ShaderRecompiler::PixelInput::SampleCoverage}) {
+        queue = drawC();
+        queue.context[0x1b3] = queue.context[0x1b4] = 2u | ShaderRecompiler::PixelInputBit(input);
+        expectFailure([&] { DecodeState(queue); }, refused);
+    }
+    queue = drawC();
+    queue.context[0x293] = 0x10000u;
+    expectFailure([&] { DecodeState(queue); }, refused);
+    queue = drawC();
+    queue.context[0x1c4] = 9;
+    queue.context[0x203] |= 0x100u;
+    expectFailure([&] { DecodeState(queue); }, refused);
+    queue = drawC();
+    queue.context[0x2dc] = 0x0000aa01u;
+    expectFailure([&] { DecodeState(queue); }, "without MSAA_ENABLE are unsupported for points, lines");
+    queue = drawC();
+    queue.userConfig[0x242] = 2;
+    expectFailure([&] { DecodeState(queue); }, "without MSAA_ENABLE are unsupported for points, lines");
+    const auto twoTargets = [&](std::uint32_t first, std::uint32_t second) {
+        auto pair = drawC();
+        for (const auto offset : {0x318u, 0x31bu, 0x31cu}) pair.context[offset + 0xfu] = pair.context.at(offset);
+        for (const auto offset : {0x390u, 0x3b0u, 0x3b8u}) pair.context[offset + 1u] = pair.context.at(offset);
+        pair.context[0x31d] = first;
+        pair.context[0x32c] = second;
+        pair.context[0x1c5] = 0x99u;
+        pair.context[0x8e] = pair.context[0x8f] = 0xffu;
+        pair.context[0x1e1] = 0;
+        return pair;
+    };
+    queue = twoTargets(0, 0);
+    Require(DecodeState(queue).samples == 1 && DecodeState(queue).colors.size() == 2, "two one-sample color targets under a 4x PA_SC_AA_CONFIG without MSAA_ENABLE were not drawn as one sample");
+    for (const auto [first, second] : {std::pair{0u, 0x12000u}, std::pair{0x12000u, 0u}}) {
+        queue = twoTargets(first, second);
+        expectFailure([&] { DecodeState(queue); }, "a color target's sample count differs from the rasterizer's");
+    }
+    queue = drawC();
+    queue.context[0x293] = 0;
+    queue.context[0x0] = 0;
+    queue.context[0x002] = 0;
+    queue.context[0x007] = (3u << 16u) | 63u;
+    queue.context[0x00a] = 0;
+    queue.context[0x00b] = 0;
+    queue.context[0x011] = 0x20000180;
+    for (const auto offset : {0x012u, 0x014u}) queue.context[offset] = 0x100;
+    queue.context[0x200] = 0x16;
+    expectFailure([&] { DecodeState(queue); }, "depth target");
+}
+
 void MsaaEnableSingleSampleTests() {
     using AgcDriver::Graphics::DecodeState;
     using AgcDriver::Graphics::DrawRejection;
@@ -7915,6 +8006,7 @@ int main(int argc, char** argv) {
         MsaaEnableSingleSampleTests();
         clipDistanceTests();
         framebufferLayerTests();
+        msaaEnableClearOneSampleTargetTests();
         UnwrittenSampleLocationTests();
         quadPixelMaskTests();
         ShaderStageTests();
