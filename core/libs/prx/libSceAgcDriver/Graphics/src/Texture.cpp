@@ -3222,6 +3222,15 @@ bool StorageTexture::keptAtUnwatchHolds(std::uint64_t from, std::uint32_t unit) 
     return found != keptAtUnwatch.end() && layerOriginal[unit] && found->second == layerGeneration[unit];
 }
 
+void StorageTexture::forgetSavedOver(std::uint64_t address, std::size_t bytes) {
+    // Only these units' bytes changed under the saved copy. Units outside keep it: results still
+    // pending there (the flush before the fill or copy stored only the units it overlaps) are
+    // compared with it at their store when the memory is outside the write watch.
+    for (std::uint32_t unit = 0; unit < trackedLayers; ++unit) {
+        if (layerBegin(unit) < address + bytes && address < layerBegin(unit) + layerBytes(unit)) layerOriginal[unit] = false;
+    }
+}
+
 void StorageTexture::saveBeforeUnwatch() {
     std::vector<bool> units(trackedLayers, false);
     for (std::uint32_t unit = 0; unit < trackedLayers; ++unit) units[unit] = layerPending[unit] && !layerOriginal[unit] && layerGeneration[unit] != 0;
@@ -3894,7 +3903,7 @@ bool StorageTexture::FillClear(std::span<const std::uint32_t, 4> pattern, std::u
         std::lock_guard lock(live.mutex);
         for (auto* texture : live.textures) {
             if (texture == this || texture->released || !texture->overlaps(begin, bytes)) continue;
-            texture->layerOriginal.assign(texture->trackedLayers, false);
+            texture->forgetSavedOver(begin, bytes);
             if (texture->descriptor.dccAddress != 0) aliasedKeys = true;
         }
     }
@@ -4028,7 +4037,7 @@ bool StorageTexture::CopyFrom(StorageTexture& source, const char*& refusal) {
         auto& live = Live();
         std::lock_guard lock(live.mutex);
         for (auto* texture : live.textures) {
-            if (texture != this && !texture->released && texture->overlaps(descriptor.baseAddress, static_cast<std::size_t>(guestBytes))) texture->layerOriginal.assign(texture->trackedLayers, false);
+            if (texture != this && !texture->released && texture->overlaps(descriptor.baseAddress, static_cast<std::size_t>(guestBytes))) texture->forgetSavedOver(descriptor.baseAddress, static_cast<std::size_t>(guestBytes));
         }
     }
     GuestMemory::MarkWritten(descriptor.baseAddress, static_cast<std::size_t>(guestBytes));

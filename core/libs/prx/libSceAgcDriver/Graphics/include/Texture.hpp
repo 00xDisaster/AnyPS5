@@ -369,6 +369,9 @@ private:
     void saveBeforeUnwatch();
     void forgetKeptAtUnwatch(std::uint32_t unit);
     bool keptAtUnwatchHolds(std::uint64_t from, std::uint32_t unit) const;
+    // Drops the saved guest bytes of the units over [address, address + bytes) (another image's fill
+    // or copy supersedes them there); the other units' bytes stay valid.
+    void forgetSavedOver(std::uint64_t address, std::size_t bytes);
     bool guestBytesSettled() const;
     // Tracked units as 64 KiB write-stamp blocks (`blockUnits`: a thin tiled surface at a 64 KiB
     // aligned base; APS5_NO_BLOCK_TRACKING=1 tracks array layers as above instead): a fill of one
