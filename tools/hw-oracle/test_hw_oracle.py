@@ -289,7 +289,7 @@ class TargetOverrideTests(unittest.TestCase):
                 "with Path(__file__).with_name('probes.txt').open('a', encoding='utf-8') as log:\n"
                 "    log.write(visible + '\\n')\n"
                 "print({'0': 'gfx1030', '1': 'gfx1100', 'unset': 'gfx900'}[visible])\n",
-                encoding="utf-8", newline="\n")
+                encoding="utf-8")
             binary = root / ("oracle.cmd" if os.name == "nt" else "oracle")
             if os.name == "nt":
                 binary.write_text(f'@"{sys.executable}" "{runner}" %*\n', encoding="utf-8")
