@@ -206,6 +206,7 @@ static std::int64_t NativePositionedTransfer(int descriptor, void* buf, std::siz
         const auto result = File::PwriteSharedMemory_nid_no_patch(descriptor, buf, nbytes, offset);
         if (result != -2) return result;
     }
+    const auto positioned = File::LockPositionedTransfer(descriptor);
     const auto handle = reinterpret_cast<HANDLE>(WithoutParameterHandler([descriptor] { return ::_get_osfhandle(descriptor); }));
     if (handle == INVALID_HANDLE_VALUE) {
         errno = EBADF;
@@ -580,6 +581,9 @@ int APS5_VABI close_nid_postfix(int d) {
         return -1;
     }
     if (GuestSockets::IsOpen(d)) return GuestSockets::Close(d);
+#ifdef _WIN32
+    const auto positioned = File::LockPositionedTransfer(d);
+#endif
     EqueueDescriptorClosed(d);
     File::ForgetRandomDevice(d);
     File::ForgetDescriptor(d);
