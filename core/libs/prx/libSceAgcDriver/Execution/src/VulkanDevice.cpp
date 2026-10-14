@@ -2474,6 +2474,7 @@ void VulkanDevice::setHdrMetadata() {
     metadata.maxContentLightLevel = PqToSdrWhiteNits(host);
     metadata.maxFrameAverageLightLevel = std::min(host.display.maxFullFrameLuminance, metadata.maxContentLightLevel);
     state->DeviceFunction<PFN_vkSetHdrMetadataEXT>("vkSetHdrMetadataEXT")(state->device, 1, &state->swapchain, &metadata);
+    std::fprintf(stderr, "[videoout] HDR metadata: mastering %.1f to %.4f nits, MaxCLL %.1f nits, MaxFALL %.1f nits\n", metadata.maxLuminance, metadata.minLuminance, metadata.maxContentLightLevel, metadata.maxFrameAverageLightLevel);
 }
 
 void VulkanDevice::useSurfaceFormat(VkSurfaceFormatKHR format) {

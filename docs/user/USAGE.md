@@ -156,7 +156,7 @@ Do not disable Dozen if it is the only Vulkan driver available; the application 
 
 ### HDR output
 
-Titles see HDR output when the window's Vulkan surface offers an HDR10 (`VK_COLOR_SPACE_HDR10_ST2084_EXT`) swapchain in a 10-bit format, the instance has `VK_EXT_swapchain_colorspace` and the device `VK_EXT_hdr_metadata`. On Windows the monitor showing the window must also run in HDR mode (Settings > Display > Use HDR); its luminance comes from DXGI. Other hosts and a monitor that reports no peak luminance are taken as 1000 nits peak and full-frame, 0 nits black. A title's BT.2100 PQ display buffers then reach the display unchanged; without HDR output they are converted to SDR.
+HDR output is available on Windows only. Titles see it when the monitor showing the window runs in HDR mode (Settings > Display > Use HDR), the window's Vulkan surface offers an HDR10 (`VK_COLOR_SPACE_HDR10_ST2084_EXT`) swapchain in a 10-bit format, the instance has `VK_EXT_swapchain_colorspace` and the device `VK_EXT_hdr_metadata`. The monitor's luminance comes from DXGI; a monitor that reports no peak luminance is taken as 1000 nits peak and full-frame, 0 nits black. On Linux and other hosts the output is always SDR, because the surface's formats do not show whether the display is in HDR. A title's BT.2100 PQ display buffers then reach the display unchanged; without HDR output they are converted to SDR.
 
 ### Storing GPU results at each flip
 

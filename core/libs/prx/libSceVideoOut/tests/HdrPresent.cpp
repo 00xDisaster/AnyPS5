@@ -147,6 +147,9 @@ int run() {
         check(!AgcDriverPresentingHdr10_nid_postfix(), "the SDR buffer did not bring the SDR swapchain back");
         present(0);
         check(AgcDriverPresentingHdr10_nid_postfix(), "the HDR10 swapchain did not come back for a PQ buffer");
+        AgcDriverSetHostDisplayHdr_nid_postfix(AgcDriver::DisplayHdrFromOutput(true, 600.0f, 0.05f, 350.0f));
+        present(0);
+        check(AgcDriverPresentingHdr10_nid_postfix() && AgcDriver::CurrentHostHdr().display.maxLuminance == 600.0f, "a new monitor luminance left the HDR10 swapchain");
         std::printf("HDR10 presentation passed (peak %.1f nits)\n", host.display.maxLuminance);
     } else {
         std::printf("HDR output is unavailable on this host (display in HDR: %s, surface offers HDR10: %s): HDR10 presentation not exercised\n", host.display.hdr ? "yes" : "no", host.surfaceHdr10 ? "yes" : "no");

@@ -82,7 +82,7 @@ void HostHdrProbe::Poll(SDL_Window* window) {
     return;
 #else
     if (published) return;
-    AgcDriverSetHostDisplayHdr_nid_postfix(AgcDriver::UndescribedHdrDisplay);
+    AgcDriverSetHostDisplayHdr_nid_postfix({});
 #endif
     published = true;
 }

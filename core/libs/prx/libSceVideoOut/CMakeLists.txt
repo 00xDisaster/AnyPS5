@@ -180,6 +180,18 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 
+    add_test_executable(video_out_hdr_probe_tests tests/HdrProbe.cpp)
+    target_include_directories(video_out_hdr_probe_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_SDL2_INCLUDE_DIR})
+    target_link_libraries(video_out_hdr_probe_tests PRIVATE libSceVideoOut libSceAgcDriver libc SDL2-static)
+    set_target_properties(video_out_hdr_probe_tests PROPERTIES CXX_EXTENSIONS OFF)
+    configure_windows_unwind(video_out_hdr_probe_tests)
+    add_test(NAME video_out_hdr_probe COMMAND video_out_hdr_probe_tests)
+    set_tests_properties(video_out_hdr_probe PROPERTIES TIMEOUT 20 SKIP_RETURN_CODE 77 ENVIRONMENT "SDL_VIDEODRIVER=${ANYPS5_VIDEO_OUT_TEST_DRIVER}")
+    if(WIN32)
+        set_tests_properties(video_out_hdr_probe PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+
     add_test_executable(video_out_hdr_present_tests tests/HdrPresent.cpp)
     target_include_directories(video_out_hdr_present_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_SDL2_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
     target_link_libraries(video_out_hdr_present_tests PRIVATE libSceVideoOut libSceAgcDriver libkernel libc)
