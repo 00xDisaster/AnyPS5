@@ -120,7 +120,7 @@ foreach(agcPresentationStage IN ITEMS Vert Frag)
             COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcPresentationShaderSpv}" "${agcPresentationShaderSource}"
             COMMAND ${CMAKE_COMMAND} -DINPUT=${agcPresentationShaderSpv} -DOUTPUT=${agcPresentationShaderHeader}
             -DSYMBOL=PRESENTATION_PASS_${agcPresentationSymbol}_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
-            DEPENDS "${agcPresentationShaderSource}" glslang-standalone
+            DEPENDS "${agcPresentationShaderSource}" "${CMAKE_CURRENT_SOURCE_DIR}/Graphics/shaders/PqToSdr.glsl" glslang-standalone
             VERBATIM
     )
     list(APPEND agcPresentationShaderHeaders ${agcPresentationShaderHeader})
