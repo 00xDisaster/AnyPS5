@@ -345,7 +345,7 @@ void reportTables() {
         static_cast<unsigned long long>(counters.narrowed.exchange(0, std::memory_order_relaxed)), static_cast<unsigned long long>(counters.narrowSkipped.exchange(0, std::memory_order_relaxed)), static_cast<double>(counters.nanoseconds.exchange(0, std::memory_order_relaxed)) / 1e6);
 }
 
-enum class RecordState : std::uint8_t { OutsideDomain, Read, Unmapped };
+enum class RecordState : std::uint8_t { OutsideDomain, Read, Unmapped, Carried };
 
 struct ColumnRecords {
     std::uint64_t base = 0;
@@ -643,6 +643,10 @@ private:
         for (std::uint32_t record = 0; record < records.keys; record++) {
             if (records.states[record] != RecordState::Read) continue;
             const auto offset = column.addend + record * column.stride;
+            if (offset >= column.foldedAddend && offset > 0xffffffffu - column.foldedCarry) {
+                records.states[record] = RecordState::Carried;
+                continue;
+            }
             const auto head = locate(offset, column.offset);
             const auto tail = locate(offset, column.offset + last);
             if (head.has_value() && tail.has_value() && (*head & 3u) == 0u && *tail > *head && *tail - *head == last && wholeAccessible(*head) && wholeAccessible(*tail)) {
@@ -729,6 +733,10 @@ private:
                 case RecordState::Unmapped:
                     out.codes[key] = ImageTableAbi::PoisonCode(static_cast<std::uint32_t>(PoisonReason::Unmapped));
                     counters.poison[static_cast<std::size_t>(PoisonReason::Unmapped)].fetch_add(1, std::memory_order_relaxed);
+                    break;
+                case RecordState::Carried:
+                    out.codes[key] = ImageTableAbi::PoisonCode(static_cast<std::uint32_t>(PoisonReason::OffsetCarry));
+                    counters.poison[static_cast<std::size_t>(PoisonReason::OffsetCarry)].fetch_add(1, std::memory_order_relaxed);
                     break;
             }
             trace.poison++;

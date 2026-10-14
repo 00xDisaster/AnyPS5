@@ -1648,6 +1648,57 @@ void verifyPointerImageTable() {
 #endif
 }
 
+void verifyPointerTableOffsetCarry() {
+    using namespace ShaderRecompiler;
+    namespace Abi = ImageTableAbi;
+    constexpr std::size_t Low = 0x10000;
+    constexpr std::uint64_t High = 0xffff0000ull;
+    constexpr std::size_t HighBytes = 0x20000;
+    constexpr std::uint64_t Reserved = High + HighBytes;
+    static TableTexture textures[2];
+    void* block = nullptr;
+#ifdef _WIN32
+    block = VirtualAlloc(nullptr, static_cast<SIZE_T>(Reserved), MEM_RESERVE, PAGE_NOACCESS);
+    require(block != nullptr && VirtualAlloc(block, Low, MEM_COMMIT, PAGE_READWRITE) == block && VirtualAlloc(static_cast<std::byte*>(block) + High, HighBytes, MEM_COMMIT, PAGE_READWRITE) == static_cast<std::byte*>(block) + High, "pointer table offset carry: cannot map the root");
+#else
+    block = mmap(nullptr, Reserved, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    require(block != MAP_FAILED && mprotect(block, Low, PROT_READ | PROT_WRITE) == 0 && mprotect(static_cast<std::byte*>(block) + High, HighBytes, PROT_READ | PROT_WRITE) == 0, "pointer table offset carry: cannot map the root");
+#endif
+    auto* root = static_cast<std::uint32_t*>(block);
+    const auto base = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(root));
+    static std::array<std::uint32_t, 8> keys{};
+    static std::array<std::uint32_t, 4> output{};
+    const auto keysV = TableV(keys.data(), 0u, static_cast<std::uint32_t>(sizeof(keys)));
+    const auto outputV = TableV(output.data(), 0u, static_cast<std::uint32_t>(sizeof(output)));
+    std::copy(keysV.begin(), keysV.end(), root);
+    std::copy(outputV.begin(), outputV.end(), root + 4);
+    const auto at = [&](std::uint64_t offset, std::array<std::uint32_t, 8> words) {
+        std::copy(words.begin(), words.end(), root + offset / 4u);
+    };
+    at(0x100000010ull, TableT(textures[0].bytes.data(), TableFormat8888UNorm, TableType2D));
+    at(0x50u, TableT(textures[1].bytes.data(), TableFormat32UInt, TableType2D));
+    const std::array<std::uint32_t, 2> userData{static_cast<std::uint32_t>(base), static_cast<std::uint32_t>(base >> 32u)};
+    const std::vector<std::uint32_t> code{0xf4080200u, 0xfa000000u, 0xf4080700u, 0xfa000010u, 0xf4080800u, 0xfa000020u, 0x7e200500u, 0x8f108210u, 0xf4200444u,
+        0x20000000u, 0x8711ff11u, 0x000000ffu, 0x8f128511u, 0x8113ff12u, 0xffffff10u, 0x8114ff12u, 0xffffff20u, 0xf4080900u, 0x26000040u, 0xf4080a00u,
+        0x28000040u, 0xf09c0f08u, 0x01090000u, 0xe0700000u, 0x80070000u, 0xbf810000u};
+    auto request = TableRequest(code, userData);
+    request.shader.codeAddress = 0x36000u;
+    const auto plan = GetResourcePlan(request);
+    require(plan->info.images.size() == 1u && plan->info.images[0].table == 0u, "pointer table offset carry: a T# read by two loads of its record was not planned as a table");
+    const auto& column = *plan->descriptorSources.at(plan->info.images[0].source).tableColumn;
+    require(column.address && column.stride == 32u && column.addend == 0xffffff10u && column.offset == 0x40u && column.maxKey == 0xffu && column.foldedAddend == 0xffffff10u && column.foldedCarry == 16u, "pointer table offset carry: the column is wrong");
+    const auto compiled = CompileTable(request);
+    const auto& snapshot = compiled.capture->snapshot.tables.tables.at(0);
+    require(snapshot.keys == 256u && snapshot.codes[7] == Abi::PoisonCode(static_cast<std::uint32_t>(Abi::PoisonReason::OffsetCarry)), "pointer table offset carry: the record whose second load wraps past 32 bits is not OffsetCarry poison");
+    require((snapshot.codes[6] & Abi::PoisonFlag) == 0u && (snapshot.codes[8] & Abi::PoisonFlag) == 0u && compiled.capture->snapshot.tables.words.at(snapshot.codes[6]).dwords[0] == root[0x100000010ull / 4u] && compiled.capture->snapshot.tables.words.at(snapshot.codes[8]).dwords[0] == root[0x50u / 4u] && root[0x100000010ull / 4u] != root[0x50u / 4u], "pointer table offset carry: the records on either side of the carry were not resolved");
+    require(!TableTouched(compiled.regions, root + 0x100000030ull / 4u, 0x20u), "pointer table offset carry: the record whose second load wraps was read");
+#ifdef _WIN32
+    VirtualFree(block, 0, MEM_RELEASE);
+#else
+    munmap(block, Reserved);
+#endif
+}
+
 void verifyDescriptorPhis() {
     using namespace ShaderRecompiler;
     constexpr std::uint32_t Format8888UNorm = 56;
@@ -4802,6 +4853,7 @@ int main(int argc, char** argv) {
             verifyImageTableRegistration();
             verifyScalarAddressRule();
             verifyPointerImageTable();
+            verifyPointerTableOffsetCarry();
             std::cout << "Image table keys, maps, records and registration passed\n";
             return 0;
         }
@@ -4825,6 +4877,7 @@ int main(int argc, char** argv) {
         verifyImageTableRegistration();
         verifyScalarAddressRule();
         verifyPointerImageTable();
+        verifyPointerTableOffsetCarry();
         verifyDescriptorPhis();
         verifyUniformTableImage();
         verifyLaneSelectedDescriptors();
