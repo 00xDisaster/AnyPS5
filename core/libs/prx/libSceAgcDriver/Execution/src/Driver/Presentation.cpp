@@ -72,6 +72,7 @@ void Driver::Present(const PresentationWindow& window, const DisplayBuffer* buff
             std::uint32_t drawableHeight = 0;
             window.getDrawableSize(window.context, &drawableWidth, &drawableHeight);
             presenting->Resize(drawableWidth, drawableHeight);
+            presenting->SelectDynamicRange(buffer);
             timing.Mark("resize");
             presentable = presenting->Presentable();
             if (buffer != nullptr) require(buffer->width == window.width && buffer->height == window.height, "display buffer extent differs from output");
