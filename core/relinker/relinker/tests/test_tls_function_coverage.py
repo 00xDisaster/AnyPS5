@@ -511,7 +511,7 @@ def add_alias(image, size, begin=0x1200):
 
 def main():
     groups = ("metadata", "padding", "register_loads", "displacement_bounds", "alu_execution",
-              "register_address_loads", "moved_branch", "rejected")
+              "register_address_loads", "moved_branch", "rejected", "gs_traps")
     groups += tuple(f"displacement_r{register}" for register in range(16) if register != 4)
     groups += tuple(f"alu_{name}" for name in ALU_READ)
     parser = argparse.ArgumentParser(description="Run Windows guest TLS function coverage fixtures")
@@ -751,6 +751,22 @@ def main():
             conflicting[232:344] = unwind[232:344]
             struct.pack_into("<H", conflicting, 56, 5)
             convert("conflicting-function-extents", conflicting, "Code analysis: conflicting function ranges")
+        if args.group in ("all", "gs_traps"):
+            for name, instruction in {
+                "gs-load-rcx": bytes.fromhex("65 48 8b 0c 25 78 03 00 00"),
+                "gs-load-r13": bytes.fromhex("65 4c 8b 2c 25 30 00 00 00"),
+                "gs-store": bytes.fromhex("65 48 89 04 25 30 00 00 00"),
+                "gs-alu": bytes.fromhex("65 48 33 04 25 28 00 00 00"),
+                "gs-short-register-address": bytes.fromhex("65 48 8b 00"),
+            }.items():
+                source = work / (name + ".elf")
+                output = source.with_suffix(".exe")
+                source.write_bytes(make_image("register", "unwind", body=instruction + b"\xc3"))
+                result = subprocess.run([str(relinker), "--skip-sce-module", "--windows", str(source), str(output)],
+                                        capture_output=True, text=True, timeout=30)
+                assert result.returncode == 0, (name, result.stdout, result.stderr)
+                patched = pe_bytes_at(output.read_bytes(), 0x11240, len(instruction) + 1)
+                assert patched == b"\x0f\x0b" + b"\x90" * (len(instruction) - 2) + b"\xc3", (name, patched.hex())
     print(f"TLS function coverage integration tests passed: {args.group}")
 
 
