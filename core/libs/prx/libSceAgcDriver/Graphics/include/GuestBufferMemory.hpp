@@ -15,6 +15,10 @@
 #include <utility>
 #include <vector>
 
+namespace AgcDriver::GuestMemory {
+struct Commitment;
+}
+
 namespace AgcDriver::Graphics {
 
 void ShutdownGuestBufferWorkers();
@@ -46,6 +50,7 @@ struct HostImport {
     std::uint64_t pinnedBytes = 0;
     std::uint32_t memoryType = std::numeric_limits<std::uint32_t>::max();
     std::uint64_t backingSerial = 0;
+    mutable std::uint64_t spaceSerial = 0;
 };
 
 inline VkDeviceSize HostImportOffset(const HostImport& import, std::uint64_t address) {
@@ -412,7 +417,7 @@ private:
         std::uint64_t end;
         bool writable;
     };
-    void addCopiedRange(const CopiedRange& range);
+    void addCopiedRange(const CopiedRange& range, const GuestMemory::Commitment* known = nullptr);
     // The BDA table entry of an uploaded region.
     static ShaderRecompiler::BdaAbi::Range addressRange(const Region& region);
     static std::uint64_t servedEnd(const Region& region);
