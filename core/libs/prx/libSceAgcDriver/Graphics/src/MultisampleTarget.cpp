@@ -333,8 +333,8 @@ MultisampleTarget& createFilled(const Context& context, const GuestTextureResour
     VkClearColorValue clear{};
     if (!MultisampledFillClearColor(use, value, clear)) refuse(std::string("whose color memory ") + range + " holds " + held + ", which has no exact clear value in its format");
     targets().push_back(std::make_unique<MultisampleTarget>(context, use));
-    guard(context, use);
     auto& created = *targets().back();
+    guard(context, use, created.active);
     created.colorFill.NoteFill(use.address, static_cast<std::size_t>(bytes), value);
     return created;
 }
