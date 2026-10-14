@@ -202,7 +202,15 @@ void Driver::execute(const Submission& submission) {
         recent.Record(cursor);
         if (header == RenderingWaitPacketHeader) {
             timed(&WorkerProfile::waitMs, [&] { submission.renderingWaits.at(cursor)->Wait(); });
-        } else if (header == FlipPacketHeader) {
+        } else if (submission.flips.contains(cursor)) {
+            if (opcode == 0x49) {
+                if (!wroteOnGpu) {
+                    Pm4::Execute(packet, queue);
+                    if (const auto label = Pm4::DecodeLabelWrite(packet)) noteLabelStore(label->address, label->Bytes(), ++eventSerial, submission.queue);
+                }
+                if (endOfPipeInterrupt && !interruptDeferred) AgcDriverDeliverEopInterrupt(submission.queue);
+            }
+            if (deviceUse.owns_lock()) deviceUse.unlock();
             CheckFailure();
             std::uint64_t batchesAtFlip = 0, unsignaledAtFlip = 0;
             bool flipInterruptDeferred = false;
