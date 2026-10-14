@@ -10,6 +10,7 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace Elfpatcher::Linux {
 
@@ -171,7 +172,7 @@ void LinuxElfPatcher::_appendTrampoline(
 }
 
 std::vector<std::uint8_t> LinuxElfPatcher::Patch(
-    const std::vector<std::uint8_t>& sourceElf,
+    std::vector<std::uint8_t> sourceElf,
     const std::vector<Domain::ProgramHeader>& originalHeaders,
     const Domain::SysVDynamicSection& dynSection,
     const std::uint64_t originalPltGotVaddr,
@@ -195,7 +196,7 @@ std::vector<std::uint8_t> LinuxElfPatcher::Patch(
         return relocations ? RebasedRelocations(data, base) : RebasedSymbols(data, base);
     };
 
-    std::vector<std::uint8_t> buf = sourceElf;
+    std::vector<std::uint8_t> buf = std::move(sourceElf);
 
     const std::uint32_t type = _fixedBase ? ET_EXEC : ET_DYN;
     buf[kEhdrOsAbiOffset] = 0;
