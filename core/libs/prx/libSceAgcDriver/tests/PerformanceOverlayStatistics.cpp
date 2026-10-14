@@ -312,9 +312,11 @@ void packetStatisticsTests() {
     require(near(statistics.GpuMsPerFrame(), 4.0) && near(statistics.DriverMsPerFrame(), 1.5), "the time counters changed with the packet counters");
     auto stalled = statistics;
     auto counters = stalled.Latest();
+    counters.draws += 900;
+    counters.dispatches += 40;
     counters.pipelines += 7;
     stalled.AddPresent(Start + 3000ms, counters);
-    require(stalled.DrawsPerFrame() == 0 && stalled.PipelinesInWindow() == 0 && stalled.Latest().pipelines == 1510, "a present alone in its second reads as packets or pipelines of that second");
+    require(near(stalled.DrawsPerFrame(), 900) && near(stalled.DispatchesPerFrame(), 40) && stalled.PipelinesInWindow() == 7 && stalled.Latest().pipelines == 1510, "a present alone in its second reads as " + std::to_string(stalled.DrawsPerFrame()) + " draws, " + std::to_string(stalled.DispatchesPerFrame()) + " dispatches and " + std::to_string(stalled.PipelinesInWindow()) + " pipelines, not the last frame's 900, 40 and 7");
     auto restarted = statistics;
     counters = restarted.Latest();
     counters.draws = 3;

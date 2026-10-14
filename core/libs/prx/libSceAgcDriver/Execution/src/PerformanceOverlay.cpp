@@ -261,7 +261,7 @@ double OverlayStatistics::DispatchesPerFrame() const {
 
 std::uint64_t OverlayStatistics::PipelinesInWindow() const {
     if (window.empty()) return 0;
-    const auto first = window.front().counters.pipelines;
+    const auto first = window.size() < 2 && previous ? previous->counters.pipelines : window.front().counters.pipelines;
     const auto last = window.back().counters.pipelines;
     return last >= first ? last - first : 0;
 }
