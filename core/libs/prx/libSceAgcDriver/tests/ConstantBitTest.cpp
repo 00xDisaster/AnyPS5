@@ -45,7 +45,7 @@ bool reversesTo(std::uint32_t word, std::uint32_t expected) {
     return result->HasImmediate() && result->ImmediateBool();
 }
 
-bool vertexProjection(std::uint32_t low, std::uint32_t hostSubgroup, std::uint32_t version, bool expected, bool directLane = false, IrShaderStage stage = IrShaderStage::Vertex) {
+bool vertexProjection(std::uint32_t low, std::uint32_t hostSubgroup, std::uint32_t version, bool expected, bool directLane = false, IrShaderStage stage = IrShaderStage::Vertex, bool ballotWords = false) {
     IrProgram program;
     program.Resources().stage = stage;
     program.SetWaveSize(64u);
@@ -56,7 +56,14 @@ bool vertexProjection(std::uint32_t low, std::uint32_t hostSubgroup, std::uint32
     builder.SetInsertionPoint(block);
     auto& lane = builder.Emit(IrOpcode::LaneId, IrType::U32, {});
     auto& half = builder.Emit(IrOpcode::ULessThan32, IrType::Bool, {&lane, &builder.Constant(32u)});
-    auto& word = builder.Emit(IrOpcode::SelectU32, IrType::U32, {&half, &builder.Constant(low), &builder.Constant(0u)});
+    IrValue* lowWord = &builder.Constant(low);
+    IrValue* highWord = &builder.Constant(0u);
+    if (ballotWords) {
+        auto& entry = builder.Emit(IrOpcode::Ballot, IrType::U32x4, {&builder.ConstantBool(true)});
+        lowWord = &builder.Emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&entry, &builder.Constant(0u)});
+        highWord = &builder.Emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&entry, &builder.Constant(1u)});
+    }
+    auto& word = builder.Emit(IrOpcode::SelectU32, IrType::U32, {&half, lowWord, highWord});
     auto& amount = builder.Emit(IrOpcode::BitwiseAnd32, IrType::U32, {&lane, &builder.Constant(31u)});
     auto& shifted = builder.Emit(IrOpcode::ShiftRightLogical32, IrType::U32, {&word, &amount});
     auto& bit = builder.Emit(IrOpcode::BitwiseAnd32, IrType::U32, {&shifted, &builder.Constant(1u)});
@@ -66,10 +73,10 @@ bool vertexProjection(std::uint32_t low, std::uint32_t hostSubgroup, std::uint32
     static_cast<void>(builder.Emit(IrOpcode::Return, IrType::Void, {}));
     ConstantFolder folder;
     const bool folded = folder.FoldVertexLaneBounds(program, hostSubgroup, version);
-    const bool shouldFold = stage == IrShaderStage::Vertex && hostSubgroup == 32u && version >= 0x00010000u && version < 0x00010600u;
+    const bool shouldFold = !ballotWords && stage == IrShaderStage::Vertex && hostSubgroup == 32u && version >= 0x00010000u && version < 0x00010600u;
     if (folded != shouldFold) return false;
-    if (!shouldFold && half.Opcode() != IrOpcode::ULessThan32) return false;
-    if (shouldFold && (!half.Resolve()->HasImmediate() || !half.Resolve()->ImmediateBool())) return false;
+    if (!shouldFold && (word.Opcode() != IrOpcode::SelectU32 || word.Argument(0)->Resolve() != &half || half.Opcode() != IrOpcode::ULessThan32)) return false;
+    if (shouldFold && (!word.Resolve()->HasImmediate() || word.Resolve()->ImmediateU32() != low)) return false;
     folder.Fold(program);
     DeadCodeEliminator{}.RemoveIdentities(program);
     DeadCodeEliminator{}.Eliminate(program);
@@ -98,6 +105,7 @@ int main() {
         passed &= run("a single set bit remains dependent on the vertex lane", vertexProjection(1u, 32u, 0x00010300u, false));
         passed &= run("a partial mask remains dependent on the vertex lane", vertexProjection(0x0000ffffu, 32u, 0x00010300u, false));
         passed &= run("a real vertex lane output stays observable after folding its guard", vertexProjection(0xffffffffu, 32u, 0x00010300u, false, true));
+        passed &= run("a lane word selected from ballot words keeps its lower-half test", vertexProjection(0xffffffffu, 32u, 0x00010300u, false, false, IrShaderStage::Vertex, true));
         passed &= run("a 64-lane subgroup keeps a lower-half export guard", vertexProjection(0xffffffffu, 64u, 0x00010300u, false));
         passed &= run("an unknown subgroup keeps a lower-half export guard", vertexProjection(0xffffffffu, 0u, 0x00010300u, false));
         passed &= run("a single-lane request does not borrow the physical 32-lane proof", vertexProjection(0xffffffffu, 1u, 0x00010300u, false));
