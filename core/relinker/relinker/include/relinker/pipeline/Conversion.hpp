@@ -22,6 +22,7 @@ struct ConversionOptions {
     bool TraceImports = false;
     std::optional<std::uint64_t> WindowsFixedBase;
     bool WindowsDiagnostics = false;
+    std::optional<std::uint64_t> LinuxFixedBase;
     std::string RunPath = "$ORIGIN/libs";
     std::set<std::string> ExcludedModules;
 };
