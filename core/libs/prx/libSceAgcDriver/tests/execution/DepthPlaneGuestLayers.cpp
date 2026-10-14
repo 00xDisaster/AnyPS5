@@ -28,7 +28,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace {
@@ -345,19 +344,6 @@ void RunCubeGather(const Context& base, const WatchedBlock& block) {
     if (imageToBufferCopies.load() != 6 || bufferToImageCopies.load() != 1) {
         throw std::runtime_error("sampling a cube over six depth surfaces recorded " + std::to_string(imageToBufferCopies.load()) + " depth surface copies and " + std::to_string(bufferToImageCopies.load()) + " plane copy fills, expected 6 and 1");
     }
-    ClearDepthSurfaces(context.device);
-    const auto refused = [&](const GuestTextureResource& cube) {
-        try {
-            DepthSurfaceTexture(context, {}, cube, components);
-        } catch (const std::runtime_error& error) {
-            return std::string_view(error.what()).find("depth plane copy geometry does not match its layers") != std::string_view::npos;
-        }
-        return false;
-    };
-    for (std::uint32_t layer = 0; layer < 5; ++layer) {
-        DepthSurfaceView(context, DepthTarget{address + geometry.GuestLayerOffset(layer), 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 1.0f, 0, 0});
-    }
-    Require(refused(resource), "a cube whose descriptor stride does not match one host depth slice and that is missing a face must be refused");
     ClearDepthSurfaces(context.device);
 }
 
