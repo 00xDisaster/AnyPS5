@@ -73,6 +73,11 @@ struct DrawEntry {
 
 using DrawDataCandidates = std::vector<std::vector<std::pair<std::shared_ptr<DispatchVariant>, std::vector<ShaderRecompiler::MemoryRegion>>>>;
 
+struct StageDataHit {
+    std::vector<std::uint32_t> words;
+    std::shared_ptr<const ShaderRecompiler::RecompileResult> compiled;
+};
+
 enum class DrawMiss : std::size_t { FrontDiffering, FragmentDiffering, OtherDiffering, Layout, Gate, Stages, Count };
 
 struct DrawEntryCounters {
@@ -86,6 +91,7 @@ struct DrawEntryCounters {
     std::uint64_t absentNewRegisters = 0, absentUserWords = 0, absentEvicted = 0, absentNeverInserted = 0, evictions = 0;
     std::uint64_t differingSameRuns = 0, differingWords = 0, differingRunsChanged = 0;
     std::uint64_t dataHits = 0, dataStagesReused = 0, dataStagesCompiled = 0, dataVerified = 0;
+    std::uint64_t stageDataHits = 0, stageDataWords = 0, stageDataVerified = 0, stageDataInserts = 0, stageDataPositions = 0;
     std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
 };
 
@@ -106,6 +112,7 @@ enum class DrawVerdict { Drawn, Nothing, Rejected };
 
 struct StageCapture {
     std::shared_ptr<const ShaderRecompiler::RecompileResult> compiled;
+    std::shared_ptr<const ShaderRecompiler::ResourceCapture> capture;
     std::vector<ShaderRecompiler::MemoryRegion> regions;
     std::uint64_t forgetSerial = 0;
     std::uint32_t pushOffset = 0;
