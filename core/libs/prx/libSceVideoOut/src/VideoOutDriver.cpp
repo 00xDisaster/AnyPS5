@@ -24,6 +24,7 @@
 #include "prx/libSceVideoOut/include/FrameTimingLog.hpp"
 #endif
 #include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
+#include "prx/libSceAgcDriver/Execution/include/HostHdr.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Presentation.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
@@ -498,6 +499,20 @@ void VideoOutDriver::updateDisplayRefreshRate() {
     displayRefreshRate.store(mode.refresh_rate);
 }
 
+void VideoOutDriver::pollHostHdr() {
+    hdrProbe.Poll(window.Handle());
+    const auto generation = AgcDriver::CurrentHostHdr().generation;
+    if (generation == hdrGeneration) return;
+    hdrGeneration = generation;
+    std::lock_guard lock(mutex);
+    for (const auto& cfg : contexts) {
+        if (!cfg) continue;
+        std::lock_guard cfgLock(cfg->mutex);
+        if (!cfg->opened || cfg->closing || cfg->failure) continue;
+        triggerEvents(*cfg, VIDEO_OUT_EVENT_SET_MODE, reinterpret_cast<void*>(cfg->outputMode));
+    }
+}
+
 void VideoOutDriver::vblankEnd(std::uint64_t tick) {
     std::lock_guard lock(mutex);
     for (const auto& cfg : contexts) {
@@ -614,9 +629,12 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
     try {
         window.Ensure(VIDEO_OUT_DEFAULT_WIDTH, VIDEO_OUT_DEFAULT_HEIGHT);
         updateDisplayRefreshRate();
+        hdrProbe.Poll(window.Handle());
         const auto extensions = windowExtensions(window.Handle());
         AgcDriverAttachWindow_nid_postfix({window.Handle(), extensions, &createWindowSurface, &windowDrawableSize, VIDEO_OUT_DEFAULT_WIDTH, VIDEO_OUT_DEFAULT_HEIGHT, nullptr});
+        hdrGeneration = AgcDriver::CurrentHostHdr().generation;
     } catch (...) {
+        hdrProbe.Release();
         window.Destroy();
         started.set_exception(std::current_exception());
         return;
@@ -661,6 +679,7 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
             }
             padInput.Update();
             updateDisplayRefreshRate();
+            pollHostHdr();
             mouseInput.UpdateCapture(!padInput.MouseModeEnabled());
             if (current) {
                 require(current->timing != nullptr, "missing presentation timing");
@@ -724,6 +743,7 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
         std::lock_guard lock(flipQueue->mutex);
         if (!flipQueue->failure) flipQueue->failure = std::current_exception();
     }
+    hdrProbe.Release();
     window.Destroy();
 }
 
