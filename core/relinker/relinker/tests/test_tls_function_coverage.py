@@ -767,6 +767,17 @@ def main():
                 assert result.returncode == 0, (name, result.stdout, result.stderr)
                 patched = pe_bytes_at(output.read_bytes(), 0x11240, len(instruction) + 1)
                 assert patched == b"\x0f\x0b" + b"\x90" * (len(instruction) - 2) + b"\xc3", (name, patched.hex())
+            instruction = bytes.fromhex("65 48 8b 0c 25 78 03 00 00")
+            image = make_image("register", "unwind", body=instruction + b"\xc3")
+            struct.pack_into("<I", image, 176, 0)
+            source = work / "gs-without-pt-tls.elf"
+            output = source.with_suffix(".exe")
+            source.write_bytes(image)
+            result = subprocess.run([str(relinker), "--skip-sce-module", "--windows", str(source), str(output)],
+                                    capture_output=True, text=True, timeout=30)
+            assert result.returncode == 0, ("gs-without-pt-tls", result.stdout, result.stderr)
+            patched = pe_bytes_at(output.read_bytes(), 0x11240, len(instruction) + 1)
+            assert patched == b"\x0f\x0b" + b"\x90" * (len(instruction) - 2) + b"\xc3", ("gs-without-pt-tls", patched.hex())
     print(f"TLS function coverage integration tests passed: {args.group}")
 
 
