@@ -2471,6 +2471,11 @@ void multisampleTests() {
     queue.context[0x2dc] = 0x0000aa01u;
     expectFailure([&] { DecodeState(queue); }, "without MSAA_ENABLE are unsupported for points, lines, a depth target or alpha-to-coverage");
     queue = multisampled();
+    queue.context[0x292] = 2;
+    queue.context[0x302] = 0x44cc;
+    state = DecodeState(queue);
+    Require(state.customSampleLocations && !state.sampleLocationGrid, "a 2x target rasterized without MSAA_ENABLE kept the per-pixel sample location grid of its centred samples");
+    queue = multisampled();
     queue.context[0x2f8] |= 0x10;
     expectFailure([&] { DecodeState(queue); }, "coverage conversion");
     queue = multisampled();

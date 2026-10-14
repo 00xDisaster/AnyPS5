@@ -809,6 +809,7 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
         Require(filled && !result.depth && !result.alphaToCoverage, "multisampled targets rasterized without MSAA_ENABLE are unsupported for points, lines, a depth target or alpha-to-coverage");
         result.customSampleLocations = true;
         result.sampleLocations.fill(0);
+        result.sampleLocationGrid = false;
     }
     if (result.samples == 1 && (read(cx, 0x292) & 1u) != 0) {
         for (std::uint32_t pixel = 0; pixel < 4; ++pixel) static_cast<void>(read(cx, 0x2feu + pixel * 4u));
