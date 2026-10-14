@@ -190,6 +190,7 @@ F10 shows or hides a performance overlay over the presented image; `ANYPS5_OVERL
 
 | Line | Meaning |
 |------|---------|
+| `PROFILED` | The first line while `APS5_PROFILE_GPU=1` or `APS5_PROFILE_DRAW=1` is set. Those switches add timestamp queries to every batch and timers to every packet, so the numbers of such a run aren't comparable with an unprofiled one. |
 | `FPS` | Frames presented per second, over the last second. When the last second holds fewer than two presents (below 1 fps), the rate of the last frame instead, 1000 divided by its time in ms: a frame every 2 s shows `0.50`. Every present counts, including frames a title presents cleared, for example while it loads. |
 | `FRAME` | Time between the last two presented frames, in ms. |
 | graph | The last 120 frame times, the newest on the right. The full height is the longest of them or twice their average, whichever is larger. |

@@ -375,6 +375,7 @@ OverlayContent ComposeOverlay(const OverlayStatistics& statistics, bool gpu, boo
 
 OverlayContent ComposeOverlay(const OverlayStatistics& statistics, bool gpu, bool driver, const OverlayDetails& details) {
     OverlayContent content;
+    if (gpu || driver) content.above.push_back("PROFILED");
     content.above.push_back("FPS: " + FormatOverlayRate(statistics.Fps()));
     content.above.push_back("FRAME: " + FormatOverlayValue(statistics.LastFrameMs()) + " MS");
     content.frameTimes = statistics.FrameTimes();

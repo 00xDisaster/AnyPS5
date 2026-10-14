@@ -111,7 +111,7 @@ void lowRateTests() {
         require(near(slow.GpuMsPerFrame(), static_cast<double>(Gpu[i]) / 1e6) && near(slow.DriverMsPerFrame(), static_cast<double>(Driver[i]) / 1e6), "frame " + std::to_string(i + 1) + " every 2 s reads " + std::to_string(slow.GpuMsPerFrame()) + " ms of GPU and " + std::to_string(slow.DriverMsPerFrame()) + " ms of driver time, not its own");
     }
     const auto everyTwoSeconds = AgcDriver::ComposeOverlay(slow, true, true);
-    require(everyTwoSeconds.above[0] == "FPS: 0.50" && everyTwoSeconds.above[1] == "FRAME: 2000 MS", "a present every 2 s shows '" + everyTwoSeconds.above[0] + "' and '" + everyTwoSeconds.above[1] + "'");
+    require(everyTwoSeconds.above == std::vector<std::string>{"PROFILED", "FPS: 0.50", "FRAME: 2000 MS"}, "a present every 2 s shows " + std::to_string(everyTwoSeconds.above.size()) + " lines above the graph, the last '" + everyTwoSeconds.above.back() + "'");
     require(everyTwoSeconds.below[0] == "MIN/AVG/MAX: 2000/2000/2000" && everyTwoSeconds.below[1] == "GPU: 20.0 MS" && everyTwoSeconds.below[2] == "DRIVER: 8.0 MS", "a present every 2 s shows '" + everyTwoSeconds.below[0] + "', '" + everyTwoSeconds.below[1] + "' and '" + everyTwoSeconds.below[2] + "'");
 
     OverlayStatistics glacial;
@@ -119,7 +119,7 @@ void lowRateTests() {
     for (int i = 1; i <= 5; ++i) glacial.AddPresent(Start + i * 12s, static_cast<std::uint64_t>(i) * 250'000'000u, static_cast<std::uint64_t>(i) * 12'500'000'000u);
     require(near(glacial.Fps(), 1000.0 / 12000.0) && near(glacial.LastFrameMs(), 12000) && near(glacial.GpuMsPerFrame(), 250) && near(glacial.DriverMsPerFrame(), 12500), "a present every 12 s reads as " + std::to_string(glacial.Fps()) + " FPS, " + std::to_string(glacial.LastFrameMs()) + " ms, " + std::to_string(glacial.GpuMsPerFrame()) + " and " + std::to_string(glacial.DriverMsPerFrame()) + " ms");
     const auto everyTwelveSeconds = AgcDriver::ComposeOverlay(glacial, true, true);
-    require(everyTwelveSeconds.above[0] == "FPS: 0.08" && everyTwelveSeconds.above[1] == "FRAME: 9999 MS", "a present every 12 s shows '" + everyTwelveSeconds.above[0] + "' and '" + everyTwelveSeconds.above[1] + "'");
+    require(everyTwelveSeconds.above == std::vector<std::string>{"PROFILED", "FPS: 0.08", "FRAME: 9999 MS"}, "a present every 12 s shows " + std::to_string(everyTwelveSeconds.above.size()) + " lines above the graph, the last '" + everyTwelveSeconds.above.back() + "'");
     require(everyTwelveSeconds.below[0] == "MIN/AVG/MAX: 9999/9999/9999" && everyTwelveSeconds.below[1] == "GPU: 250 MS" && everyTwelveSeconds.below[2] == "DRIVER: 9999 MS", "a present every 12 s shows '" + everyTwelveSeconds.below[0] + "', '" + everyTwelveSeconds.below[1] + "' and '" + everyTwelveSeconds.below[2] + "'");
     require(everyTwelveSeconds.frameTimes == std::vector<double>(5, 12000.0), "the graph does not hold the five 12 s frames");
     const auto layout = AgcDriver::LayOutOverlay(everyTwelveSeconds, {1920, 1080}, OverlayCorner::TopLeft);
@@ -187,6 +187,9 @@ void composeTests() {
     require(plain.frameTimes.size() == 100, "the graph does not hold every frame time");
     const auto profiled = AgcDriver::ComposeOverlay(statistics, true, true);
     require(profiled.below.size() == 3 && profiled.below[1] == "GPU: 2.0 MS" && profiled.below[2] == "DRIVER: 0.5 MS", "the profiled lines read '" + profiled.below[1] + "' and '" + profiled.below[2] + "'");
+    std::vector<std::string> marked{"PROFILED"};
+    marked.insert(marked.end(), plain.above.begin(), plain.above.end());
+    require(profiled.above == marked && AgcDriver::ComposeOverlay(statistics, true, false).above == marked && AgcDriver::ComposeOverlay(statistics, false, true).above == marked, "a profiled panel does not start with PROFILED above the unprofiled lines: it starts with '" + profiled.above.front() + "'");
     require(AgcDriver::ComposeOverlay(statistics, true, false).below.size() == 2 && AgcDriver::ComposeOverlay(statistics, false, true).below[1].rfind("DRIVER", 0) == 0, "a line is shown without its source");
 }
 
