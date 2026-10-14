@@ -156,7 +156,7 @@ std::uint32_t TextureOf(std::uint32_t iteration, std::uint32_t key) {
     return key == Records - 1u - iteration ? Textures : (key + iteration) % Textures;
 }
 
-bool DecoratesNonUniform(const std::vector<std::uint32_t>& words) {
+bool DecoratesNonUniform(std::span<const std::uint32_t> words) {
     for (std::size_t index = 5u; index < words.size();) {
         const auto count = words[index] >> 16u;
         if (count == 0u) return false;
