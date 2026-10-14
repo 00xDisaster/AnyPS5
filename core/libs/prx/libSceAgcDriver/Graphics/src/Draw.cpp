@@ -53,6 +53,7 @@ std::uint64_t DrawRenderPassKey(const Context& context, const State& state, std:
     mix(state.samples);
     mix(state.customSampleLocations);
     if (state.customSampleLocations) {
+        mix(state.sampleLocationGrid);
         for (const auto location : state.sampleLocations) mix(location);
     }
     if (!context.provokingVertexModePerPipeline) mix(state.provokingVertexMode);
