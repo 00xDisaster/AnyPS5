@@ -6734,7 +6734,7 @@ int main(int argc, char** argv) {
         }
         if (argc == 2 && std::string_view(argv[1]) == "--shadowed-key-stores-only") {
             if (!shadowedKeyStoreTests(device, recorder)) {
-                std::cout << "skipped, unit shadows over a watched host import are unavailable\n";
+                std::cout << "skipped, the device imports no watched host memory under a unit shadow\n";
                 return 77;
             }
             std::cout << "DCC keys under unit shadows tests passed\n";
