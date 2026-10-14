@@ -19,6 +19,7 @@
 #include <relinker/guest/GuestImage.hpp>
 #include <codegen/IAmd64OnlyConverter.hpp>
 #include <codegen/x86/RedZoneFramer.hpp>
+#include <relinker/analysis/UnusedNidFilter/EhFrameReader.hpp>
 #include <map>
 #include <codegen/CodegenException.hpp>
 #include <algorithm>
@@ -110,10 +111,14 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
     const auto intelSites = trampolines.size();
     std::vector<Codegen::RedZoneDisplacement> displacements;
     if (options.FrameRedZone) {
+        const auto headers = Relinker::ElfReader(sourceBytes).ReadProgramHeaders();
         std::vector<Domain::ProgramHeader> codeSegments;
-        for (const auto& header : Relinker::ElfReader(sourceBytes).ReadProgramHeaders()) if (header.Type == 1 && (header.Flags & 1) != 0) codeSegments.push_back(header);
+        for (const auto& header : headers) if (header.Type == 1 && (header.Flags & 1) != 0) codeSegments.push_back(header);
+        std::vector<Codegen::RedZoneFunction> functions;
+        for (const auto& region : Relinker::UnusedNidFilter::ReadExceptionFunctions(sourceBytes, headers, {}, {})) functions.push_back({region.Begin, region.End});
+        if (functions.empty()) throw Domain::RelinkerException("Red-zone framing needs function bounds from the executable's .eh_frame, and it has none");
         Codegen::RedZoneFrameReport report;
-        auto framed = Codegen::FrameRedZoneFunctions(sourceBytes, codeSegments, trampolines, report, displacements);
+        auto framed = Codegen::FrameRedZoneFunctions(sourceBytes, codeSegments, functions, trampolines, report, displacements);
         for (const auto& moved : displacements) {
             if (moved.Offset > sourceBytes.size() || moved.Bytes.size() > sourceBytes.size() - moved.Offset)
                 throw Domain::RelinkerException("Red-zone displacement exceeds source image", moved.Offset);

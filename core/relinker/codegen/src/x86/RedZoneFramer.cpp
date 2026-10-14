@@ -211,6 +211,7 @@ struct OperandStub {
 void frameSegment(
     const std::vector<std::uint8_t>& fileBytes,
     const Domain::ProgramHeader& ph,
+    const std::vector<RedZoneFunction>& functions,
     const std::vector<TrampolineSite>& existing,
     std::vector<TrampolineSite>& sites,
     std::vector<RedZoneDisplacement>& displacements,
@@ -220,24 +221,15 @@ void frameSegment(
     const auto segSize = static_cast<std::size_t>(ph.FileSize);
     if (segOffset > fileBytes.size() || segSize > fileBytes.size() - segOffset) return;
     const std::vector<std::uint8_t> seg(fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset), fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset + segSize));
-    const auto matches = MakeInstructionScanner()->ScanCodeSection(seg, 0, seg.size());
+    const auto scanner = MakeInstructionScanner();
     const X64InstructionDecoder decoder;
-    std::vector<Insn> insns;
-    insns.reserve(matches.size());
-    for (const auto& match : matches) insns.push_back({static_cast<std::size_t>(match.Offset), match.Length, decoder.DecodeInstruction(seg.data() + match.Offset, match.Length)});
 
     std::set<std::size_t> targets;
-    std::set<std::size_t> starts;
-    for (std::size_t i = 0; i < insns.size(); ++i) {
-        const auto& insn = insns[i];
-        if (insn.Info.HasBranchTarget && !insn.Info.HasRipRelativeDisp) {
-            const auto target = static_cast<std::int64_t>(insn.Offset + insn.Length) + insn.Info.BranchDisp;
-            if (target >= 0 && static_cast<std::size_t>(target) < seg.size()) {
-                if (insn.Info.FlowKind == ControlFlowKind::Call) starts.insert(static_cast<std::size_t>(target));
-                else targets.insert(static_cast<std::size_t>(target));
-            }
-        }
-        if (i > 0 && insns[i - 1].Length == 1 && seg[insns[i - 1].Offset] == 0xcc && seg[insn.Offset] != 0xcc && insn.Offset % 16 == 0) starts.insert(insn.Offset);
+    for (const auto& match : scanner->ScanCodeSection(seg, 0, seg.size())) {
+        const auto info = decoder.DecodeInstruction(seg.data() + match.Offset, match.Length);
+        if (!info.HasBranchTarget || info.HasRipRelativeDisp || info.FlowKind == ControlFlowKind::Call) continue;
+        const auto target = static_cast<std::int64_t>(match.Offset + match.Length) + info.BranchDisp;
+        if (target >= 0 && static_cast<std::size_t>(target) < seg.size()) targets.insert(static_cast<std::size_t>(target));
     }
     std::vector<std::pair<std::size_t, std::size_t>> taken;
     for (const auto& site : existing) {
@@ -252,11 +244,6 @@ void frameSegment(
         const auto hit = targets.upper_bound(begin);
         return hit != targets.end() && *hit < end;
     };
-    const auto indexOf = [&](const std::size_t offset) -> std::optional<std::size_t> {
-        const auto found = std::lower_bound(insns.begin(), insns.end(), offset, [](const Insn& insn, const std::size_t value) { return insn.Offset < value; });
-        if (found == insns.end() || found->Offset != offset) return std::nullopt;
-        return static_cast<std::size_t>(found - insns.begin());
-    };
     const auto padding = [&](const Insn& insn) {
         if (insn.Info.IsTwoByteOpcode) return insn.Info.Opcode == 0x1f;
         return seg[insn.Offset + insn.Info.OpcodeOffset] == 0x90 && (insn.Info.RexPrefix & 1) == 0;
@@ -268,52 +255,52 @@ void frameSegment(
         return static_cast<std::size_t>(target);
     };
 
-    for (auto it = starts.begin(); it != starts.end(); ++it) {
-        const auto start = *it;
-        const auto next = std::next(it);
-        const auto limit = next == starts.end() ? seg.size() : *next;
-        const auto first = indexOf(start);
-        if (!first) continue;
+    for (const auto& function : functions) {
+        if (function.Begin < ph.MappedAddress || function.End <= function.Begin || function.End - ph.MappedAddress > segSize) continue;
+        const auto start = static_cast<std::size_t>(function.Begin - ph.MappedAddress);
+        const auto limit = static_cast<std::size_t>(function.End - ph.MappedAddress);
         ++report.Functions;
         const auto skip = [&](const char* reason) { ++report.Skipped[reason]; };
 
-        std::vector<std::size_t> body;
+        const std::vector<std::uint8_t> code(seg.begin() + static_cast<std::ptrdiff_t>(start), seg.begin() + static_cast<std::ptrdiff_t>(limit));
+        std::vector<Insn> body;
         bool afterReturn = false;
         std::optional<std::size_t> jumpedTo;
-        for (auto i = *first; i < insns.size() && insns[i].Offset < limit; ++i) {
-            if (seg[insns[i].Offset] == 0xcc && insns[i].Length == 1) break;
-            if (!padding(insns[i])) {
-                if (insns[i].Offset % 16 == 0 && (afterReturn || jumpedTo == insns[i].Offset)) break;
-                afterReturn = insns[i].Info.FlowKind == ControlFlowKind::Return || insns[i].Info.FlowKind == ControlFlowKind::Trap;
-                jumpedTo = jumpTarget(insns[i]);
+        for (const auto& match : scanner->ScanCodeSection(code, 0, code.size())) {
+            if (code[match.Offset] == 0xcc && match.Length == 1) break;
+            const Insn insn{start + static_cast<std::size_t>(match.Offset), match.Length, decoder.DecodeInstruction(code.data() + match.Offset, match.Length)};
+            if (!padding(insn)) {
+                if (insn.Offset % 16 == 0 && (afterReturn || jumpedTo == insn.Offset)) break;
+                afterReturn = insn.Info.FlowKind == ControlFlowKind::Return || insn.Info.FlowKind == ControlFlowKind::Trap;
+                jumpedTo = jumpTarget(insn);
             }
-            body.push_back(i);
+            body.push_back(insn);
         }
         if (body.size() < 3) continue;
-        const auto at = [&](const std::size_t k) { return seg.data() + insns[body[k]].Offset; };
-        const bool rbpPrologue = insns[body[0]].Length == 1 && at(0)[0] == 0x55 && insns[body[1]].Length == 3 && std::memcmp(at(1), "\x48\x89\xe5", 3) == 0;
+        const auto at = [&](const std::size_t k) { return seg.data() + body[k].Offset; };
+        const bool rbpPrologue = body[0].Length == 1 && at(0)[0] == 0x55 && body[1].Length == 3 && std::memcmp(at(1), "\x48\x89\xe5", 3) == 0;
         std::vector<std::uint8_t> pushed;
         std::size_t p = rbpPrologue ? 2 : 0;
         while (p < body.size())
-            if (const auto reg = pushedRegister(at(p), insns[body[p]])) { pushed.push_back(*reg); ++p; } else break;
+            if (const auto reg = pushedRegister(at(p), body[p])) { pushed.push_back(*reg); ++p; } else break;
         std::int64_t allocation = 0;
         if (!rbpPrologue && p < body.size())
-            if (const auto adjustment = rspAdjustment(at(p), insns[body[p]]); adjustment && *adjustment < 0) { allocation = -*adjustment; ++p; }
+            if (const auto adjustment = rspAdjustment(at(p), body[p]); adjustment && *adjustment < 0) { allocation = -*adjustment; ++p; }
         std::vector<std::uint8_t> expected(pushed.begin(), pushed.end());
         if (rbpPrologue) expected.insert(expected.begin(), kRegRbp);
         const auto popsBefore = [&](const std::size_t k) -> std::optional<std::size_t> {
             std::size_t q = k;
             std::vector<std::uint8_t> popped;
             while (q > p && popped.size() < expected.size())
-                if (const auto reg = poppedRegister(at(q - 1), insns[body[q - 1]])) { popped.push_back(*reg); --q; } else break;
+                if (const auto reg = poppedRegister(at(q - 1), body[q - 1])) { popped.push_back(*reg); --q; } else break;
             if (popped != expected) return std::nullopt;
             return q;
         };
         std::set<std::size_t> frees;
         if (allocation > 0)
             for (std::size_t k = p; k < body.size(); ++k)
-                if (insns[body[k]].Info.FlowKind == ControlFlowKind::Return)
-                    if (const auto q = popsBefore(k); q && *q > p && rspAdjustment(at(*q - 1), insns[body[*q - 1]]) == allocation) frees.insert(*q - 1);
+                if (body[k].Info.FlowKind == ControlFlowKind::Return)
+                    if (const auto q = popsBefore(k); q && *q > p && rspAdjustment(at(*q - 1), body[*q - 1]) == allocation) frees.insert(*q - 1);
 
         bool leaf = true;
         bool redZone = false;
@@ -321,18 +308,18 @@ void frameSegment(
         std::vector<std::pair<std::size_t, std::size_t>> exits;
         std::map<std::size_t, std::pair<std::size_t, std::vector<std::uint8_t>>> moves;
         std::vector<std::size_t> stubbed;
-        const auto functionEnd = insns[body.back()].Offset + insns[body.back()].Length;
+        const auto functionEnd = limit;
         std::int64_t depth = 0;
         bool wholeRedZone = rbpPrologue;
         for (std::size_t k = p; k < body.size(); ++k) {
-            const auto use = memoryUse(at(k), insns[body[k]]);
+            const auto use = memoryUse(at(k), body[k]);
             if (!use.RspBased) continue;
             if (use.RspDisp < 0) depth = std::max(depth, -use.RspDisp);
             if (use.Indexed || (use.Address && use.RspDisp < 0)) wholeRedZone = true;
         }
         const auto shift = wholeRedZone ? kRedZoneBytes : std::min(kRedZoneBytes, (depth + kStackAlignment - 1) / kStackAlignment * kStackAlignment);
         for (std::size_t k = p; k < body.size(); ++k) {
-            const auto& insn = insns[body[k]];
+            const auto& insn = body[k];
             const auto* code = at(k);
             const auto flow = insn.Info.FlowKind;
             if (flow == ControlFlowKind::Call || flow == ControlFlowKind::IndirectCall) { leaf = false; break; }
@@ -367,7 +354,7 @@ void frameSegment(
                     if (q == p || !frees.contains(q - 1)) { reason = "exit does not free the prologue's allocation"; continue; }
                     --q;
                 }
-                const auto siteStart = insns[body[q]].Offset;
+                const auto siteStart = body[q].Offset;
                 const auto siteEnd = insn.Offset + 1;
                 if (siteEnd - siteStart < kJumpBytes) { reason = "exit shorter than a jump"; continue; }
                 if (targetInside(siteStart, siteEnd)) { reason = "branch into an exit"; continue; }
@@ -376,7 +363,7 @@ void frameSegment(
         }
         if (!leaf || !redZone) continue;
         ++report.RedZoneFunctions;
-        const auto prologueEnd = p > 0 ? insns[body[p - 1]].Offset + insns[body[p - 1]].Length : start;
+        const auto prologueEnd = p > 0 ? body[p - 1].Offset + body[p - 1].Length : start;
         if (reason == nullptr && ((pushed.empty() && allocation == 0) || prologueEnd - start < kJumpBytes)) reason = "prologue shorter than a jump";
         if (reason == nullptr && targetInside(start, prologueEnd)) reason = "branch into the prologue";
         if (reason == nullptr && exits.empty()) reason = "no ret exit";
@@ -390,9 +377,9 @@ void frameSegment(
         for (const auto k : stubbed) {
             if (reason != nullptr) break;
             if (!stubs.empty() && k < stubs.back().Last) continue;
-            OperandStub stub{k, k, insns[body[k]].Offset, insns[body[k]].Offset, {}};
+            OperandStub stub{k, k, body[k].Offset, body[k].Offset, {}};
             while (stub.Last < body.size() && stub.End - stub.Begin < kJumpBytes) {
-                const auto& covered = insns[body[stub.Last]];
+                const auto& covered = body[stub.Last];
                 if (covered.Offset != stub.End || covered.Info.FlowKind != ControlFlowKind::Sequential || covered.Info.HasRipRelativeDisp || frees.contains(stub.Last)) break;
                 const auto use = memoryUse(at(stub.Last), covered);
                 const auto bytes = use.RspBased ? withDisplacement(at(stub.Last), covered, use, use.RspDisp + shift) : std::vector<std::uint8_t>(at(stub.Last), at(stub.Last) + covered.Length);
@@ -418,6 +405,7 @@ void frameSegment(
             site.ReturnBranchOffset = code.size();
             code.insert(code.end(), std::begin(kJumpBack), std::end(kJumpBack));
             site.Body = std::move(code);
+            taken.emplace_back(begin, end);
             sites.push_back(std::move(site));
         };
         const auto original = [&](const std::size_t begin, const std::size_t end) { return std::vector<std::uint8_t>(seg.begin() + static_cast<std::ptrdiff_t>(begin), seg.begin() + static_cast<std::ptrdiff_t>(end)); };
@@ -447,12 +435,13 @@ void frameSegment(
 std::vector<TrampolineSite> FrameRedZoneFunctions(
     const std::vector<std::uint8_t>& fileBytes,
     const std::vector<Domain::ProgramHeader>& codeSegments,
+    const std::vector<RedZoneFunction>& functions,
     const std::vector<TrampolineSite>& existing,
     RedZoneFrameReport& report,
     std::vector<RedZoneDisplacement>& displacements
 ) {
     std::vector<TrampolineSite> sites;
-    for (const auto& ph : codeSegments) frameSegment(fileBytes, ph, existing, sites, displacements, report);
+    for (const auto& ph : codeSegments) frameSegment(fileBytes, ph, functions, existing, sites, displacements, report);
     return sites;
 }
 

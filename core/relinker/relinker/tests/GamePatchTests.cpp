@@ -362,6 +362,26 @@ std::vector<std::uint8_t> framedLeafFixture() {
     const std::vector<std::uint8_t> leaf{0x53, 0x41, 0x56, 0x41, 0x57, 0x48, 0x89, 0x7c, 0x24, 0xf0, 0x48, 0x8b, 0x04, 0x24, 0x48, 0x8b, 0x44, 0x24, 0x08, 0x41, 0x5f, 0x41, 0x5e, 0x5b, 0xc3};
     std::copy(caller.begin(), caller.end(), bytes.begin() + 0x1000);
     std::copy(leaf.begin(), leaf.end(), bytes.begin() + 0x1040);
+    const auto ehFrameHeader = 64 + 7 * 56;
+    Io::WriteU32(bytes, ehFrameHeader, 0x6474e550);
+    Io::WriteU32(bytes, ehFrameHeader + 4, 4);
+    for (const auto field : {8, 16, 24}) Io::WriteU64(bytes, ehFrameHeader + field, 0x2900);
+    Io::WriteU64(bytes, ehFrameHeader + 32, 32);
+    Io::WriteU64(bytes, ehFrameHeader + 40, 32);
+    Io::WriteU64(bytes, ehFrameHeader + 48, 4);
+    Io::WriteU32(bytes, 0x2800, 9);
+    const std::vector<std::uint8_t> cie{1, 0, 1, 0x78, 16};
+    std::copy(cie.begin(), cie.end(), bytes.begin() + 0x2808);
+    Io::WriteU32(bytes, 0x2840, 20);
+    Io::WriteU32(bytes, 0x2844, 0x44);
+    Io::WriteU64(bytes, 0x2848, 0x1040);
+    Io::WriteU64(bytes, 0x2850, leaf.size());
+    bytes[0x2900] = 1;
+    bytes[0x2902] = 3;
+    Io::WriteU64(bytes, 0x2904, 0x2800);
+    Io::WriteU32(bytes, 0x290c, 1);
+    Io::WriteU64(bytes, 0x2910, 0x1040);
+    Io::WriteU64(bytes, 0x2918, 0x2840);
     return bytes;
 }
 

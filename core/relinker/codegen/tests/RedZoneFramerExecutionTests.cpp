@@ -127,6 +127,7 @@ std::vector<std::uint8_t> callTo(const std::size_t from, const std::size_t targe
 struct Image {
     std::vector<std::uint8_t> Bytes;
     std::vector<std::size_t> Starts;
+    std::vector<std::size_t> Ends;
 };
 
 Image place(const std::vector<Leaf>& leaves) {
@@ -144,6 +145,7 @@ Image place(const std::vector<Leaf>& leaves) {
     for (std::size_t index = 0; index < leaves.size(); ++index) {
         image.Bytes.resize(image.Starts[index], 0xcc);
         image.Bytes.insert(image.Bytes.end(), leaves[index].Code.begin(), leaves[index].Code.end());
+        image.Ends.push_back(image.Bytes.size());
     }
     image.Bytes.resize((image.Bytes.size() + 15) / 16 * 16 + 16, 0xcc);
     require(image.Bytes.size() <= kStubBase, "the leaves do not fit before the stubs");
@@ -164,7 +166,9 @@ Framing load(const Image& image, const bool frame) {
     if (!frame) return framing;
     const auto base = reinterpret_cast<std::uint64_t>(arena);
     const std::vector<Domain::ProgramHeader> segments{{1, 5, 0, base, base, image.Bytes.size(), image.Bytes.size(), 16}};
-    framing.Sites = Codegen::FrameRedZoneFunctions(image.Bytes, segments, {}, framing.Report, framing.Displacements);
+    std::vector<Codegen::RedZoneFunction> functions;
+    for (std::size_t index = 0; index < image.Starts.size(); ++index) functions.push_back({base + image.Starts[index], base + image.Ends[index]});
+    framing.Sites = Codegen::FrameRedZoneFunctions(image.Bytes, segments, functions, {}, framing.Report, framing.Displacements);
     for (const auto& moved : framing.Displacements) std::copy(moved.Bytes.begin(), moved.Bytes.end(), arena + moved.Offset);
     std::size_t cursor = kStubBase;
     for (const auto& site : framing.Sites) {
