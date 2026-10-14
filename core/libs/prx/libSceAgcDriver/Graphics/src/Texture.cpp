@@ -347,7 +347,7 @@ Texture::Texture(const Context& context, TextureDetiler& detiler, const GuestTex
         allocation.allocationSize = requirements.size;
         allocationBytes = requirements.size;
         allocation.memoryTypeIndex = context.DeviceMemoryType(requirements.memoryTypeBits, requirements.size, "texture");
-        owned->memory = GetBufferPool(context)->AllocateMemory(allocation, "vkAllocateMemory texture");
+        owned->memory = GetBufferPool(context)->AllocateMemory(allocation, "vkAllocateMemory texture", context.PoolHostFallback(requirements.memoryTypeBits, allocation.memoryTypeIndex));
         Check(context.Function<PFN_vkBindImageMemory>("vkBindImageMemory")(context.device, image, owned->memory, 0), "vkBindImageMemory");
 
         const VkImage uploadImage = image;
@@ -1402,7 +1402,7 @@ StorageTexture::StorageTexture(const Context& context, TextureDetiler& detiler, 
         allocation.allocationSize = requirements.size;
         memoryBytes = requirements.size;
         allocation.memoryTypeIndex = context.DeviceMemoryType(requirements.memoryTypeBits, requirements.size, "storage texture");
-        memory = GetBufferPool(context)->AllocateMemory(allocation, "vkAllocateMemory storage texture");
+        memory = GetBufferPool(context)->AllocateMemory(allocation, "vkAllocateMemory storage texture", context.PoolHostFallback(requirements.memoryTypeBits, allocation.memoryTypeIndex));
         Check(context.Function<PFN_vkBindImageMemory>("vkBindImageMemory")(context.device, image, memory, 0), "vkBindImageMemory storage");
     } catch (...) {
         release();
