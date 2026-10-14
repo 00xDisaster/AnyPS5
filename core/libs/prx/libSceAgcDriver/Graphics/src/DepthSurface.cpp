@@ -1036,6 +1036,8 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
     auto* found = planeSurface(context.device, resource.baseAddress);
     if (found == nullptr) return nullptr;
     const auto& base = found->target;
+    const bool stencil = base.stencilAddress != 0 && resource.baseAddress == base.stencilAddress;
+    if (stencil && BytesPerElement(resource.format) != 1u) return nullptr;
     if (base.samples != 1u || resource.dimension == TextureDimension::k2DMsaa) {
         Require(base.samples > 1u, "multisample reader overlaps a single-sample depth attachment");
         auto* recorder = RecorderFor(context);
@@ -1048,13 +1050,11 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
         return found->Sampled(words, resource, components);
     }
     if (resource.width != base.extent.width || resource.height != base.extent.height) return nullptr;
-    const bool stencil = base.stencilAddress != 0 && resource.baseAddress == base.stencilAddress;
     const bool d16 = base.format == VK_FORMAT_D16_UNORM || base.format == VK_FORMAT_D16_UNORM_S8_UINT;
     const auto format = ResolveTextureFormat(resource.format);
     const bool depthBits = !stencil && words.size() >= 4 && ShaderRecompiler::DepthBitsTextureWidth(words[1], words[3]) == (d16 ? 16u : 32u);
     const bool integer = d16 && format == VK_FORMAT_R16_UINT && !depthBits;
     if (!stencil && format != (d16 ? VK_FORMAT_R16_UNORM : VK_FORMAT_R32_SFLOAT) && !depthBits && !integer) return nullptr;
-    if (stencil && BytesPerElement(resource.format) != 1u) return nullptr;
     found->ApplyFastClear();
     const bool cube = resource.dimension == TextureDimension::kCube;
     const bool layered = cube || (resource.dimension == TextureDimension::k2DArray && resource.depthOrLastArray != 0);
