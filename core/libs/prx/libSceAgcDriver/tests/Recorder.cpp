@@ -6976,7 +6976,7 @@ int pipelineCacheFileTests(const Device& device) {
         const bool stored = !holds(probe, 0);
         context.Function<PFN_vkDestroyPipelineCache>("vkDestroyPipelineCache")(context.device, probe, nullptr);
         if (!stored) {
-            std::cout << "skipped, the driver keeps no pipelines in a pipeline cache\n";
+            std::cout << "skipped, the device does not keep pipelines in a pipeline cache\n";
             return 77;
         }
     }
