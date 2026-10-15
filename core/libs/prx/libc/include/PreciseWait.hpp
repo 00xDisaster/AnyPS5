@@ -256,6 +256,24 @@ inline void PreciseSleepUntil(const std::chrono::time_point<TClock, TDuration>& 
         }
     }
 #elif !defined(__EMSCRIPTEN__)
+    if constexpr (std::is_same_v<TClock, std::chrono::steady_clock>) {
+        const auto rawDeadline = deadline.time_since_epoch().count();
+        if (rawDeadline <= 0) [[unlikely]] {
+            return;
+        }
+        std::uint64_t targetNanos = 0;
+        if constexpr (std::is_same_v<typename TDuration::period, std::nano>) {
+            targetNanos = static_cast<std::uint64_t>(rawDeadline);
+        } else {
+            targetNanos = static_cast<std::uint64_t>(
+                std::chrono::ceil<std::chrono::nanoseconds>(deadline.time_since_epoch()).count());
+        }
+        const std::uint64_t startNanos = PreciseMonotonicNanos();
+        if (startNanos < targetNanos) {
+            PreciseSleepFromNanos(startNanos, targetNanos - startNanos);
+        }
+        return;
+    }
     const std::uint64_t startNanos = PreciseMonotonicNanos();
     const auto now = TClock::now();
     if (now < deadline) {
