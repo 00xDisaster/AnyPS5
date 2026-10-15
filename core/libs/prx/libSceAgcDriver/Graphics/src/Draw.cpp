@@ -2234,7 +2234,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
                     const auto geometry = DescribeSurface(array);
                     for (std::uint32_t slice = 0; slice <= color.arrayLastSlice; ++slice) Require(geometry.GuestLayerOffset(slice) == slice * sliceBytes, "the array image's layer pitch differs from the color view's slice offset");
                     Require(color.surfaceAddress == color.arrayAddress + color.arraySlice * sliceBytes, "the array image's layer pitch differs from the color view's slice offset");
-                    auto resident = CachedStorageSurface(context, array);
+                    auto resident = CachedStorageLayers(context, array, color.arraySlice, 1);
                     Require(resident->Attachable(), "storage format cannot be a color attachment");
                     return resident;
                 }
@@ -2833,7 +2833,8 @@ DrawRecipeOutcome DrawWithRecipe(const Context& context, const State& state, con
         auto stored = recipe.targets[index].lock();
         if (stored == nullptr || !StorageImageCached(context, stored.get()) || !StorageImageServesKeys(*stored, state.colors[index].dccAddress)) return miss(DrawRecipeMiss::TargetGone);
         auto resident = refreshResidentTarget(context, state, state.colors[index], outcome, profile, [&] {
-            stored->Refresh();
+            if (state.colors[index].arrayLastSlice != 0) stored->RefreshLayers(state.colors[index].arraySlice, 1);
+            else stored->Refresh();
             return stored;
         });
         timer.phase(PhaseReadTarget);
