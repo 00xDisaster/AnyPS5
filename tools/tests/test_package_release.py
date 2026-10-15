@@ -402,7 +402,7 @@ class ReleaseNotesTests(unittest.TestCase):
                         except OSError as error:
                             self.skipTest(str(error))
                     else:
-                        paths[second].hardlink_to(paths[first])
+                        os.link(paths[first], paths[second])
                     previous = [path.read_bytes() for path in paths]
                     with self.assertRaisesRegex(ValueError, "distinct files"):
                         prepare_release_notes.prepare_notes(*paths)
