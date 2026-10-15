@@ -234,6 +234,20 @@ class TraceDigestTests(unittest.TestCase):
         self.assertAlmostEqual(thread["wait_ms_per_frame"], 4.0)
         self.assertEqual(thread["top"], [{"name": "GpuMutex.hold.draw", "ms_per_frame": 6.0}])
 
+    def test_invalid_stack_weights_fail_without_a_digest(self):
+        for row in ("worker;draw -1", "worker;draw 0", "worker;draw nope", "worker;;draw 1", " 1"):
+            with self.subTest(row=row):
+                self.stacks.write_text("# header\n" + row + "\n", encoding="utf-8")
+                output, errors = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    with self.assertRaises(SystemExit) as exit:
+                        trace_digest.main([str(self.trace), "--stacks", str(self.stacks), "--json"])
+                self.assertEqual(exit.exception.code, 2)
+                self.assertEqual(output.getvalue(), "")
+                self.assertIn(str(self.stacks) + ":2:", errors.getvalue())
+                self.assertNotIn("Traceback", errors.getvalue())
+
+
     def test_stacks_self_and_total(self):
         stacks = self.result()["stacks"]
         self.assertEqual(stacks["samples"], 5)
