@@ -24,7 +24,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <sys/mman.h>
 #endif
 #include <functional>
@@ -1289,7 +1289,7 @@ void linuxRipRelativePlacement() {
 
 }
 
-#if defined(__linux__) && defined(__x86_64__)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(__x86_64__)
 std::uint64_t extrqReference(std::uint64_t value, std::uint64_t control) {
     const auto length = static_cast<unsigned>(control & 0x3f);
     const auto index = static_cast<unsigned>((control >> 8) & 0x3f);
@@ -1302,6 +1302,12 @@ std::uint64_t insertqReference(std::uint64_t destination, std::uint64_t value, s
     const auto index = static_cast<unsigned>((control >> 8) & 0x3f);
     const auto mask = length == 0 ? ~std::uint64_t{0} : ((std::uint64_t{1} << length) - 1);
     return (destination & ~(mask << index)) | ((value & mask) << index);
+}
+
+void* mapBuffer(const bool low) {
+    const int flags = MAP_PRIVATE | MAP_ANONYMOUS | (low ? MAP_32BIT : 0);
+    auto* buffer = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, flags, -1, 0);
+    return buffer == MAP_FAILED ? nullptr : buffer;
 }
 
 constexpr std::uint64_t kStubScratch[2] = {0x0123456789abcdefull, 0xfedcba9876543210ull};
@@ -1580,8 +1586,10 @@ void clzeroExecution() {
     }
     for (const auto& item : cases) {
         require(item.Match.has_value(), item.Name);
-        auto* buffer = static_cast<std::uint8_t*>(mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | (item.Low ? MAP_32BIT : 0), -1, 0));
-        require(buffer != MAP_FAILED, "cannot map the CLZERO buffer");
+        auto* buffer = static_cast<std::uint8_t*>(mapBuffer(item.Low));
+        if (buffer == nullptr && item.Low)
+            continue;
+        require(buffer != nullptr, "cannot map the CLZERO buffer");
         for (const std::size_t offset : {std::size_t{0x80}, std::size_t{0xAD}, std::size_t{0xFF}}) {
             std::memset(buffer, 0xA5, 4096);
             const auto address = reinterpret_cast<std::uint64_t>(buffer + offset);
