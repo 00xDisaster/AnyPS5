@@ -1953,6 +1953,36 @@ void verifySelectedRecordDirectOperations() {
     require(sampled->info.images.size() == 1u && sampled->info.images[0].table == 0u && sampled->descriptorSources.at(sampled->info.images[0].source).tableColumn->selected, "selected record direct operations: a T# that is only sampled no longer selects its record");
 }
 
+void verifyEvaluableHeapSamplerDirect() {
+    using namespace ShaderRecompiler;
+    static TableTexture textures[2];
+    alignas(4096) static TableGuest guest;
+    auto& heap = guest.heap;
+    std::fill(heap.begin(), heap.end(), std::array<std::uint32_t, 8>{});
+    heap[0] = TableT(textures[0].bytes.data(), TableFormat8888UNorm, TableType2D);
+    heap[1] = TableT(textures[1].bytes.data(), TableFormat32UInt, TableType2D);
+    heap[2] = heap[1];
+    heap[3] = heap[0];
+    FillTableSrt(guest, heap.data(), 32u, 4u);
+    guest.srt[16] = 2u;
+    const auto userData = TableUserData(guest);
+    const auto heapSampler = [](std::vector<std::uint32_t> code) {
+        const auto direct = std::find(code.begin(), code.end(), 0xf4080200u);
+        require(direct != code.end() && direct[1] == 0xfa000010u, "evaluable heap sampler: the program has no S# load from the SRT");
+        code.erase(direct, direct + 2);
+        const auto shift = std::find(code.begin(), code.end(), 0x8f108510u);
+        require(shift != code.end(), "evaluable heap sampler: the program has no key shift");
+        code.insert(shift + 1, {0xf4280202u, 0x20000000u});
+        return code;
+    };
+    const auto evaluatedCode = heapSampler(TableSrtKeyCode);
+    const auto evaluated = GetResourcePlan(TableRequest(evaluatedCode, userData));
+    require(evaluated->info.samplers.size() == 1u && evaluated->info.samplers[0].table == NoTable && !evaluated->descriptorSources.at(evaluated->info.samplers[0].source).tableColumn.has_value(), "evaluable heap sampler: an S# read from a heap at an offset the SRT walker evaluates was planned through a sampler table");
+    const auto perLaneCode = heapSampler(TableWholeCode);
+    const auto perLane = GetResourcePlan(TableRequest(perLaneCode, userData));
+    require(perLane->info.samplers.size() == 1u && perLane->info.samplers[0].table != NoTable && perLane->descriptorSources.at(perLane->info.samplers[0].source).tableColumn.has_value(), "evaluable heap sampler: an S# read from a heap at an offset keyed per lane was not planned through a sampler table");
+}
+
 void verifyDescriptorPhis() {
     using namespace ShaderRecompiler;
     constexpr std::uint32_t Format8888UNorm = 56;
@@ -5246,6 +5276,7 @@ int main(int argc, char** argv) {
             verifySelectedRecordFallbacks();
             verifySelectedRecordOffsetCarry();
             verifySelectedRecordDirectOperations();
+            verifyEvaluableHeapSamplerDirect();
             std::cout << "Image table keys, maps, records and registration passed\n";
             return 0;
         }
