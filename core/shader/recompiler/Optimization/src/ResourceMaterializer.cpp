@@ -526,7 +526,7 @@ private:
     }
 
     std::uint32_t WordsIndex(const DescriptorValue& value) {
-        const auto [found, inserted] = wordsIndex.try_emplace({value.dwords, value.dwordCount}, static_cast<std::uint32_t>(tables.words.size()));
+        const auto [found, inserted] = wordsIndex.try_emplace({value.dwords, value.dwordCount, value.availableDwordMask}, static_cast<std::uint32_t>(tables.words.size()));
         if (inserted) tables.words.push_back(value);
         return found->second;
     }
@@ -590,6 +590,7 @@ private:
                         break;
                     }
                     value.dwords[dword] = Read(*address);
+                    value.availableDwordMask |= static_cast<std::uint8_t>(1u << dword);
                     first = std::min(first, *address);
                     past = std::max(past, *address + sizeof(std::uint32_t));
                 }
@@ -684,9 +685,13 @@ private:
             value.dwordCount = column.sampler ? 4u : 8u;
             if (whole[record] != Unread) {
                 std::copy_n(read.begin() + whole[record], column.dwordCount, value.dwords.begin());
+                value.availableDwordMask = static_cast<std::uint8_t>((1u << column.dwordCount) - 1u);
             } else {
                 for (std::uint32_t dword = 0; dword < column.dwordCount; dword++) {
-                    if (next->second[dword] != Unread) value.dwords[dword] = read[next->second[dword]];
+                    if (next->second[dword] != Unread) {
+                        value.dwords[dword] = read[next->second[dword]];
+                        value.availableDwordMask |= static_cast<std::uint8_t>(1u << dword);
+                    }
                 }
                 ++next;
             }
@@ -752,13 +757,14 @@ private:
     ImageTableSnapshot& tables;
     std::map<std::uint32_t, ColumnRecords> columns;
     struct WordsHash {
-        std::size_t operator()(const std::pair<std::array<std::uint32_t, 8>, std::uint32_t>& key) const noexcept {
-            std::uint64_t hash = 0xcbf29ce484222325ull ^ key.second;
-            for (const auto word : key.first) hash = (hash ^ word) * 0x100000001b3ull;
+        using Key = std::tuple<std::array<std::uint32_t, 8>, std::uint32_t, std::uint8_t>;
+        std::size_t operator()(const Key& key) const noexcept {
+            std::uint64_t hash = 0xcbf29ce484222325ull ^ std::get<1>(key) ^ std::get<2>(key);
+            for (const auto word : std::get<0>(key)) hash = (hash ^ word) * 0x100000001b3ull;
             return static_cast<std::size_t>(hash ^ (hash >> 32u));
         }
     };
-    std::unordered_map<std::pair<std::array<std::uint32_t, 8>, std::uint32_t>, std::uint32_t, WordsHash> wordsIndex;
+    std::unordered_map<WordsHash::Key, std::uint32_t, WordsHash> wordsIndex;
     std::unordered_map<std::uint64_t, bool> pages;
     std::unordered_map<std::uint64_t, bool> wholePages;
 };
@@ -1049,6 +1055,12 @@ ResolvedImageTables ResourceMaterializer::ResolveImageTables(const ShaderInfo& i
         const auto& image = info.images[resource];
         const auto& modes = info.runtimeImageModes[resource];
         std::array<std::uint32_t, Abi::ImageRecordWords> record{0u, words.dwords[3], 0u};
+        if ((words.availableDwordMask & (1u << 3u)) == 0u) {
+            record[Abi::ImageRecordFlags] = poison(resource, PoisonReason::OutsideSnapshot, &words);
+            const auto offset = static_cast<std::uint32_t>(out.map.size());
+            out.map.insert(out.map.end(), record.begin(), record.end());
+            return offset;
+        }
         const auto decoded = decodeTableEntry(image, modes, words, memoKey, resource);
         if ((decoded & DecodeFailed) != 0u) {
             record[Abi::ImageRecordFlags] = poison(resource, static_cast<PoisonReason>(decoded & ~DecodeFailed), &words);
@@ -1131,7 +1143,7 @@ ResolvedImageTables ResourceMaterializer::ResolveImageTables(const ShaderInfo& i
                 mapped = reason == PoisonReason::OutsideDomain ? Abi::PoisonCode(Abi::OutsideDomainPoison) : poison(resource, reason, nullptr);
             } else if (out.map[header + Abi::TableFault] == 0u) {
                 const auto& words = tables.words.at(code);
-                if (sampler || !nullImageDescriptor(words)) {
+                if (sampler || (words.availableDwordMask & (1u << 3u)) == 0u || !nullImageDescriptor(words)) {
                     const auto [found, inserted] = records.try_emplace(code, 0u);
                     if (inserted) found->second = sampler ? samplerRecord(resource, words) : imageRecord(resource, words);
                     mapped = found->second;
