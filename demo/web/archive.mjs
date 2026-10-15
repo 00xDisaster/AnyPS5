@@ -225,6 +225,10 @@ export function batchOutputDirectory(name, index) {
   return `${String(index + 1).padStart(2, "0")}-${stem || "app"}`;
 }
 
+export function createPackageWriter(destination) {
+  return new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
+}
+
 async function appendEntry(writer, name, entry, report) {
   const stream = new TransformStream();
   let produced = 0;
@@ -302,7 +306,7 @@ class DirectoryWriter {
 export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false, options = {}) {
   const libraries = new ZipReader(new BoundedBlobReader(libraryFile));
   const ownsWriter = !options.writer;
-  const writer = options.writer ?? (directory ? new DirectoryWriter(destination) : new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true }));
+  const writer = options.writer ?? (directory ? new DirectoryWriter(destination) : createPackageWriter(destination));
   const outputPath = name => {
     const path = options.prefix ? `${options.prefix}${name}` : name;
     validPath(path);
