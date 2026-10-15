@@ -35,16 +35,16 @@ static_assert(sizeof(VkStencilOpState) == 28, "VkStencilOpState changed: update 
 static_assert(sizeof(VkVertexInputBindingDescription) == 12, "VkVertexInputBindingDescription changed: update the recipe codec");
 static_assert(sizeof(VkVertexInputAttributeDescription) == 16, "VkVertexInputAttributeDescription changed: update the recipe codec");
 #if defined(__linux__) && defined(__x86_64__) && defined(__GLIBCXX__)
-static_assert(sizeof(State) == 688, "State changed: update CanonicalPipelineState and the recipe codec");
-static_assert(sizeof(ShaderStages) == 100, "ShaderStages changed: update the recipe codec");
+static_assert(sizeof(State) == 752, "State changed: update CanonicalPipelineState and the recipe codec");
+static_assert(sizeof(ShaderStages) == 108, "ShaderStages changed: update the recipe codec");
 static_assert(sizeof(ShaderRecompiler::MeshConfiguration) == 36, "MeshConfiguration changed: update the recipe codec");
-static_assert(sizeof(ShaderRecompiler::TessellationConfiguration) == 32, "TessellationConfiguration changed: update the recipe codec");
+static_assert(sizeof(ShaderRecompiler::TessellationConfiguration) == 40, "TessellationConfiguration changed: update the recipe codec");
 #endif
 
 constexpr std::uint32_t FileMagic = 0x4c4a5041u;
 // Bumped when the recipe codec, CanonicalPipelineState or the store key change in a way the
 // layout guards above do not catch (a field renumbered or reinterpreted at the same size).
-constexpr std::uint32_t FileFormat = 1u;
+constexpr std::uint32_t FileFormat = 2u;
 constexpr std::uint32_t ModuleRecord = 1u;
 constexpr std::uint32_t GraphicsRecord = 2u;
 constexpr std::uint32_t ComputeRecord = 3u;
@@ -157,11 +157,15 @@ void decodeMesh(Reader& reader, ShaderRecompiler::MeshConfiguration& mesh) {
 void encodeTessellation(Writer& writer, const ShaderRecompiler::TessellationConfiguration& tessellation) {
     for (const auto value : {tessellation.inputControlPoints, tessellation.outputControlPoints, tessellation.domain, tessellation.partitioning, tessellation.outputTopology, tessellation.patchesPerGroup, tessellation.primitiveGroupSize}) writer.U32(value);
     writer.Bool(tessellation.breakAtInstance);
+    writer.U32(tessellation.instancePatches);
+    writer.Bool(tessellation.drawParameters);
 }
 
 void decodeTessellation(Reader& reader, ShaderRecompiler::TessellationConfiguration& tessellation) {
     for (auto* value : {&tessellation.inputControlPoints, &tessellation.outputControlPoints, &tessellation.domain, &tessellation.partitioning, &tessellation.outputTopology, &tessellation.patchesPerGroup, &tessellation.primitiveGroupSize}) *value = reader.U32();
     tessellation.breakAtInstance = reader.Bool();
+    tessellation.instancePatches = reader.U32();
+    tessellation.drawParameters = reader.Bool();
 }
 
 void encodeState(Writer& writer, const State& state) {
@@ -185,6 +189,7 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.stencilTest);
     writer.Raw(state.stencilFront);
     writer.Raw(state.stencilBack);
+    writer.Bool(state.stencilReplayReference.has_value());
     writer.U64(state.colors.size());
     for (const auto& color : state.colors) {
         writer.U32(static_cast<std::uint32_t>(color.format));
@@ -196,6 +201,7 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.hasColorTarget);
     writer.Bool(state.rectList);
     writer.Bool(state.dualSourceBlend);
+    writer.U32(state.reversedBlend);
     writer.U32(static_cast<std::uint32_t>(state.topology));
     writer.Bool(state.primitiveRestart);
     writer.Bool(state.negativeOneToOne);
@@ -209,6 +215,7 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.customSampleLocations);
     writer.Bool(state.sampleLocationGrid);
     writer.Bool(state.perSampleShading);
+    for (const auto mask : state.quadSampleMask) writer.Raw(mask);
 }
 
 void decodeState(Reader& reader, State& state) {
@@ -233,6 +240,7 @@ void decodeState(Reader& reader, State& state) {
     state.stencilTest = reader.Bool();
     state.stencilFront = reader.Raw<VkStencilOpState>();
     state.stencilBack = reader.Raw<VkStencilOpState>();
+    if (reader.Bool()) state.stencilReplayReference = 0u;
     const auto colors = reader.U64();
     if (!reader.Ok() || colors > 8u) {
         reader.Fail();
@@ -251,6 +259,7 @@ void decodeState(Reader& reader, State& state) {
     state.hasColorTarget = reader.Bool();
     state.rectList = reader.Bool();
     state.dualSourceBlend = reader.Bool();
+    state.reversedBlend = reader.U32();
     state.topology = static_cast<VkPrimitiveTopology>(reader.U32());
     state.primitiveRestart = reader.Bool();
     state.negativeOneToOne = reader.Bool();
@@ -264,6 +273,7 @@ void decodeState(Reader& reader, State& state) {
     state.customSampleLocations = reader.Bool();
     state.sampleLocationGrid = reader.Bool();
     state.perSampleShading = reader.Bool();
+    for (auto& mask : state.quadSampleMask) mask = reader.Raw<std::uint16_t>();
 }
 
 void encodeRecipe(Writer& writer, const GraphicsPipelineRecipe& recipe) {
@@ -986,6 +996,7 @@ State CanonicalPipelineState(const State& state) {
     canonical.stencilTest = state.stencilTest;
     canonical.stencilFront = state.stencilFront;
     canonical.stencilBack = state.stencilBack;
+    if (state.stencilReplayReference) canonical.stencilReplayReference = 0u;
     for (const auto& color : state.colors) {
         ColorTarget canonicalColor{};
         canonicalColor.format = color.format;
@@ -998,6 +1009,7 @@ State CanonicalPipelineState(const State& state) {
     canonical.hasColorTarget = state.hasColorTarget;
     canonical.rectList = state.rectList;
     canonical.dualSourceBlend = state.dualSourceBlend;
+    canonical.reversedBlend = state.reversedBlend;
     canonical.topology = state.topology;
     canonical.primitiveRestart = state.primitiveRestart;
     canonical.negativeOneToOne = state.negativeOneToOne;
@@ -1011,6 +1023,7 @@ State CanonicalPipelineState(const State& state) {
     canonical.customSampleLocations = state.customSampleLocations;
     canonical.sampleLocationGrid = state.sampleLocationGrid;
     canonical.perSampleShading = state.perSampleShading;
+    canonical.quadSampleMask = state.quadSampleMask;
     return canonical;
 }
 
