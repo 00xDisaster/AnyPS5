@@ -1983,6 +1983,38 @@ void verifyEvaluableHeapSamplerDirect() {
     require(perLane->info.samplers.size() == 1u && perLane->info.samplers[0].table != NoTable && perLane->descriptorSources.at(perLane->info.samplers[0].source).tableColumn.has_value(), "evaluable heap sampler: an S# read from a heap at an offset keyed per lane was not planned through a sampler table");
 }
 
+void verifySelectedRecordUniformIndex() {
+    using namespace ShaderRecompiler;
+    static TableTexture textures[2];
+    alignas(4096) static TableGuest guest;
+    auto& heap = guest.heap;
+    std::fill(heap.begin(), heap.end(), std::array<std::uint32_t, 8>{});
+    heap[0] = TableT(textures[0].bytes.data(), TableFormat8888UNorm, TableType2D);
+    heap[1] = TableT(textures[1].bytes.data(), TableFormat32UInt, TableType2D);
+    heap[2] = heap[1];
+    heap[3] = heap[0];
+    FillTableSrt(guest, heap.data(), 32u, 4u);
+    guest.srt[16] = 2u;
+    const auto userData = TableUserData(guest);
+    const auto twoWaves = [&](const std::vector<std::uint32_t>& code) {
+        auto request = TableRequest(code, userData);
+        request.context.compute->numThreads = {128u, 1u, 1u};
+        return CompileTable(request);
+    };
+    const auto nonUniform = [](const TableCompiled& compiled) {
+        const auto spirv = compiled.result->spirv.Words();
+        std::uint32_t count = 0;
+        for (std::size_t cursor = 5; cursor < spirv.size() && (spirv[cursor] >> 16u) != 0u; cursor += spirv[cursor] >> 16u) {
+            if ((spirv[cursor] & 0xffffu) == spv::OpDecorate && (spirv[cursor] >> 16u) == 3u && spirv[cursor + 2u] == spv::DecorationNonUniform) ++count;
+        }
+        return count;
+    };
+    const auto selected = twoWaves(TableSrtKeyCode);
+    require(TableBinding(*selected.result, DescriptorRole::ImageTable) != nullptr && nonUniform(selected) == 0u, "selected record uniform index: the image table index of a selected record in a two-wave workgroup is decorated NonUniform");
+    const auto whole = twoWaves(TableWholeCode);
+    require(nonUniform(whole) != 0u, "selected record uniform index: the image table index of a table keyed per lane in a two-wave workgroup is not decorated NonUniform");
+}
+
 void verifyDescriptorPhis() {
     using namespace ShaderRecompiler;
     constexpr std::uint32_t Format8888UNorm = 56;
@@ -5277,6 +5309,7 @@ int main(int argc, char** argv) {
             verifySelectedRecordOffsetCarry();
             verifySelectedRecordDirectOperations();
             verifyEvaluableHeapSamplerDirect();
+            verifySelectedRecordUniformIndex();
             std::cout << "Image table keys, maps, records and registration passed\n";
             return 0;
         }
