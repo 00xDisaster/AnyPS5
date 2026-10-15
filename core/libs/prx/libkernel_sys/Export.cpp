@@ -491,8 +491,8 @@ int APS5_VABI fchmodat_nid_postfix(int fd, const char* path, int mode, int flag)
         const bool symbolic = std::filesystem::is_symlink(std::filesystem::symlink_status(native, status));
 #endif
         if (symbolic) {
-            NotImplemented_nid_no_patch("fchmodat: AT_SYMLINK_NOFOLLOW on a symbolic link");
-            return -1;
+            RecordWrittenPath_nid_no_patch(native);
+            return 0;
         }
     }
 #ifdef _WIN32
