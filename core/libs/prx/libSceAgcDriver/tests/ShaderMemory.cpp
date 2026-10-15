@@ -28,11 +28,13 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <map>
 #include <future>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <span>
 #include <string>
@@ -2416,6 +2418,18 @@ void verifyHalfWaveReduction() {
     compared.insert(compared.begin() + 3, {0xd4c50006u, 0x00021680u});
     expectFailure([&] { static_cast<void>(pixel(compared, 32u, true)); }, lane63, "half-wave reduction: a scan selected by a compare under the all-lanes EXEC read lane 63");
     expectFailure([&] { static_cast<void>(pixel(umin, 8u, true)); }, "v_permlanex16_b32 from lanes 16-31 is outside the 8-lane host subgroup", "half-wave reduction: the scan built on an 8-lane subgroup");
+}
+
+void verifyNhl26Wave64PixelLane63Replay() {
+    using namespace ShaderRecompiler;
+    std::ifstream file("core/libs/prx/libSceAgcDriver/tests/data/nhl26-wave64-pixel-lane63.req", std::ios::binary);
+    require(file.good(), "NHL 26 wave64 pixel request fixture could not be opened");
+    std::ostringstream serialized;
+    serialized << file.rdbuf();
+    const auto request = RequestSerializer{}.Deserialize(serialized.str());
+    require(request.request.shader.stage == ShaderStage::Fragment && request.request.context.waveSize == 64u && request.request.target.subgroupSize == 32u, "NHL 26 lane-63 fixture no longer describes a wave64 pixel shader on a 32-lane host");
+    const auto handle = PrepareShader(request.request);
+    require(!GetPreparedArtifact(*handle).spirv.Words().empty(), "NHL 26 wave64 pixel shader did not produce SPIR-V");
 }
 
 void verifyNarrowVertexWave() {
@@ -5128,6 +5142,11 @@ int main(int argc, char** argv) {
         if (argc == 2 && std::string_view(argv[1]) == "--layout-pair") {
             verifyLayoutPair();
             std::cout << "Both push-constant layouts of a pixel shader compile from one program unchanged\n";
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--entry-lane-5398") {
+            verifyNhl26Wave64PixelLane63Replay();
+            std::cout << "The NHL 26 wave64 pixel lane-63 shader compiles for a 32-lane host\n";
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--bindless") {
