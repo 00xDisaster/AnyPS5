@@ -155,12 +155,9 @@ int main() {
          }) {
         RequireUnsupported(resource);
     }
-    bool unsupported = false;
-    try {
-        getdtablesize_nid_postfix();
-    } catch (const std::runtime_error&) {
-        unsupported = true;
-    }
-    Require(unsupported);
+    const ResourceLimit nofile = GuestLimit(GUEST_RLIMIT_NOFILE);
+    const int tableSize = getdtablesize_nid_postfix();
+    Require(nofile.rlim_cur > std::numeric_limits<int>::max() ? tableSize == std::numeric_limits<int>::max()
+                                                              : tableSize == static_cast<int>(nofile.rlim_cur));
     CheckOpenFileLimit();
 }
