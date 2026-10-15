@@ -213,6 +213,21 @@ static void CheckSystemStringSysctl() {
         Require(length == sizeof(buffer));
     }
 }
+static void CheckSystemStringNames() {
+    for (const auto& entry : SystemStrings) {
+        *__error_nid_postfix() = 13;
+        char buffer[32];
+        std::memset(buffer, 0xaa, sizeof(buffer));
+        std::size_t length = sizeof(buffer);
+        Require(sysctlbyname_nid_postfix(entry.name, buffer, &length, nullptr, 0) == 0 && length == std::strlen(entry.value) + 1);
+        Require(std::strcmp(buffer, entry.value) == 0 && *__error_nid_postfix() == 13);
+        Require(sysctlbyname_nid_postfix(entry.name, buffer, &length, "Prospero", sizeof("Prospero")) == -1 && *__error_nid_postfix() == 1);
+        int mib[3] = {0x5a5a5a5a, 0x5a5a5a5a, 0x5a5a5a5a};
+        std::size_t size = 3;
+        Require(sysctlnametomib_nid_postfix(entry.name, mib, &size) == 0 && size == 2);
+        Require(mib[0] == entry.mib[0] && mib[1] == entry.mib[1] && mib[2] == 0x5a5a5a5a);
+    }
+}
 static void CheckLeafWithTrailingComponent() {
     const int leaves[][2] = {{6, 3}, {6, 2}, {6, 5}, {1, 37}};
     for (const auto& leaf : leaves) {
@@ -441,6 +456,7 @@ int main() {
     CheckMachdepCachelineSizeSysctl();
     CheckPathnameSysctl();
     CheckSystemStringSysctl();
+    CheckSystemStringNames();
     CheckLeafWithTrailingComponent();
     CheckSystemSwVersion();
     CheckPseudoRandomSysctl();
