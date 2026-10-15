@@ -1095,6 +1095,87 @@ void importRefusalMemoryTests(const Context& context) {
     ::operator delete(block, std::align_val_t{piece});
 }
 
+void importDeviceBudgetTests() {
+    constexpr std::uint64_t MiB = std::uint64_t{1} << 20u;
+    constexpr std::uint64_t GiB = std::uint64_t{1} << 30u;
+    VkPhysicalDeviceMemoryProperties memory{};
+    memory.memoryHeapCount = 2;
+    memory.memoryHeaps[0] = {8 * GiB, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+    memory.memoryHeaps[1] = {16 * GiB, 0};
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT reported{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
+    const auto text = [](std::uint64_t bytes) { return std::to_string(bytes >> 20u) + " MiB"; };
+    Require(HostImportBudgetFor(memory, nullptr, 6 * GiB, 0) == 6 * GiB, "an import budget without a memory budget report is not the configured one");
+    Require(HostImportBudgetFor(memory, &reported, 6 * GiB, 0) == 6 * GiB, "a zero reported budget of the host heap did not leave the configured import budget");
+    reported.heapBudget[1] = 12 * GiB;
+    reported.heapUsage[1] = 5 * GiB;
+    const auto granted = HostImportBudgetFor(memory, &reported, 10 * GiB, 2 * GiB);
+    Require(granted == 7 * GiB + 512 * MiB, "a 12 GiB host heap budget using 3 GiB besides 2 GiB of imports did not give 7.5 GiB to imports: " + text(granted));
+    Require(HostImportBudgetFor(memory, &reported, 6 * GiB, 2 * GiB) == 6 * GiB, "a reported host heap budget raised the configured import budget");
+    reported.heapUsage[1] = 5 * GiB + 10 * MiB;
+    const auto rounded = HostImportBudgetFor(memory, &reported, 10 * GiB, 2 * GiB);
+    Require(rounded == 7 * GiB + 448 * MiB, "the import budget from a reported heap was not rounded down to 64 MiB: " + text(rounded));
+    reported.heapUsage[1] = 5 * GiB;
+    const auto uncounted = HostImportBudgetFor(memory, &reported, 64 * GiB, 8 * GiB);
+    Require(uncounted == 10 * GiB + 512 * MiB, "imports the heap usage does not count were taken from other usage: " + text(uncounted));
+    reported.heapBudget[1] = 4 * GiB;
+    reported.heapUsage[1] = 6 * GiB;
+    Require(HostImportBudgetFor(memory, &reported, 6 * GiB, GiB) == 0, "a host heap used past its reported budget left room for imports");
+    reported.heapBudget[0] = 1 * GiB;
+    reported.heapBudget[1] = 0;
+    Require(HostImportBudgetFor(memory, &reported, 6 * GiB, 0) == 6 * GiB, "the device-local heap's budget was taken for the host heap's");
+}
+
+void importCeilingTests(const Context& context, const BdaTestAccess& access, bool nearBudget) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t count = 24;
+    auto* block = static_cast<std::uint8_t*>(::operator new(2 * count * piece, std::align_val_t{piece}));
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(0);
+    ClearHostImports(importing.device);
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Add(block + 2 * index * piece, piece, true, true, true);
+    }
+    std::size_t next = 0;
+    const auto lookup = [&] { return HostImportFor(importing, reinterpret_cast<std::uintptr_t>(block + 2 * next++ * piece), 16) != nullptr; };
+    const auto counted = [] { return HostImportCounters().requesters[static_cast<std::size_t>(ImportRequester::Access)]; };
+    const auto outcome = [](const HostImportRequesterCounts& before, const HostImportRequesterCounts& after) { return std::to_string(after.failed - before.failed) + " failed, " + std::to_string(after.refused - before.refused) + " refused"; };
+    if (nearBudget) {
+        SetHostImportBudget(HostImportLiveBytes() + 2 * piece);
+        Require(lookup(), "the ceiling test's first import was not made");
+        access.limitImports(0);
+        const auto before = counted();
+        for (int attempt = 0; attempt < 3; ++attempt) static_cast<void>(lookup());
+        const auto after = counted();
+        access.limitImports(std::nullopt);
+        Require(after.failed - before.failed == 1 && after.refused - before.refused == 2, "imports after a vkAllocateMemory failure within an eighth of the budget were not one failure and then refusals: " + outcome(before, after));
+    } else {
+        SetHostImportBudget(64 * piece);
+        Require(lookup(), "the ceiling test's first import was not made");
+        access.limitImports(0);
+        auto before = counted();
+        Require(!lookup(), "an import past the mock's import limit was made");
+        access.limitImports(std::nullopt);
+        Require(lookup() && counted().failed == before.failed + 1, "one vkAllocateMemory failure far below the import budget lowered it");
+        access.limitImports(0);
+        before = counted();
+        for (int attempt = 0; attempt < 5; ++attempt) static_cast<void>(lookup());
+        const auto after = counted();
+        access.limitImports(std::nullopt);
+        Require(after.failed - before.failed == 3 && after.refused - before.refused == 2, "five imports after vkAllocateMemory failures far below the budget were not three failures and then refusals: " + outcome(before, after));
+    }
+    Require(!lookup(), "an import was made over the lowered ceiling");
+    SetHostImportBudget(0);
+    Require(lookup(), "a new import budget did not lift the ceiling");
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Remove(block + 2 * index * piece);
+    }
+    ClearHostImports(importing.device);
+    ::operator delete(block, std::align_val_t{piece});
+}
+
 void spaceReadAcrossImportsTests(const Context& context, const BdaTestAccess& access) {
     constexpr std::size_t piece = 65536;
     constexpr std::size_t window = 2 * piece;
@@ -2200,6 +2281,9 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     importBlockFailureTests(context, access);
     importBlockBudgetTests(context);
     importRefusalMemoryTests(context);
+    importDeviceBudgetTests();
+    importCeilingTests(context, access, false);
+    importCeilingTests(context, access, true);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
