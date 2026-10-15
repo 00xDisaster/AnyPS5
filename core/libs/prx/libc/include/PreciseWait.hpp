@@ -218,6 +218,29 @@ inline void PreciseSleepUs(unsigned long long micros) {
 template <class TClock, class TDuration>
 inline void PreciseSleepUntil(const std::chrono::time_point<TClock, TDuration>& deadline) {
 #ifdef _WIN32
+    if constexpr (std::is_same_v<TClock, std::chrono::steady_clock>) {
+        if (PreciseQpcFrequency() == 10000000ULL) [[likely]] {
+            const auto rawDeadline = deadline.time_since_epoch().count();
+            if (rawDeadline <= 0) [[unlikely]] {
+                return;
+            }
+            using HundredNanos = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
+            std::uint64_t targetHns = 0;
+            if constexpr (std::is_same_v<typename TDuration::period, std::nano>) {
+                targetHns = (static_cast<std::uint64_t>(rawDeadline) + 99ULL) / 100ULL;
+            } else {
+                targetHns = static_cast<std::uint64_t>(
+                    std::chrono::ceil<HundredNanos>(deadline.time_since_epoch()).count());
+            }
+            LARGE_INTEGER counter;
+            QueryPerformanceCounter(&counter);
+            const std::uint64_t nowTicks = static_cast<std::uint64_t>(counter.QuadPart);
+            if (nowTicks < targetHns) {
+                PreciseSleepFromCounter(counter, targetHns - nowTicks);
+            }
+            return;
+        }
+    }
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);
     const auto now = TClock::now();
