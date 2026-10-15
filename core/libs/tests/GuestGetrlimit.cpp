@@ -1,4 +1,5 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
@@ -7,6 +8,7 @@
 #include <vector>
 #ifndef _WIN32
 #include <sys/resource.h>
+#include <unistd.h>
 #endif
 
 struct ResourceLimit {
@@ -157,7 +159,12 @@ int main() {
     }
     const ResourceLimit nofile = GuestLimit(GUEST_RLIMIT_NOFILE);
     const int tableSize = getdtablesize_nid_postfix();
-    Require(nofile.rlim_cur > std::numeric_limits<int>::max() ? tableSize == std::numeric_limits<int>::max()
-                                                              : tableSize == static_cast<int>(nofile.rlim_cur));
+    std::int64_t expectedTableSize = nofile.rlim_cur;
+#ifndef _WIN32
+    expectedTableSize = std::min(expectedTableSize, static_cast<std::int64_t>(::getdtablesize()));
+#endif
+    if (expectedTableSize > std::numeric_limits<int>::max())
+        expectedTableSize = std::numeric_limits<int>::max();
+    Require(tableSize == static_cast<int>(expectedTableSize));
     CheckOpenFileLimit();
 }
