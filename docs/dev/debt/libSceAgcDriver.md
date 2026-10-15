@@ -1,5 +1,9 @@
 # libSceAgcDriver technical debt
 
+### Silent stubs
+
+- [sceAgcDriverRegisterDefaultOwner](../../../core/libs/prx/libSceAgcDriver/Unimplemented.cpp) (libSceAgcDriver) - takes one uint32 owner by value (OpenAGC `include/agcdriver.h`, SharpEmu `AgcExports.DriverResources.cs`) and returns 0 without recording it. PPSA21480 treats the code 0x8A6C9018 it returned before as fatal. Console behaviour is unverified: OpenAGC describes the function as a firmware 5.50 stub that returns 0x8A6C9018, SharpEmu returns 0
+
 ### Unknown function info
 
 - [Optional BMP frame dumps](../../../core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp) use checked host stdio. An open, header, pixel or close failure prints one diagnostic and disables subsequent BMP dumps for the process; queued frames drain without more file I/O. Pixel validation and allocation failures retain the existing fatal path. The CPU fixture checks identical BMP bytes and real pipe failures. VideoOut flips on an RTX 3060 continue after a first dump that cannot be opened; header, pixel and close failures during presentation are unmeasured.
