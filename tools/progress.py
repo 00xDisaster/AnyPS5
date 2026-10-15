@@ -448,11 +448,11 @@ def report(base, head):
 
 def write_site(output, libraries, shaders):
     output.mkdir(parents=True, exist_ok=True)
-    (output / "progress.json").write_text(json.dumps({"libraries": libraries, "shaders": shaders}, indent=2))
-    (output / "badge-libraries.svg").write_text(badge("libraries*", libraries))
-    (output / "badge-shaders.svg").write_text(badge("shaders", shaders))
-    (output / "progress.svg").write_text(render(libraries, shaders))
-    (output / "progress.html").write_text(summary(libraries, shaders))
+    (output / "progress.json").write_text(json.dumps({"libraries": libraries, "shaders": shaders}, indent=2), encoding="utf-8")
+    (output / "badge-libraries.svg").write_text(badge("libraries*", libraries), encoding="utf-8")
+    (output / "badge-shaders.svg").write_text(badge("shaders", shaders), encoding="utf-8")
+    (output / "progress.svg").write_text(render(libraries, shaders), encoding="utf-8")
+    (output / "progress.html").write_text(summary(libraries, shaders), encoding="utf-8")
 
 
 def main(argv=None):
