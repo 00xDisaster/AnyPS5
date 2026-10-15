@@ -739,6 +739,22 @@ class ImportAuditTests(unittest.TestCase):
         self.assertEqual(data["stops"], [{"registry": str(registry), "nid": None, "library": None, "name": None}])
         self.assertIn(f"  {registry}: none", out)
 
+    def test_duplicate_import_strength_is_order_independent(self):
+        for strengths in ((False, True), (True, False), (False, False), (True, True)):
+            with self.subTest(strengths=strengths):
+                imports = [("AAAAAAAAAAA", "libSceA.prx", weak) for weak in strengths]
+                records, _ = import_audit.audit(imports, {}, {}, set(), set())
+                self.assertEqual(len(records), 1)
+                self.assertEqual(records[0]["references"], 2)
+                self.assertEqual(records[0]["weak"], all(strengths))
+                stop = import_audit.current_stop(imports, records)
+                if all(strengths):
+                    self.assertIsNone(stop)
+                else:
+                    self.assertIs(stop, records[0])
+                    self.assertFalse(stop["weak"])
+
+
     def test_a_weak_unresolved_import_is_not_a_stop(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(exporting("AAAAAAAAAAA"))
