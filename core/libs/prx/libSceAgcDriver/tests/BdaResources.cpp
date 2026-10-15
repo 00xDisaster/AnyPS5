@@ -1123,6 +1123,15 @@ void importDeviceBudgetTests() {
     reported.heapBudget[0] = 1 * GiB;
     reported.heapBudget[1] = 0;
     Require(HostImportBudgetFor(memory, &reported, 6 * GiB, 0) == 6 * GiB, "the device-local heap's budget was taken for the host heap's");
+    constexpr auto unreported = std::numeric_limits<std::uint64_t>::max();
+    Require(HostImportBudgetWith(6400 * MiB, true, 4480 * MiB, false, 0) == 6400 * MiB, "a host heap report lowered a set import budget");
+    Require(HostImportBudgetWith(6400 * MiB, true, 4480 * MiB, true, 0) == 6400 * MiB, "a host heap report lowered a set import budget after a vkAllocateMemory failure");
+    Require(HostImportBudgetWith(6400 * MiB, true, 4480 * MiB, true, 3752 * MiB) == 3752 * MiB, "the ceiling after a vkAllocateMemory failure did not lower a set import budget");
+    Require(HostImportBudgetWith(5888 * MiB, false, 4480 * MiB, false, 0) == 5888 * MiB, "a host heap report lowered the default import budget before any vkAllocateMemory failure");
+    Require(HostImportBudgetWith(5888 * MiB, false, 4480 * MiB, true, 0) == 4480 * MiB, "the default import budget did not take a lower host heap report after a vkAllocateMemory failure");
+    Require(HostImportBudgetWith(5888 * MiB, false, 8 * GiB, true, 0) == 5888 * MiB, "a higher host heap report raised the default import budget");
+    Require(HostImportBudgetWith(5888 * MiB, false, unreported, true, 0) == 5888 * MiB, "a device without a memory budget report changed the default import budget");
+    Require(HostImportBudgetWith(5888 * MiB, false, 4480 * MiB, true, 3000 * MiB) == 3000 * MiB, "the ceiling below a host heap report did not hold the default import budget");
 }
 
 void importCeilingTests(const Context& context, const BdaTestAccess& access, bool nearBudget) {
@@ -1168,6 +1177,58 @@ void importCeilingTests(const Context& context, const BdaTestAccess& access, boo
     Require(!lookup(), "an import was made over the lowered ceiling");
     SetHostImportBudget(0);
     Require(lookup(), "a new import budget did not lift the ceiling");
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Remove(block + 2 * index * piece);
+    }
+    ClearHostImports(importing.device);
+    ::operator delete(block, std::align_val_t{piece});
+}
+
+std::uint64_t reportedHostHeapBudget = 0;
+std::uint64_t reportedHostHeapUsage = 0;
+
+void VKAPI_PTR reportHostHeap(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties2* properties) {
+    for (auto* next = static_cast<VkBaseOutStructure*>(properties->pNext); next != nullptr; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT) continue;
+        auto* reported = reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT*>(next);
+        reported->heapBudget[1] = reportedHostHeapBudget;
+        reported->heapUsage[1] = reportedHostHeapUsage;
+    }
+}
+
+void importReportFloorTests(const Context& context, const BdaTestAccess& access, bool setBudget) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t count = 24;
+    constexpr std::uint64_t GiB = std::uint64_t{1} << 30u;
+    static std::uintptr_t physical = 0x1000;
+    auto* block = static_cast<std::uint8_t*>(::operator new(2 * count * piece, std::align_val_t{piece}));
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    importing.memory.memoryHeapCount = 2;
+    importing.memory.memoryHeaps[0] = {8 * GiB, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+    importing.memory.memoryHeaps[1] = {16 * GiB, 0};
+    importing.memoryProperties2 = reportHostHeap;
+    importing.physical = reinterpret_cast<VkPhysicalDevice>(physical += 0x10);
+    reportedHostHeapBudget = 8 * (std::uint64_t{1} << 20u);
+    reportedHostHeapUsage = reportedHostHeapBudget;
+    SetHostImportWindow(0);
+    SetHostImportBudget(setBudget ? 64 * piece : 0);
+    ClearHostImports(importing.device);
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Add(block + 2 * index * piece, piece, true, true, true);
+    }
+    std::size_t next = 0;
+    const auto lookup = [&] { return HostImportFor(importing, reinterpret_cast<std::uintptr_t>(block + 2 * next++ * piece), 16) != nullptr; };
+    const std::string budget = setBudget ? "a set import budget" : "the default import budget";
+    for (int made = 0; made < 3; ++made) Require(lookup(), budget + " was lowered below " + std::to_string(made + 1) + " imports by a host heap report that leaves imports no room, before any vkAllocateMemory failure");
+    access.limitImports(0);
+    Require(!lookup(), "an import past the mock's import limit was made");
+    access.limitImports(std::nullopt);
+    if (setBudget) Require(lookup(), "a set import budget took the host heap report's limit after a vkAllocateMemory failure far below it");
+    else Require(!lookup(), "the default import budget did not take the host heap report's limit after a vkAllocateMemory failure");
+    SetHostImportBudget(0);
     {
         GuestAllocations::Mutation mutation;
         for (std::size_t index = 0; index < count; ++index) mutation.Remove(block + 2 * index * piece);
@@ -2284,6 +2345,8 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     importDeviceBudgetTests();
     importCeilingTests(context, access, false);
     importCeilingTests(context, access, true);
+    importReportFloorTests(context, access, true);
+    importReportFloorTests(context, access, false);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
