@@ -29,7 +29,7 @@ void require(bool condition, const std::string& reason) {
     if (!condition) throw std::runtime_error(reason);
 }
 
-bool near(double value, double expected, double tolerance = 1e-9) {
+bool within(double value, double expected, double tolerance = 1e-9) {
     return std::abs(value - expected) <= tolerance;
 }
 
@@ -39,13 +39,13 @@ void fpsWindowTests() {
     statistics.AddPresent(Start, 0, 0);
     require(statistics.Fps() == 0, "one present reads as a frame rate");
     for (int i = 1; i <= 120; ++i) statistics.AddPresent(Start + i * 10ms, 0, 0);
-    require(near(statistics.Fps(), 100.0), "a present every 10 ms reads as " + std::to_string(statistics.Fps()) + " FPS, not 100");
+    require(within(statistics.Fps(), 100.0), "a present every 10 ms reads as " + std::to_string(statistics.Fps()) + " FPS, not 100");
     statistics.AddPresent(Start + 1700ms, 0, 0);
-    require(near(statistics.Fps(), 51.0), "after a 500 ms stall the last second holds 52 presents, read as " + std::to_string(statistics.Fps()) + " FPS, not 51");
+    require(within(statistics.Fps(), 51.0), "after a 500 ms stall the last second holds 52 presents, read as " + std::to_string(statistics.Fps()) + " FPS, not 51");
     statistics.AddPresent(Start + 3700ms, 0, 0);
-    require(near(statistics.Fps(), 0.5), "after a 2 s stall the last second holds one present, read as " + std::to_string(statistics.Fps()) + " FPS, not the last frame's 0.5");
+    require(within(statistics.Fps(), 0.5), "after a 2 s stall the last second holds one present, read as " + std::to_string(statistics.Fps()) + " FPS, not the last frame's 0.5");
     statistics.AddPresent(Start + 3750ms, 0, 0);
-    require(near(statistics.Fps(), 20.0), "two presents 50 ms apart read as " + std::to_string(statistics.Fps()) + " FPS, not 20");
+    require(within(statistics.Fps(), 20.0), "two presents 50 ms apart read as " + std::to_string(statistics.Fps()) + " FPS, not 20");
     bool refused = false;
     try {
         statistics.AddPresent(Start + 3740ms, 0, 0);
@@ -66,24 +66,24 @@ void frameRingTests() {
         statistics.AddPresent(at, 0, 0);
     }
     const auto partial = statistics.FrameTimes();
-    require(partial.size() == 4 && near(partial[0], 1) && near(partial[3], 4), "the frame times of a short run are not in present order");
+    require(partial.size() == 4 && within(partial[0], 1) && within(partial[3], 4), "the frame times of a short run are not in present order");
     for (int i = 5; i <= 150; ++i) {
         at += std::chrono::milliseconds(i);
         statistics.AddPresent(at, 0, 0);
     }
     const auto times = statistics.FrameTimes();
     require(times.size() == OverlayStatistics::FrameHistory, "the ring holds " + std::to_string(times.size()) + " frames, not 120");
-    for (std::size_t i = 0; i < times.size(); ++i) require(near(times[i], 31.0 + static_cast<double>(i)), "frame " + std::to_string(i) + " of the ring is " + std::to_string(times[i]) + " ms");
-    require(near(statistics.LastFrameMs(), 150), "the last frame is not the newest");
+    for (std::size_t i = 0; i < times.size(); ++i) require(within(times[i], 31.0 + static_cast<double>(i)), "frame " + std::to_string(i) + " of the ring is " + std::to_string(times[i]) + " ms");
+    require(within(statistics.LastFrameMs(), 150), "the last frame is not the newest");
     const auto range = statistics.FrameTimeRange();
-    require(near(range.minimum, 31) && near(range.maximum, 150) && near(range.average, 90.5), "the graph range of 31..150 ms reads as " + std::to_string(range.minimum) + "/" + std::to_string(range.average) + "/" + std::to_string(range.maximum));
+    require(within(range.minimum, 31) && within(range.maximum, 150) && within(range.average, 90.5), "the graph range of 31..150 ms reads as " + std::to_string(range.minimum) + "/" + std::to_string(range.average) + "/" + std::to_string(range.maximum));
 }
 
 void counterTests() {
     OverlayStatistics statistics;
     constexpr std::uint64_t Earlier = 1'000'000'000u;
     for (std::uint64_t i = 0; i <= 60; ++i) statistics.AddPresent(Start + i * 16ms, Earlier + i * 4'000'000u, Earlier + i * 1'500'000u);
-    require(near(statistics.GpuMsPerFrame(), 4.0) && near(statistics.DriverMsPerFrame(), 1.5), "4 ms of GPU and 1.5 ms of driver time per frame read as " + std::to_string(statistics.GpuMsPerFrame()) + " and " + std::to_string(statistics.DriverMsPerFrame()));
+    require(within(statistics.GpuMsPerFrame(), 4.0) && within(statistics.DriverMsPerFrame(), 1.5), "4 ms of GPU and 1.5 ms of driver time per frame read as " + std::to_string(statistics.GpuMsPerFrame()) + " and " + std::to_string(statistics.DriverMsPerFrame()));
     statistics.AddPresent(Start + 61 * 16ms, 5, 5);
     require(statistics.GpuMsPerFrame() == 0 && statistics.DriverMsPerFrame() == 0, "a counter that went back is read as time");
 }
@@ -107,8 +107,8 @@ void lowRateTests() {
         gpuTotal += Gpu[i];
         driverTotal += Driver[i];
         slow.AddPresent(Start + (i + 1) * 2s, gpuTotal, driverTotal);
-        require(near(slow.Fps(), 0.5) && near(slow.LastFrameMs(), 2000), "a present every 2 s reads as " + std::to_string(slow.Fps()) + " FPS and " + std::to_string(slow.LastFrameMs()) + " ms, not 0.5 and 2000");
-        require(near(slow.GpuMsPerFrame(), static_cast<double>(Gpu[i]) / 1e6) && near(slow.DriverMsPerFrame(), static_cast<double>(Driver[i]) / 1e6), "frame " + std::to_string(i + 1) + " every 2 s reads " + std::to_string(slow.GpuMsPerFrame()) + " ms of GPU and " + std::to_string(slow.DriverMsPerFrame()) + " ms of driver time, not its own");
+        require(within(slow.Fps(), 0.5) && within(slow.LastFrameMs(), 2000), "a present every 2 s reads as " + std::to_string(slow.Fps()) + " FPS and " + std::to_string(slow.LastFrameMs()) + " ms, not 0.5 and 2000");
+        require(within(slow.GpuMsPerFrame(), static_cast<double>(Gpu[i]) / 1e6) && within(slow.DriverMsPerFrame(), static_cast<double>(Driver[i]) / 1e6), "frame " + std::to_string(i + 1) + " every 2 s reads " + std::to_string(slow.GpuMsPerFrame()) + " ms of GPU and " + std::to_string(slow.DriverMsPerFrame()) + " ms of driver time, not its own");
     }
     const auto everyTwoSeconds = AgcDriver::ComposeOverlay(slow, true, true);
     require(everyTwoSeconds.above == std::vector<std::string>{"PROFILED", "FPS: 0.50", "FRAME: 2000 MS"}, "a present every 2 s shows " + std::to_string(everyTwoSeconds.above.size()) + " lines above the graph, the last '" + everyTwoSeconds.above.back() + "'");
@@ -117,7 +117,7 @@ void lowRateTests() {
     OverlayStatistics glacial;
     glacial.AddPresent(Start, 0, 0);
     for (int i = 1; i <= 5; ++i) glacial.AddPresent(Start + i * 12s, static_cast<std::uint64_t>(i) * 250'000'000u, static_cast<std::uint64_t>(i) * 12'500'000'000u);
-    require(near(glacial.Fps(), 1000.0 / 12000.0) && near(glacial.LastFrameMs(), 12000) && near(glacial.GpuMsPerFrame(), 250) && near(glacial.DriverMsPerFrame(), 12500), "a present every 12 s reads as " + std::to_string(glacial.Fps()) + " FPS, " + std::to_string(glacial.LastFrameMs()) + " ms, " + std::to_string(glacial.GpuMsPerFrame()) + " and " + std::to_string(glacial.DriverMsPerFrame()) + " ms");
+    require(within(glacial.Fps(), 1000.0 / 12000.0) && within(glacial.LastFrameMs(), 12000) && within(glacial.GpuMsPerFrame(), 250) && within(glacial.DriverMsPerFrame(), 12500), "a present every 12 s reads as " + std::to_string(glacial.Fps()) + " FPS, " + std::to_string(glacial.LastFrameMs()) + " ms, " + std::to_string(glacial.GpuMsPerFrame()) + " and " + std::to_string(glacial.DriverMsPerFrame()) + " ms");
     const auto everyTwelveSeconds = AgcDriver::ComposeOverlay(glacial, true, true);
     require(everyTwelveSeconds.above == std::vector<std::string>{"PROFILED", "FPS: 0.08", "FRAME: 9999 MS"}, "a present every 12 s shows " + std::to_string(everyTwelveSeconds.above.size()) + " lines above the graph, the last '" + everyTwelveSeconds.above.back() + "'");
     require(everyTwelveSeconds.below[0] == "MIN/AVG/MAX: 9999/9999/9999" && everyTwelveSeconds.below[1] == "GPU: 250 MS" && everyTwelveSeconds.below[2] == "DRIVER: 9999 MS", "a present every 12 s shows '" + everyTwelveSeconds.below[0] + "', '" + everyTwelveSeconds.below[1] + "' and '" + everyTwelveSeconds.below[2] + "'");
@@ -141,7 +141,7 @@ void lowRateTests() {
         rising.AddPresent(at, total, 0);
     };
     const auto check = [&](double fps, double gpuMs, const char* shown, const std::string& when) {
-        require(near(rising.Fps(), fps) && near(rising.GpuMsPerFrame(), gpuMs) && AgcDriver::FormatOverlayRate(rising.Fps()) == shown, when + " reads as " + std::to_string(rising.Fps()) + " FPS ('" + AgcDriver::FormatOverlayRate(rising.Fps()) + "') and " + std::to_string(rising.GpuMsPerFrame()) + " ms of GPU time, not " + std::to_string(fps) + " ('" + shown + "') and " + std::to_string(gpuMs));
+        require(within(rising.Fps(), fps) && within(rising.GpuMsPerFrame(), gpuMs) && AgcDriver::FormatOverlayRate(rising.Fps()) == shown, when + " reads as " + std::to_string(rising.Fps()) + " FPS ('" + AgcDriver::FormatOverlayRate(rising.Fps()) + "') and " + std::to_string(rising.GpuMsPerFrame()) + " ms of GPU time, not " + std::to_string(fps) + " ('" + shown + "') and " + std::to_string(gpuMs));
     };
     step(2s, 40'000'000u);
     check(0.5, 40, "0.50", "a 2 s frame");
@@ -310,16 +310,16 @@ AgcDriver::OverlayDetails fullDetails() {
 
 void packetStatisticsTests() {
     const auto statistics = countedStatistics();
-    require(near(statistics.DrawsPerFrame(), 1240) && near(statistics.DispatchesPerFrame(), 85), "1240 draws and 85 dispatches per frame read as " + std::to_string(statistics.DrawsPerFrame()) + " and " + std::to_string(statistics.DispatchesPerFrame()));
+    require(within(statistics.DrawsPerFrame(), 1240) && within(statistics.DispatchesPerFrame(), 85), "1240 draws and 85 dispatches per frame read as " + std::to_string(statistics.DrawsPerFrame()) + " and " + std::to_string(statistics.DispatchesPerFrame()));
     require(statistics.PipelinesInWindow() == 3 && statistics.Latest().pipelines == 1503, "3 pipelines created within the last second of 1503 read as " + std::to_string(statistics.PipelinesInWindow()) + " of " + std::to_string(statistics.Latest().pipelines));
-    require(near(statistics.GpuMsPerFrame(), 4.0) && near(statistics.DriverMsPerFrame(), 1.5), "the time counters changed with the packet counters");
+    require(within(statistics.GpuMsPerFrame(), 4.0) && within(statistics.DriverMsPerFrame(), 1.5), "the time counters changed with the packet counters");
     auto stalled = statistics;
     auto counters = stalled.Latest();
     counters.draws += 900;
     counters.dispatches += 40;
     counters.pipelines += 7;
     stalled.AddPresent(Start + 3000ms, counters);
-    require(near(stalled.DrawsPerFrame(), 900) && near(stalled.DispatchesPerFrame(), 40) && stalled.PipelinesInWindow() == 7 && stalled.Latest().pipelines == 1510, "a present alone in its second reads as " + std::to_string(stalled.DrawsPerFrame()) + " draws, " + std::to_string(stalled.DispatchesPerFrame()) + " dispatches and " + std::to_string(stalled.PipelinesInWindow()) + " pipelines, not the last frame's 900, 40 and 7");
+    require(within(stalled.DrawsPerFrame(), 900) && within(stalled.DispatchesPerFrame(), 40) && stalled.PipelinesInWindow() == 7 && stalled.Latest().pipelines == 1510, "a present alone in its second reads as " + std::to_string(stalled.DrawsPerFrame()) + " draws, " + std::to_string(stalled.DispatchesPerFrame()) + " dispatches and " + std::to_string(stalled.PipelinesInWindow()) + " pipelines, not the last frame's 900, 40 and 7");
     auto restarted = statistics;
     counters = restarted.Latest();
     counters.draws = 3;
@@ -465,9 +465,9 @@ void paletteTests() {
     const auto sdr = AgcDriver::OverlayPalette(VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
     require(sdr[1] == std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f} && sdr[0][3] > 0.0f && sdr[0][3] < 1.0f, "the SDR palette is not opaque white text over a translucent panel");
     const auto srgb = AgcDriver::OverlayPalette(VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
-    require(near(srgb[2][1], std::pow((0.8 + 0.055) / 1.055, 2.4), 1e-5) && srgb[1][0] == 1.0f, "an sRGB swapchain gets encoded colors");
+    require(within(srgb[2][1], std::pow((0.8 + 0.055) / 1.055, 2.4), 1e-5) && srgb[1][0] == 1.0f, "an sRGB swapchain gets encoded colors");
     const auto hdr = AgcDriver::OverlayPalette(VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT);
-    for (std::size_t channel = 0; channel < 3; ++channel) require(near(hdr[1][channel], 0.5807, 0.0015), "HDR10 white text is not at 203 nits (PQ " + std::to_string(hdr[1][channel]) + ")");
+    for (std::size_t channel = 0; channel < 3; ++channel) require(within(hdr[1][channel], 0.5807, 0.0015), "HDR10 white text is not at 203 nits (PQ " + std::to_string(hdr[1][channel]) + ")");
     require(std::lround(hdr[0][0] * 1023.0f) == 0 && hdr[0][3] == sdr[0][3], "the HDR10 panel is not black at the same opacity");
 }
 
