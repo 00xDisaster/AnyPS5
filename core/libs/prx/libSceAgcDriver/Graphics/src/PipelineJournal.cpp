@@ -367,6 +367,12 @@ public:
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
 
+#ifdef _WIN32
+    bool Held() const { return handle != INVALID_HANDLE_VALUE; }
+#else
+    bool Held() const { return descriptor >= 0; }
+#endif
+
 private:
 #ifdef _WIN32
     HANDLE handle = INVALID_HANDLE_VALUE;
@@ -721,6 +727,12 @@ private:
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
         FileLock fileLock(lockPath);
+        if (!fileLock.Held()) {
+            static std::atomic<bool> reported{false};
+            if (!reported.exchange(true)) std::fprintf(stderr, "[pipeline-journal] cannot lock %s; pipelines are not recorded while it cannot be locked\n", lockPath.string().c_str());
+            counters.writeFailures.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
         bool fresh = false;
         {
             std::lock_guard lock(mutex);
