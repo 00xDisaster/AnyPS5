@@ -1,0 +1,21 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0, TEXEL_FORMAT) uniform restrict uimage2DMS samples;
+
+layout(push_constant) uniform Order {
+    uvec4 map;
+    uvec2 extent;
+    uint count;
+} order;
+
+void main() {
+    const uvec2 at = gl_GlobalInvocationID.xy;
+    if (at.x >= order.extent.x || at.y >= order.extent.y) return;
+    const uint map = order.map[(at.x & 1u) | ((at.y & 1u) << 1u)];
+    if (map == 0x76543210u) return;
+    uvec4 held[8];
+    for (uint index = 0u; index < order.count; ++index) held[index] = imageLoad(samples, ivec2(at), int(index));
+    for (uint index = 0u; index < order.count; ++index) imageStore(samples, ivec2(at), int(index), held[(map >> (index * 4u)) & 7u]);
+}
