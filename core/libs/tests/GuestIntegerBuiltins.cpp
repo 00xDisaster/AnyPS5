@@ -102,6 +102,8 @@ static void CheckBitCounts() {
     Require(__clzti2_nid_postfix(1) == 127 && __clzti2_nid_postfix(Make(1, 0)) == 63);
     Require(__ctzsi2_nid_postfix(0x80000000u) == 31 && __ctzdi2_nid_postfix(1ull << 40) == 40);
     Require(__ctzti2_nid_postfix(Make(1, 0)) == 64 && __ctzti2_nid_postfix(4) == 2);
+    Require(__clzdi2_nid_postfix(0) == 32 && __ctzdi2_nid_postfix(0) == 32);
+    Require(__clzti2_nid_postfix(0) == 64 && __ctzti2_nid_postfix(0) == 64);
     Require(__ffsdi2_nid_postfix(0) == 0 && __ffsdi2_nid_postfix(8) == 4);
     Require(__ffsti2_nid_postfix(0) == 0 && __ffsti2_nid_postfix(Make(2, 0)) == 66);
     Require(__paritysi2_nid_postfix(7) == 1 && __paritydi2_nid_postfix(3) == 0);
