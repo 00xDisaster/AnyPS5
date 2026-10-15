@@ -218,6 +218,7 @@ bool Driver::fillBuffer(QueueState& queue, std::uint32_t queueId, std::span<cons
         bytes = dwordFill->bytes;
         pattern = dwordFill->pattern;
     } else if (memoryFill) {
+        drainPendingInputWrites(queueId, {{memoryFill->valueAddress, 4}});
         GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Fill);
         inputLock.lock();
         recordLabelsForPacket(localDevice.get(), queueId);
@@ -260,6 +261,7 @@ bool Driver::fillBuffer(QueueState& queue, std::uint32_t queueId, std::span<cons
         bytes = static_cast<std::size_t>(records * 16u);
         if (matchesBufferPatternFillKernel(code)) {
             const auto source = userData[4] | (static_cast<std::uint64_t>(userData[5] & 0xffffu) << 32u);
+            drainPendingInputWrites(queueId, {{source, sizeof(pattern)}});
             GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Fill);
             inputLock.lock();
             recordLabelsForPacket(localDevice.get(), queueId);
@@ -269,6 +271,7 @@ bool Driver::fillBuffer(QueueState& queue, std::uint32_t queueId, std::span<cons
             pattern = {userData[4], userData[5], userData[6], userData[7]};
         }
     }
+    if (queueId == 0 && DrawPipeline::Active() && inputLock.owns_lock()) inputLock.unlock();
     storeBufferFill(queueId, base, bytes, pattern, localDevice, memoryFill.has_value(), true);
     return true;
 }
@@ -401,7 +404,6 @@ void Driver::storeBufferFill(std::uint32_t queueId, std::uint64_t base, std::siz
     };
     static const bool orderedFills = std::getenv("APS5_PIPELINE_DRAIN_FILLS") == nullptr;
     if (orderedFills && queueId == 0 && DrawPipeline::Active()) {
-        if (inputLock.owns_lock()) inputLock.unlock();
         DrawPipeline::Queue0().Enqueue([store, queueId] {
             GuestMemory::SetCurrentPacket(0x15, queueId);
             store();
