@@ -141,6 +141,9 @@ def place_segments(data, headers, records):
         if header["vaddr"] != 0:
             host = load_for(header["vaddr"])
             if host is None:
+                if header["size"] == 0:
+                    header["source"] = 0
+                    continue
                 raise Refused("segment %d vaddr %#x is in no PT_LOAD" % (header["index"], header["vaddr"]))
             header["host"] = host
             header["source"] = host["source"] + (header["vaddr"] - host["vaddr"])
@@ -155,6 +158,8 @@ def place_segments(data, headers, records):
             header["memory"] = min(header["memory"], keep)
 
     for header in headers:
+        if header["type"] == PT_LOAD and header["size"] == 0:
+            continue
         if header["source"] > len(data) or header["size"] > len(data) - header["source"]:
             raise Refused("segment %d does not fit the file" % header["index"])
 
@@ -219,7 +224,7 @@ def unwrap(path, output, verbose=False):
         result[region["new"]:region["new"] + region["size"]] = data[region["old"]:region["old"] + region["size"]]
 
     for header in headers:
-        if header["size"] == 0 and header["type"] == PT_LOAD:
+        if header["size"] == 0 and (header["type"] == PT_LOAD or header["source"] == 0):
             header["new"] = 0
             continue
         region = region_for(header["source"], header["size"])
