@@ -177,6 +177,42 @@ static void CheckPathnameSysctl() {
     length = sizeof(buffer);
     Require(sysctl_nid_postfix(mibSelf, 4, buffer, &length, buffer, sizeof(buffer)) == -1 && *__error_nid_postfix() == 1);
 }
+struct SystemString {
+    int mib[2];
+    const char* name;
+    const char* value;
+};
+static const SystemString SystemStrings[] = {
+    {{1, 1}, "kern.ostype", "FreeBSD"},
+    {{1, 2}, "kern.osrelease", "11.4-RELEASE"},
+    {{1, 4}, "kern.version", "FreeBSD 11.4-RELEASE\n"},
+    {{1, 10}, "kern.hostname", "AnyPS5"},
+    {{6, 1}, "hw.machine", "amd64"},
+};
+static void CheckSystemStringSysctl() {
+    for (const auto& entry : SystemStrings) {
+        const std::size_t size = std::strlen(entry.value) + 1;
+        *__error_nid_postfix() = 13;
+        std::size_t length = 0;
+        Require(sysctl_nid_postfix(entry.mib, 2, nullptr, &length, nullptr, 0) == 0 && length == size);
+        char buffer[32];
+        std::memset(buffer, 0xaa, sizeof(buffer));
+        length = sizeof(buffer);
+        Require(sysctl_nid_postfix(entry.mib, 2, buffer, &length, nullptr, 0) == 0 && length == size);
+        Require(std::strcmp(buffer, entry.value) == 0 && buffer[size] == static_cast<char>(0xaa));
+        Require(*__error_nid_postfix() == 13);
+        std::memset(buffer, 0xaa, sizeof(buffer));
+        length = 2;
+        Require(sysctl_nid_postfix(entry.mib, 2, buffer, &length, nullptr, 0) == -1 && *__error_nid_postfix() == 12);
+        Require(length == 2 && std::memcmp(buffer, entry.value, 2) == 0 && buffer[2] == static_cast<char>(0xaa));
+        length = sizeof(buffer);
+        Require(sysctl_nid_postfix(entry.mib, 2, buffer, &length, "Prospero", sizeof("Prospero")) == -1 && *__error_nid_postfix() == 1);
+        const int deeper[] = {entry.mib[0], entry.mib[1], 0};
+        length = sizeof(buffer);
+        Require(sysctl_nid_postfix(deeper, 3, buffer, &length, nullptr, 0) == -1 && *__error_nid_postfix() == 20);
+        Require(length == sizeof(buffer));
+    }
+}
 static void CheckLeafWithTrailingComponent() {
     const int leaves[][2] = {{6, 3}, {6, 2}, {6, 5}, {1, 37}};
     for (const auto& leaf : leaves) {
@@ -404,6 +440,7 @@ int main() {
     CheckTscFrequencySysctl();
     CheckMachdepCachelineSizeSysctl();
     CheckPathnameSysctl();
+    CheckSystemStringSysctl();
     CheckLeafWithTrailingComponent();
     CheckSystemSwVersion();
     CheckPseudoRandomSysctl();
