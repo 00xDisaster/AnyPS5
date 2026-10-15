@@ -1132,8 +1132,9 @@ int DoMprotect(const void* addr, size_t len, int prot) {
         }
 #endif
         if (!protectedPages) throw std::system_error(errno, std::generic_category(), "mprotect failed");
+        if (inside != requested) RecordProtection(requestedPointer, static_cast<std::size_t>(inside - requested), prot);
         NoteGuestStackProtection(inside, insideBytes, (prot & 3) == 3);
-        RecordProtection(requestedPointer, requestedBytes, prot);
+        RecordProtection(insidePointer, insideBytes, prot);
         return 0;
     }
     GuestAllocations::Mutation mutation;
