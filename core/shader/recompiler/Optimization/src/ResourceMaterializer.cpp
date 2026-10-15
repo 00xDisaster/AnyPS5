@@ -66,11 +66,16 @@ ShaderBufferResource decodeBufferDescriptor(const DescriptorValue& value) {
 }
 
 bool nullImageDescriptor(const DescriptorValue& descriptor) {
-    return ((descriptor.dwords[3] >> 28u) & 0xfu) == 0u || (descriptor.dwords[0] == 0u && (descriptor.dwords[1] & 0xffu) == 0u);
+    return descriptor.dwords[0] == 0u && (descriptor.dwords[1] & 0xffu) == 0u;
 }
 
 ImageType rawImageType(const DescriptorValue& descriptor) {
     return static_cast<ImageType>((descriptor.dwords[3] >> 28u) & 0xfu);
+}
+
+bool nullImageDescriptor(const ImageResource& image, const DescriptorValue& descriptor) {
+    if (nullImageDescriptor(descriptor)) return true;
+    return rawImageType(descriptor) == static_cast<ImageType>(0u) && image.table == NoTable && image.read && !image.written && !image.atomic;
 }
 
 IrBufferFormat rawImageFormat(const DescriptorValue& descriptor) {
@@ -128,7 +133,7 @@ bool validImageDescriptor(const DescriptorValue& descriptor, bool r128) {
 }
 
 std::uint32_t storageMipCount(const ImageResource& base, const DescriptorValue& descriptor) {
-    if (base.mipMode != ImageMipMode::DynamicStorage || nullImageDescriptor(descriptor)) {
+    if (base.mipMode != ImageMipMode::DynamicStorage || nullImageDescriptor(base, descriptor)) {
         return 1u;
     }
     const auto mipBase = (descriptor.dwords[3] >> 12u) & 0xfu;
@@ -170,7 +175,7 @@ ImageDecode inspectImageDescriptor(const DescriptorValue& descriptor, const Imag
     if (decoded.mipCount == 0u) {
         return rejectImage(PoisonReason::InvalidFormat, "storage image descriptor has an invalid mip range");
     }
-    if (nullImageDescriptor(descriptor)) {
+    if (nullImageDescriptor(base, descriptor)) {
         decoded.numericClass = base.atomic ? IrTextureNumericClass::Uint : IrTextureNumericClass::Float;
         decoded.dimension = RdnaImageDimension::Dim2D;
         decoded.cube = false;
@@ -824,7 +829,7 @@ void materializeSnapshot(const IrResourcePlan& plan, const SrtRuntime& runtime, 
             descriptor = DescriptorValue{};
             descriptor.dwordCount = 8u;
         }
-        if (!validImageDescriptor(descriptor, image.r128) && !nullImageDescriptor(descriptor)) {
+        if (!validImageDescriptor(descriptor, image.r128) && !nullImageDescriptor(image, descriptor)) {
             throw std::runtime_error("runtime image descriptor is invalid");
         }
         snapshot.images[i] = descriptor;
@@ -868,7 +873,7 @@ std::uint32_t colorCompareReference(IrBufferFormat format) {
 std::uint32_t emulatedCompareState(const ShaderInfo& info, const ResourceSnapshot& snapshot, std::uint32_t index) {
     const auto& image = info.images[index];
     const auto& descriptor = snapshot.images[index];
-    if (!image.depthCompare || descriptor.dwordCount != 8u || nullImageDescriptor(descriptor)) return 0u;
+    if (!image.depthCompare || descriptor.dwordCount != 8u || nullImageDescriptor(image, descriptor)) return 0u;
     const auto format = rawImageFormat(descriptor);
     if (format == IrBufferFormat::Format32Float || format == IrBufferFormat::Format16UNorm || IsDepthBitsTexture(descriptor.dwords[1], descriptor.dwords[3])) return 0u;
     if (image.table != NoTable || (image.emulatedCompare & EmulatedCompare::Unsupported) != 0u) throw std::runtime_error("unsupported color comparison image instructions");
@@ -1143,7 +1148,7 @@ ResolvedImageTables ResourceMaterializer::ResolveImageTables(const ShaderInfo& i
                 mapped = reason == PoisonReason::OutsideDomain ? Abi::PoisonCode(Abi::OutsideDomainPoison) : poison(resource, reason, nullptr);
             } else if (out.map[header + Abi::TableFault] == 0u) {
                 const auto& words = tables.words.at(code);
-                if (sampler || (words.availableDwordMask & (1u << 3u)) == 0u || !nullImageDescriptor(words)) {
+                if (sampler || (words.availableDwordMask & (1u << 3u)) == 0u || !nullImageDescriptor(info.images[resource], words)) {
                     const auto [found, inserted] = records.try_emplace(code, 0u);
                     if (inserted) found->second = sampler ? samplerRecord(resource, words) : imageRecord(resource, words);
                     mapped = found->second;
@@ -1348,7 +1353,7 @@ RuntimeImageModeMatch ResourceMaterializer::TryRuntimeImageMode(const ImageResou
     };
     if (descriptor.dwordCount != 8u) throw std::runtime_error("runtime image descriptor must contain eight dwords");
     if (modes.empty()) throw std::runtime_error("prepared runtime image modes are missing");
-    if (nullImageDescriptor(descriptor)) {
+    if (nullImageDescriptor(image, descriptor)) {
         result.mode = 0u;
         return result;
     }
