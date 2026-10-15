@@ -914,9 +914,10 @@ ComputePipelineReplayResult VulkanDevice::ReplayComputePipeline(const ComputePip
     check(state->DeviceFunction<PFN_vkCreatePipelineCache>("vkCreatePipelineCache")(state->device, &cacheInfo, nullptr, &replay.cache), "vkCreatePipelineCache replay");
     result.cacheMilliseconds = elapsed(phase);
     phase = std::chrono::steady_clock::now();
+    const auto replayCode = Graphics::CacheKeyedSpirv(state->graphicsPipelineLibrary, capture.spirv.data(), capture.spirv.size() * sizeof(std::uint32_t));
     VkShaderModuleCreateInfo moduleInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    moduleInfo.codeSize = capture.spirv.size() * sizeof(std::uint32_t);
-    moduleInfo.pCode = capture.spirv.data();
+    moduleInfo.codeSize = replayCode.size() * sizeof(std::uint32_t);
+    moduleInfo.pCode = replayCode.data();
     check(state->DeviceFunction<PFN_vkCreateShaderModule>("vkCreateShaderModule")(state->device, &moduleInfo, nullptr, &objects.module), "vkCreateShaderModule replay");
     result.moduleMilliseconds = elapsed(phase);
     phase = std::chrono::steady_clock::now();
