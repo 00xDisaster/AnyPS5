@@ -1563,6 +1563,7 @@ struct RecordedDraw {
     std::vector<std::pair<std::uint32_t, std::shared_ptr<Pipeline>>> stencilReplay;
     std::vector<SampleOrderTarget> reordered;
     SampleOrderPass reorderPass;
+    std::optional<DepthSampleLocations> depthLocations;
 };
 
 void recordStencilReplay(const Context& context, VkCommandBuffer commands, const State& state, const Pm4::DrawParameters& draw, const DrawInputs& inputs, std::span<const std::pair<std::uint32_t, std::shared_ptr<Pipeline>>> replay, std::span<const CompiledShader> shaders, const ShaderResources& resources, const std::array<std::byte, PipelinePushConstantBytes>* bytes = nullptr, VkShaderStageFlags stages = 0) {
@@ -1842,16 +1843,22 @@ void recordDraw(const Context& context, const State& state, const Pm4::DrawParam
     auto checkRecords = indirectRecordCheck(record.indirect);
     APS5_LOG_CHARS_OUT_DEBUG("Draw recorded");
     std::function<void(VkCommandBuffer)> storeProxies;
-    if (!continued && (!record.proxies.empty() || !record.reordered.empty())) {
-        storeProxies = [proxies = record.proxies, reordered = record.reordered, reorderPass = record.reorderPass, context, recorder](VkCommandBuffer passCommands) {
+    if (!continued && (!record.proxies.empty() || !record.reordered.empty() || record.depthLocations)) {
+        storeProxies = [proxies = record.proxies, reordered = record.reordered, reorderPass = record.reorderPass, depthLocations = record.depthLocations, context, recorder](VkCommandBuffer passCommands) {
             for (const auto& proxy : proxies) {
                 proxy->RecordAttachmentProxyStore(passCommands, VK_IMAGE_LAYOUT_GENERAL);
                 Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
             }
-            if (reordered.empty()) return;
-            std::vector<std::shared_ptr<void>> kept;
-            RecordSampleOrder(context, passCommands, reorderPass, reordered, false, kept);
-            for (auto& object : kept) recorder->Keep(std::move(object));
+            if (!reordered.empty()) {
+                std::vector<std::shared_ptr<void>> kept;
+                RecordSampleOrder(context, passCommands, reorderPass, reordered, false, kept);
+                for (auto& object : kept) recorder->Keep(std::move(object));
+            }
+            if (depthLocations) {
+                RecordDepthSampleLocations(context, passCommands, *depthLocations);
+                Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
+                recorder->Keep(depthLocations->keep);
+            }
         };
     }
     recorder->LeaveRenderPassOpen(passKey, drawTiming, fenced, passAccess, std::move(storeProxies));
@@ -2264,6 +2271,12 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
             Require(reordered.back().method == step.method, "a reordered attachment's surface disagrees with the planned way of putting its samples in order");
         }
     }
+    std::optional<DepthSampleLocations> depthLocations;
+    if (state.depth && state.depth->samples > 1u && pipelineState.customSampleLocations && pipeline->SampleLocationsEnabled()) {
+        depthLocations = DepthSurfaceSampleLocations(context, *state.depth);
+        depthLocations->grid = pipeline->HostSampleLocationGrid();
+        depthLocations->locations = SampleLocations(pipelineState);
+    }
     timer.phase(PhasePipeline);
     APS5_LOG_CHARS_OUT_DEBUG("Pipeline created");
     if (lean) {
@@ -2286,6 +2299,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
         record.stencilReplay = stencilReplay;
         record.reordered = reordered;
         record.reorderPass = reorderPass;
+        record.depthLocations = depthLocations;
         recordDraw(context, state, draw, shaders, inputs, record, outcome, timer, ownWaitedMs);
         // The recipe for the caller's draw-cache entry (design_cpu_final M8, rule R3 for draws):
         // only a template the resource cache serves under this content key (reusable: no lease,
@@ -2435,6 +2449,11 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
     if (recorded) recorder->EndPassSamples();
     EndRenderPass(context, commands);
     RecordSampleOrder(context, commands, reorderPass, reordered, false, reorderKept);
+    if (depthLocations) {
+        RecordDepthSampleLocations(context, commands, *depthLocations);
+        countBarrier(2);
+        reorderKept.push_back(depthLocations->keep);
+    }
     if (recorded) {
         for (auto& object : reorderKept) recorder->Keep(std::move(object));
     }

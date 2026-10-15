@@ -76,6 +76,19 @@ VkExtent2D regionOf(const SampleOrderPass& pass, VkExtent2D extent) {
     return {std::min(pass.extent.width, extent.width), std::min(pass.extent.height, extent.height)};
 }
 
+void transitionLocated(const Context& context, VkCommandBuffer commands, VkImage image, VkFormat format, const VkSampleLocationsInfoEXT& locations, VkImageLayout from, VkImageLayout to, VkPipelineStageFlags sourceStages, VkAccessFlags sourceAccess, VkPipelineStageFlags destinationStages, VkAccessFlags destinationAccess) {
+    VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, &locations};
+    barrier.srcAccessMask = sourceAccess;
+    barrier.dstAccessMask = destinationAccess;
+    barrier.oldLayout = from;
+    barrier.newLayout = to;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT | (HasStencil(format) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0u), 0, 1, 0, 1};
+    context.Resolved(&DeviceFunctions::cmdPipelineBarrier, "vkCmdPipelineBarrier")(commands, sourceStages, destinationStages, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
 class CopyImage {
 public:
     CopyImage(const Context& context, VkFormat format, std::uint32_t samples, VkExtent2D extent, bool stencil) : context(context), format(format), samples(samples), extent(extent) {
@@ -188,10 +201,15 @@ public:
         region3d.srcSubresource = {aspects, 0, 0, 1};
         region3d.dstSubresource = {aspects, 0, 0, 1};
         region3d.extent = {region.width, region.height, 1};
-        context.Function<PFN_vkCmdCopyImage>("vkCmdCopyImage")(commands, target.image, VK_IMAGE_LAYOUT_GENERAL, copy->image, VK_IMAGE_LAYOUT_GENERAL, 1, &region3d);
-        RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
         const auto& locations = order.locations;
         const bool located = order.located;
+        const VkSampleLocationsInfoEXT info{VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, static_cast<VkSampleCountFlagBits>(target.samples), {1, 1}, target.samples, locations.data()};
+        constexpr VkPipelineStageFlags fragmentStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        constexpr VkAccessFlags depthAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        if (located) transitionLocated(context, commands, target.image, target.format, info, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, anyWrite, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+        context.Function<PFN_vkCmdCopyImage>("vkCmdCopyImage")(commands, target.image, located ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL, copy->image, VK_IMAGE_LAYOUT_GENERAL, 1, &region3d);
+        if (located) transitionLocated(context, commands, target.image, target.format, info, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, fragmentStages, depthAccess);
+        RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, fragmentStages, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | depthAccess);
         const auto& pass = depthPass(target.format, target.samples, target.method, located, locations);
         const auto set = allocate(sampledSetLayout, {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, setsPerPool * 2u}});
         std::array<VkDescriptorImageInfo, 2> images{{{VK_NULL_HANDLE, copy->depthView, VK_IMAGE_LAYOUT_GENERAL}, {VK_NULL_HANDLE, stencil ? copy->stencilView : copy->depthView, VK_IMAGE_LAYOUT_GENERAL}}};
@@ -212,7 +230,6 @@ public:
         begin.renderPass = pass.renderPass;
         begin.framebuffer = framebuffer->Handle();
         begin.renderArea = {{0, 0}, region};
-        const VkSampleLocationsInfoEXT info{VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, static_cast<VkSampleCountFlagBits>(target.samples), {1, 1}, target.samples, locations.data()};
         const VkAttachmentSampleLocationsEXT initial{0, info};
         const VkSubpassSampleLocationsEXT post{0, info};
         VkRenderPassSampleLocationsBeginInfoEXT sampleLocations{VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT};
@@ -629,6 +646,13 @@ void RecordSampleOrder(const Context& context, VkCommandBuffer commands, const S
     }
     RecordMemoryBarrier(context, commands, reorderStages, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, anyAccess);
     if (Recorder::Active() != nullptr) Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
+}
+
+void RecordDepthSampleLocations(const Context& context, VkCommandBuffer commands, const DepthSampleLocations& depth) {
+    Require(depth.image != VK_NULL_HANDLE && depth.samples * depth.grid.width * depth.grid.height <= depth.locations.size(), "a depth target drawn at custom sample locations has no image or too many locations");
+    const VkSampleLocationsInfoEXT info{VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, static_cast<VkSampleCountFlagBits>(depth.samples), depth.grid, depth.samples * depth.grid.width * depth.grid.height, depth.locations.data()};
+    transitionLocated(context, commands, depth.image, depth.format, info, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, anyWrite, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    transitionLocated(context, commands, depth.image, depth.format, info, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, anyAccess);
 }
 
 std::array<std::span<const std::uint32_t>, 9> SampleOrderShaderModules() {
