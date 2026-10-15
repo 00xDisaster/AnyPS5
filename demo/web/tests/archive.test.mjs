@@ -111,6 +111,29 @@ for (const target of ["windows", "linux"]) {
 }
 }
 
+const bundleArchive = new Archive(source);
+await bundleArchive.inspect(() => {});
+const bundleInput = await bundleArchive.conversionInput("linux", false, () => {});
+const bundleConversion = native.Convert(bundleInput, () => {});
+assert.equal(bundleConversion.ok, true, bundleConversion.error);
+const bundleLibraries = await zip([["libs/system.prx", new Uint8Array([1, 2, 3])]]);
+const bundleWriter = new ZipWriter(new BlobWriter("application/zip"), { zip64: true, level: 9, useWebWorkers: false, useCompressionStream: false });
+await packageArchive(bundleArchive, bundleConversion, bundleInput.outputName, bundleLibraries, null, () => {}, false, { prefix: "01-first/", writer: bundleWriter });
+await packageArchive(bundleArchive, bundleConversion, bundleInput.outputName, bundleLibraries, null, () => {}, false, { prefix: "02-second/", writer: bundleWriter });
+const bundle = await bundleWriter.close();
+const bundleReader = new ZipReader(new BlobReader(bundle));
+const bundleEntries = await bundleReader.getEntries();
+const bundleNames = new Set(bundleEntries.map(entry => entry.filename));
+assert(bundleNames.has(`01-first/${bundleInput.outputName}`));
+assert(bundleNames.has("01-first/libs/system.prx"));
+assert(bundleNames.has("01-first/app0/content/resource.bin"));
+assert(bundleNames.has(`02-second/${bundleInput.outputName}`));
+assert(bundleNames.has("02-second/libs/system.prx"));
+assert(bundleNames.has("02-second/app0/content/resource.bin"));
+await bundleReader.close();
+await bundleArchive.close();
+console.log("Multiple app packages append under separate roots in a single ZIP");
+
 for (const [entries, error] of [
   [[["one", executable], ["two", executable]], /exactly one/u],
   [[["readme", new Uint8Array([1])]], /exactly one/u],
