@@ -3,6 +3,7 @@
 #include "ThreadOwned.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Memory/DwordPatternFill.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
@@ -273,16 +274,17 @@ void Driver::storeBufferFill(std::uint32_t queueId, std::uint64_t base, std::siz
     ++fills;
     filledBytes += bytes;
     if (bytes == 0) return;
-    GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Fill);
-    std::lock_guard gpuLock(GuestMemory::GpuMutex());
-    const auto holdStart = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-    auto phaseStart = holdStart;
-    const auto phase = [&](FillPhase which) {
-        if (!profile) return;
-        const auto now = std::chrono::steady_clock::now();
-        fillPhaseMs[which] += std::chrono::duration<double, std::milli>(now - phaseStart).count();
-        phaseStart = now;
-    };
+    const auto store = [this, queueId, base, bytes, pattern, localDevice, memoryValueFill, noteMetadata] {
+        GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Fill);
+        std::lock_guard gpuLock(GuestMemory::GpuMutex());
+        const auto holdStart = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        auto phaseStart = holdStart;
+        const auto phase = [&](FillPhase which) {
+            if (!profile) return;
+            const auto now = std::chrono::steady_clock::now();
+            fillPhaseMs[which] += std::chrono::duration<double, std::milli>(now - phaseStart).count();
+            phaseStart = now;
+        };
 
     recordLabelsForPacket(localDevice.get(), queueId);
     phase(FillLabels);
@@ -380,5 +382,15 @@ void Driver::storeBufferFill(std::uint32_t queueId, std::uint64_t base, std::siz
             std::fprintf(stderr, "[fill] %llu buffer fills (%.0f MiB), %llu stored by the CPU; hold phases ms (cumulative):%s; pre-store flushes %llu (%llu stored an image); stored on the GPU: uniform %llu (%.0f MiB), pattern %llu (%.0f MiB), chain copies %llu\n", static_cast<unsigned long long>(fills.load()), filledBytes.load() / 1048576.0, static_cast<unsigned long long>(cpuFills.load()), line.c_str(), static_cast<unsigned long long>(flushes), static_cast<unsigned long long>(flushed), static_cast<unsigned long long>(uniformFills), uniformBytes / 1048576.0, static_cast<unsigned long long>(patternFills), patternBytes / 1048576.0, static_cast<unsigned long long>(chainCopies));
         }
     }
+    };
+    static const bool orderedFills = std::getenv("APS5_PIPELINE_DRAIN_FILLS") == nullptr;
+    if (orderedFills && queueId == 0 && DrawPipeline::Active()) {
+        DrawPipeline::Queue0().Enqueue([store, queueId] {
+            GuestMemory::SetCurrentPacket(0x15, queueId);
+            store();
+        }, {{base, base + bytes}});
+        return;
+    }
+    store();
 }
 }
