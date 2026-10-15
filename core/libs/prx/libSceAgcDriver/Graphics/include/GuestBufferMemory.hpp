@@ -70,7 +70,14 @@ void SetHostImportWindow(std::uint64_t bytes);
 // Tests: the window of one large registered range (64 MiB) and the import budget (0: the configured one).
 void SetHostImportRangeWindow(std::uint64_t bytes);
 void SetHostImportBudget(std::uint64_t bytes);
+void SetHostImportDeferredSettles(bool enabled);
 std::uint64_t HostImportLiveBytes();
+struct HostImportSettleCounts {
+    std::uint64_t submitted = 0;
+    std::uint64_t waited = 0;
+    std::uint64_t rewatched = 0;
+};
+HostImportSettleCounts HostImportSettles();
 bool ImportMappedRanges(const Context& context, const GuestAllocations::Mapped& ranges, std::uint64_t generation, bool adoptDevice);
 // Whether an existing import covers [address, address + bytes), without reconciling the imports
 // with the registry or making one (HostImportFor may take a registry lease): a hint for choices
