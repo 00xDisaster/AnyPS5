@@ -65,7 +65,35 @@ def main():
         if os.name == "nt":
             executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
             assert executed.returncode == 42, f"exit code {executed.returncode:#x}"
+        check_relocated_zero_fill(relinker, work)
     print("Windows zero-filled memory tests passed")
+
+
+def check_relocated_zero_fill(relinker, work):
+    image = fixture()
+    file_size = struct.unpack_from("<Q", image, 64 + 32)[0]
+    memory_size = file_size + BSS
+    struct.pack_into("<Q", image, 64 + 40, memory_size)
+    slot = memory_size - 0x1000
+    struct.pack_into("<i", image, 0x202, slot - 0x206)
+    struct.pack_into("<Q", image, 0x700, slot)
+    source = work / "relocated.elf"
+    source.write_bytes(image)
+    output = work / "relocated.exe"
+    result = subprocess.run([str(relinker), "--skip-sce-module", "--windows", str(source), str(output)],
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    pe = output.read_bytes()
+    assert len(pe) < BSS // 16, f"{len(pe)} byte executable for {BSS} bytes of zero-filled memory"
+    table, image_size = sections(pe)
+    rva = LOAD_RVA + slot
+    name, virtual_size, start, raw_size, raw = next(section for section in table if section[2] <= rva < section[2] + section[1])
+    assert rva + 8 <= start + raw_size, (name, hex(rva), hex(start), raw_size)
+    base = struct.unpack_from("<Q", pe, struct.unpack_from("<I", pe, 0x3c)[0] + 24 + 24)[0]
+    assert struct.unpack_from("<Q", pe, raw + rva - start)[0] == base + LOAD_RVA + 0x210
+    if os.name == "nt":
+        executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
+        assert executed.returncode == 42, f"exit code {executed.returncode:#x}"
 
 
 if __name__ == "__main__":

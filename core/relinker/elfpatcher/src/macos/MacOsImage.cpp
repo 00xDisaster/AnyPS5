@@ -166,7 +166,9 @@ std::pair<std::uint8_t, std::uint64_t> Locate(const std::vector<Segment>& segmen
 
 Segment& SegmentAt(std::vector<Segment>& segments, const std::uint64_t rva, const std::uint64_t size) {
     for (auto& segment : segments) {
-        if (rva >= segment.Rva && rva - segment.Rva + size <= segment.Data.size()) return segment;
+        if (rva < segment.Rva || rva - segment.Rva + size > segment.MemorySize) continue;
+        if (rva - segment.Rva + size > segment.Data.size()) segment.Data.resize(rva - segment.Rva + size);
+        return segment;
     }
     throw Domain::RelinkerException("Mach-O image patch is outside the image data", rva);
 }
