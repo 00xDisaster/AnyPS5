@@ -21,7 +21,7 @@ def previous_sequence(path):
     try:
         with path.open("rb") as command:
             line = command.readline(129)
-    except FileNotFoundError:
+    except (FileNotFoundError, IsADirectoryError, PermissionError):
         return 0
     if os.name == "nt" and line.endswith(b"\r\n"):
         line = line[:-2] + b"\n"
@@ -74,6 +74,10 @@ def main():
         mask = button_mask(args.button)
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
+    if args.path.is_dir():
+        parser.error(f"{args.path} is a directory")
+    if not args.path.parent.is_dir():
+        parser.error(f"directory does not exist: {args.path.parent}")
     if not 1 <= args.hold_ms <= 5000:
         parser.error("--hold-ms must be between 1 and 5000")
     sticks = ""
@@ -94,7 +98,7 @@ def main():
             pass
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", dir=args.path.parent, delete=False) as output:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n", dir=args.path.parent, delete=False) as output:
             temporary = Path(output.name)
             if metadata is not None:
                 if os.geteuid() == 0:
