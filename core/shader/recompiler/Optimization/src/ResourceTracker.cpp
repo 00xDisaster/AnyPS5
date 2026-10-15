@@ -1455,6 +1455,7 @@ private:
         for (auto& source : m_sources) {
             if (source.tableColumn.has_value() && source.tableColumn->selected && SelectionWritten(*source.tableColumn)) {
                 source.tableColumn->selected = false;
+                source.tableColumn->keyDomains.clear();
             }
             if (!source.tableColumn.has_value() || source.tableColumn->keyDomains.empty()) {
                 continue;
