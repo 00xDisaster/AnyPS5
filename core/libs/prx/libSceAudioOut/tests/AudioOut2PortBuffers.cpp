@@ -207,6 +207,26 @@ void TestAdvanceRetainsVolume() {
     RequirePlayed(played, {&buffer, &reduced});
 }
 
+void TestAdvanceBurstRetainsEveryGrain() {
+    std::vector<std::vector<float>> expected;
+    for (std::uint32_t index = 0; index < 64; ++index) expected.push_back(Grain(0.001f * static_cast<float>(index + 1)));
+    const auto played = Play([&](AudioOut2ContextHandle context, AudioOut2PortHandle port) {
+        std::thread producer([&] {
+            auto buffer = Grain(0.0f);
+            for (const auto& data : expected) {
+                buffer = data;
+                SetData(port, buffer.data());
+                Require(sceAudioOut2ContextAdvance(context) == 0);
+            }
+        });
+        producer.join();
+        for (std::size_t index = 0; index < expected.size(); ++index) Require(sceAudioOut2ContextPush(context, 1) == 0);
+    }, true);
+    std::vector<const std::vector<float>*> grains;
+    for (const auto& data : expected) grains.push_back(&data);
+    RequirePlayed(played, grains);
+}
+
 void TestPushingThreadWaitsForAdvance() {
     const auto first = Grain(0.01f);
     const auto second = Grain(0.02f);
@@ -238,6 +258,7 @@ int main() {
     SetEnvironment("SDL_AUDIODRIVER", "disk");
     TestAdvanceRetainsRewrittenBuffer();
     TestAdvanceRetainsVolume();
+    TestAdvanceBurstRetainsEveryGrain();
     TestPushingThreadWaitsForAdvance();
     TestBuffersSetBeforeOnePushPlayInOrder();
     TestBurstThenGapKeepsEveryBuffer();
