@@ -29,6 +29,18 @@ def convert(relinker, directory, name, image):
     return b"".join(data[lo:hi] for lo, hi in MachO(data).executable_ranges())
 
 
+def check_outside_block_refused(relinker, directory):
+    image = make_image("register", "unwind", body=bytes.fromhex("64 48 2b 04 25 00 ff ff ff c3"))
+    source = Path(directory) / "outside-block.elf"
+    output = Path(directory) / "outside-block"
+    source.write_bytes(bytes(image))
+    result = subprocess.run([str(relinker), "--macos", "--skip-sce-module", str(source), str(output)],
+                            capture_output=True, text=True, timeout=60)
+    message = result.stdout + result.stderr
+    if result.returncode != 2 or "is not in the thread TLS block" not in message or output.exists():
+        raise SystemExit(f"outside-block: an ALU read outside the thread TLS block was not refused: {message}")
+
+
 def main():
     relinker = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="anyps5-macos-tls-alu-") as directory:
@@ -38,6 +50,7 @@ def main():
                 raise SystemExit(f"{name}: the %fs access was left in the code")
             if operation not in code:
                 raise SystemExit(f"{name}: the stub does not apply the operation to the guest TLS value")
+        check_outside_block_refused(relinker, directory)
     print("macOS TLS ALU checks passed")
 
 
