@@ -243,6 +243,28 @@ try {
   await assert.rejects(worker.downloadLibraries("windows"), /Cannot verify the latest release \(403\)/u);
   latestResponse = new Response(JSON.stringify({ tag_name: "v2" }));
   await assert.rejects(worker.downloadLibraries("windows"), /A new release is being published/u);
+
+  latestResponse = new Response(null, { status: 429 });
+  await self.onmessage({ data: { type: "inspect", inputs: [
+    { name: "First App.zip", file: source },
+    { name: "First App.zip", file: source }
+  ] } });
+  assert.equal(workerMessages.filter(message => message.type === "inspected").length, 2);
+  assert(workerMessages.some(message => message.type === "inspection-complete" && message.count === 2));
+  await self.onmessage({ data: { type: "convert", target: "windows", toIntel: false, mode: "memory" } });
+  const batchComplete = workerMessages.find(message => message.type === "complete");
+  assert(batchComplete, workerMessages.find(message => message.type === "error")?.message);
+  assert.equal(batchComplete.apps, 2);
+  const batchReader = new ZipReader(new BlobReader(batchComplete.blob));
+  const batchNames = new Set((await batchReader.getEntries()).map(entry => entry.filename));
+  assert(batchNames.has("01-First-App/program.exe"));
+  assert(batchNames.has("01-First-App/libs/system.prx"));
+  assert(batchNames.has("01-First-App/app0/content/resource.bin"));
+  assert(batchNames.has("02-First-App/program.exe"));
+  assert(batchNames.has("02-First-App/libs/system.prx"));
+  assert(batchNames.has("02-First-App/app0/content/resource.bin"));
+  await batchReader.close();
+  workerMessages.length = 0;
 } finally {
   globalThis.fetch = originalFetch;
   workerMessages.length = 0;
@@ -251,6 +273,15 @@ await self.onmessage({ data: { type: "convert", target: "windows", mode: "disk" 
 assert.equal(workerMessages.length, 1);
 assert.equal(workerMessages[0].type, "error");
 assert.match(workerMessages[0].message, /browsers block DLL creation/u);
+workerMessages.length = 0;
+await self.onmessage({ data: { type: "inspect", inputs: [
+  { name: "valid.zip", file: source },
+  { name: "invalid.zip", file: new Blob(["not a ZIP"]) }
+] } });
+assert.equal(workerMessages.at(-1).type, "error");
+assert.match(workerMessages.at(-1).message, /invalid\.zip/u);
+assert.equal(workerMessages.some(message => message.type === "inspection-complete"), false);
 delete globalThis.self;
 console.log("Rate-limited release checks use the verified site manifest; other release-check failures remain errors");
 console.log("Windows folder output rejected before conversion or file writes");
+console.log("Multiple ZIP inputs stream into separate app roots; invalid inputs name the failing archive");
