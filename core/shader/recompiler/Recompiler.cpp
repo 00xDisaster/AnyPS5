@@ -1163,6 +1163,7 @@ std::uint64_t snapshotHash(const RecompileRequest& request, const ResourceSnapsh
         mix(values.size());
         for (const auto& value : values) {
             mix(value.dwordCount);
+            mix(value.availableDwordMask);
             for (std::uint32_t i = 0; i < value.dwordCount && i < value.dwords.size(); ++i) mix(value.dwords[i]);
         }
     };
