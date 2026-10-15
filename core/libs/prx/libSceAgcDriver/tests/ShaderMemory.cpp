@@ -1866,6 +1866,14 @@ void verifySelectedRecordFallbacks() {
     require(writtenColumn.has_value() && !writtenColumn->selected && writtenColumn->keyDomains.empty(), "selected record fallbacks: a key loaded from a buffer the shader writes selected its record");
     const auto written = CompileTable(writtenRequest);
     require(written.capture->snapshot.tables.tables.at(0).keys == 4u, "selected record fallbacks: a key loaded from a buffer the shader writes did not keep the whole table");
+    require(!loadedPlan->descriptorSources.at(loadedPlan->info.images[0].source).tableColumn->keyDomains.empty(), "selected record fallbacks: a key loaded from a constant buffer has no key domain");
+    auto pointerWritten = loadedKey;
+    const auto end = std::find(pointerWritten.begin(), pointerWritten.end(), 0xbf810000u);
+    require(end != pointerWritten.end(), "selected record fallbacks: the program has no s_endpgm");
+    pointerWritten.insert(end, {0xdc708000u, 0x001c0100u});
+    const auto pointerPlan = GetResourcePlan(TableRequest(pointerWritten, userData));
+    const auto& pointerColumn = pointerPlan->descriptorSources.at(pointerPlan->info.images.at(0).source).tableColumn;
+    require(pointerPlan->info.bdaWrites && pointerColumn.has_value() && !pointerColumn->selected && pointerColumn->keyDomains.empty(), "selected record fallbacks: a key loaded from a constant buffer in a shader that stores through a pointer selected its record or kept its key domain");
 
     const auto lanePlan = GetResourcePlan(TableRequest(TableWholeCode, userData));
     require(!lanePlan->info.images.empty() && !lanePlan->descriptorSources.at(lanePlan->info.images[0].source).tableColumn->selected, "selected record fallbacks: a T# selected per lane left the table");
