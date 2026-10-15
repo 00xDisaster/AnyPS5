@@ -51,6 +51,19 @@ inline HANDLE PreciseWaitThreadTimer() {
     return HostThreadLocal<Timer, Timer>().handle;
 }
 
+inline std::uint64_t PreciseQpcFrequency() {
+    static std::atomic<std::uint64_t> cachedFreq{0};
+    std::uint64_t freq = cachedFreq.load(std::memory_order_relaxed);
+    if (freq == 0) [[unlikely]] {
+        LARGE_INTEGER f;
+        if (QueryPerformanceFrequency(&f) && f.QuadPart > 0) {
+            freq = static_cast<std::uint64_t>(f.QuadPart);
+            cachedFreq.store(freq, std::memory_order_relaxed);
+        }
+    }
+    return freq;
+}
+
 inline void PreciseSleepFromCounterWithTimer(
     LARGE_INTEGER counter,
     unsigned long long hundredNanos,
@@ -62,21 +75,12 @@ inline void PreciseSleepFromCounterWithTimer(
     }
     constexpr unsigned long long kSpinTailHundredNanos = 2500;
     constexpr unsigned long long kMinTimerSpinSleepHundredNanos = 10000;
-    static std::atomic<std::uint64_t> cachedFreq{0};
-    std::uint64_t freq = cachedFreq.load(std::memory_order_relaxed);
+    const std::uint64_t freq = PreciseQpcFrequency();
     std::uint64_t deltaTicks = hundredNanos;
     std::uint64_t pauseThresholdTicks = 2ULL;
     if (freq != 10000000ULL) [[unlikely]] {
-        if (freq == 0) {
-            LARGE_INTEGER f;
-            QueryPerformanceFrequency(&f);
-            freq = static_cast<std::uint64_t>(f.QuadPart);
-            cachedFreq.store(freq, std::memory_order_relaxed);
-        }
-        if (freq != 10000000ULL) {
-            deltaTicks = PreciseHundredNanosToQpcTicks(hundredNanos, freq);
-            pauseThresholdTicks = PrecisePauseThresholdTicks(freq);
-        }
+        deltaTicks = PreciseHundredNanosToQpcTicks(hundredNanos, freq);
+        pauseThresholdTicks = PrecisePauseThresholdTicks(freq);
     }
     const std::uint64_t deadlineTicks = static_cast<std::uint64_t>(counter.QuadPart) + deltaTicks;
     const bool useSpinTail = allowSpinTail || hundredNanos >= kMinTimerSpinSleepHundredNanos;
