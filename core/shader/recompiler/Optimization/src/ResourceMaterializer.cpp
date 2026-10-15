@@ -580,13 +580,17 @@ private:
         std::uint64_t high = 0;
         for (std::uint32_t dword = 0; dword < column.dwordCount; dword++) {
             const auto position = ImageTableAbi::ScalarBufferDword(offset, column.offset + dword * 4u, size);
-            if (!position.has_value()) continue;
+            if (!position.has_value()) {
+                value.availableDwordMask |= static_cast<std::uint8_t>(1u << dword);
+                continue;
+            }
             const auto address = base + *position;
             if (!PageAccessible(address, base, base + size)) {
                 records.states.front() = RecordState::Unmapped;
                 return;
             }
             value.dwords[dword] = Read(address);
+            value.availableDwordMask |= static_cast<std::uint8_t>(1u << dword);
             low = std::min(low, address);
             high = std::max(high, address + sizeof(std::uint32_t));
         }
