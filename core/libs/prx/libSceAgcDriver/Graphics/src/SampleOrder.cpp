@@ -572,6 +572,10 @@ SampleOrderMethod DepthSampleOrderMethod(const Context& context, const DepthTarg
     return context.shaderStencilExport ? SampleOrderMethod::DepthStencilExport : SampleOrderMethod::DepthStencilBits;
 }
 
+bool HostsSampleLocationGrid(VkExtent2D largestGrid) {
+    return largestGrid.width != 0u && largestGrid.height != 0u && largestGrid.width % 2u == 0u && largestGrid.height % 2u == 0u;
+}
+
 bool MayReorderSamples(const Context& context, std::uint32_t samples) {
     return samples > 1u && (context.sampleLocationSampleCounts & samples) != 0 && (context.sampleLocationGridSampleCounts & samples) == 0;
 }

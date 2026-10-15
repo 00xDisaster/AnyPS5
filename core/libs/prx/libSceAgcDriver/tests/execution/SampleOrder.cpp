@@ -1116,6 +1116,8 @@ int GridReference(AgcDriver::VulkanDevice& device) {
         std::printf("skipped, the device has no custom sample locations at 2 samples\n");
         return VulkanTestSkipped;
     }
+    const auto largest = context.sampleLocationGridSizes[1];
+    std::printf("the device's largest sample location grid at 2 samples is %ux%u pixels (vkGetPhysicalDeviceMultisamplePropertiesEXT)\n", largest.width, largest.height);
     auto emulated = context;
     emulated.sampleLocationGridSampleCounts = 0u;
     auto fallback = emulated;

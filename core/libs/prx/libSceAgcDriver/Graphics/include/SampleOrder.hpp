@@ -57,6 +57,7 @@ struct DepthSampleLocations {
 };
 
 HostSampleLocations HostSampleLocationsFor(const Context& context, const State& state);
+bool HostsSampleLocationGrid(VkExtent2D largestGrid);
 bool MayReorderSamples(const Context& context, std::uint32_t samples);
 SampleOrderMethod DepthSampleOrderMethod(const Context& context, const DepthTarget& depth);
 VkFormat SampleOrderStorageFormat(const Context& context, VkFormat format, std::uint32_t elementBytes, std::uint32_t samples);
