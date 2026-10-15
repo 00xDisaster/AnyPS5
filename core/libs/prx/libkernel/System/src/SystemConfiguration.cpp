@@ -209,6 +209,9 @@ int APS5_VABI sysctlbyname_nid_postfix(const char* name, void* oldValue, std::si
         *__error_nid_postfix() = 2;
         return -1;
     }
+    for (const auto& entry : SystemStrings) {
+        if (std::strcmp(name, entry.name) == 0) return sysctl_nid_postfix(entry.mib, 2, oldValue, oldLength, newValue, newLength);
+    }
     if (std::strcmp(name, "kern.proc.pathname") == 0) {
         static constexpr int mib[] = {1, 14, 12};
         return sysctl_nid_postfix(mib, 3, oldValue, oldLength, newValue, newLength);
@@ -303,12 +306,17 @@ int APS5_VABI sysctlnametomib_nid_postfix(const char* name, int* mib, std::size_
         *__error_nid_postfix() = 2;
         return -1;
     }
-    for (const auto& entry : known) {
-        if (std::strcmp(name, entry.name) != 0) continue;
+    const auto copyMib = [&](const int* found, std::size_t length) {
         std::size_t bytes = *size * sizeof(int);
-        const int result = CopyOut(entry.mib, entry.length * sizeof(int), mib, &bytes);
+        const int result = CopyOut(found, length * sizeof(int), mib, &bytes);
         *size = bytes / sizeof(int);
         return result;
+    };
+    for (const auto& entry : known) {
+        if (std::strcmp(name, entry.name) == 0) return copyMib(entry.mib, entry.length);
+    }
+    for (const auto& entry : SystemStrings) {
+        if (std::strcmp(name, entry.name) == 0) return copyMib(entry.mib, 2);
     }
     throw std::runtime_error(std::string(__func__) + ": unsupported name " + name);
 }
