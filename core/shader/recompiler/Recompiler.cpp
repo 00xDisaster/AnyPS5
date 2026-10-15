@@ -397,6 +397,8 @@ bool diskPlans() {
     return enabled && ShaderDiskCache::Enabled() && !DebugProbeActive();
 }
 
+bool sameLayout(const BindingLayout& left, const BindingLayout& right);
+
 std::shared_ptr<SourceEntry> getSource(const RecompileRequest& request, ShaderPreparationContext* preparation = nullptr, bool reclaim = true) {
     static PrimedSharedMutex mutex;
     // Entries whose code hashes alike share a bucket; the code comparison picks the right one.
@@ -455,7 +457,9 @@ std::shared_ptr<SourceEntry> getSource(const RecompileRequest& request, ShaderPr
                 try {
                     ResourceProgram resource(request, preparation, reclaim);
                     source->plan = std::move(resource.plan);
-                    source->program = std::move(resource.program);
+                    if (std::ranges::none_of(source->variants, [&](const auto& variant) { return sameLayout(variant->layout, request.layout); })) {
+                        source->program = std::move(resource.program);
+                    }
                 } catch (...) {
                     if (FailureMemo()) source->planFailure = std::current_exception();
                     throw;

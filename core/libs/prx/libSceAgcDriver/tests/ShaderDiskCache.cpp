@@ -1871,6 +1871,28 @@ void verifyPlanRoundTrip() {
     const auto reloadedPlan = GetResourcePlan(registeredRequest);
     require(ShaderDiskCache::Totals().planHits == beforeReload.planHits + 1u, "a released registration plan was not reloaded from the disk cache");
     require(samePlan(*registeredPlan, *reloadedPlan), "a released registration plan changed when reloaded");
+
+    auto reloadFixture = fixtures.front();
+    reloadFixture.waveSize = 32u;
+    reloadFixture.code.insert(reloadFixture.code.begin(), 0xbf800004u);
+    const auto reloadRequest = reloadFixture.Request(true);
+    const auto reloadHandle = PrepareShader(reloadRequest);
+    static_cast<void>(GetResourcePlan(reloadRequest));
+    ShaderDiskCache::Flush();
+    std::vector<std::byte> reloadKey;
+    ShaderDiskCache::BuildPlanKey(reloadRequest, 32u, reloadKey);
+    const auto reloadPath = ShaderDiskCache::EntryDirectory() / ShaderDiskCache::EntryName(reloadKey);
+    require(std::filesystem::is_regular_file(reloadPath), "the reload regression plan was not persisted");
+    const auto preservedPath = reloadPath.string() + ".reload-preserved";
+    std::filesystem::rename(reloadPath, preservedPath);
+    ReleaseUndrawnResourcePlan(*reloadHandle);
+    static_cast<void>(GetResourcePlan(reloadRequest));
+    auto secondLayout = reloadRequest;
+    secondLayout.layout.pushConstantSizeBytes = 0u;
+    ShaderPreparationContext preparation;
+    static_cast<void>(PrepareShader(secondLayout, &preparation));
+    require(preparation.ResourcePrograms() == 1u, "a plan reload retained full IR after an artifact for that layout was already available");
+
     RequestMemoryView registeredMemory(registeredRequest.context.memory);
     const auto runtimeCapture = CaptureResources(registeredRequest, registeredMemory.MakeRuntime(registeredRequest.context.userData, registeredRequest.shader.codeAddress), *registeredHandle);
     const auto beforeKeep = ShaderDiskCache::Totals();
