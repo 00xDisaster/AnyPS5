@@ -92,7 +92,6 @@ std::uint64_t Driver::drawRegisterKey(const QueueState& queue, const ShaderRegis
     RegisterStateKeyParts parts;
     auto key = RegisterStateKey(queue, allUserWords, true, &shapeKey, components != nullptr ? &parts : nullptr);
     if (verify && key != RegisterStateKey(queue, allUserWords, false)) throw std::runtime_error("incremental register fingerprint disagrees with full state");
-
     const auto mix = [&](std::uint64_t value) {
         key ^= value;
         key *= 0x100000001b3ull;
@@ -121,10 +120,7 @@ std::uint64_t Driver::drawRegisterKey(const QueueState& queue, const ShaderRegis
             continue;
         }
         --it;
-        for (const auto& snapshot : it->second) {
-            const auto identity = reinterpret_cast<std::uintptr_t>(snapshot.get());
-            mix(identity);
-        }
+        for (const auto& snapshot : it->second) mix(reinterpret_cast<std::uintptr_t>(snapshot.get()));
         mix(address - it->first);
     }
     if (shape != nullptr) *shape = shapeKey;
