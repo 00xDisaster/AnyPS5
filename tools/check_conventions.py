@@ -372,7 +372,9 @@ def jobs(lines, source):
     for index, (number, indent, name, _) in enumerate(entries):
         if indent != entries[0][1]:
             continue
-        fields = {entry[2]: field(source, entry) for entry in block(entries, index) if entry[1] == indent + 2}
+        children = block(entries, index)
+        child = min((entry[1] for entry in children), default=indent + 2)
+        fields = {entry[2]: field(source, entry) for entry in children if entry[1] == child}
         result.append((number, name, re.findall(r"[A-Za-z0-9_-]+", fields.get("needs", "")), fields.get("if", "")))
     return result
 
