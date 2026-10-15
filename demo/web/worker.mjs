@@ -103,6 +103,8 @@ self.onmessage = async ({ data }) => {
             keepOpen = true;
           }
           self.postMessage({ type: "inspected", index, count: inputs.length, name: item.name, summary });
+        } catch (error) {
+          throw new Error(`${item.name}: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
           if (!keepOpen) await current.close();
         }
