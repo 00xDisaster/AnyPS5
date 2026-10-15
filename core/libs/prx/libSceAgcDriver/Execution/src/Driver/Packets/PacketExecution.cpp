@@ -277,8 +277,8 @@ void Driver::execute(const Submission& submission) {
                 }
             }
         } else if (drawPacket) {
-            packetCounters.CountDraw();
             landPendingWaits(submission.queue);
+            packetCounters.CountDraw();
             bool drawn = false;
             timed(&WorkerProfile::drawMs, [&] {
                 static const bool traceDraws = std::getenv("APS5_TRACE_DRAWS") != nullptr;
