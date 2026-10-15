@@ -394,5 +394,29 @@ class IntervalDigestTests(unittest.TestCase):
             trace_digest.main([str(self.path)])
         self.assertIn("no interval lines", output.getvalue())
 
+    def test_interval_phase_names_preserve_json_and_markdown_table_structure(self):
+        for name, escaped in (("Draw|<pass>&", "Draw&#124;&lt;pass&gt;&amp;"),
+                              ("Draw\r\npass", "Draw<br>pass"),
+                              ("Draw\rpass\nend", "Draw<br>pass<br>end")):
+            with self.subTest(name=name):
+                line = interval_line(0.0, 30.0, 20.0, 5.0, top_phases_ms_per_frame={name: 7.5})
+                self.path.write_text(json.dumps(line) + "\n", encoding="utf-8")
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(trace_digest.main([str(self.path), "--json"]), 0)
+                row = json.loads(output.getvalue())["intervals"][0]
+                self.assertEqual(row["top_phase"], {"name": name, "ms_per_frame": 7.5})
+                self.assertEqual(row["frame_ms"], line["frame_ms"])
+                self.assertEqual(row["gpu_busy_ms_per_present"], 5.0)
+                self.assertEqual((row["start_s"], row["end_s"], row["presents"]), (0.0, 30.0, 1800))
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(trace_digest.main([str(self.path)]), 0)
+                rows = [line for line in output.getvalue().splitlines() if line.startswith("|")]
+                self.assertEqual(len(rows), 3)
+                self.assertTrue(all(line.count("|") == 11 for line in rows), rows)
+                cells = [cell.strip() for cell in rows[2].split("|")[1:-1]]
+                self.assertEqual(cells, ["1", "0-30", "1800", "16.6", "18.0", "20.0", "25.0", "5.0", "50 %", escaped + " 7.5"])
+
 if __name__ == "__main__":
     unittest.main()
