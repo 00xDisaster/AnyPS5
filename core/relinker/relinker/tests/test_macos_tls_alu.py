@@ -11,6 +11,9 @@ from test_tls_function_coverage import make_image
 FORMS = {
     "sub-rax-stack-guard": (bytes.fromhex("64 48 2b 04 25 28 00 00 00"), bytes.fromhex("9d 48 87 04 24 48 2b 04 24 48 8d 64 24 08")),
     "sub-rcx-stack-guard": (bytes.fromhex("64 48 2b 0c 25 28 00 00 00"), bytes.fromhex("9d 48 2b c8 58")),
+    "xor-r10-stack-guard": (bytes.fromhex("64 4c 33 14 25 28 00 00 00"), bytes.fromhex("9d 4c 33 d0 58")),
+    "adc-rdx-tls-block": (bytes.fromhex("64 48 13 14 25 f8 ff ff ff"), bytes.fromhex("9d 48 13 d0 58")),
+    "cmp-r8-thread-pointer": (bytes.fromhex("64 4c 3b 04 25 00 00 00 00"), bytes.fromhex("9d 4c 3b c0 58")),
 }
 
 
