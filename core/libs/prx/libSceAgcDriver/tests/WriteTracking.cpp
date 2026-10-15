@@ -9,6 +9,7 @@
 #include <windows.h>
 #else
 #include <sys/mman.h>
+#include <unistd.h>
 #endif
 #include <array>
 #include <cstdint>
@@ -312,6 +313,23 @@ void CheckPartlyWatchedStore() {
     Require(!UnchangedSince(watchedHalf, Block / 2, beforeSplit), "a driver store across the halves of a split block left its watched half unchanged");
 #endif
 }
+
+#ifndef _WIN32
+void CheckWatchOverlaps() {
+    const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    void* memory = AllocateWatched(Block);
+    const auto base = reinterpret_cast<std::uintptr_t>(memory);
+    Require(GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(memory, page), "cannot unwatch the block's first page");
+    Require(GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(reinterpret_cast<void*>(base + 3 * page), Block - 3 * page), "cannot unwatch the block's last pages");
+    Require(!GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(base, Block), "a block with unwatched pages is covered");
+    Require(GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base, Block), "a block with watched pages inside does not overlap the watch");
+    Require(GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + page - 1, 2), "a range ending in a watched page does not overlap the watch");
+    Require(GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + 3 * page - 1, 2), "a range starting in a watched page does not overlap the watch");
+    Require(!GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base, page), "an unwatched page before the watched ones overlaps the watch");
+    Require(!GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + 3 * page, Block - 3 * page), "unwatched pages after the watched ones overlap the watch");
+    Require(!GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + page, 0), "an empty range overlaps the watch");
+}
+#endif
 
 #ifdef _WIN32
 void CheckDeferredSharedImports() {
@@ -969,6 +987,9 @@ int main() {
         CheckUnwatch();
         CheckNewestStamp();
         CheckPartlyWatchedStore();
+#ifndef _WIN32
+        CheckWatchOverlaps();
+#endif
 #ifdef _WIN32
         CheckDeferredSharedImports();
         CheckPrivateMappingReuse();
