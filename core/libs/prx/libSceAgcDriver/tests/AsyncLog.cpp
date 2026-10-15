@@ -1,12 +1,29 @@
 #include "prx/libSceAgcDriver/Execution/include/AsyncLog.hpp"
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
 
 namespace {
 
@@ -24,6 +41,11 @@ std::string ReadAll(std::FILE* file) {
     char buffer[4096];
     for (std::size_t read = 0; (read = std::fread(buffer, 1, sizeof(buffer), file)) != 0;) text.append(buffer, read);
     return text;
+}
+
+std::string ReadFile(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
 }
 
 void ClearLogEnvironment() {
@@ -152,6 +174,22 @@ void FlushWaitsForHeldStream() {
     std::fclose(file);
 }
 
+void BoundedFlushGivesUp() {
+    std::FILE* file = std::tmpfile();
+    Check(file != nullptr, "temporary file");
+    auto& log = AgcDriver::AsyncLog::Get();
+    Check(log.FlushFor(0ms), "FlushFor waited with nothing queued");
+    {
+        HeldStream held(file);
+        log.Defer(file, "bounded %d\n", 1);
+        Check(!log.FlushFor(100ms), "FlushFor reported a line written while its stream was held");
+        held.Release();
+        Check(log.FlushFor(10s), "FlushFor missed the line written after the stream was released");
+    }
+    Check(ReadAll(file) == "bounded 1\n", "the line queued behind a held stream changed");
+    std::fclose(file);
+}
+
 void FullQueueBlocksCaller() {
     std::FILE* file = std::tmpfile();
     Check(file != nullptr, "temporary file");
@@ -199,15 +237,97 @@ void FullQueueBlocksCaller() {
     std::fclose(file);
 }
 
+constexpr int ChildLines = 50;
+
+[[noreturn]] void EndChild(const std::string& mode, const char* output) {
+    std::FILE* file = std::fopen(output, "wb");
+    Check(file != nullptr, "child output file");
+#ifdef _WIN32
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#else
+    const rlimit noCore{0, 0};
+    setrlimit(RLIMIT_CORE, &noCore);
+#endif
+    std::thread([] {
+        std::this_thread::sleep_for(8s);
+        std::_Exit(99);
+    }).detach();
+    AgcDriver::InstallAsyncLog_nid_no_patch();
+    auto& log = AgcDriver::AsyncLog::Get();
+    HeldStream held(file);
+    for (int i = 0; i < ChildLines; ++i) {
+        log.Defer(file, "deferred %d\n", i);
+        WriteLogLine(file, "plain %d\n", i);
+    }
+    std::thread releaser([&] {
+        std::this_thread::sleep_for(100ms);
+        if (mode != "blocked") held.Release();
+    });
+    if (mode == "terminate") std::terminate();
+#ifdef _WIN32
+    if (mode == "fault") RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+#else
+    if (mode == "raise") {
+        std::raise(SIGABRT);
+        std::_Exit(0);
+    }
+#endif
+    std::abort();
 }
 
-int main() {
+std::string Quote(const std::string& text) {
+    return "\"" + text + "\"";
+}
+
+void LinesSurviveEnd(const std::string& self, const std::string& mode) {
+    const auto output = std::filesystem::temp_directory_path() / ("aps5-async-log-" + mode + "-" + std::to_string(Clock::now().time_since_epoch().count()) + ".txt");
+    std::string command = Quote(self) + " child " + mode + " " + Quote(output.string());
+#ifdef _WIN32
+    command = Quote(command);
+#endif
+    const auto start = Clock::now();
+    const int status = std::system(command.c_str());
+    const auto lived = Clock::now() - start;
+    std::error_code error;
+    const bool started = std::filesystem::exists(output, error);
+    const std::string text = started ? ReadFile(output) : std::string();
+    std::filesystem::remove(output, error);
+    Check(started, "the child did not start");
+    Check(status != 0, "the child did not end abnormally");
+    Check(lived < 6s, "the child took too long to end");
+    if (mode == "blocked") {
+        Check(lived >= 1900ms, "the child ended before the flush gave up");
+        Check(text.empty(), "the child wrote through a held stream");
+        return;
+    }
+    std::string expected;
+    for (int i = 0; i < ChildLines; ++i) expected += "deferred " + std::to_string(i) + "\nplain " + std::to_string(i) + "\n";
+    Check(text == expected, "lines queued before the process ended were lost or changed");
+}
+
+}
+
+int main(int argc, char** argv) {
     try {
         ClearLogEnvironment();
+        if (argc == 4 && std::strcmp(argv[1], "child") == 0) EndChild(argv[2], argv[3]);
+        if (argc == 2 && std::strcmp(argv[1], "fatal") == 0) {
+            LinesSurviveEnd(argv[0], "abort");
+            LinesSurviveEnd(argv[0], "terminate");
+#ifdef _WIN32
+            LinesSurviveEnd(argv[0], "fault");
+#else
+            LinesSurviveEnd(argv[0], "raise");
+#endif
+            LinesSurviveEnd(argv[0], "blocked");
+            return 0;
+        }
         OrderPerThread();
         LongLine();
         Coalescing();
         FlushWaitsForHeldStream();
+        BoundedFlushGivesUp();
         FullQueueBlocksCaller();
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
