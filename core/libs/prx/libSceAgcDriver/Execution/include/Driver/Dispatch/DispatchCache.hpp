@@ -30,7 +30,6 @@ struct DispatchVariant {
     std::vector<SharedWords> shared;
     std::uint64_t forgetSerial = 0;
     std::shared_ptr<const ShaderRecompiler::RecompileResult> compiled;
-    std::array<std::uint32_t, 4> meshIndexDescriptor{};
 
     std::shared_ptr<const ShaderSnapshot> shader;
 
