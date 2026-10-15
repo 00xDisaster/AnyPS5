@@ -187,7 +187,7 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
                             if (!next.IsTwoByteOpcode && next.Opcode != 0xe9) {
                                 movedBytes = next.Opcode == 0xeb ? std::vector<std::uint8_t>{0xe9} : std::vector<std::uint8_t>{0x0f, static_cast<std::uint8_t>(0x80 | (next.Opcode & 0xf))};
                                 branchDisplacementOffset = movedBytes.size();
-                                movedBytes.insert(movedBytes.end(), 4, 0);
+                                movedBytes.resize(movedBytes.size() + 4);
                             } else {
                                 branchDisplacementOffset = next.Length - 4;
                             }
