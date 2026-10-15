@@ -272,6 +272,26 @@ class TraceDigestTests(unittest.TestCase):
     def test_no_batch_section_without_batch_ids(self):
         self.assertNotIn("largest_gpu_batches", self.result())
 
+    def test_negative_list_limits_are_rejected_and_zero_is_supported(self):
+        for option in ("--frames", "--top"):
+            with self.subTest(option=option):
+                output, errors = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    with self.assertRaises(SystemExit) as exit:
+                        trace_digest.main([str(self.trace), option, "-1", "--json"])
+                self.assertEqual(exit.exception.code, 2)
+                self.assertEqual(output.getvalue(), "")
+                self.assertIn(option, errors.getvalue())
+                self.assertIn("nonnegative", errors.getvalue())
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(trace_digest.main([str(self.trace), "--frames", "0", "--top", "0", "--json"]), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["slowest_frames"], [])
+        self.assertEqual(result["top_slices_ms_per_frame"], [])
+        self.assertEqual(result["longest_waits"], [])
+
+
     def test_command_line_markdown_and_json(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

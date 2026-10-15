@@ -296,13 +296,20 @@ def markdown_intervals(result):
     return "\n".join(lines) + "\n"
 
 
+def nonnegative_integer(value):
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must be a nonnegative integer")
+    return number
+
+
 def main(arguments=None):
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("trace", help="aps5-trace-*.json.gz (or .json), or a .jsonl summary file with APS5_TRACE_SUMMARY_EVERY lines")
     parser.add_argument("--summary", help="file with the summary line (default: aps5-summary.jsonl next to the trace)")
     parser.add_argument("--stacks", help="collapsed-stack file of APS5_SAMPLE_WORKER (<file stem>.collapsed.txt)")
-    parser.add_argument("--frames", type=int, default=5, help="slowest frames to list (default 5)")
-    parser.add_argument("--top", type=int, default=10, help="entries per list (default 10)")
+    parser.add_argument("--frames", type=nonnegative_integer, default=5, help="slowest frames to list (default 5)")
+    parser.add_argument("--top", type=nonnegative_integer, default=10, help="entries per list (default 10)")
     parser.add_argument("--json", action="store_true", help="print the digest as JSON")
     options = parser.parse_args(arguments)
     if options.trace.endswith(".jsonl"):
