@@ -7,7 +7,7 @@ import { register } from "node:module";
 register("./cdn-loader.mjs", import.meta.url, { data: { url: process.env.ANYPS5_TEST_ZIP_URL, path: process.env.ANYPS5_TEST_ZIP_PATH } });
 
 const site = name => pathToFileURL(path.join(process.argv[2], name)).href;
-const { Archive, memoryEstimate, MEMORY_LIMIT, ICON_LIMIT, packageArchive } = await import(site("archive.mjs"));
+const { Archive, batchMemoryEstimate, batchOutputDirectory, memoryEstimate, MEMORY_LIMIT, ICON_LIMIT, packageArchive } = await import(site("archive.mjs"));
 const { BlobReader, BlobWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, ZipWriter } = await import(process.env.ANYPS5_TEST_ZIP_URL);
 await import("./archive-reserved.test.mjs");
 const { default: createRelinker } = await import(site("native/relinker_wasm.mjs"));
@@ -134,6 +134,16 @@ assert.equal(selfModuleSummary.warnings.length, 2);
 assert.match(selfModuleSummary.warnings.join(" "), /SELF container/u);
 await selfModule.close();
 assert(memoryEstimate(200 * 1024 ** 3, 1024, 1024, 100) > MEMORY_LIMIT);
+assert(batchMemoryEstimate([
+  { totalBytes: 1024, selectedBytes: 128, windowsSelectedBytes: 256, files: 2 },
+  { totalBytes: 2048, selectedBytes: 256, windowsSelectedBytes: 512, files: 3 }
+], "linux", 1024) > memoryEstimate(2048, 256, 1024, 3));
+assert.equal(batchOutputDirectory("First App.zip", 0), "01-First-App");
+assert.equal(batchOutputDirectory("First App.zip", 1), "02-First-App");
+assert.equal(batchOutputDirectory("CON.zip", 0), "01-CON");
+assert.equal(batchOutputDirectory("...zip", 0), "01-app");
+assert.throws(() => batchOutputDirectory("app.zip", -1), /Invalid app index/u);
+assert.throws(() => batchMemoryEstimate([], "macos", 0), /Unsupported conversion target/u);
 const invalid = native.Convert({ target: "unsupported" }, () => {});
 assert.equal(invalid.ok, false);
 console.log("Archive validation, missing-folder warnings and large-download budget verified");

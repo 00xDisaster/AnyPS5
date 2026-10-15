@@ -208,6 +208,23 @@ export function memoryEstimate(archiveBytes, selectedBytes, libraryBytes, entrie
   return safeSize(Math.ceil(archiveBytes * 1.02) + selectedBytes * 4 + libraryBytes + entries * 1024 + 8 * 1024 * 1024);
 }
 
+export function batchMemoryEstimate(summaries, target, libraryBytes) {
+  if (target !== "linux" && target !== "windows") throw new Error(`Unsupported conversion target: ${target}`);
+  return summaries.reduce((total, summary) => safeSize(total + memoryEstimate(
+    summary.totalBytes,
+    target === "windows" ? summary.windowsSelectedBytes : summary.selectedBytes,
+    libraryBytes,
+    summary.files
+  )), 0);
+}
+
+export function batchOutputDirectory(name, index) {
+  if (!Number.isSafeInteger(index) || index < 0) throw new Error("Invalid app index");
+  const stem = String(name).replace(/\.zip$/iu, "").normalize("NFKC")
+    .replace(/[^A-Za-z0-9._-]+/gu, "-").replace(/^[.-]+/u, "").slice(0, 80).replace(/[. -]+$/u, "");
+  return `${String(index + 1).padStart(2, "0")}-${stem || "app"}`;
+}
+
 async function appendEntry(writer, name, entry, report) {
   const stream = new TransformStream();
   let produced = 0;
@@ -282,13 +299,19 @@ class DirectoryWriter {
   async close() {}
 }
 
-export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false) {
+export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false, options = {}) {
   const libraries = new ZipReader(new BoundedBlobReader(libraryFile));
-  const writer = directory ? new DirectoryWriter(destination) : new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
+  const ownsWriter = !options.writer;
+  const writer = options.writer ?? (directory ? new DirectoryWriter(destination) : new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true }));
+  const outputPath = name => {
+    const path = options.prefix ? `${options.prefix}${name}` : name;
+    validPath(path);
+    return path;
+  };
   const names = new Set();
   const claim = name => {
-    validPath(name);
-    const key = name.replace(/\/$/u, "").toLowerCase();
+    const path = outputPath(name);
+    const key = path.replace(/\/$/u, "").toLowerCase();
     if (names.has(key)) throw new Error(`Output path collision: ${name}`);
     names.add(key);
   };
@@ -309,18 +332,18 @@ export async function packageArchive(archive, converted, outputName, libraryFile
       claim(module.name);
     }
     const binary = { versionMadeBy: 0x31e, externalFileAttributes: (0o100755 << 16) >>> 0 };
-    await writer.add(outputName, new Uint8ArrayReader(converted.executable), binary);
-    if (converted.diagnostics) await writer.add("windows-diagnostics-imports.txt", new Uint8ArrayReader(new TextEncoder().encode(converted.diagnostics)));
-    for (const module of converted.modules) await writer.add(module.name, new Uint8ArrayReader(module.bytes), binary);
+    await writer.add(outputPath(outputName), new Uint8ArrayReader(converted.executable), binary);
+    if (converted.diagnostics) await writer.add(outputPath("windows-diagnostics-imports.txt"), new Uint8ArrayReader(new TextEncoder().encode(converted.diagnostics)));
+    for (const module of converted.modules) await writer.add(outputPath(module.name), new Uint8ArrayReader(module.bytes), binary);
     for (const entry of libraryEntries) {
-      if (entry.directory) await writer.add(entry.filename, undefined, { directory: true });
-      else await appendEntry(writer, entry.filename, entry, report);
+      if (entry.directory) await writer.add(outputPath(entry.filename), undefined, { directory: true });
+      else await appendEntry(writer, outputPath(entry.filename), entry, report);
     }
     for (const { entry, name } of originalFiles) {
-      if (entry.directory) await writer.add("app0/" + name, undefined, { directory: true });
-      else await appendEntry(writer, "app0/" + name, entry, report);
+      if (entry.directory) await writer.add(outputPath("app0/" + name), undefined, { directory: true });
+      else await appendEntry(writer, outputPath("app0/" + name), entry, report);
     }
-    await writer.close();
+    if (ownsWriter) await writer.close();
   } finally {
     await libraries.close();
   }
