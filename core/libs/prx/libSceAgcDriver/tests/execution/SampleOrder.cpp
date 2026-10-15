@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -960,11 +961,61 @@ constexpr VkExtent2D ReferenceExtent{64u, 32u};
 constexpr std::array<std::uint8_t, 32> VillageLocations{0x04, 0x0c, 0, 0, 0, 0, 0, 0, 0x04, 0x0c, 0, 0, 0, 0, 0, 0, 0x0c, 0x04, 0, 0, 0, 0, 0, 0, 0x0c, 0x04, 0, 0, 0, 0, 0, 0};
 constexpr float ClearDepth = 0.9375f;
 constexpr std::size_t SceneSlots = 6u;
+const Vertices Slopes{{-1.0f, -1.0f, 0.125f, 1.0f}, {1.0f, -0.8125f, 0.875f, 1.0f}, {-0.5625f, 1.0f, 0.5f, 1.0f}, {1.0f, -1.0f, 0.75f, 1.0f}, {0.6875f, 1.0f, 0.0625f, 1.0f}, {-1.0f, 0.4375f, 0.3125f, 1.0f}};
 
 struct Rendered {
     Samples color;
     Samples depth;
 };
+
+double SlopeDepth(std::size_t triangle, double x, double y) {
+    std::array<std::array<double, 3>, 3> corner{};
+    for (std::size_t vertex = 0; vertex < corner.size(); ++vertex) {
+        const auto& at = Slopes[triangle * 3u + vertex];
+        corner[vertex] = {(at[0] + 1.0) * ReferenceExtent.width / 2.0, (1.0 - at[1]) * ReferenceExtent.height / 2.0, at[2]};
+    }
+    const auto edge = [](const std::array<double, 3>& from, const std::array<double, 3>& to, double px, double py) { return (to[0] - from[0]) * (py - from[1]) - (to[1] - from[1]) * (px - from[0]); };
+    const auto area = edge(corner[0], corner[1], corner[2][0], corner[2][1]);
+    return (edge(corner[1], corner[2], x, y) * corner[0][2] + edge(corner[2], corner[0], x, y) * corner[1][2] + edge(corner[0], corner[1], x, y) * corner[2][2]) / area;
+}
+
+struct DepthLocations {
+    std::size_t sloped = 0;
+    std::size_t guest = 0;
+    std::size_t standard = 0;
+};
+
+DepthLocations LocateDepth(const Samples& depth) {
+    constexpr std::uint32_t samples = 2u;
+    constexpr std::array<std::array<double, 2>, 2> standard{{{0.75, 0.75}, {0.25, 0.25}}};
+    DepthLocations located;
+    for (std::size_t index = 0; index < depth.size(); ++index) {
+        const auto value = static_cast<double>(std::bit_cast<float>(depth[index][0]));
+        if (value == ClearDepth) continue;
+        ++located.sloped;
+        const auto pixel = static_cast<std::uint32_t>(index / samples);
+        const auto sample = static_cast<std::uint32_t>(index % samples);
+        const auto x = pixel % ReferenceExtent.width;
+        const auto y = pixel / ReferenceExtent.width;
+        const auto bits = static_cast<std::uint32_t>(VillageLocations[Quad(x, y) * 8u + sample]);
+        const std::array<double, 2> guest{0.5 + (static_cast<int>(bits & 7u) - static_cast<int>(bits & 8u)) / 16.0, 0.5 + (static_cast<int>((bits >> 4u) & 7u) - static_cast<int>((bits >> 4u) & 8u)) / 16.0};
+        const auto holds = [&](const std::array<double, 2>& at) {
+            for (std::size_t triangle = 0; triangle < 2u; ++triangle) {
+                if (std::abs(SlopeDepth(triangle, x + at[0], y + at[1]) - value) < 1.0e-5) return true;
+            }
+            return false;
+        };
+        if (holds(guest)) ++located.guest;
+        else if (holds(standard[sample])) ++located.standard;
+    }
+    return located;
+}
+
+DepthLocations ReportDepthLocations(const std::string& what, const Rendered& rendered) {
+    const auto located = LocateDepth(rendered.depth);
+    std::printf("%s: of %zu sloped depth samples, %zu hold the slope's depth at the guest's sample locations and %zu at the standard 2x locations\n", what.c_str(), located.sloped, located.guest, located.standard);
+    return located;
+}
 
 Samples ReadTarget(const Context& context, VkImageView view, bool color, std::uint32_t samples) {
     const auto count = static_cast<std::size_t>(ReferenceExtent.width) * ReferenceExtent.height * samples;
@@ -998,7 +1049,6 @@ Rendered RenderCheckerboard(AgcDriver::VulkanDevice& device, const Context& cont
     AgcDriver::Graphics::DepthTarget depth{reinterpret_cast<std::uintptr_t>(DepthMemory.data()) + 256u * 1024u * run, 0u, ReferenceExtent, VK_FORMAT_D32_SFLOAT, 1.0f, 0};
     depth.samples = samples;
     const Vertices clear = Screen(ClearDepth);
-    const Vertices slopes{{-1.0f, -1.0f, 0.125f, 1.0f}, {1.0f, -0.8125f, 0.875f, 1.0f}, {-0.5625f, 1.0f, 0.5f, 1.0f}, {1.0f, -1.0f, 0.75f, 1.0f}, {0.6875f, 1.0f, 0.0625f, 1.0f}, {-1.0f, 0.4375f, 0.3125f, 1.0f}};
     const Vertices shade{{-0.9375f, -0.875f, 0.25f, 1.0f}, {0.9375f, -0.625f, 0.6875f, 1.0f}, {0.0625f, 0.9375f, 0.4375f, 1.0f}};
     Pass depthOnly;
     depthOnly.vertices = &clear;
@@ -1009,7 +1059,7 @@ Rendered RenderCheckerboard(AgcDriver::VulkanDevice& device, const Context& cont
     depthOnly.depthWrite = true;
     depthOnly.locations = locations;
     Draw(device, context, depthOnly);
-    depthOnly.vertices = &slopes;
+    depthOnly.vertices = &Slopes;
     depthOnly.depthCompare = VK_COMPARE_OP_LESS;
     Draw(device, context, depthOnly);
     Pass colorPass;
@@ -1066,7 +1116,9 @@ void CheckScene(const Rendered& rendered, std::uint32_t samples, const std::stri
         const auto pixel = static_cast<std::uint32_t>(index / samples);
         const auto at = At(pixel % ReferenceExtent.width, pixel / ReferenceExtent.width, sample);
         const auto id = static_cast<float>(sample);
-        Require(std::bit_cast<float>(rendered.color[index][2]) == id && std::bit_cast<float>(rendered.color[index][3]) == id, what + ": " + at + " does not hold its own sample index in color");
+        const auto z = std::bit_cast<float>(rendered.color[index][2]);
+        const auto w = std::bit_cast<float>(rendered.color[index][3]);
+        Require(z == id && w == id, what + ": " + at + " does not hold its own sample index in color (z " + std::to_string(z) + ", w " + std::to_string(w) + ")");
         const auto depth = std::bit_cast<float>(rendered.depth[index][0]);
         Require(depth >= 0.0f && depth <= ClearDepth, what + ": " + at + " holds depth " + std::to_string(depth));
         if (depth == ClearDepth) ++cleared;
@@ -1147,12 +1199,23 @@ int GridReference(AgcDriver::VulkanDevice& device) {
     CheckScene(exact, samples, "the exact path");
     CheckScene(approximate, samples, "pixel (0,0)'s locations alone");
     const bool grid = (context.sampleLocationGridSampleCounts & samples) != 0u;
-    std::size_t gridDifferences = 0;
+    std::optional<Rendered> native;
     if (grid) {
-        const auto native = RenderCheckerboard(device, context, samples, 0u, VillageLocations);
-        CheckScene(native, samples, "the 2x2 grid");
-        gridDifferences = Differences(reference.color, native.color, samples, "color through the device's 2x2 grid", true) + Differences(reference.depth, native.depth, samples, "depth through the device's 2x2 grid", true);
-        const auto exactGridDifferences = Differences(native.color, exact.color, samples, "color", false) + Differences(native.depth, exact.depth, samples, "depth", false);
+        native = RenderCheckerboard(device, context, samples, 0u, VillageLocations);
+        CheckScene(*native, samples, "the 2x2 grid");
+    }
+    const auto referenceDepth = ReportDepthLocations("the composite of uniform renders", reference);
+    ReportDepthLocations("the exact path", exact);
+    ReportDepthLocations("pixel (0,0)'s locations alone", approximate);
+    if (native) ReportDepthLocations("the device's 2x2 grid", *native);
+    if (referenceDepth.guest != referenceDepth.sloped) {
+        std::printf("skipped, the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them: the composite of uniform renders holds the guest's depth in %zu of %zu sloped samples, so no path can be compared with it bit for bit\n", referenceDepth.guest, referenceDepth.sloped);
+        return VulkanTestSkipped;
+    }
+    std::size_t gridDifferences = 0;
+    if (native) {
+        gridDifferences = Differences(reference.color, native->color, samples, "color through the device's 2x2 grid", true) + Differences(reference.depth, native->depth, samples, "depth through the device's 2x2 grid", true);
+        const auto exactGridDifferences = Differences(native->color, exact.color, samples, "color", false) + Differences(native->depth, exact.depth, samples, "depth", false);
         std::printf("2x checkerboard at %ux%u: the device's 2x2 grid differs from the composite of four uniform renders in %zu samples and from the exact path in %zu samples\n", ReferenceExtent.width, ReferenceExtent.height, gridDifferences, exactGridDifferences);
     } else {
         std::printf("the device has no 2x2 sample location grid at 2 samples: the composite of four uniform renders is the reference\n");
@@ -1179,59 +1242,72 @@ int Bench(AgcDriver::VulkanDevice& device, VkExtent2D extent, std::uint32_t samp
         std::printf("skipped, the device has no %ux storage alias for RGBA16F, sampleable D32F or timestamps\n", samples);
         return VulkanTestSkipped;
     }
+    const bool located = (context.sampleLocationSampleCounts & samples) != 0u && AgcDriver::Graphics::SampleLocationsCompatibleDepth(context, VK_FORMAT_D32_SFLOAT, samples);
     Image color(context, VK_FORMAT_R16G16B16A16_SFLOAT, samples, extent, ColorUsage, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT);
-    Image depth(context, VK_FORMAT_D32_SFLOAT, samples, extent, DepthUsage, 0u);
+    Image depth(context, VK_FORMAT_D32_SFLOAT, samples, extent, DepthUsage, located ? VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT : 0u);
     const auto storage = color.View(alias, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_USAGE_STORAGE_BIT);
     const auto attachment = depth.View(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
     const std::array<SampleOrderTarget, 2> targets{{
         {color.Handle(), storage, alias, extent, samples, SampleOrderMethod::Storage, nullptr},
         {depth.Handle(), attachment, VK_FORMAT_D32_SFLOAT, extent, samples, SampleOrderMethod::Depth, nullptr},
     }};
-    const SampleOrderPass pass{OrderFor(samples), extent, {}, false};
     VkQueryPoolCreateInfo queryInfo{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
     queryInfo.queryCount = 5u;
     VkQueryPool queries = VK_NULL_HANDLE;
     Check(context.Function<PFN_vkCreateQueryPool>("vkCreateQueryPool")(context.device, &queryInfo, nullptr, &queries), "vkCreateQueryPool sample order bench");
-    std::vector<std::array<double, 4>> phases;
-    std::vector<std::shared_ptr<void>> kept;
-    for (std::uint32_t frame = 0; frame <= frames; ++frame) {
-        kept.clear();
-        Submit(context, [&](VkCommandBuffer commands) {
-            if (frame == 0u) {
-                color.ToGeneral(commands, VK_IMAGE_ASPECT_COLOR_BIT);
-                depth.ToGeneral(commands, VK_IMAGE_ASPECT_DEPTH_BIT);
-            }
-            context.Function<PFN_vkCmdResetQueryPool>("vkCmdResetQueryPool")(commands, queries, 0u, 5u);
-            const auto stamp = [&](std::uint32_t query) {
-                context.Function<PFN_vkCmdWriteTimestamp>("vkCmdWriteTimestamp")(commands, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, query);
-            };
-            stamp(0u);
-            AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, std::span(targets).subspan(1u), true, kept);
-            stamp(1u);
-            AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, std::span(targets).subspan(1u), false, kept);
-            stamp(2u);
-            AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, targets, true, kept);
-            stamp(3u);
-            AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, targets, false, kept);
-            stamp(4u);
-        });
-        std::array<std::uint64_t, 5> ticks{};
-        Check(context.Function<PFN_vkGetQueryPoolResults>("vkGetQueryPoolResults")(context.device, queries, 0u, 5u, sizeof(ticks), ticks.data(), sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT), "vkGetQueryPoolResults sample order bench");
-        if (frame == 0u) continue;
-        std::array<double, 4> phase{};
-        for (std::size_t index = 0; index < phase.size(); ++index) phase[index] = static_cast<double>(ticks[index + 1u] - ticks[index]) * context.limits.timestampPeriod / 1.0e6;
-        phases.push_back(phase);
+    Submit(context, [&](VkCommandBuffer commands) {
+        color.ToGeneral(commands, VK_IMAGE_ASPECT_COLOR_BIT);
+        depth.ToGeneral(commands, VK_IMAGE_ASPECT_DEPTH_BIT);
+    });
+    const auto measure = [&](const SampleOrderPass& pass) {
+        std::vector<std::array<double, 4>> phases;
+        std::vector<std::shared_ptr<void>> kept;
+        for (std::uint32_t frame = 0; frame <= frames; ++frame) {
+            kept.clear();
+            Submit(context, [&](VkCommandBuffer commands) {
+                context.Function<PFN_vkCmdResetQueryPool>("vkCmdResetQueryPool")(commands, queries, 0u, 5u);
+                const auto stamp = [&](std::uint32_t query) {
+                    context.Function<PFN_vkCmdWriteTimestamp>("vkCmdWriteTimestamp")(commands, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queries, query);
+                };
+                stamp(0u);
+                AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, std::span(targets).subspan(1u), true, kept);
+                stamp(1u);
+                AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, std::span(targets).subspan(1u), false, kept);
+                stamp(2u);
+                AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, targets, true, kept);
+                stamp(3u);
+                AgcDriver::Graphics::RecordSampleOrder(context, commands, pass, targets, false, kept);
+                stamp(4u);
+            });
+            std::array<std::uint64_t, 5> ticks{};
+            Check(context.Function<PFN_vkGetQueryPoolResults>("vkGetQueryPoolResults")(context.device, queries, 0u, 5u, sizeof(ticks), ticks.data(), sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT), "vkGetQueryPoolResults sample order bench");
+            if (frame == 0u) continue;
+            std::array<double, 4> phase{};
+            for (std::size_t index = 0; index < phase.size(); ++index) phase[index] = static_cast<double>(ticks[index + 1u] - ticks[index]) * context.limits.timestampPeriod / 1.0e6;
+            phases.push_back(phase);
+        }
+        std::array<double, 4> median{};
+        for (std::size_t index = 0; index < median.size(); ++index) {
+            std::vector<double> values;
+            for (const auto& phase : phases) values.push_back(phase[index]);
+            std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(values.size() / 2u), values.end());
+            median[index] = values[values.size() / 2u];
+        }
+        return median;
+    };
+    const auto report = [&](const std::array<double, 4>& median, const char* how) {
+        std::printf("sample order swaps at %ux%u, %ux, %s, median of %u frames (GPU ms): depth-only pass in %.3f, out %.3f; color+depth pass in %.3f, out %.3f; per frame with one pass of each %.3f\n", extent.width, extent.height, samples, how, frames, median[0], median[1], median[2], median[3], median[0] + median[1] + median[2] + median[3]);
+    };
+    report(measure(SampleOrderPass{OrderFor(samples), extent, {}, false}), "without sample locations");
+    if (located) {
+        AgcDriver::Graphics::State standard{};
+        standard.samples = samples;
+        report(measure(SampleOrderPass{OrderFor(samples), extent, AgcDriver::Graphics::SampleLocations(standard), true}), "naming the standard sample locations at the depth copy's transitions");
+    } else {
+        std::printf("the device draws no %ux depth at custom sample locations: no swap names them\n", samples);
     }
     context.Function<PFN_vkDestroyQueryPool>("vkDestroyQueryPool")(context.device, queries, nullptr);
-    std::array<double, 4> median{};
-    for (std::size_t index = 0; index < median.size(); ++index) {
-        std::vector<double> values;
-        for (const auto& phase : phases) values.push_back(phase[index]);
-        std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(values.size() / 2u), values.end());
-        median[index] = values[values.size() / 2u];
-    }
-    std::printf("sample order swaps at %ux%u, %ux, median of %u frames (GPU ms): depth-only pass in %.3f, out %.3f; color+depth pass in %.3f, out %.3f; per frame with one pass of each %.3f\n", extent.width, extent.height, samples, frames, median[0], median[1], median[2], median[3], median[0] + median[1] + median[2] + median[3]);
     return 0;
 }
 
