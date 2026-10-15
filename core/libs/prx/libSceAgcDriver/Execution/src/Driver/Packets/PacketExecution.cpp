@@ -24,11 +24,11 @@ void Driver::timed(double WorkerProfile::*bucket, TWork&& work) {
     const auto end = std::chrono::steady_clock::now();
     profile.*bucket += std::chrono::duration<double, std::milli>(end - begin).count();
     static const bool report = std::getenv("APS5_PROFILE_DRAW") != nullptr;
-    if (report && bucket != &WorkerProfile::waitMs) PerformanceCounters::AddDriverNanoseconds(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count()));
     if (report && end - profile.reported > std::chrono::seconds(10)) {
         profile.reported = end;
         AgcDriver::ProfilePrint_nid_no_patch( "[gpu] worker at %.0f s: dispatch %.1f s, draw %.1f s, wait %.1f s\n", std::chrono::duration<double>(end - profile.start).count(), profile.dispatchMs / 1000, profile.drawMs / 1000, profile.waitMs / 1000);
     }
+    if (report && bucket != &WorkerProfile::waitMs) PerformanceCounters::AddDriverNanoseconds(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count()));
 }
 
 void Driver::execute(const Submission& submission) {
