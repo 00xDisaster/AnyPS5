@@ -394,7 +394,8 @@ enum class DescriptorRole {
     ShaderData,
     ImageTable,
     SamplerTable,
-    ImageTableMap
+    ImageTableMap,
+    ImageStorageTable
 };
 
 struct DescriptorBinding {
