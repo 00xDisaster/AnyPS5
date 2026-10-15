@@ -329,6 +329,25 @@ void CheckWatchOverlaps() {
     Require(!GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + 3 * page, Block - 3 * page), "unwatched pages after the watched ones overlap the watch");
     Require(!GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(base + page, 0), "an empty range overlaps the watch");
 }
+
+void CheckWatchedMiddleStore() {
+    const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    void* memory = AllocateWatched(Block);
+    const auto base = reinterpret_cast<std::uint64_t>(memory);
+    const auto middle = base + page;
+    std::memset(memory, 0x11, Block);
+    Unwatch(base, page);
+    Unwatch(base + 3 * page, Block - 3 * page);
+    const auto before = CollectWrites(middle, 2 * page);
+    Require(before != 0 && UnchangedSince(middle, 2 * page, before), "the watched middle of a block was not collected");
+    Require(MarkWritten(base + 3 * page + 64, 128) == 0 && UnchangedSince(middle, 2 * page, before), "a driver store into an unwatched end of a block stamped its watched middle");
+    Require(MarkWritten(base + page / 2, 3 * page) == 0, "a driver store around the watched middle of a block is trusted");
+    Require(!UnchangedSince(middle, 2 * page, before), "a driver store around the watched middle of a block left it unchanged");
+    Require(StoredOver(middle, 2 * page, before), "a driver store around the watched middle of a block is not seen over it");
+    const auto beforeOwn = TrackerGeneration();
+    Require(StoreOwnBytes(base + page / 2, 3 * page, [&] { std::memset(reinterpret_cast<void*>(base + page / 2), 0x22, 3 * page); }) == 0, "an own store around the watched middle of a block is trusted");
+    Require(!UnchangedSince(middle, 2 * page, beforeOwn), "an own store around the watched middle of a block left it unchanged");
+}
 #endif
 
 #ifdef _WIN32
@@ -989,6 +1008,7 @@ int main() {
         CheckPartlyWatchedStore();
 #ifndef _WIN32
         CheckWatchOverlaps();
+        CheckWatchedMiddleStore();
 #endif
 #ifdef _WIN32
         CheckDeferredSharedImports();

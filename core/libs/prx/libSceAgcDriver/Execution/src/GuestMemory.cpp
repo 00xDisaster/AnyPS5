@@ -918,18 +918,27 @@ struct WriteTracker {
         }
     }
 
+    bool blockPartWatched(std::uint64_t first, std::uint64_t stop) const {
+#ifdef _WIN32
+        return covers(first, 1) || covers(stop - 1, 1);
+#else
+        return GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(static_cast<std::uintptr_t>(first), static_cast<std::size_t>(stop - first));
+#endif
+    }
+
     void stampWatchedPart(std::uint64_t address, std::uint64_t end, std::uint32_t stampGeneration) {
 #ifdef _WIN32
         address = std::max<std::uint64_t>(address, base);
         end = std::min<std::uint64_t>(end, base + size);
+        if (address >= end) return;
 #else
         end = std::min<std::uint64_t>(end, LeafCount * LeafBlocks * WriteBlockBytes);
+        if (address >= end || !GuestWriteWatch::GuestWriteWatchOverlaps_nid_postfix(static_cast<std::uintptr_t>(address), static_cast<std::size_t>(end - address))) return;
 #endif
-        if (address >= end) return;
         for (auto block = blockOf(address); block <= blockOf(end - 1); ++block) {
             const auto first = std::max(address, blockBegin(block));
             const auto stop = std::min<std::uint64_t>(end, blockBegin(block) + WriteBlockBytes);
-            if (!covers(first, 1) && !covers(stop - 1, 1)) continue;
+            if (!blockPartWatched(first, stop)) continue;
             stamp(block, stampGeneration, StampKind::Driver);
             noteDriverStore(block, address, end, stampGeneration);
         }
