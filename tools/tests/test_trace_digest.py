@@ -176,6 +176,23 @@ class TraceDigestTests(unittest.TestCase):
         self.assertAlmostEqual(largest[("Driver.Present", "presenter")], 16.0)
         self.assertAlmostEqual(largest[("Driver.Present.inflight_wait", "presenter")], 14.5)
 
+    def test_markdown_thread_names_cannot_split_table_cells_or_rows(self):
+        name = "worker|<gpu>\nrow & more"
+        phase = "phase|<tag>\r\nnext"
+        trace = trace_digest.Trace({"traceEvents": [
+            {"ph": "M", "name": "thread_name", "tid": 1, "args": {"name": name}},
+            complete(1, phase, 0, 1000),
+        ]})
+        result = trace_digest.digest(trace)
+        self.assertEqual(result["threads"][0]["thread"], name)
+        self.assertEqual(result["threads"][0]["top"][0]["name"], phase)
+        rows = [line for line in trace_digest.markdown(result).splitlines() if line.startswith("|")]
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(line.count("|") == 7 for line in rows), rows)
+        self.assertIn("worker&#124;&lt;gpu&gt;<br>row &amp; more", rows[2])
+        self.assertIn("phase&#124;&lt;tag&gt;<br>next", rows[2])
+
+
     def test_threads_split_busy_and_wait(self):
         threads = {thread["thread"]: thread for thread in self.result()["threads"]}
         worker = threads["queue worker 0x0"]
