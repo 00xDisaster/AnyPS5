@@ -8254,17 +8254,17 @@ int main(int argc, char** argv) {
             splitWriteBackTests(device, recorder);
             return 0;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--cmask-only") {
+            cmaskPassTests(device, recorder);
+            std::cout << "CMASK copied clear, write-back and failure tests passed\n";
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--writeback-blocks-only") {
             if (device.GetContext().hostImportAlignment == 0) {
                 std::cout << "skipped, host imports are unavailable\n";
                 return 77;
             }
             writeBackBlockTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--cmask-only") {
-            cmaskPassTests(device, recorder);
-            std::cout << "CMASK copied clear, write-back and failure tests passed\n";
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--metadata-pass-only") {
