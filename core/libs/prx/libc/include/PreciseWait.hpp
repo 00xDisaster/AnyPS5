@@ -133,7 +133,11 @@ inline void PreciseSpinPause() {
 
 inline std::uint64_t PreciseMonotonicNanos() {
     struct timespec ts;
+#if defined(__APPLE__) && defined(_LIBCPP_VERSION) && defined(CLOCK_MONOTONIC_RAW)
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+#else
     clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
     return static_cast<std::uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<std::uint64_t>(ts.tv_nsec);
 }
 
@@ -256,6 +260,8 @@ inline void PreciseSleepUntil(const std::chrono::time_point<TClock, TDuration>& 
         }
     }
 #elif !defined(__EMSCRIPTEN__)
+#if (defined(__linux__) && (defined(__GLIBCXX__) || (defined(_LIBCPP_VERSION) && !defined(_LIBCPP_HAS_TIMESPEC_GET)))) || \
+    (defined(__APPLE__) && defined(_LIBCPP_VERSION) && defined(CLOCK_MONOTONIC_RAW))
     if constexpr (std::is_same_v<TClock, std::chrono::steady_clock>) {
         const auto rawDeadline = deadline.time_since_epoch().count();
         if (rawDeadline <= 0) [[unlikely]] {
@@ -274,6 +280,7 @@ inline void PreciseSleepUntil(const std::chrono::time_point<TClock, TDuration>& 
         }
         return;
     }
+#endif
     const std::uint64_t startNanos = PreciseMonotonicNanos();
     const auto now = TClock::now();
     if (now < deadline) {
