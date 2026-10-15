@@ -571,6 +571,17 @@ CompiledVariant emitVariant(const RecompileRequest& request, IrProgram& program)
     targetOptions.spannedWaves = request.target.spannedWaves;
     targetOptions.robustBufferAccess2 = request.target.robustBufferAccess2;
     targetOptions.float32FlushToZero = request.target.float32FlushToZero;
+    targetOptions.meshBarycentricPixel = request.shader.stage == ShaderStage::Fragment && request.graphics && request.graphics->mesh;
+    if (request.shader.stage == ShaderStage::Mesh && request.graphics && request.graphics->meshBarycentrics) {
+        const auto& paired = *request.graphics->meshBarycentrics;
+        const auto emulated = DescribeEmulatedInterface(paired.parameters, paired.emulation, true);
+        const auto& layout = emulated.layout;
+        targetOptions.meshBarycentricVertex = true;
+        targetOptions.barycentricSmoothLocation = layout.smoothLocation;
+        targetOptions.barycentricLinearLocation = layout.linearLocation;
+        targetOptions.barycentricPositionsLocation = layout.positionsLocation;
+        targetOptions.meshExportedLocations = emulated.passed;
+    }
 
     constexpr SpirvEmitter spirvEmitter;
     CompiledShaderArtifact result;
@@ -591,6 +602,7 @@ CompiledVariant emitVariant(const RecompileRequest& request, IrProgram& program)
         result.spirv = spirvEmitter.Emit(program, inputInfo, bindings, targetOptions);
     }
     result.registrationModule = registration;
+    if (request.shader.stage == ShaderStage::Mesh && request.graphics) result.meshBarycentrics = request.graphics->meshBarycentrics;
     result.stencilReplaySafe = (request.shader.stage == ShaderStage::Vertex || stencilReplay) && StencilReplaySafe(program);
     if (stencilReplay) {
         result.stencilReferences = StencilReferenceValues(program, request.context.pixel.has_value() && request.context.pixel->stencilOperationValueExport ? 8u : 0u);
@@ -935,6 +947,7 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
         .parameterExports = artifact.parameterExports,
         .fragmentParameters = artifact.fragmentParameters,
         .barycentricEmulation = artifact.barycentricEmulation,
+        .meshBarycentrics = artifact.meshBarycentrics,
         .stencilReferences = artifact.stencilReferences,
         .stencilReplaySafe = artifact.stencilReplaySafe,
         .stencilReferenceDword = artifact.stencilReferenceDword,
@@ -1092,6 +1105,16 @@ bool sameLayout(const BindingLayout& left, const BindingLayout& right) {
     return left.descriptorSet == right.descriptorSet && left.firstBinding == right.firstBinding && left.pushConstantOffsetBytes == right.pushConstantOffsetBytes && left.pushConstantSizeBytes == right.pushConstantSizeBytes;
 }
 
+}
+
+std::optional<MeshBarycentricLayout> MeshBarycentricLayoutOf(const RecompileResult& fragment) {
+    if (!fragment.barycentricEmulation.active) return std::nullopt;
+    MeshBarycentricLayout layout;
+    layout.emulation = fragment.barycentricEmulation;
+    for (const auto& parameter : fragment.fragmentParameters) {
+        layout.parameters.push_back({parameter.location, parameter.sourceLocation, false, parameter.perVertex});
+    }
+    return layout;
 }
 
 struct PreparedInterface {
