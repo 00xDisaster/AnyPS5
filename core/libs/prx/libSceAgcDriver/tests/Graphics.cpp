@@ -5743,7 +5743,7 @@ void orderedPixelShaderTests() {
     const auto vertexStops = vertexWords(bdaExtensions);
     const auto vertexTerminate = vertexWords(terminateExtensions);
     const auto vertexOps = countOps(vertexTerminate);
-    Require(vertexStops == vertexTerminate && !vertexOps.contains(spv::OpTerminateInvocation) && !vertexOps.contains(spv::OpKill) && vertexOps.at(spv::OpReturn) > 1u, "a vertex shader with BDA reads changed its fault exit when SPV_KHR_terminate_invocation was advertised");
+    Require(std::ranges::equal(vertexStops, vertexTerminate) && !vertexOps.contains(spv::OpTerminateInvocation) && !vertexOps.contains(spv::OpKill) && vertexOps.at(spv::OpReturn) > 1u, "a vertex shader with BDA reads changed its fault exit when SPV_KHR_terminate_invocation was advertised");
     expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(orderedPixelRequest(0x30600u, plain))); }, "fragmentShaderPixelInterlock");
 }
 
@@ -6737,7 +6737,7 @@ void validationTests() {
         pixel.spirv = makeModule({.fragment = true});
         expectFailure([&] { AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, true); }, "requires a fragment shader");
         const auto validateTerminate = [&](bool enabled) {
-            return AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, false, false, false, false, false, false, false, false, false, enabled);
+            return AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, false, false, false, false, false, false, false, false, false, false, enabled);
         };
         vertex.spirv = makeModule({});
         pixel.spirv = makeModule({.fragment = true, .terminateInvocation = true});

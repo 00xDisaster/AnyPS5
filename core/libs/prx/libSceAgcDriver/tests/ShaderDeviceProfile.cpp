@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace {
 
@@ -16,8 +17,8 @@ using AgcDriver::Graphics::Require;
 
 struct ProfileInput {
     std::vector<std::uint32_t> capabilities{spv::CapabilityShader, spv::CapabilityInt64, spv::CapabilityPhysicalStorageBufferAddresses, spv::CapabilityStorageBuffer8BitAccess};
-    std::array<std::string, 2> extensionStrings{"SPV_KHR_physical_storage_buffer", "SPV_KHR_8bit_storage"};
-    std::array<std::string_view, 2> extensions{extensionStrings[0], extensionStrings[1]};
+    std::vector<std::string> extensionStrings{"SPV_KHR_physical_storage_buffer", "SPV_KHR_8bit_storage"};
+    std::vector<std::string_view> extensions{extensionStrings[0], extensionStrings[1]};
     VkPhysicalDeviceRobustness2FeaturesEXT robustness{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT, nullptr, VK_FALSE, VK_FALSE, VK_TRUE};
     VkPhysicalDeviceDescriptorIndexingFeatures indexing{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES, &robustness};
     VkPhysicalDevice8BitStorageFeatures bytes{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES, &indexing, VK_TRUE};
@@ -54,7 +55,7 @@ void Reject(TAction action, const char* expected) {
         Require(std::string(error.what()).find(expected) != std::string::npos, "unexpected profile validation error");
         return;
     }
-    throw std::runtime_error("invalid shader device profile was accepted");
+    throw std::runtime_error(std::string("invalid shader device profile was accepted: ") + expected);
 }
 
 void CheckProfile() {
