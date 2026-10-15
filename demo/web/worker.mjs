@@ -1,4 +1,5 @@
-import { Archive, batchMemoryEstimate, batchOutputDirectory, CONVERSION_LIMIT, MEMORY_LIMIT, createPackageWriter, packageArchive } from "./archive.mjs";
+import { batchMemoryEstimate, batchOutputDirectory, MEMORY_LIMIT } from "./batch.mjs";
+import { Archive, CONVERSION_LIMIT, createPackageWriter, packageArchive } from "./archive.mjs";
 
 let archive;
 let inputs = [];
