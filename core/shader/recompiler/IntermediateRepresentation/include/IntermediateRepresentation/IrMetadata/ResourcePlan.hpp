@@ -8,12 +8,12 @@
 #include "IntermediateRepresentation/IrMetadata/ResourceInfo.hpp"
 #include "IntermediateRepresentation/IrMetadata/ShaderInfo.hpp"
 #include "IntermediateRepresentation/IrMetadata/ShaderStage.hpp"
-#include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <algorithm>
+#include <atomic>
 #include <span>
 #include <stdexcept>
 #include <type_traits>

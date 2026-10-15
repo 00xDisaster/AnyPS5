@@ -5,8 +5,8 @@
 #include "RdnaDecoder/RdnaDescriptorFormat.hpp"
 #include "RdnaDecoder/RdnaImageOpDecoder.hpp"
 #include "SpirvBackend/SpirvBufferFormat.hpp"
-#include "ImageTableAbi.hpp"
 #include "ThreadOwned.hpp"
+#include "ImageTableAbi.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
