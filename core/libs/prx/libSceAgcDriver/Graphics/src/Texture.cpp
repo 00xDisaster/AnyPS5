@@ -1832,7 +1832,7 @@ VkImageView StorageTexture::AttachmentProxyView() {
         VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         allocation.allocationSize = requirements.size;
         allocation.memoryTypeIndex = context.MemoryType(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        Check(context.AllocateDeviceMemory(allocation, requirements.memoryTypeBits, proxyMemory, "attachment proxy"), "vkAllocateMemory attachment proxy");
+        proxyMemory = AllocateAttachmentMemory(context, allocation, requirements.memoryTypeBits, "vkAllocateMemory attachment proxy");
         Check(context.Function<PFN_vkBindImageMemory>("vkBindImageMemory")(context.device, proxyImage, proxyMemory, 0), "vkBindImageMemory attachment proxy");
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = proxyImage;
