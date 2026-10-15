@@ -433,6 +433,8 @@ Samples ReadValues(AgcDriver::Graphics::Buffer& buffer, std::size_t count) {
 
 void CheckOrdered(const Samples& before, const Samples& after, VkExtent2D extent, VkExtent2D region, std::uint32_t samples, const SampleOrder& order, bool toHost, const std::string& what) {
     std::uint32_t moved = 0;
+    std::string first;
+    std::array<std::uint32_t, 4> wrong{};
     for (std::uint32_t y = 0; y < extent.height; ++y) {
         for (std::uint32_t x = 0; x < extent.width; ++x) {
             const bool inside = x < region.width && y < region.height;
@@ -442,13 +444,24 @@ void CheckOrdered(const Samples& before, const Samples& after, VkExtent2D extent
                 const auto base = (y * extent.width + x) * samples;
                 const auto source = inside ? Pick(map, sample) : sample;
                 if (after[base + sample] != before[base + source]) {
-                    char held[96];
-                    std::snprintf(held, sizeof(held), " holds 0x%08x 0x%08x, expected 0x%08x 0x%08x (sample %u)", after[base + sample][0], after[base + sample][1], before[base + source][0], before[base + source][1], source);
-                    throw std::runtime_error(what + ": " + At(x, y, sample) + held);
+                    if (first.empty()) {
+                        char held[96];
+                        std::snprintf(held, sizeof(held), " holds 0x%08x 0x%08x, expected 0x%08x 0x%08x (sample %u)", after[base + sample][0], after[base + sample][1], before[base + source][0], before[base + source][1], source);
+                        first = At(x, y, sample) + held;
+                    }
+                    ++wrong[Quad(x, y)];
                 }
                 if (source != sample) ++moved;
             }
         }
+    }
+    if (!first.empty()) {
+        std::string classes;
+        for (std::uint32_t quad = 0; quad < wrong.size(); ++quad) {
+            const bool kept = order[quad] == 0u || order[quad] == KeptSampleOrder;
+            classes += (quad == 0u ? "" : ", ") + std::to_string(wrong[quad]) + " in pixels with x " + ((quad & 1u) != 0u ? "odd" : "even") + " and y " + ((quad & 2u) != 0u ? "odd" : "even") + (kept ? " (kept)" : " (reordered)");
+        }
+        throw std::runtime_error(what + ": " + first + "; wrong samples: " + classes);
     }
     Require(moved != 0, what + ": the order moved no sample");
 }

@@ -5111,6 +5111,25 @@ void sampleLocationGridFallbackTests() {
     mock = MockVulkan{};
 }
 
+std::string varyingIndex(std::span<const std::uint32_t> code) {
+    Require(code.size() > 5 && code[0] == spv::MagicNumber, "a sample order shader is not a SPIR-V module");
+    std::set<std::uint32_t> constants;
+    for (std::size_t at = 5; at < code.size();) {
+        const auto count = code[at] >> 16u;
+        const auto opcode = static_cast<spv::Op>(code[at] & 0xffffu);
+        Require(count != 0 && at + count <= code.size(), "a sample order shader holds a malformed instruction");
+        if (opcode == spv::OpConstant) constants.insert(code[at + 2]);
+        if (opcode == spv::OpVectorExtractDynamic || opcode == spv::OpVectorInsertDynamic) return "a vector component chosen per invocation (opcode " + std::to_string(opcode) + ")";
+        if (opcode == spv::OpAccessChain || opcode == spv::OpInBoundsAccessChain || opcode == spv::OpPtrAccessChain || opcode == spv::OpInBoundsPtrAccessChain) {
+            for (std::size_t operand = 4; operand < count; ++operand) {
+                if (!constants.contains(code[at + operand])) return "an access chain into %" + std::to_string(code[at + 3]) + " through the non-constant index %" + std::to_string(code[at + operand]);
+            }
+        }
+        at += count;
+    }
+    return {};
+}
+
 VkSampleCountFlags orderStorageCounts = VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
 bool orderSixteenBitStencil = true;
 std::vector<VkSampleMask> pipelineSampleMasks;
@@ -5176,6 +5195,12 @@ void sampleOrderTests() {
     Require(InvertSampleOrder(0x76543201u) == 0x76543201u && InvertSampleOrder(0x76540132u) == 0x76541023u && InvertSampleOrder(KeptSampleOrder) == KeptSampleOrder, "inverting a sample order did not undo it");
     Require(HostSampleBits(0x1u, 0x76543201u) == 0x2u && HostSampleBits(0x1u, 0x76540132u) == 0x8u && HostSampleBits(0xffffffffu, 0x76540132u) == 0xffffffffu, "a guest sample mask did not move to the host samples at its guest samples' locations");
     Require(ReordersSamples(rowSwap) && !ReordersSamples(SampleOrder{}) && !ReordersSamples(SampleOrder{KeptSampleOrder, KeptSampleOrder, KeptSampleOrder, KeptSampleOrder}), "a sample order that keeps every index counted as a reordering");
+    std::size_t module = 0;
+    for (const auto code : SampleOrderShaderModules()) {
+        const auto varying = varyingIndex(code);
+        Require(varying.empty(), "sample order shader " + std::to_string(module) + " picks a pixel's order word or a held sample through " + varying);
+        ++module;
+    }
 
     const auto capable = [] {
         auto context = mockContext();

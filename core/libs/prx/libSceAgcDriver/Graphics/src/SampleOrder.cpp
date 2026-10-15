@@ -164,7 +164,7 @@ public:
         context.Resolved(&DeviceFunctions::cmdBindPipeline, "vkCmdBindPipeline")(commands, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
         context.Resolved(&DeviceFunctions::cmdBindDescriptorSets, "vkCmdBindDescriptorSets")(commands, VK_PIPELINE_BIND_POINT_COMPUTE, storagePipelineLayout, 0, 1, &set, 0, nullptr);
         context.Resolved(&DeviceFunctions::cmdPushConstants, "vkCmdPushConstants")(commands, storagePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
-        context.Resolved(&DeviceFunctions::cmdDispatch, "vkCmdDispatch")(commands, (region.width + 7u) / 8u, (region.height + 7u) / 8u, 1);
+        context.Resolved(&DeviceFunctions::cmdDispatch, "vkCmdDispatch")(commands, ((region.width + 1u) / 2u + 7u) / 8u, ((region.height + 1u) / 2u + 7u) / 8u, 1);
     }
 
     void Depth(VkCommandBuffer commands, const SampleOrderTarget& target, const std::array<std::uint32_t, 4>& map, VkExtent2D region, const SampleOrderPass& order, std::vector<std::shared_ptr<void>>& kept) {
@@ -629,6 +629,10 @@ void RecordSampleOrder(const Context& context, VkCommandBuffer commands, const S
     }
     RecordMemoryBarrier(context, commands, reorderStages, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, anyAccess);
     if (Recorder::Active() != nullptr) Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
+}
+
+std::array<std::span<const std::uint32_t>, 9> SampleOrderShaderModules() {
+    return {SAMPLE_ORDER_R8_SPV, SAMPLE_ORDER_R16_SPV, SAMPLE_ORDER_R32_SPV, SAMPLE_ORDER_RG32_SPV, SAMPLE_ORDER_RGBA32_SPV, SAMPLE_ORDER_VERTEX_SPV, SAMPLE_ORDER_DEPTH_SPV, SAMPLE_ORDER_STENCILEXPORT_SPV, SAMPLE_ORDER_STENCILBITS_SPV};
 }
 
 void ClearSampleOrders(VkDevice device) {
