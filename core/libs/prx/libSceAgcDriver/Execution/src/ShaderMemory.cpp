@@ -119,6 +119,16 @@ ShaderMemory::~ShaderMemory() {
     }
 }
 
+void ShaderMemory::WordMask::SetRun(std::size_t first, std::size_t count) {
+    while (count != 0) {
+        const auto shift = first % 64u;
+        const auto take = std::min<std::size_t>(count, 64u - shift);
+        bits[first / 64u] |= (take == 64u ? ~std::uint64_t{0} : (std::uint64_t{1} << take) - 1u) << shift;
+        first += take;
+        count -= take;
+    }
+}
+
 bool ShaderMemory::WordMask::None() const {
     return std::all_of(bits.begin(), bits.end(), [](std::uint64_t word) { return word == 0u; });
 }
@@ -293,14 +303,10 @@ bool ShaderMemory::readWords(void* context, std::uint64_t address, std::uint32_t
         const auto bytes = static_cast<std::uint64_t>(words) * sizeof(std::uint32_t);
         Page* page = nullptr;
         if (address % sizeof(std::uint32_t) == 0 && address <= std::numeric_limits<std::uint64_t>::max() - bytes && !self.overlapsInitial(address, address + bytes)) page = &self.page(base);
-        if (page != nullptr && page->valid.all()) {
+        if (page != nullptr && page->valid.All()) {
             std::memcpy(values, page->words.data() + index, bytes);
-            std::bitset<PageWords> mask;
-            mask.set();
-            mask >>= PageWords - words;
-            mask <<= index;
-            page->read |= mask;
-            page->recent |= mask;
+            page->read.SetRun(index, words);
+            page->recent.SetRun(index, words);
             CaptureTotals().reads += words;
         } else {
             for (std::size_t word = 0; word < words; ++word) {
