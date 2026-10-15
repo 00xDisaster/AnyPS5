@@ -178,6 +178,31 @@ class ImportAuditTests(unittest.TestCase):
         self.work = Workspace()
         self.addCleanup(self.work.close)
 
+    def test_named_imports_use_literal_exports_and_keep_unresolved_names(self):
+        work = self.work
+        (work.libs / "libc.prx").write_bytes(exporting("strcmp", "_Z3foov", "AAAAAAAAAAA"))
+        registry, report = work.root / "homebrew.registry.json", work.root / "audit.json"
+        write_registry(registry, [("strcmp", ""), ("strcmp", ""), ("_Z3foov", "libc.prx"),
+                                  ("AAAAAAAAAAA#A#B", "libc.prx"), ("missing_function", "", True)])
+        code, _, err = work.run(registry, "--json", str(report))
+        self.assertEqual((code, err), (1, ""))
+        data = json.loads(report.read_text(encoding="utf-8"))
+        records = {record["nid"]: record for record in data["imports"]}
+        self.assertEqual(data["references"], 5)
+        self.assertEqual(data["unique_by_class"], {"implemented": 3, "stub": 0, "absent": 1, "module": 0})
+        self.assertEqual(records["strcmp"]["references"], 2)
+        self.assertEqual(records["strcmp"]["providers"], ["libc.prx"])
+        self.assertTrue(records["missing_function"]["weak"])
+        self.assertIsNone(data["stops"][0]["nid"])
+
+    def test_empty_and_control_character_imports_remain_invalid(self):
+        registry = self.work.root / "homebrew.registry.json"
+        for name in ("", "#A#B", "bad\x00name", "bad\nname", "bad\x7fname", "bad name"):
+            with self.subTest(name=name):
+                write_registry(registry, [(name, "")])
+                with self.assertRaisesRegex(import_audit.AuditError, "invalid import symbol"):
+                    import_audit.read_registry(registry)
+
     def test_failed_json_write_preserves_existing_report_and_leaves_no_partial_report(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(exporting("AAAAAAAAAAA"))
@@ -1192,7 +1217,7 @@ class ImportAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(import_audit.AuditError, r"entry 0 needs string fields"):
             import_audit.read_registry(path)
         write_registry(path, [("AAAAAAAAAAA", ""), ("bad\x01nid", "")])
-        with self.assertRaisesRegex(import_audit.AuditError, r"entry 1 has an invalid NID 'bad\\x01nid'"):
+        with self.assertRaisesRegex(import_audit.AuditError, r"entry 1 has an invalid import symbol 'bad\\x01nid'"):
             import_audit.read_registry(path)
         write_registry(path, [("AAAAAAAAAAA#A#B", "libSceA.prx")], encoding="utf-8-sig")
         self.assertEqual(import_audit.read_registry(path), [("AAAAAAAAAAA", "libSceA.prx", False)])
@@ -1226,10 +1251,10 @@ class ImportAuditTests(unittest.TestCase):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(exporting("AAAAAAAAAAA"))
         registry = work.root / "game.json"
-        write_registry(registry, [("short", "libSceA.prx")])
+        write_registry(registry, [("bad name", "libSceA.prx")])
         code, out, err = work.run(registry)
         self.assertEqual((code, out), (2, ""))
-        self.assertIn("game.json: entry 0 has an invalid NID 'short'", err)
+        self.assertIn("game.json: entry 0 has an invalid import symbol 'bad name'", err)
 
     def test_unreadable_library_and_unwritable_json_exit_two(self):
         work = self.work

@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import json
-import re
 import struct
 import subprocess
 import sys
@@ -14,7 +13,6 @@ import progress
 
 ROOT = Path(__file__).resolve().parent.parent
 PRX = ROOT / "core" / "libs" / "prx"
-NID = re.compile(r"[A-Za-z0-9+\-]{11}")
 NID_POSTFIX = "_nid_postfix"
 MODULE_SUFFIX = "#"
 CLASSES = ("implemented", "stub", "absent", "module")
@@ -409,8 +407,8 @@ def read_registry(path):
         if not isinstance(entry, dict) or not isinstance(entry.get("nid"), str) or not isinstance(entry.get("library"), str):
             raise AuditError(f"{path}: entry {index} needs string fields 'nid' and 'library': {entry!r}")
         nid = entry["nid"].split("#", 1)[0]
-        if not NID.fullmatch(nid):
-            raise AuditError(f"{path}: entry {index} has an invalid NID {entry['nid']!r}")
+        if not nid or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in nid):
+            raise AuditError(f"{path}: entry {index} has an invalid import symbol {entry['nid']!r}")
         imports.append((nid, entry["library"], bool(entry.get("weak", False))))
     return imports
 
