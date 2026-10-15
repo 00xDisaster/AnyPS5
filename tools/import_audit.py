@@ -411,7 +411,10 @@ def read_registry(path):
         nid = entry["nid"].split("#", 1)[0]
         if not NID.fullmatch(nid):
             raise AuditError(f"{path}: entry {index} has an invalid NID {entry['nid']!r}")
-        imports.append((nid, entry["library"], bool(entry.get("weak", False))))
+        weak = entry.get("weak", False)
+        if not isinstance(weak, bool):
+            raise AuditError(f"{path}: entry {index} needs a boolean 'weak' field")
+        imports.append((nid, entry["library"], weak))
     return imports
 
 

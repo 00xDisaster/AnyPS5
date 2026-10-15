@@ -174,6 +174,24 @@ class Workspace:
 
 
 class ImportAuditTests(unittest.TestCase):
+    def test_registry_weak_flags_are_booleans(self):
+        registry = self.work.root / "game.json"
+        output = self.work.root / "audit.json"
+        output.write_bytes(b"previous report")
+        for weak in ("false", "true", 0, 1, None, [], {}):
+            with self.subTest(weak=weak):
+                registry.write_text(json.dumps([{"nid": "AAAAAAAAAAA", "library": "libSceA.prx", "weak": weak}]), encoding="utf-8")
+                with self.assertRaisesRegex(import_audit.AuditError, "boolean 'weak'"):
+                    import_audit.read_registry(registry)
+                code, out, err = self.work.run(registry, "--json", str(output))
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("boolean 'weak'", err)
+                self.assertEqual(output.read_bytes(), b"previous report")
+        for fields, expected in (({}, False), ({"weak": False}, False), ({"weak": True}, True)):
+            registry.write_text(json.dumps([dict(nid="AAAAAAAAAAA", library="libSceA.prx", **fields)]), encoding="utf-8")
+            self.assertEqual(import_audit.read_registry(registry), [("AAAAAAAAAAA", "libSceA.prx", expected)])
+
+
     def setUp(self):
         self.work = Workspace()
         self.addCleanup(self.work.close)
