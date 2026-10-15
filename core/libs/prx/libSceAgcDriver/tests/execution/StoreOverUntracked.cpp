@@ -312,6 +312,7 @@ Outcome RunSecondStore(const char* name) {
 }
 
 Outcome Run(const Case& test) {
+    std::optional<Surface> output;
     std::optional<Surface> source;
     if (test.kind == Kind::Copied || test.kind == Kind::NeighbourCopied) source.emplace();
     const bool neighbour = test.kind == Kind::NeighbourLeftWatch;
@@ -333,8 +334,8 @@ Outcome Run(const Case& test) {
     Store(surface.Texels());
     if (test.kind == Kind::UntrackedRepeat) {
         Settle(hold, surface, Stored);
-        Surface output;
-        ReadImage(surface.Texels(), output.Texels());
+        output.emplace();
+        ReadImage(surface.Texels(), output->Texels());
         hold.lock();
         const auto image = StorageTexture::FindLive(surface.Address(), SurfaceBytes);
         Require(image != nullptr, "store over untracked: the sampled surface has no live storage image");
