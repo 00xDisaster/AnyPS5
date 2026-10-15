@@ -29,6 +29,8 @@
 #include "prx/libkernel/File/include/DescriptorControl.hpp"
 #include "prx/libc/include/CreationMask.hpp"
 #include "prx/libkernel/File/include/FileFlags.hpp"
+#include "prx/libkernel/File/include/File.hpp"
+#include "prx/libkernel/KernelErrors.hpp"
 extern "C" int APS5_VABI getpid_nid_postfix(void);
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -126,6 +128,37 @@ int GuestFileError(int error) {
 std::int64_t Fail(int error) {
     *__error_nid_postfix() = error;
     return -1;
+}
+
+std::int64_t PathConfigurationValue(int name, const char* function) {
+    switch (name) {
+    case PcLinkMax: return 32767;
+    case PcNameMax: return static_cast<std::int64_t>(GuestNameMax);
+    case PcPathMax: return static_cast<std::int64_t>(GuestPathMax);
+    case PcPipeBuf: return 512;
+    case PcChownRestricted: return 1;
+    case PcNoTrunc: return 1;
+    case PcFileSizeBits: return 64;
+    case PcRecMaxXferSize: return -1;
+    case PcSymlinkMax: return static_cast<std::int64_t>(GuestPathMax);
+    case PcPrioIo: return 0;
+    case PcSyncIo: return 0;
+    case PcMaxCanon:
+    case PcMaxInput:
+    case PcVdisable:
+    case PcAllocSizeMin:
+    case PcRecIncrXferSize:
+    case PcRecMinXferSize:
+    case PcRecXferAlign:
+    case PcMinHoleSize:
+    case PcAsyncIo:
+    case PcAclExtended:
+    case PcAclPathMax:
+    case PcMacPresent:
+    case PcAclNfs4:
+        throw std::runtime_error(std::string(function) + ": name " + std::to_string(name) + " depends on the console filesystem or kernel configuration");
+    default: return Fail(GuestEinval);
+    }
 }
 
 int GuestError(const std::error_code& error) {
@@ -335,34 +368,16 @@ std::int64_t APS5_VABI pathconf_nid_postfix(const char* path, int name) {
     const auto status = std::filesystem::status(native, error);
     if (error) return Fail(error == std::errc::no_such_file_or_directory && HasNonDirectoryPrefix(native) ? GuestEnotdir : GuestError(error));
     if (!std::filesystem::exists(status)) return Fail(HasNonDirectoryPrefix(native) ? GuestEnotdir : GuestEnoent);
-    switch (name) {
-    case PcLinkMax: return 32767;
-    case PcNameMax: return static_cast<std::int64_t>(GuestNameMax);
-    case PcPathMax: return static_cast<std::int64_t>(GuestPathMax);
-    case PcPipeBuf: return 512;
-    case PcChownRestricted: return 1;
-    case PcNoTrunc: return 1;
-    case PcFileSizeBits: return 64;
-    case PcRecMaxXferSize: return -1;
-    case PcSymlinkMax: return static_cast<std::int64_t>(GuestPathMax);
-    case PcPrioIo: return 0;
-    case PcSyncIo: return 0;
-    case PcMaxCanon:
-    case PcMaxInput:
-    case PcVdisable:
-    case PcAllocSizeMin:
-    case PcRecIncrXferSize:
-    case PcRecMinXferSize:
-    case PcRecXferAlign:
-    case PcMinHoleSize:
-    case PcAsyncIo:
-    case PcAclExtended:
-    case PcAclPathMax:
-    case PcMacPresent:
-    case PcAclNfs4:
-        throw std::runtime_error("pathconf: name " + std::to_string(name) + " depends on the console filesystem or kernel configuration");
-    default: return Fail(GuestEinval);
-    }
+    return PathConfigurationValue(name, "pathconf");
+}
+
+std::int64_t APS5_VABI _fpathconf_nid_postfix(int fd, int name) {
+    if (fd < 0 || !DescriptorIsOpen_nid_no_patch(fd)) return Fail(GuestEbadf);
+    return PathConfigurationValue(name, "fpathconf");
+}
+
+std::int64_t APS5_VABI fpathconf_nid_postfix(int fd, int name) {
+    return _fpathconf_nid_postfix(fd, name);
 }
 
 #ifdef _WIN32
