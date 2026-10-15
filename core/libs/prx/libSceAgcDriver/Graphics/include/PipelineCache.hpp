@@ -25,6 +25,7 @@ public:
     PipelineCache& operator=(const PipelineCache&) = delete;
     VkPipelineCache Handle() const { return cache; }
     PipelineCacheSynchronization& Synchronization() { return synchronization; }
+    void SaveNow();
 
 private:
     struct FileHeader {
@@ -54,6 +55,7 @@ private:
     VkPipelineCache cache = VK_NULL_HANDLE;
     PipelineCacheSynchronization synchronization;
     std::filesystem::path path;
+    bool holdsFile = false;
     std::size_t loadedBytes = 0;
     std::size_t settledBytes = 0;
     std::optional<FileHeader> settledFile;
