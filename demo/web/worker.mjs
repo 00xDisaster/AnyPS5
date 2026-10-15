@@ -19,7 +19,15 @@ function report(event) {
 }
 
 function reportFor(item, index) {
-  return event => report({ ...event, appIndex: index, appCount: inputs.length, appName: item.name });
+  let started = false;
+  return event => {
+    if (!started) {
+      lastReport = 0;
+      lastPhase = "";
+      started = true;
+    }
+    report({ ...event, appIndex: index, appCount: inputs.length, appName: item.name });
+  };
 }
 
 export async function downloadLibraries(target) {
@@ -112,8 +120,7 @@ self.onmessage = async ({ data }) => {
         if (selectedBytes > CONVERSION_LIMIT) throw new Error(`Selected ${data.target} conversion input exceeds the 256 MiB conversion limit. Use the native relinker for this app.`);
       }
       const libraries = await downloadLibraries(data.target);
-      const estimate = batchMemoryEstimate(summaries, data.target, libraries.expandedBytes);
-      if (data.mode === "memory" && estimate > MEMORY_LIMIT) throw new Error("This result exceeds the 256 MiB memory-download budget. Use Save ZIP to disk in desktop Chrome or Edge.");
+      if (data.mode === "memory" && batchMemoryEstimate(summaries, data.target, libraries.expandedBytes) > MEMORY_LIMIT) throw new Error("This result exceeds the 256 MiB memory-download budget. Use Save ZIP to disk in desktop Chrome or Edge.");
       report({ phase: "Loading converter" });
       const { default: createRelinker } = await import("./native/relinker_wasm.mjs");
       const native = await createRelinker();
