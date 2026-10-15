@@ -1129,6 +1129,7 @@ std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
     std::uint64_t freed = 0;
     std::size_t sampledEntries = 0;
     std::size_t storageEntries = 0;
+    std::size_t storageKept = 0;
     bool sampledSkipped = false;
     bool storageSkipped = false;
     {
@@ -1156,7 +1157,6 @@ std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
             storageSkipped = true;
         } else {
             try {
-                bool dirtyToo = false;
                 while (freed < bytes) {
                     std::vector<std::pair<std::shared_ptr<StorageTexture>, std::uint64_t>> evicted;
                     {
@@ -1166,20 +1166,20 @@ std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
                         }
                         std::lock_guard lock(cache.mutex, std::adopt_lock);
                         std::uint64_t batch = 0;
+                        storageKept = 0;
                         for (auto it = cache.entries.end(); it != cache.entries.begin() && batch + freed < bytes;) {
                             --it;
-                            if (!dirtyToo && it->texture->Dirty()) continue;
+                            if (it->texture->Dirty()) {
+                                ++storageKept;
+                                continue;
+                            }
                             const auto accounted = it->accounted;
                             const auto next = std::next(it);
                             evicted.emplace_back(evictStorage(cache, it), accounted);
                             batch += accounted;
                             it = next;
                         }
-                        if (evicted.empty()) {
-                            if (dirtyToo || cache.entries.empty()) break;
-                            dirtyToo = true;
-                            continue;
-                        }
+                        if (evicted.empty()) break;
                     }
                     for (auto& [image, accounted] : evicted) {
                         std::vector<std::shared_ptr<ShaderResources>> resources;
@@ -1198,7 +1198,7 @@ std::uint64_t ReleaseTextureCaches(std::uint64_t bytes) {
             }
         }
     }
-    std::fprintf(stderr, "[gpu] texture caches released %llu MiB of the %llu MiB asked for: %zu sampled entries%s, %zu storage images%s\n", static_cast<unsigned long long>(freed >> 20u), static_cast<unsigned long long>(bytes >> 20u), sampledEntries, sampledSkipped ? " (cache busy, skipped)" : "", storageEntries, storageSkipped ? " (cache or device busy, skipped)" : "");
+    std::fprintf(stderr, "[gpu] texture caches released %llu MiB of the %llu MiB asked for: %zu sampled entries%s, %zu storage images%s, %zu with pending results kept\n", static_cast<unsigned long long>(freed >> 20u), static_cast<unsigned long long>(bytes >> 20u), sampledEntries, sampledSkipped ? " (cache busy, skipped)" : "", storageEntries, storageSkipped ? " (cache or device busy, skipped)" : "", storageKept);
     return freed;
 }
 
