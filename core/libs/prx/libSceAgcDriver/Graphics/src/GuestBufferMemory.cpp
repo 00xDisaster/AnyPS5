@@ -175,7 +175,7 @@ struct EvictingRefusal {
     std::uint64_t epoch;
     std::uint64_t liveBytes;
     std::uint64_t budget;
-    std::uint64_t containing;
+    std::uint64_t room;
     std::uint64_t window;
     std::uint64_t floor;
     std::uint64_t ready;
@@ -1150,9 +1150,8 @@ const HostImport* importRunAt(const Context& context, HostImports& state, Import
     }
     const auto budget = importBudget(context);
     const auto containing = std::find_if(run.ranges.begin(), run.ranges.end(), [address](const auto& range) { return address >= range->address && address < range->address + range->bytes; });
-    const auto containingAddress = containing != run.ranges.end() ? (*containing)->address : std::numeric_limits<std::uint64_t>::max();
     if (const auto remembered = state.evictingRefusals.find({base, bytes}); evict && !joined && remembered != state.evictingRefusals.end()) {
-        if (remembered->second.containing == containingAddress && evictingRefusalCurrent(state, remembered->second, budget) && sameRun(remembered->second, run)) {
+        if ((!stepDown || containing == run.ranges.end() || remembered->second.room < (*containing)->bytes) && evictingRefusalCurrent(state, remembered->second, budget) && sameRun(remembered->second, run)) {
             ++counts.refused;
             counts.refusedBytes += bytes;
             ++counts.remembered;
@@ -1203,7 +1202,7 @@ const HostImport* importRunAt(const Context& context, HostImports& state, Import
         const auto room = budget + evictable > live ? budget + evictable - live : 0;
         if (stepDown && containing != run.ranges.end() && room >= (*containing)->bytes) return importAllocation(context, state, address, lease, requester, end, evict, std::min(bytes / 2, room));
         if (containing != run.ranges.end() && run.ranges.size() > 1) remember((*containing)->address, (*containing)->bytes, GuestAllocations::Mapped{*containing});
-        if (evict && !joined) state.evictingRefusals.insert_or_assign(std::pair{base, bytes}, EvictingRefusal{base, bytes, GuestAllocations::Mapped(run.ranges.begin(), run.ranges.end()), state.epoch, state.liveBytes, budget, containingAddress, importWindow.load(std::memory_order_relaxed), state.buildFloor, ready, readyHeld});
+        if (evict && !joined) state.evictingRefusals.insert_or_assign(std::pair{base, bytes}, EvictingRefusal{base, bytes, GuestAllocations::Mapped(run.ranges.begin(), run.ranges.end()), state.epoch, state.liveBytes, budget, room, importWindow.load(std::memory_order_relaxed), state.buildFloor, ready, readyHeld});
         return nullptr;
     }
     for (auto it = first; it != state.imports.end() && it->first < base + bytes;) {

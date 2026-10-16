@@ -1206,6 +1206,25 @@ void evictingRefusalRangeTests(const Context& context) {
     Require(HostImportFor(window.importing, window.Address(2 * piece), 16) != nullptr && window.Block(2 * piece, piece), "a 64 KiB range of the same 256 KiB block was answered from the 128 KiB range's refusal instead of stepping down to its own import");
 }
 
+void evictingRefusalBlockRangesTests(const Context& context) {
+    PieceWindow window(context);
+    constexpr auto piece = PieceWindow::Piece;
+    constexpr auto fillers = PieceWindow::Window / 2;
+    window.AddPieces(0, 4 * piece);
+    for (std::size_t filler = 0; filler < 4; ++filler) {
+        window.Add(fillers + 2 * filler * piece, piece);
+        Require(HostImportFor(window.importing, window.Address(fillers + 2 * filler * piece), 16) != nullptr, "a filler piece inside the import budget was not imported");
+    }
+    SetHostImportBudget(HostImportLiveBytes());
+    const auto counted = [] { return HostImportCounters().requesters[static_cast<std::size_t>(ImportRequester::Access)]; };
+    const auto before = counted();
+    for (int request = 0; request < 8; ++request) Require(HostImportFor(window.importing, window.Address(static_cast<std::size_t>(request % 2) * piece), 16) == nullptr, "a 64 KiB range of a block over a full budget with nothing evictable was imported");
+    const auto after = counted();
+    Require(after.refused - before.refused == 8 && after.remembered - before.remembered == 7, "8 evicting requests alternating between two 64 KiB ranges of one refused 256 KiB block scanned the imports " + std::to_string(8 - (after.remembered - before.remembered)) + " times, not once");
+    SetHostImportBudget(HostImportLiveBytes() + piece);
+    Require(HostImportFor(window.importing, window.Address(piece), 16) != nullptr && window.Block(piece, piece), "a 64 KiB range of the block was answered from the full budget's refusal instead of stepping down to its own import once the budget had room for it");
+}
+
 void evictingRefusalWindowTests(const Context& context) {
     PieceWindow window(context);
     constexpr auto piece = PieceWindow::Piece;
@@ -2480,6 +2499,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     evictingRefusalAgingTests(context);
     evictingRefusalRangeTests(context);
     evictingRefusalWindowTests(context);
+    evictingRefusalBlockRangesTests(context);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
