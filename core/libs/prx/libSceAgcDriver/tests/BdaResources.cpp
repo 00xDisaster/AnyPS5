@@ -1132,6 +1132,7 @@ void importDeviceBudgetTests() {
     Require(HostImportBudgetWith(5888 * MiB, false, 8 * GiB, true, 0) == 5888 * MiB, "a higher host heap report raised the default import budget");
     Require(HostImportBudgetWith(5888 * MiB, false, unreported, true, 0) == 5888 * MiB, "a device without a memory budget report changed the default import budget");
     Require(HostImportBudgetWith(5888 * MiB, false, 4480 * MiB, true, 3000 * MiB) == 3000 * MiB, "the ceiling below a host heap report did not hold the default import budget");
+    Require(HostImportBudgetWith(5888 * MiB, false, 0, true, 0) != 0, "a host heap report that leaves imports no room made the default import budget 0, which the refusal memory reads as no budget");
 }
 
 void importCeilingTests(const Context& context, const BdaTestAccess& access, bool nearBudget) {
@@ -1234,6 +1235,63 @@ void importReportFloorTests(const Context& context, const BdaTestAccess& access,
         for (std::size_t index = 0; index < count; ++index) mutation.Remove(block + 2 * index * piece);
     }
     ClearHostImports(importing.device);
+    ::operator delete(block, std::align_val_t{piece});
+}
+
+void importReportRefusalMemoryTests(const Context& context, const BdaTestAccess& access) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t count = 24;
+    constexpr std::uint64_t GiB = std::uint64_t{1} << 30u;
+    static std::uintptr_t physical = 0x800000;
+    auto* block = static_cast<std::uint8_t*>(::operator new(2 * count * piece, std::align_val_t{piece}));
+    auto* other = static_cast<std::uint8_t*>(::operator new(piece, std::align_val_t{piece}));
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    importing.memory.memoryHeapCount = 2;
+    importing.memory.memoryHeaps[0] = {8 * GiB, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+    importing.memory.memoryHeaps[1] = {16 * GiB, 0};
+    importing.memoryProperties2 = reportHostHeap;
+    importing.physical = reinterpret_cast<VkPhysicalDevice>(physical += 0x10);
+    reportedHostHeapBudget = 8 * (std::uint64_t{1} << 20u);
+    reportedHostHeapUsage = reportedHostHeapBudget;
+    SetHostImportWindow(0);
+    SetHostImportBudget(0);
+    ClearHostImports(importing.device);
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Add(block + 2 * index * piece, piece, true, true, true);
+    }
+    access.limitImports(0);
+    Require(HostImportFor(importing, reinterpret_cast<std::uintptr_t>(block), 16) == nullptr, "an import past the mock's import limit was made");
+    access.limitImports(std::nullopt);
+    bool added = false;
+    const auto rebuild = [&] {
+        {
+            GuestAllocations::Mutation mutation;
+            if (added) mutation.Remove(other);
+            else mutation.Add(other, piece, true, true, false);
+        }
+        added = !added;
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+    };
+    const auto counted = [] { return HostImportCounters().requesters[static_cast<std::size_t>(ImportRequester::Build)]; };
+    const auto tries = [](const HostImportRequesterCounts& requested) { return requested.refused - requested.remembered; };
+    auto before = counted();
+    rebuild();
+    auto after = counted();
+    Require(after.made == before.made && tries(after) > tries(before), "an address-based build under a host heap report that leaves imports no room imported or refused nothing: " + std::to_string(after.made - before.made) + " made, " + std::to_string(tries(after) - tries(before)) + " refused");
+    before = after;
+    rebuild();
+    after = counted();
+    Require(tries(after) == tries(before) && after.remembered > before.remembered, "a second address-based build under a host heap report that leaves imports no room tried " + std::to_string(tries(after) - tries(before)) + " refused ranges again instead of answering them from the refusal memory");
+    {
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < count; ++index) mutation.Remove(block + 2 * index * piece);
+        if (added) mutation.Remove(other);
+    }
+    ClearHostImports(importing.device);
+    ::operator delete(other, std::align_val_t{piece});
     ::operator delete(block, std::align_val_t{piece});
 }
 
@@ -2347,6 +2405,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     importCeilingTests(context, access, true);
     importReportFloorTests(context, access, true);
     importReportFloorTests(context, access, false);
+    importReportRefusalMemoryTests(context, access);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();

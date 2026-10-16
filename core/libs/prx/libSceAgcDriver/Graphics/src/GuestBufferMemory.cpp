@@ -2736,7 +2736,7 @@ std::uint64_t HostImportBudgetFor(const VkPhysicalDeviceMemoryProperties& memory
 }
 
 std::uint64_t HostImportBudgetWith(std::uint64_t configured, bool set, std::uint64_t reported, bool allocationFailed, std::uint64_t ceiling) {
-    const auto budget = set || !allocationFailed ? configured : std::min(configured, reported);
+    const auto budget = set || !allocationFailed ? configured : std::max<std::uint64_t>(std::min(configured, reported), 1);
     return ceiling != 0 ? std::min(budget, ceiling) : budget;
 }
 
