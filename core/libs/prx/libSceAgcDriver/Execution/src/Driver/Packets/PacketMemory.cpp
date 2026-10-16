@@ -268,34 +268,37 @@ void Driver::dumpSampleCounters(std::uint64_t address) {
 }
 
 bool Driver::enqueueDmaPacket(std::span<const std::uint32_t> packet, std::uint32_t opcode, std::uint32_t queue, const QueueState& state) {
-    static const bool enabled = std::getenv("APS5_NO_PIPELINE_DMA") == nullptr;
+    static const bool enabled = std::getenv("APS5_PIPELINE_DMA") != nullptr;
     if (!enabled || opcode != 0x50 || queue != 0 || packet.size() < 7 || !DrawPipeline::Active() || !deferredLabels().labels.empty()) return false;
-    const auto source = Pm4::DmaSource(packet);
-    const std::size_t length = packet[6] & 0x3ffffffu;
+    const auto source = ((packet[1] >> 29u) & 3u) | ((packet[6] >> 24u) & 4u) | ((packet[6] >> 25u) & 8u);
     constexpr std::size_t immediateLimit = std::size_t{16} << 20u;
-    constexpr std::size_t gpuStoreLimit = 65536;
-    if (source == 0 || source == 3) Graphics::RequireNoMultisampleTarget(packet[2] | (static_cast<std::uint64_t>(packet[3]) << 32u), length, "a DMA copy");
-    if (source == 2 || length <= gpuStoreLimit) {
-        const auto store = Pm4::ResolveStore(packet, state, source == 2 ? immediateLimit : gpuStoreLimit);
+    if (source == 2) {
+        const auto store = Pm4::ResolveStore(packet, state, immediateLimit);
         if (!store.has_value() || store->Bytes().empty() || !GuestMemory::Accessible(reinterpret_cast<const void*>(store->address), store->Bytes().size(), true)) return false;
         const auto address = store->address;
-        if (source == 2 && Pm4::DmaDestination(packet) != 1) {
-            Graphics::NoteDepthMetadataFill(address, length, packet[2]);
-            Graphics::NoteColorMetadataFill(address, length, packet[2]);
-        }
         std::vector<std::byte> bytes(store->Bytes().begin(), store->Bytes().end());
         const auto size = bytes.size();
-        DrawPipeline::Queue0().Enqueue([this, queue, address, bytes = std::move(bytes)] {
+        const bool metadataFill = Pm4::DmaDestination(packet) != 1;
+        const auto fillAddress = packet[4] | (static_cast<std::uint64_t>(packet[5]) << 32u);
+        const auto fillBytes = packet[6] & 0x3ffffffu;
+        const auto pattern = packet[2];
+        DrawPipeline::Queue0().Enqueue([this, queue, address, bytes = std::move(bytes), metadataFill, fillAddress, fillBytes, pattern] {
             GuestMemory::SetCurrentPacket(0x50, queue);
+            if (metadataFill) {
+                Graphics::NoteDepthMetadataFill(fillAddress, fillBytes, pattern);
+                Graphics::NoteColorMetadataFill(fillAddress, fillBytes, pattern);
+            }
             commitDmaStore(queue, address, bytes);
         }, {{address, address + size}});
         return true;
     }
+    if (Pm4::DmaSource(packet) == 0 || Pm4::DmaSource(packet) == 3) Graphics::RequireNoMultisampleTarget(packet[2] | (static_cast<std::uint64_t>(packet[3]) << 32u), packet[6] & 0x3ffffffu, "a DMA copy");
     const auto copy = Pm4::DecodeMemoryCopy(packet);
     if (!copy.has_value() || copy->destination % 4 != 0 || copy->bytes % 4 != 0 || !GuestMemory::Accessible(reinterpret_cast<const void*>(copy->source), copy->bytes) || !GuestMemory::Accessible(reinterpret_cast<const void*>(copy->destination), copy->bytes, true)) return false;
     DrawPipeline::Queue0().Enqueue([this, queue, copy = *copy] {
         GuestMemory::SetCurrentPacket(0x50, queue);
-        {
+        constexpr std::size_t gpuStoreLimit = 65536;
+        if (copy.bytes > gpuStoreLimit) {
             GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Copy);
             std::lock_guard gpuLock(GuestMemory::GpuMutex());
             if (const auto localDevice = device.Load()) {
@@ -339,7 +342,7 @@ void Driver::commitDmaStore(std::uint32_t queue, std::uint64_t address, std::spa
 
 bool Driver::enqueueLabelPacket(std::span<const std::uint32_t> packet, std::uint32_t opcode, std::uint32_t queue) {
     static const bool ordered = std::getenv("APS5_PIPELINE_DRAIN_LABELS") == nullptr;
-    if (!ordered || !DeferLabels() || (opcode != 0x49 && opcode != 0x37)) return false;
+    if (!ordered || !DeferLabels() || (opcode != 0x49 && opcode != 0x37) || !deferredLabels().labels.empty()) return false;
     const auto interruptSelect = opcode == 0x49 ? (packet[2] >> 24u) & 7u : 0u;
     const bool endOfPipeInterrupt = interruptSelect != 0 && interruptSelect != 3;
     const auto label = Pm4::DecodeLabelWrite(packet);

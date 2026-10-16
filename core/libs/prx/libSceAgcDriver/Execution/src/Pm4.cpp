@@ -175,7 +175,7 @@ std::vector<std::byte> copyDataSource(std::span<const std::uint32_t> packet, con
 
 }
 
-std::string Name(std::uint32_t header) {
+std::string_view KnownName(std::uint32_t header) {
     if (FillerPacket(header)) return "PM4_FILLER";
     const auto opcode = (header >> 8u) & 0xffu;
     if (opcode == 0x10 && (header & 0xfcu) != 0) {
@@ -194,9 +194,14 @@ std::string Name(std::uint32_t header) {
             default: return "UNKNOWN_CUSTOM";
         }
     }
-    for (const auto& entry : Opcodes) if (entry.value == opcode) return std::string(entry.name);
+    for (const auto& entry : Opcodes) if (entry.value == opcode) return entry.name;
+    return {};
+}
+
+std::string Name(std::uint32_t header) {
+    if (const auto known = KnownName(header); !known.empty()) return std::string(known);
     char text[24]{};
-    std::snprintf(text, sizeof(text), "UNKNOWN_0x%02x", opcode);
+    std::snprintf(text, sizeof(text), "UNKNOWN_0x%02x", (header >> 8u) & 0xffu);
     return text;
 }
 
@@ -986,8 +991,9 @@ void Execute(std::span<const std::uint32_t> packet, QueueState& queue) {
             switch ((packet[0] >> 2u) & 0x3fu) {
                 case 0: return;
                 case 0x09: queue = std::move(*std::make_unique<QueueState>()); return;
-                case 0x0b:
+                case 0x0b: queue.markers.emplace_back(reinterpret_cast<const char*>(packet.data() + 1)); return;
                 case 0x0c:
+                    if (!queue.markers.empty()) queue.markers.pop_back();
                     return;
                 case 0x1a:
                     if (TraceContextState()) std::fprintf(stderr, "[context] op %u: %zu registers, saved %d, cb0 %x info %x mask %x\n", packet[1], queue.context.size(), queue.savedContext.has_value() ? 1 : 0, queue.context.contains(0x318) ? queue.context.at(0x318) : 0u, queue.context.contains(0x31c) ? queue.context.at(0x31c) : 0u, queue.context.contains(0x8e) ? queue.context.at(0x8e) : 0u);

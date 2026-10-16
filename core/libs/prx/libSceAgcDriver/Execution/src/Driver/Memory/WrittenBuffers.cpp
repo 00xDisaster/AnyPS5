@@ -7,6 +7,7 @@
 #include "Optimization/ShaderStageInputInfo.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 
 namespace AgcDriver::DriverDetail {
 
@@ -49,6 +50,31 @@ void Driver::noteWrittenBuffers(std::uint64_t program, std::uint32_t queue, cons
     while (writtenBuffers.size() > WrittenBufferRing) writtenBuffers.pop_front();
 }
 
+std::vector<std::pair<std::uint64_t, std::uint64_t>> DispatchWriteRanges(const ShaderRecompiler::RecompileResult& compiled, bool& bounded) {
+    bounded = compiled.bdaAbiVersion == 0;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> ranges;
+    constexpr std::uint64_t UnknownImageBytes = 64ull * 1024 * 1024;
+    for (const auto& binding : compiled.bindings) {
+        if (binding.role == ShaderRecompiler::DescriptorRole::Gds || binding.role == ShaderRecompiler::DescriptorRole::BdaPagetable || binding.role == ShaderRecompiler::DescriptorRole::FaultBuffer) bounded = false;
+        if (binding.role != ShaderRecompiler::DescriptorRole::GuestImages || binding.kind != ShaderRecompiler::DescriptorKind::StorageImage) continue;
+        for (std::uint32_t element = 0; element < binding.count; ++element) {
+            const bool written = element >= binding.imageWritten.size() || binding.imageWritten[element];
+            if (!written) continue;
+            if (binding.guestDescriptor.size() < (static_cast<std::size_t>(element) + 1) * 8) {
+                bounded = false;
+                continue;
+            }
+            const auto resource = Graphics::DecodeTextureResource(std::span<const std::uint32_t>(binding.guestDescriptor).subspan(static_cast<std::size_t>(element) * 8, 8));
+            if (resource.baseAddress == 0) continue;
+            const auto surfaceBytes = Graphics::DescribeSurface(resource).guestBytes;
+            ranges.emplace_back(resource.baseAddress, resource.baseAddress + (surfaceBytes != 0 ? surfaceBytes : UnknownImageBytes));
+            if (resource.dccAddress != 0) ranges.emplace_back(resource.dccAddress, resource.dccAddress + (surfaceBytes != 0 ? surfaceBytes / 256 + 1 : UnknownImageBytes));
+        }
+    }
+    visitWrittenBuffers(compiled, [&](std::uint32_t, std::uint64_t begin, std::uint64_t end, bool) { ranges.emplace_back(begin, end); });
+    return ranges;
+}
+
 void Driver::noteForeignWriter(std::uint64_t begin, std::uint64_t end, std::uint32_t queue) {
     if (!foreignWriters() || !(writeEvidenceEnabled() || traceCapSync()) || end <= begin) return;
     std::lock_guard lock(writtenBuffersMutex);
@@ -63,7 +89,7 @@ void Driver::noteDrawWriters(std::span<const Graphics::CompiledShader> stages, s
 }
 
 bool ExactDrawWrites() {
-    static const bool exact = std::getenv("APS5_EXACT_DRAW_WRITES") != nullptr;
+    static const bool exact = [] { const char* text = std::getenv("APS5_EXACT_DRAW_WRITES"); return text == nullptr || std::strcmp(text, "0") != 0; }();
     return exact;
 }
 
@@ -98,12 +124,14 @@ std::vector<std::pair<std::uint64_t, std::uint64_t>> DrawWriteRanges(const Graph
             const auto bytes = static_cast<std::uint64_t>(color.bytes) * slices;
             add(color.address, bytes);
             add(color.dccAddress, (bytes + 255) / 256);
+            add(color.cmaskAddress, static_cast<std::uint64_t>(color.cmaskBytes) * slices);
             return;
         }
         const std::uint64_t bytes = color.bytes != 0 ? static_cast<std::uint64_t>(color.bytes) : UnknownBytes;
         const auto base = color.surfaceAddress != 0 ? std::min(color.surfaceAddress, color.address) : color.address;
         if (base != 0) ranges.emplace_back(base, color.address + 2 * bytes + Slack);
         add(color.dccAddress, bytes / 16 + Slack);
+        add(color.cmaskAddress, static_cast<std::uint64_t>(color.cmaskBytes) * std::max<std::uint32_t>(color.depth, 1));
     };
     if (graphics.hasColorTarget) addColor(graphics.color);
     for (const auto& color : graphics.colors) addColor(color);

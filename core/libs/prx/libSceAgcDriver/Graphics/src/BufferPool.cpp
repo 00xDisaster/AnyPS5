@@ -1,7 +1,5 @@
 #include "prx/libSceAgcDriver/Execution/include/ProfileOutput.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
-#include "prx/libSceAgcDriver/Graphics/include/Resources.hpp"
-#include <limits>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -22,6 +20,16 @@ bool sharedTiers() {
 bool exactSizes() {
     static const bool exact = std::getenv("APS5_NO_BUFFER_CLASSES") != nullptr;
     return exact;
+}
+
+bool systemMemoryHeap(const VkPhysicalDeviceMemoryProperties& memory, std::uint32_t heap) {
+    bool typed = false;
+    for (std::uint32_t type = 0; type < std::min<std::uint32_t>(memory.memoryTypeCount, VK_MAX_MEMORY_TYPES); ++type) {
+        if (memory.memoryTypes[type].heapIndex != heap) continue;
+        if ((memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) return false;
+        typed = true;
+    }
+    return typed;
 }
 
 constexpr VkBufferUsageFlags deviceUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -171,9 +179,13 @@ VkDeviceSize BufferPool::DeviceBudget(const VkPhysicalDeviceMemoryProperties& me
     static const char* value = std::getenv("APS5_STAGING_POOL_MIB");
     if (value != nullptr) return static_cast<VkDeviceSize>(std::strtoull(value, nullptr, 10)) << 20u;
     VkDeviceSize largest = 0;
+    bool systemMemory = false;
     for (std::uint32_t heap = 0; heap < memory.memoryHeapCount && heap < VK_MAX_MEMORY_HEAPS; ++heap) {
-        if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) largest = std::max(largest, memory.memoryHeaps[heap].size);
+        if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0 || memory.memoryHeaps[heap].size <= largest) continue;
+        largest = memory.memoryHeaps[heap].size;
+        systemMemory = systemMemoryHeap(memory, heap);
     }
+    if (systemMemory) return std::max<VkDeviceSize>(VkDeviceSize{128} << 20u, largest / 64u);
     return std::max<VkDeviceSize>(VkDeviceSize{512} << 20u, largest / 8u);
 }
 
@@ -238,6 +250,7 @@ std::optional<BufferAllocation> BufferPool::Take(std::size_t bytes, VkBufferUsag
     }
     auto result = found->second.back().allocation;
     found->second.pop_back();
+    if (found->second.empty()) tier.free.erase(found);
     --tier.slots;
     tier.retainedBytes -= result.allocationBytes;
     ++tier.hits;
@@ -250,6 +263,7 @@ void BufferPool::evictOldest(Tier& tier, std::vector<BufferAllocation>& evicted)
     evicted.push_back(oldest->second.front().allocation);
     tier.retainedBytes -= oldest->second.front().allocation.allocationBytes;
     oldest->second.pop_front();
+    if (oldest->second.empty()) tier.free.erase(oldest);
     --tier.slots;
     ++tier.evictions;
 }

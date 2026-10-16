@@ -1,4 +1,5 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -27,11 +28,18 @@ DrawPipeline& DrawPipeline::Queue0() {
 std::size_t DrawPipeline::Depth() {
     static const std::size_t depth = [] {
         const char* text = std::getenv("APS5_PIPELINED_DRAWS");
-        if (text == nullptr || std::getenv("APS5_LOCKED_DRAW_PREPARE") != nullptr || std::getenv("APS5_DRAW_DRAIN") != nullptr || std::getenv("APS5_DRAIN_ALL") != nullptr || std::getenv("APS5_NO_WORDWISE_CAPTURE") != nullptr) return std::size_t{0};
+        if (std::getenv("APS5_LOCKED_DRAW_PREPARE") != nullptr || std::getenv("APS5_DRAW_DRAIN") != nullptr || std::getenv("APS5_DRAIN_ALL") != nullptr || std::getenv("APS5_NO_WORDWISE_CAPTURE") != nullptr) return std::size_t{0};
+        if (text == nullptr) return std::size_t{8};
         const auto value = std::strtoull(text, nullptr, 10);
         return value == 0 ? std::size_t{0} : value == 1 ? std::size_t{8} : static_cast<std::size_t>(std::min<unsigned long long>(value, 256));
     }();
     return depth;
+}
+
+std::size_t DrawPipeline::QueuedItems() {
+    auto& pipeline = Queue0();
+    std::lock_guard lock(pipeline.mutex);
+    return pipeline.items.size();
 }
 
 bool& DrawPipeline::Active() {
@@ -62,6 +70,7 @@ void DrawPipeline::Enqueue(Commit commit, std::vector<Range> writes, std::uint64
     std::unique_lock lock(mutex);
     rethrowFailure();
     if (items.size() >= Depth()) {
+        if (GuestMemory::GpuMutex().HeldByThisThread()) throw std::runtime_error("draw pipeline full while the enqueuing thread holds the GPU lock");
         const auto start = std::chrono::steady_clock::now();
         ++idleWaiters;
         idle.wait(lock, [&] { return items.size() < Depth(); });
@@ -115,21 +124,28 @@ void DrawPipeline::run() {
             committerWaiting = true;
             wake.wait(lock, [&] { return !items.empty(); });
             committerWaiting = false;
-            commit = &items.front().commit;
+            commit = stopped ? nullptr : &items.front().commit;
         }
         const auto start = std::chrono::steady_clock::now();
         std::exception_ptr fatal;
         bool failed = false;
+        bool shutdown = false;
         try {
-            (*commit)();
-        } catch (const std::exception& error) {
+            if (commit != nullptr) (*commit)();
+        } catch (const std::exception&) {
             failed = true;
-            static std::atomic<std::uint64_t> reported{0};
-            if (reported.fetch_add(1, std::memory_order_relaxed) < 20) std::fprintf(stderr, "[draw] pipelined commit failed: %.200s\n", error.what());
+            fatal = std::current_exception();
+        } catch (const ProcessShutdown&) {
+            shutdown = true;
+            fatal = std::current_exception();
         } catch (...) {
             fatal = std::current_exception();
         }
         const auto spent = elapsedNs(start);
+        if (fatal != nullptr && !stopped) {
+            stopped = true;
+            if (!shutdown) Driver::Get().ReportFailure(fatal);
+        }
         std::lock_guard lock(mutex);
         items.pop_front();
         ++commits;
@@ -142,6 +158,7 @@ void DrawPipeline::run() {
 }
 
 void DrawPipeline::Drain(DrainReason reason, std::uint32_t opcode) {
+    drainRequests[std::min<std::uint32_t>(opcode, 0x100)].fetch_add(1, std::memory_order_relaxed);
     if (!Busy()) return;
     if (GuestMemory::GpuMutex().HeldByThisThread()) throw std::runtime_error("draw pipeline drain under the GPU lock (reason " + std::to_string(static_cast<unsigned>(reason)) + ", opcode " + std::to_string(opcode) + ")");
     const auto start = std::chrono::steady_clock::now();
@@ -154,6 +171,10 @@ void DrawPipeline::Drain(DrainReason reason, std::uint32_t opcode) {
     ++drainOpcodes[std::min<std::uint32_t>(opcode, 0x100)];
     drainWaitNs[index] += elapsedNs(start);
     rethrowFailure();
+}
+
+std::uint64_t DrawPipeline::DrainRequestsByOpcode(std::uint32_t opcode) {
+    return Queue0().drainRequests[std::min<std::uint32_t>(opcode, 0x100)].load(std::memory_order_relaxed);
 }
 
 std::optional<std::uint64_t> DrawPipeline::PendingLabel(std::uint64_t address, std::size_t bytes) {
