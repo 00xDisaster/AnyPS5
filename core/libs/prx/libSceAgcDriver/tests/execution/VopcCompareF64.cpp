@@ -120,8 +120,7 @@ std::array<std::uint32_t, 4> BufferDescriptor(const void* data, std::uint32_t co
     return {static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu) | (4u << 16u), count, 0x11016facu};
 }
 
-void Run(AgcDriver::VulkanDevice& device, const Mode& mode) {
-    Output.fill(0xdeadbeefu);
+ShaderRecompiler::RecompileResult Compile(AgcDriver::VulkanDevice& device, const Mode& mode) {
     std::vector<std::uint32_t> userData(8, 0u);
     const auto input = BufferDescriptor(Input.data(), static_cast<std::uint32_t>(Input.size()));
     const auto output = BufferDescriptor(Output.data(), static_cast<std::uint32_t>(Output.size()));
@@ -138,9 +137,7 @@ void Run(AgcDriver::VulkanDevice& device, const Mode& mode) {
     };
     request.useCache = false;
     request.context.floatMode = mode.value;
-    const auto result = ShaderRecompiler::Recompile(request);
-    device.Dispatch(result, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(code.data()));
-    device.WaitIdle();
+    return ShaderRecompiler::Recompile(request);
 }
 
 std::uint32_t ClassBit(std::uint64_t bits) {
@@ -227,9 +224,12 @@ int main() {
             {"mode 3, IEEE on", ShaderRecompiler::ShaderFloatMode{0xc0u, true, true, false}, false},
         }};
         for (const auto& mode : modes) {
+            const auto result = Compile(*device, mode);
             for (std::uint32_t round = 0; round < EdgeRounds + RandomRounds; ++round) {
                 FillInput(round);
-                Run(*device, mode);
+                Output.fill(0xdeadbeefu);
+                device->Dispatch(result, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(CompareCode.data()));
+                device->WaitIdle();
                 Check(round, mode);
             }
         }
