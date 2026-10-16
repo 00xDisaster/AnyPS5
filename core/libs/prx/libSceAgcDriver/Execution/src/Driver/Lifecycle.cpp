@@ -1,3 +1,4 @@
+#include "prx/libSceAgcDriver/Execution/include/AsyncLog.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
@@ -42,6 +43,7 @@ void PrintFailure(std::exception_ptr error) {
     } catch (...) {
         std::fprintf(stderr, "[gpu] driver failure with a non-standard exception\n");
     }
+    FlushAsyncLog_nid_no_patch();
     std::fflush(stderr);
 }
 
@@ -127,11 +129,13 @@ void Driver::stop() {
     Graphics::StopCompareHelpers();
     ShaderRecompiler::ShaderDiskCache::Shutdown();
     PerformanceTrace::StopOutput();
+    FlushAsyncLog_nid_no_patch();
     StopProfileOutput_nid_no_patch();
     stopped = true;
 }
 
 Driver::Driver() {
+    InstallAsyncLog_nid_no_patch();
     static_cast<void>(GuestMemory::TrackerGeneration());
     ShaderMemory::SetWaitedMsProvider(&Graphics::Recorder::ThreadWaitedMs);
     try {
