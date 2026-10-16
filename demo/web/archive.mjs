@@ -225,7 +225,7 @@ async function appendEntry(writer, name, entry, report) {
   await Promise.all([
     entry.getData(stream.writable, { checkSignature: true }),
     writer.add(name, stream.readable.pipeThrough(limit), {
-      versionMadeBy: 0x31e, externalFileAttributes: entry.externalFileAttributes,
+      versionMadeBy: 0x31e, externalFileAttributes: entry.externalFileAttributes >>> 16 ? entry.externalFileAttributes : ((0o100644 << 16) | (entry.externalFileAttributes & 0xffff)) >>> 0,
       onprogress: completed => report({ phase: writer instanceof DirectoryWriter ? "Writing files" : "Compressing ZIP", input: name, completed, total: entry.uncompressedSize })
     })
   ]);
