@@ -860,6 +860,8 @@ static void CheckKernelSocketOption() {
     Require(kernel >= 0);
     const int size = 65536;
     Require(sceNetSetsockopt(kernel, 0xffff, 0x1001, &size, sizeof(size)) == 0);
+    const int one = 1;
+    Require(sceNetSetsockopt(kernel, 6, 1, &one, sizeof(one)) == 0);
     Require(close_nid_postfix(kernel) == 0);
     Require(Failed(sceNetSetsockopt(kernel, 0xffff, 0x1001, &size, sizeof(size)), 9));
 }
