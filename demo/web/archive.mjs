@@ -227,7 +227,7 @@ async function appendEntry(writer, name, entry, report) {
   ]);
 }
 
-class DirectoryWriter {
+export class DirectoryWriter {
   constructor(destination) {
     this.destination = destination;
   }
@@ -255,8 +255,7 @@ class DirectoryWriter {
         }
         await writer.close();
       } catch (error) {
-        await reader.cancel(error);
-        await writer.abort(error);
+        await Promise.allSettled([reader.cancel(error), writer.abort(error)]);
         throw error;
       } finally {
         reader.releaseLock();
@@ -271,7 +270,7 @@ class DirectoryWriter {
         }
         await writer.close();
       } catch (error) {
-        await writer.abort(error);
+        await Promise.allSettled([writer.abort(error)]);
         throw error;
       } finally {
         writer.releaseLock();
