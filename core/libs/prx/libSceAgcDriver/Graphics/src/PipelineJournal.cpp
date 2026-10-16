@@ -421,9 +421,11 @@ struct LoadedJournal {
 class Journal {
 public:
     static Journal& Instance() {
-        static auto* journal = new Journal();
+        static auto* journal = Create();
         return *journal;
     }
+
+    static Journal* Existing() { return created().load(std::memory_order_acquire); }
 
     [[nodiscard]] bool Enabled() const { return !path.empty() && !mismatched.load(std::memory_order_relaxed); }
     [[nodiscard]] const std::filesystem::path& Path() const { return path; }
@@ -543,6 +545,17 @@ private:
         std::vector<PendingModule> modules;
         std::vector<std::byte> payload;
     };
+
+    static std::atomic<Journal*>& created() {
+        static std::atomic<Journal*> pointer{nullptr};
+        return pointer;
+    }
+
+    static Journal* Create() {
+        auto* journal = new Journal();
+        created().store(journal, std::memory_order_release);
+        return journal;
+    }
 
     Journal() {
         const char* off = std::getenv("APS5_NO_PIPELINE_JOURNAL");
@@ -1098,7 +1111,8 @@ void RecordComputePipeline(const ShaderRecompiler::RecompileResult& shader, bool
 }
 
 void FlushPipelineJournal() {
-    if (Journal::Instance().Enabled()) Journal::Instance().Flush();
+    auto* journal = Journal::Existing();
+    if (journal != nullptr && journal->Enabled()) journal->Flush();
 }
 
 void ReportPipelineJournal() {
