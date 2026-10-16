@@ -176,7 +176,7 @@ struct Context {
     std::vector<std::unique_ptr<CertificateHandle>> certificateHandles;
     std::unordered_map<void*, Snapshot> caLists;
     std::unordered_map<void*, Snapshot> caCerts;
-    explicit Context(std::size_t size) : pool{size} {}
+    explicit Context(std::size_t size) : pool{size, 0, 0, {}} {}
 };
 
 int HostError() {
