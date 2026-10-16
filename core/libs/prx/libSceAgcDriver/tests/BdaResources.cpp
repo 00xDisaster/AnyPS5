@@ -1118,6 +1118,10 @@ void evictingRefusalMemoryTests(const Context& context) {
     for (int request = 0; request < 8; ++request) Require(HostImportFor(importing, address(filled), 16) == nullptr, "a piece over a full budget with nothing evictable was imported");
     auto after = counted();
     Require(after.refused - before.refused == 8 && after.remembered - before.remembered == 7, "8 evicting requests for one refused piece at a full budget with nothing evictable scanned the imports " + std::to_string(8 - (after.remembered - before.remembered)) + " times, not once");
+    SetHostImportBudget(budget - piece);
+    before = counted();
+    Require(HostImportFor(importing, address(filled), 16) == nullptr && counted().remembered == before.remembered + 1, "a remembered evicting refusal ended when the budget was lowered");
+    SetHostImportBudget(budget);
     {
         GuestAllocations::Mutation mutation;
         mutation.Remove(at(0));
