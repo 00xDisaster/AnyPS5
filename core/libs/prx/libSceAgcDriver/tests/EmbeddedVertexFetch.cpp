@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <initializer_list>
 #include <span>
 #include <vector>
 
@@ -54,19 +55,19 @@ int NoCarryOffsets() {
             std::fprintf(stderr, "wave%u: no-carry offsets: loads=%zu vertex=%d instance=%d shared=%d/%d observed=%d/%d\n", wave, plan.loads.size(), plan.vertexOffsetSgpr, plan.instanceOffsetSgpr, plan.vertexOffsetShared, plan.instanceOffsetShared, plan.vertexIndexObserved, plan.instanceIndexObserved);
             ++failures;
         }
-        const auto rejected = [&](const char* label, auto change) {
-            auto program = decoded;
-            change(program.instructions.front());
-            if (analyze(program).vertexOffsetSgpr == -1) return;
+        const auto rejected = [&](const char* label, std::initializer_list<std::uint32_t> instruction) {
+            std::vector<std::uint32_t> words(instruction);
+            words.insert(words.end(), code.begin() + 1, code.end());
+            if (analyze(RdnaInstructionDecoder{}.Decode(words)).vertexOffsetSgpr == -1) return;
             std::fprintf(stderr, "wave%u: %s was admitted as a no-carry offset\n", wave, label);
             ++failures;
         };
-        rejected("VOP3 saturation", [](auto& add) { add.family = RdnaInstructionFamily::VOP3; add.wordCount = 2; add.destination.clamp = true; });
-        rejected("extended VOP2", [](auto& add) { add.wordCount = 2; });
-        rejected("vector offset", [](auto& add) { add.source0.kind = RdnaOperandKind::VectorRegister; });
-        rejected("different index source", [](auto& add) { ++add.source1.reg; });
-        rejected("non-user scalar", [](auto& add) { add.source0.reg = 31; });
-        rejected("subtraction", [](auto& add) { add.op = RdnaOpcode::VSubNcU32; });
+        rejected("VOP3 saturation", {0xd5258005u, 0x00020a10u});
+        rejected("SDWA byte source", {0x4a0a0af9u, 0x06800610u});
+        rejected("vector offset", {0x4a0a0b10u});
+        rejected("different index source", {0x4a0a0c10u});
+        rejected("non-user scalar", {0x4a0a0a1fu});
+        rejected("subtraction", {0x4c0a0a10u});
         auto sharedCode = std::vector<std::uint32_t>(code.begin(), code.end());
         sharedCode.insert(sharedCode.end() - 1, 0x7e080210u);
         const auto shared = analyze(RdnaInstructionDecoder{}.Decode(sharedCode));
