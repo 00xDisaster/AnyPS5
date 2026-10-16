@@ -1149,6 +1149,15 @@ void ShaderStageTests() {
         Require(mesh.outputPrimitiveSize == 1 && mesh.maxPrimitives == 255 && AgcDriver::Graphics::RasterPrimitiveOf(state) == ShaderRecompiler::RasterPrimitive::Point, "a point-list subgroup did not decode as points");
         Require(mesh.provokingVertex == 0, "a point draw has provoking vertex 0");
         lines.context[0x205] = raster;
+        auto points = lines;
+        points.userConfig[0x242] = 6;
+        points.userConfig[0x25b] = 0x5c2e;
+        points.context[0x1ff] = 0x8a;
+        points.context[0x2ce] = 3;
+        points.context[0x29b] = 0;
+        const auto pointState = AgcDriver::Graphics::DecodeState(points);
+        const auto& pointMesh = *pointState.stages.mesh;
+        Require(pointMesh.outputPrimitiveSize == 1u && pointMesh.primitivesPerGroup == 44u && pointMesh.verticesPerGroup == 46u && pointMesh.maxVertices == 138u && pointMesh.maxPrimitives == 138u && pointMesh.threadsPerGroup == 192u && AgcDriver::Graphics::RasterPrimitiveOf(pointState) == ShaderRecompiler::RasterPrimitive::Point, "triangle-strip input with point output did not decode the reported subgroup");
         lines.context[0x29b] = 1;
         lines.context[0x2ce] = 1;
         expectFailure([&] { AgcDriver::Graphics::DecodeState(lines); }, "unsupported geometry input or output assembly");
