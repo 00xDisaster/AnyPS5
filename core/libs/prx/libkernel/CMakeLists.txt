@@ -578,6 +578,9 @@ if(BUILD_TESTING)
     if(WIN32)
         set_tests_properties(guest_nanosleep PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
+        add_test(NAME guest_nanosleep_timer_self_test COMMAND guest_nanosleep_tests)
+        set_tests_properties(guest_nanosleep_timer_self_test PROPERTIES TIMEOUT 30 ENVIRONMENT "APS5_TRACE_TIMERS=1" ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
     endif()
     add_test_executable(guest_pthread_sem_tests ${LIBS_INCLUDE_DIR}/tests/GuestPthreadSem.cpp)
     target_include_directories(guest_pthread_sem_tests PRIVATE ${LIBS_INCLUDE_DIR})
