@@ -173,6 +173,7 @@ int main(int argc, char** argv) {
         else if (mode == "--shader-cache-writer") ShutdownJoinsShaderCacheWriter();
         else if (mode == "--late-shader-cache") ShutdownJoinsShaderCacheWriter(true);
         else if (mode == "--async-log-held") ShutdownPassesHeldAsyncLog();
+        else if (mode == "--exit-after-start") static_cast<void>(AgcDriver::DriverDetail::Driver::Get());
         else ClosingStartsNoPreparation();
         std::cout << "shutdown threads tests passed\n";
         return 0;

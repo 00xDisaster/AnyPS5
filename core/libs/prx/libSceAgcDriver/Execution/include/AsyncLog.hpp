@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -203,8 +204,14 @@ private:
         if (!asynchronous) return;
         LogSink().store(&AsyncLog::Sink, std::memory_order_release);
         std::atexit(&AsyncLog::FlushAtEnd);
+        InitializeWaits();
         std::thread([this] { Run(); }).detach();
         LibcSetEndFlush_nid_no_patch(&AsyncLog::FlushAtEnd);
+    }
+
+    void InitializeWaits() {
+        std::unique_lock lock(mutex);
+        for (auto* condition : {&wake, &space, &idle}) static_cast<void>(condition->wait_for(lock, std::chrono::nanoseconds(0)));
     }
 
     static int Sink(std::FILE* stream, const char* text, std::size_t length) {
