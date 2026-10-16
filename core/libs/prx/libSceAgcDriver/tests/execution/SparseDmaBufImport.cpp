@@ -64,6 +64,12 @@ bool Imported(VkDevice device, std::uint64_t address, std::size_t bytes) {
     return AgcDriver::Graphics::HostImportCovers(probe, address, bytes);
 }
 
+bool DmaBufImport(const AgcDriver::VulkanDevice& device, std::uint64_t address, std::size_t bytes) {
+    std::lock_guard lock(AgcDriver::GuestMemory::GpuMutex());
+    const auto* import = AgcDriver::Graphics::HostImportFor(AgcDriver::VulkanDeviceTestAccess::ContextOf(device), address, bytes);
+    return import != nullptr && import->dmaBuf;
+}
+
 }
 
 int main() {
@@ -118,14 +124,17 @@ int main() {
         const bool settles = AgcDriver::VulkanDeviceTestAccess::ContextOf(*device).settleQueue != VK_NULL_HANDLE;
         const auto settledBefore = AgcDriver::Graphics::HostImportsSettled();
         device->ImportGuestMemory(Register(small, SmallBytes), GuestAllocations::GuestAllocationsGeneration_nid_postfix(), false);
+        const auto settledAtMap = AgcDriver::Graphics::HostImportsSettled();
         const bool smallImported = Imported(device->Device(), reinterpret_cast<std::uint64_t>(small), static_cast<std::size_t>(SmallBytes));
+        const bool settlesShared = settles && smallImported && DmaBufImport(*device, reinterpret_cast<std::uint64_t>(small), static_cast<std::size_t>(SmallBytes));
         GuestAllocations::Mutation().Remove(small);
         if (!smallImported) {
             std::printf("skipped, the device does not import dma-buf memory\n");
             return VulkanTestSkipped;
         }
         if (!settles) std::printf("note: the device has no settle queue, so dma-buf imports are not settled\n");
-        Require(!settles || AgcDriver::Graphics::HostImportsSettled() == settledBefore + 1, "sparse import: the 1 MiB dma-buf import made at map time was not settled on the settle queue");
+        else if (!settlesShared) std::printf("note: the device imports shared memory through host pointers, which are not settled\n");
+        Require(!settlesShared || settledAtMap == settledBefore + 1, "sparse import: the 1 MiB dma-buf import made at map time was not settled on the settle queue");
 
         const auto boundary = ChunkBytes;
         std::memset(mapping + boundary - 65536, 0x11, 131072);
@@ -135,7 +144,7 @@ int main() {
         const bool atMap = device->ImportGuestMemory(ranges, GuestAllocations::GuestAllocationsGeneration_nid_postfix(), false);
         Require(Imported(device->Device(), address, static_cast<std::size_t>(bytes)), "sparse import: a range larger than udmabuf's size limit was not imported");
         Require(atMap, "sparse import: the import made without the GPU lock was refused");
-        Require(!settles || AgcDriver::Graphics::HostImportsSettled() == settledSmall + 1, "sparse import: the sparse dma-buf import made at map time was not settled on the settle queue");
+        Require(!settlesShared || AgcDriver::Graphics::HostImportsSettled() == settledSmall + 1, "sparse import: the sparse dma-buf import made at map time was not settled on the settle queue");
 
         bool filled = false;
         {
