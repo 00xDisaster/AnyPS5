@@ -147,6 +147,15 @@ struct Snapshot {
     std::size_t count;
 };
 
+struct CertNameEntry {
+    std::string oid;
+    std::string value;
+};
+
+struct CertName {
+    std::vector<CertNameEntry> entries;
+};
+
 struct Context {
     Pool pool;
     std::vector<std::shared_ptr<CertificateChain>> authorities;
@@ -154,6 +163,7 @@ struct Context {
     std::vector<std::unique_ptr<CertificateHandle>> certificateHandles;
     std::unordered_map<void*, Snapshot> caLists;
     std::unordered_map<void*, Snapshot> caCerts;
+    std::unordered_map<void*, std::unique_ptr<CertName>> certNames;
     explicit Context(std::size_t size) : pool{size} {}
 };
 
@@ -173,20 +183,10 @@ struct SslConnection {
     std::string alpn;
 };
 
-struct CertNameEntry {
-    std::string oid;
-    std::string value;
-};
-
-struct CertName {
-    std::vector<CertNameEntry> entries;
-};
-
 struct Runtime {
     std::mutex mutex;
     std::unordered_map<int, std::unique_ptr<Context>> contexts;
     std::unordered_map<int, SslConnection> connections;
-    std::unordered_map<void*, std::unique_ptr<CertName>> certNames;
     unsigned nextHandle = 1;
     Runtime() {
         if (mbedtls_platform_set_calloc_free(PoolCalloc, PoolFree) != 0)
@@ -253,25 +253,24 @@ std::size_t CertificateCount(const Context& context) {
     return count;
 }
 
-const mbedtls_x509_crt* RequireCertificate(const char* function, void* cert) {
+const mbedtls_x509_crt* RequireCertificate(const char* function, int sslCtxId, void* cert) {
     if (!cert) throw std::invalid_argument(std::string(function) + ": null certificate");
-    auto& state = State();
-    for (const auto& [_, ctx] : state.contexts) {
-        for (const auto& handle : ctx->certificateHandles) {
-            if (handle.get() == cert) {
-                if (handle->owner.expired() || !handle->certificate) {
-                    throw std::invalid_argument(std::string(function) + ": expired certificate");
-                }
-                return handle->certificate;
+    auto& context = GetContext(sslCtxId);
+    for (const auto& handle : context.certificateHandles) {
+        if (handle.get() == cert) {
+            if (handle->owner.expired() || !handle->certificate) {
+                throw std::invalid_argument(std::string(function) + ": expired certificate");
             }
+            return handle->certificate;
         }
     }
     throw std::invalid_argument(std::string(function) + ": unknown certificate");
 }
 
-void* ExtractCertName(const char* function, void* sslCert, bool subject) {
+void* ExtractCertName(const char* function, int sslCtxId, void* sslCert, bool subject) {
     std::lock_guard lock(State().mutex);
-    const auto* crt = RequireCertificate(function, sslCert);
+    auto& context = GetContext(sslCtxId);
+    const auto* crt = RequireCertificate(function, sslCtxId, sslCert);
     const auto* name = subject ? &crt->subject : &crt->issuer;
     auto certName = std::make_unique<CertName>();
     for (const auto* node = name; node; node = node->next) {
@@ -293,7 +292,7 @@ void* ExtractCertName(const char* function, void* sslCert, bool subject) {
         certName->entries.push_back({std::move(oid), std::move(value)});
     }
     auto* handle = certName.get();
-    State().certNames.emplace(handle, std::move(certName));
+    context.certNames.emplace(handle, std::move(certName));
     return handle;
 }
 
@@ -524,21 +523,32 @@ int APS5_VABI sceSslClose() {
  return 0;
 }
 
-int APS5_VABI sceSslGetSerialNumber(void* sslCert, const char** sboData, unsigned int* sboLen) {
-    if (!sboData || !sboLen) return ErrorInvalidArg;
+int APS5_VABI sceSslGetSerialNumber(int sslCtxId, void* sslCert, unsigned char* sboData, std::size_t* sboLen) {
+    if (!sboLen) return ErrorInvalidArg;
     std::lock_guard lock(State().mutex);
-    const auto* crt = RequireCertificate(__func__, sslCert);
-    *sboData = reinterpret_cast<const char*>(crt->serial.p);
-    *sboLen = static_cast<unsigned int>(crt->serial.len);
+    const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
+    const auto reqLen = crt->serial.len;
+    if (!sboData || *sboLen == 0) {
+        *sboLen = reqLen;
+        return 0;
+    }
+    if (*sboLen < reqLen) {
+        *sboLen = reqLen;
+        return ErrorInvalidArg;
+    }
+    std::memcpy(sboData, crt->serial.p, reqLen);
+    *sboLen = reqLen;
     return 0;
 }
 
-int APS5_VABI sceSslFreeSslCertName(void* certName) {
+int APS5_VABI sceSslFreeSslCertName(int sslCtxId, void* certName) {
     if (!certName) return ErrorInvalidArg;
-    std::lock_guard lock(State().mutex);
-    const auto found = State().certNames.find(certName);
-    if (found == State().certNames.end()) throw std::invalid_argument("sceSslFreeSslCertName: unknown cert name");
-    State().certNames.erase(found);
+    auto& state = State();
+    std::lock_guard lock(state.mutex);
+    auto& context = GetContext(sslCtxId);
+    const auto found = context.certNames.find(certName);
+    if (found == context.certNames.end()) throw std::invalid_argument("sceSslFreeSslCertName: unknown cert name");
+    context.certNames.erase(found);
     return 0;
 }
 
@@ -576,24 +586,28 @@ int APS5_VABI sceSslSetMinSslVersion(int sslConnectionId, int version) {
     return 0;
 }
 
-void* APS5_VABI sceSslGetIssuerName(void* sslCert) {
-    return ExtractCertName(__func__, sslCert, false);
+void* APS5_VABI sceSslGetIssuerName(int sslCtxId, void* sslCert) {
+    return ExtractCertName(__func__, sslCtxId, sslCert, false);
 }
 
-int APS5_VABI sceSslGetNameEntryCount(void* certName) {
+int APS5_VABI sceSslGetNameEntryCount(int sslCtxId, void* certName) {
     if (!certName) return ErrorInvalidArg;
-    std::lock_guard lock(State().mutex);
-    const auto found = State().certNames.find(certName);
-    if (found == State().certNames.end()) throw std::invalid_argument("sceSslGetNameEntryCount: unknown cert name");
+    auto& state = State();
+    std::lock_guard lock(state.mutex);
+    auto& context = GetContext(sslCtxId);
+    const auto found = context.certNames.find(certName);
+    if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryCount: unknown cert name");
     return static_cast<int>(found->second->entries.size());
 }
 
-int APS5_VABI sceSslGetNameEntryInfo(void* certName, int entryNum, char* oidname, unsigned int maxOidnameLen,
-    char* value, unsigned int maxValueLen, unsigned int* valueLen) {
+int APS5_VABI sceSslGetNameEntryInfo(int sslCtxId, void* certName, int entryNum, char* oidname, std::size_t maxOidnameLen,
+    char* value, std::size_t maxValueLen, std::size_t* valueLen) {
     if (!certName) return ErrorInvalidArg;
-    std::lock_guard lock(State().mutex);
-    const auto found = State().certNames.find(certName);
-    if (found == State().certNames.end()) throw std::invalid_argument("sceSslGetNameEntryInfo: unknown cert name");
+    auto& state = State();
+    std::lock_guard lock(state.mutex);
+    auto& context = GetContext(sslCtxId);
+    const auto found = context.certNames.find(certName);
+    if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryInfo: unknown cert name");
     const auto& entries = found->second->entries;
     if (entryNum < 0 || static_cast<std::size_t>(entryNum) >= entries.size()) return ErrorInvalidArg;
     const auto& entry = entries[static_cast<std::size_t>(entryNum)];
@@ -607,7 +621,7 @@ int APS5_VABI sceSslGetNameEntryInfo(void* certName, int entryNum, char* oidname
         std::memcpy(value, entry.value.data(), copyLen);
         value[copyLen] = '\0';
     }
-    if (valueLen) *valueLen = static_cast<unsigned int>(entry.value.size());
+    if (valueLen) *valueLen = entry.value.size();
     return 0;
 }
 
@@ -616,8 +630,8 @@ int APS5_VABI sceSslGetPem(void) {
     return 0;
 }
 
-void* APS5_VABI sceSslGetSubjectName(void* sslCert) {
-    return ExtractCertName(__func__, sslCert, true);
+void* APS5_VABI sceSslGetSubjectName(int sslCtxId, void* sslCert) {
+    return ExtractCertName(__func__, sslCtxId, sslCert, true);
 }
 
 }
