@@ -213,6 +213,7 @@ struct Context {
     std::uint32_t samplerTableCapacity = 0;
     bool geometryShader = false;
     bool sampleRateShading = false;
+    bool storageImageMultisample = false;
     bool shaderClipDistance = false;
     bool shaderCullDistance = false;
     bool nullDescriptors = false;
@@ -233,7 +234,6 @@ struct Context {
     VkSampleCountFlags sampleLocationSampleCounts = 0;
     VkSampleCountFlags sampleLocationGridSampleCounts = 0;
     std::array<VkExtent2D, 4> sampleLocationGridSizes{};
-    bool storageImageMultisample = false;
     bool shaderStencilExport = false;
     PipelineCacheSynchronization* pipelineCacheSynchronization = nullptr;
     bool shaderTerminateInvocation = false;
