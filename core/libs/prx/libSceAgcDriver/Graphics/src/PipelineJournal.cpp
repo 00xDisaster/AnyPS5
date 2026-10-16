@@ -35,7 +35,7 @@ static_assert(sizeof(VkStencilOpState) == 28, "VkStencilOpState changed: update 
 static_assert(sizeof(VkVertexInputBindingDescription) == 12, "VkVertexInputBindingDescription changed: update the recipe codec");
 static_assert(sizeof(VkVertexInputAttributeDescription) == 16, "VkVertexInputAttributeDescription changed: update the recipe codec");
 #if defined(__linux__) && defined(__x86_64__) && defined(__GLIBCXX__)
-static_assert(sizeof(State) == 784, "State changed: update CanonicalPipelineState and the recipe codec");
+static_assert(sizeof(State) == 800, "State changed: update CanonicalPipelineState and the recipe codec");
 static_assert(sizeof(ShaderStages) == 112, "ShaderStages changed: update the recipe codec");
 static_assert(sizeof(ShaderRecompiler::MeshConfiguration) == 40, "MeshConfiguration changed: update the recipe codec");
 static_assert(sizeof(ShaderRecompiler::TessellationConfiguration) == 40, "TessellationConfiguration changed: update the recipe codec");
@@ -219,6 +219,10 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.mergedCoverage);
     for (const auto mask : state.quadSampleMask) writer.Raw(mask);
     writer.U32(state.depthRemap.mode);
+    writer.Bool(state.vertexPoints);
+    writer.Raw(state.pointSize);
+    writer.Raw(state.pointSizeMin);
+    writer.Raw(state.pointSizeMax);
 }
 
 void decodeState(Reader& reader, State& state) {
@@ -280,6 +284,10 @@ void decodeState(Reader& reader, State& state) {
     state.mergedCoverage = reader.Bool();
     for (auto& mask : state.quadSampleMask) mask = reader.Raw<std::uint16_t>();
     state.depthRemap.mode = reader.U32();
+    state.vertexPoints = reader.Bool();
+    state.pointSize = reader.Raw<float>();
+    state.pointSizeMin = reader.Raw<float>();
+    state.pointSizeMax = reader.Raw<float>();
 }
 
 void encodeRecipe(Writer& writer, const GraphicsPipelineRecipe& recipe) {
@@ -1053,6 +1061,10 @@ State CanonicalPipelineState(const State& state) {
     canonical.mergedCoverage = state.mergedCoverage;
     canonical.quadSampleMask = state.quadSampleMask;
     canonical.depthRemap.mode = state.depthRemap.mode;
+    canonical.vertexPoints = state.vertexPoints;
+    canonical.pointSize = state.pointSize;
+    canonical.pointSizeMin = state.pointSizeMin;
+    canonical.pointSizeMax = state.pointSizeMax;
     return canonical;
 }
 
