@@ -90,8 +90,8 @@ void Driver::tagVariantRuns(DispatchVariant& variant, std::span<const ShaderReco
         const auto offset = variant.words.size();
         variant.words.resize(offset + count);
         std::memcpy(variant.words.data() + offset, region.bytes.data(), count * sizeof(std::uint32_t));
-        AppendSharedWords(variant.shared, index, offset, region.bytes, supplied);
         if (relocatable == 0) {
+            AppendSharedWords(variant.shared, variant.runs.size(), offset, region.bytes, supplied);
             variant.runs.emplace_back(region.guestAddress, region.guestAddress + region.bytes.size());
             continue;
         }
@@ -100,6 +100,7 @@ void Driver::tagVariantRuns(DispatchVariant& variant, std::span<const ShaderReco
         for (std::size_t word = 1; word <= count; ++word) {
             const auto next = word < count ? origin(region.guestAddress + word * sizeof(std::uint32_t)) : std::int8_t {-2};
             if (next == current) continue;
+            AppendSharedWords(variant.shared, variant.runs.size(), offset + start, region.bytes.subspan(start * sizeof(std::uint32_t), (word - start) * sizeof(std::uint32_t)), supplied);
             variant.runs.emplace_back(region.guestAddress + start * sizeof(std::uint32_t), region.guestAddress + word * sizeof(std::uint32_t));
             variant.runBases.push_back(current);
             start = word;
