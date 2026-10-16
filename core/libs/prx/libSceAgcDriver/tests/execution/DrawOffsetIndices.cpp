@@ -469,6 +469,7 @@ std::string Run(Fixture& fixture) {
             fixture.Place(indexedRecord[3], bufferIndices, indexedRecord[4]);
             fixture.Draw(vertex, draw);
             failures += fixture.Check(what + ", drawn in place on the GPU", bufferIndices, indexedRecord[3], indexedRecord[4], false);
+            if (code == &NoCarryCode) std::cout << "no-carry indexed indirect GPU readback checked\n";
         }
         {
             const std::string what = "indexed indirect record whose packet names no register for its offsets, user data s16 0x51, s17 0x62";
