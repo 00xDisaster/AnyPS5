@@ -239,6 +239,7 @@ ShaderStageInputInfo BuildShaderStageInputInfo(ShaderStageKind stage, const Gues
             target.provokingVertex = mesh->provokingVertex;
             target.esgsItemSize = mesh->esgsItemSize;
             target.outputPrimitiveSize = mesh->outputPrimitiveSize;
+            if (target.outputPrimitiveSize == 1u) vertexStorage.pointList = true;
         }
         ShaderStageInputInfo result;
         result.vertex = &vertexStorage;
