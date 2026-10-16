@@ -5,6 +5,7 @@
 #include "CompiledVariant.hpp"
 #include "ShaderDiskCache.hpp"
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -53,13 +54,24 @@ void ClosingJoinsPreparation() {
     std::promise<std::thread::id> prebuilt;
     auto preparedOn = prepared.get_future();
     auto prebuiltOn = prebuilt.get_future();
-    SubmitRegistrationPreparation([&] { prepared.set_value(std::this_thread::get_id()); });
-    SubmitLibraryPrebuild([&] { prebuilt.set_value(std::this_thread::get_id()); });
+    std::promise<void> gate;
+    auto opened = gate.get_future().share();
+    SubmitRegistrationPreparation([&] { prepared.set_value(std::this_thread::get_id()); opened.wait(); });
+    SubmitLibraryPrebuild([&] { prebuilt.set_value(std::this_thread::get_id()); opened.wait(); });
     const auto caller = std::this_thread::get_id();
-    Require(preparedOn.get() != caller && prebuiltOn.get() != caller, "a queued preparation ran on the caller instead of a preparation thread");
-    Require(RegistrationPreparationThreads() != 0, "a queued preparation started no preparation thread");
-    CloseRegistrationPreparation();
+    const bool offCaller = preparedOn.get() != caller && prebuiltOn.get() != caller;
+    auto closing = std::async(std::launch::async, [] { CloseRegistrationPreparation(); });
+    const bool waited = closing.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
+    gate.set_value();
+    closing.get();
+    Require(offCaller, "a queued preparation ran on the caller instead of a preparation thread");
+    Require(waited, "closing returned while preparation tasks were still running");
     Require(RegistrationPreparationThreads() == 0, "closing the shader preparation left its threads running");
+    CloseRegistrationPreparation();
+    bool ranHere = false;
+    SubmitRegistrationPreparation([&] { ranHere = std::this_thread::get_id() == caller; });
+    SubmitLibraryPrebuild([&] { ranHere = ranHere && std::this_thread::get_id() == caller; });
+    Require(ranHere && RegistrationPreparationThreads() == 0, "a closed preparation pool restarted after being joined");
 }
 
 void StoppingJoinsCompareHelpers() {
@@ -107,13 +119,14 @@ void ShutdownJoinsDrawCommitter() {
     Require(DrawPipeline::Committers() == 0, "a commit enqueued after the shutdown started a draw committer");
 }
 
-void ShutdownJoinsShaderCacheWriter() {
+void ShutdownJoinsShaderCacheWriter(bool lateInitialization = false) {
     namespace Cache = ShaderRecompiler::ShaderDiskCache;
     const auto directory = std::filesystem::temp_directory_path() / ("aps5-shutdown-shader-cache-" + std::to_string(std::random_device{}()));
     SetEnvironment("ANYPS5_NO_SHADER_CACHE", "0");
     SetEnvironment("ANYPS5_SHADER_CACHE_DIR", directory.string());
+    if (lateInitialization) AgcDriverShutdown_nid_postfix();
     Require(Cache::Enabled(), "the shader cache is not enabled");
-    Require(Cache::Writers() == 1, "the shader cache started no writer");
+    Require(Cache::Writers() == (lateInitialization ? 0u : 1u), "the shader cache writer did not respect the shutdown state");
     const auto variant = std::make_shared<const ShaderRecompiler::CompiledVariant>();
     const std::vector<std::byte> queued{std::byte{1}};
     const std::vector<std::byte> late{std::byte{2}};
@@ -137,6 +150,7 @@ int main(int argc, char** argv) {
         else if (mode == "--compare-helpers") StoppingJoinsCompareHelpers();
         else if (mode == "--draw-committer") ShutdownJoinsDrawCommitter();
         else if (mode == "--shader-cache-writer") ShutdownJoinsShaderCacheWriter();
+        else if (mode == "--late-shader-cache") ShutdownJoinsShaderCacheWriter(true);
         else ClosingStartsNoPreparation();
         std::cout << "shutdown threads tests passed\n";
         return 0;
