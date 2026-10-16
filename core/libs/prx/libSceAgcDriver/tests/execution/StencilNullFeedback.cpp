@@ -13,6 +13,9 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#if ANYPS5_ENABLE_SPIRV_TOOLS
+#include <spirv-tools/libspirv.hpp>
+#endif
 
 namespace AgcDriver {
 
@@ -89,13 +92,71 @@ ShaderRecompiler::ShaderPixelStageInfo PixelInfo(std::uint32_t shaderControl) {
     return AgcDriver::Graphics::DecodePixelStageInfo(context, {0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u, 0xe4u});
 }
 
-void AttachNullImages(ShaderRecompiler::RecompileResult& result, bool depthAlias = false) {
+constexpr std::uint32_t ImageElements = 2u;
+constexpr std::uint32_t StorageFloat2DHeap = ShaderRecompiler::RuntimeAbi::FirstStorageImageBinding + 2u;
+
+void Emit(std::vector<std::uint32_t>& output, spv::Op opcode, std::initializer_list<std::uint32_t> operands) {
+    output.push_back((static_cast<std::uint32_t>(operands.size() + 1u) << spv::WordCountShift) | static_cast<std::uint32_t>(opcode));
+    output.insert(output.end(), operands.begin(), operands.end());
+}
+
+bool StartsDeclarations(spv::Op opcode) {
+    return opcode == spv::OpUndef || opcode == spv::OpVariable || (opcode >= spv::OpTypeVoid && opcode <= spv::OpTypeForwardPointer) || (opcode >= spv::OpConstantTrue && opcode <= spv::OpSpecConstantOp);
+}
+
+void DeclareImageHeap(std::vector<std::uint32_t>& module, std::uint32_t set, std::uint32_t binding, std::uint32_t elements) {
+    Require(module.size() >= 5u && module[0] == spv::MagicNumber, "the null-image fixture module is not SPIR-V");
+    std::uint32_t scalar = 0u, floating = 0u;
+    std::size_t entry = 0u, declarations = 0u, functions = 0u;
+    for (std::size_t offset = 5u; offset < module.size();) {
+        const auto count = module[offset] >> spv::WordCountShift;
+        const auto opcode = static_cast<spv::Op>(module[offset] & spv::OpCodeMask);
+        Require(count != 0u && count <= module.size() - offset, "the null-image fixture module has a truncated instruction");
+        if (opcode == spv::OpFunction) {
+            functions = offset;
+            break;
+        }
+        if (opcode == spv::OpEntryPoint) {
+            Require(entry == 0u, "the null-image fixture module has several entry points");
+            entry = offset;
+        }
+        if (declarations == 0u && StartsDeclarations(opcode)) declarations = offset;
+        if (opcode == spv::OpTypeInt && module[offset + 2u] == 32u && module[offset + 3u] == 0u) scalar = module[offset + 1u];
+        if (opcode == spv::OpTypeFloat && module[offset + 2u] == 32u) floating = module[offset + 1u];
+        offset += count;
+    }
+    Require(entry != 0u && declarations != 0u && functions != 0u && floating != 0u, "the null-image fixture module has no entry point, declarations or scalar shader types");
+    auto id = module[3];
+    const bool declareScalar = scalar == 0u;
+    if (declareScalar) scalar = id++;
+    const auto length = id++, image = id++, array = id++, pointer = id++, variable = id++;
+    std::vector<std::uint32_t> annotations;
+    Emit(annotations, spv::OpDecorate, {variable, spv::DecorationDescriptorSet, set});
+    Emit(annotations, spv::OpDecorate, {variable, spv::DecorationBinding, binding});
+    std::vector<std::uint32_t> types;
+    if (declareScalar) Emit(types, spv::OpTypeInt, {scalar, 32u, 0u});
+    Emit(types, spv::OpConstant, {scalar, length, elements});
+    Emit(types, spv::OpTypeImage, {image, floating, spv::Dim2D, 0u, 0u, 0u, 2u, spv::ImageFormatUnknown});
+    Emit(types, spv::OpTypeArray, {array, image, length});
+    Emit(types, spv::OpTypePointer, {pointer, spv::StorageClassUniformConstant, array});
+    Emit(types, spv::OpVariable, {pointer, variable, spv::StorageClassUniformConstant});
+    module.insert(module.begin() + static_cast<std::ptrdiff_t>(functions), types.begin(), types.end());
+    module.insert(module.begin() + static_cast<std::ptrdiff_t>(declarations), annotations.begin(), annotations.end());
+    if (module[1] >= 0x00010400u) {
+        module.insert(module.begin() + static_cast<std::ptrdiff_t>(entry + (module[entry] >> spv::WordCountShift)), variable);
+        module[entry] += 1u << spv::WordCountShift;
+    }
+    module[3] = id;
+}
+
+void AttachNullImages(ShaderRecompiler::RecompileResult& result, const ShaderRecompiler::SpirvTarget& target, bool depthAlias = false) {
     namespace Runtime = ShaderRecompiler::RuntimeAbi;
     const auto address = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(depthAlias ? DepthMemory.data() : NullBindingTexture.data()));
     const auto format = depthAlias ? 22u : 56u;
     const std::array<std::uint32_t, 8> words{static_cast<std::uint32_t>(address >> 8u), static_cast<std::uint32_t>(address >> 40u) | (format << 20u) | (((Width - 1u) & 3u) << 30u), ((Width - 1u) >> 2u) | ((Height - 1u) << 14u), 0xfacu | (9u << 28u), 0u, 0u, 0u, 0u};
-    constexpr auto binding = Runtime::FirstStorageImageBinding + 1u;
-    ShaderRecompiler::DescriptorBinding images{ShaderRecompiler::DescriptorKind::StorageImage, ShaderRecompiler::DescriptorRole::GuestImages, Runtime::FragmentDescriptorSet, binding, 2u, std::vector<std::uint32_t>(16u)};
+    const auto set = target.registrationModules ? Runtime::FragmentDescriptorSet : Runtime::DescriptorSet;
+    const auto binding = Runtime::BindingNumber(Runtime::Stage::Fragment, static_cast<Runtime::Binding>(StorageFloat2DHeap));
+    ShaderRecompiler::DescriptorBinding images{ShaderRecompiler::DescriptorKind::StorageImage, ShaderRecompiler::DescriptorRole::GuestImages, set, binding, ImageElements, std::vector<std::uint32_t>(ImageElements * words.size())};
     std::copy(words.begin(), words.end(), images.guestDescriptor.begin());
     images.imageShape = ShaderRecompiler::DescriptorImageShape::Image2D;
     images.imageWritten = {false, false};
@@ -103,41 +164,22 @@ void AttachNullImages(ShaderRecompiler::RecompileResult& result, bool depthAlias
     images.imageAtomic64 = {false, false};
     result.bindings.push_back(std::move(images));
     auto module = result.spirv.Copy();
-    auto id = module[3];
-    std::uint32_t scalar = 0u, floating = 0u;
-    std::size_t types = 0u, functions = 0u;
-    for (std::size_t offset = 5u; offset < module.size(); offset += module[offset] >> 16u) {
-        const auto opcode = module[offset] & 0xffffu;
-        if (types == 0u && opcode == spv::OpTypeVoid) types = offset;
-        if (opcode == spv::OpTypeInt && module[offset + 2u] == 32u && module[offset + 3u] == 0u) scalar = module[offset + 1u];
-        if (opcode == spv::OpTypeFloat && module[offset + 2u] == 32u) floating = module[offset + 1u];
-        if (opcode == spv::OpFunction) { functions = offset; break; }
-    }
-    Require(types != 0u && functions != 0u && floating != 0u, "the null-image fixture has no scalar shader types");
-    const bool declareScalar = scalar == 0u;
-    if (declareScalar) scalar = id++;
-    const auto count = id++, image = id++, array = id++, pointer = id++, variable = id++;
-    const auto emit = [](std::vector<std::uint32_t>& output, spv::Op opcode, std::initializer_list<std::uint32_t> operands) {
-        output.push_back((static_cast<std::uint32_t>(operands.size() + 1u) << 16u) | static_cast<std::uint32_t>(opcode));
-        output.insert(output.end(), operands.begin(), operands.end());
-    };
-    std::vector<std::uint32_t> annotations;
-    emit(annotations, spv::OpDecorate, {variable, spv::DecorationDescriptorSet, Runtime::FragmentDescriptorSet});
-    emit(annotations, spv::OpDecorate, {variable, spv::DecorationBinding, binding});
-    emit(annotations, spv::OpDecorate, {variable, spv::DecorationNonWritable});
-    std::vector<std::uint32_t> declarations;
-    if (declareScalar) emit(declarations, spv::OpTypeInt, {scalar, 32u, 0u});
-    emit(declarations, spv::OpConstant, {scalar, count, 2u});
-    emit(declarations, spv::OpTypeImage, {image, floating, spv::Dim2D, 0u, 0u, 0u, 2u, depthAlias ? spv::ImageFormatR32f : spv::ImageFormatRgba8});
-    emit(declarations, spv::OpTypeArray, {array, image, count});
-    emit(declarations, spv::OpTypePointer, {pointer, spv::StorageClassUniformConstant, array});
-    emit(declarations, spv::OpVariable, {pointer, variable, spv::StorageClassUniformConstant});
-    module.insert(module.begin() + functions, declarations.begin(), declarations.end());
-    module.insert(module.begin() + types, annotations.begin(), annotations.end());
-    module[3] = id;
+    DeclareImageHeap(module, set, binding, ImageElements);
     result.spirv = std::move(module);
 }
 
+#if ANYPS5_ENABLE_SPIRV_TOOLS
+void RequireValidModule(const ShaderRecompiler::RecompileResult& result, const ShaderRecompiler::SpirvTarget& target) {
+    std::string diagnostics;
+    spvtools::SpirvTools validator(target.spirvVersion >= 0x00010400u ? SPV_ENV_VULKAN_1_1_SPIRV_1_4 : SPV_ENV_VULKAN_1_1);
+    validator.SetMessageConsumer([&](spv_message_level_t, const char*, const spv_position_t&, const char* message) {
+        if (message != nullptr) diagnostics += std::string(message) + '\n';
+    });
+    const auto& words = result.spirv.Words();
+    const bool valid = validator.Validate(words.data(), words.size());
+    Require(valid, "the null-image fixture emitted invalid SPIR-V:\n" + diagnostics);
+}
+#endif
 
 void Draw(AgcDriver::VulkanDevice& device, std::span<const std::uint32_t> pixelCode, std::uint32_t shaderControl, const VkStencilOpState& stencil, std::uint32_t vertices = 3u, std::uint32_t instances = 1u, bool depthFail = false, const std::function<void(AgcDriver::Graphics::State&)>& alter = {}, const std::function<void(AgcDriver::Pm4::DrawParameters&)>& alterDraw = {}, std::span<const std::array<float, 4>> vertexData = Vertices, std::span<const std::uint32_t> vertexCode = VertexCode, std::span<const std::uint32_t> pixelData = {}, std::span<const ShaderRecompiler::MemoryRegion> pixelSrt = {}, bool nullImages = false, bool depthAlias = false) {
     Pixels.fill(Kept);
@@ -171,7 +213,12 @@ void Draw(AgcDriver::VulkanDevice& device, std::span<const std::uint32_t> pixelC
     };
     fragment.useCache = false;
     auto pixelResult = ShaderRecompiler::Recompile(fragment);
-    if (nullImages) AttachNullImages(pixelResult, depthAlias);
+    if (nullImages) {
+        AttachNullImages(pixelResult, target, depthAlias);
+#if ANYPS5_ENABLE_SPIRV_TOOLS
+        RequireValidModule(pixelResult, target);
+#endif
+    }
     if (!pixelResult.stencilReferences.empty()) {
         Require(pixelResult.stencilReferenceDword * sizeof(std::uint32_t) + sizeof(std::uint32_t) == pixelResult.pushConstants.size(), "dynamic reference is not reserved after the stage payload");
         for (std::size_t cursor = 5; cursor < pixelResult.spirv.size();) {
