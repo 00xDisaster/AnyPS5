@@ -5458,7 +5458,14 @@ void sampleOrderTests() {
         };
         auto noStorage = context;
         noStorage.storageImageMultisample = false;
-        refused(noStorage, withStencil, "has no storage view", "a color target on a device without multisampled storage images");
+        auto depthOnly = withStencil;
+        depthOnly.colors.clear();
+        depthOnly.blends.clear();
+        depthOnly.hasColorTarget = false;
+        Require(ReordersSamples(HostSampleLocationsFor(context, depthOnly).order), "a depth-only pass on a device with multisampled storage images was not reordered");
+        refused(noStorage, depthOnly, "lacks shaderStorageImageMultisample", "a depth-only pass on a device without multisampled storage images");
+        Require(HostSampleLocationsFor(noStorage, depthOnly).order == HostSampleLocationsFor(noStorage, withStencil).order, "a depth-only pass and a color pass on one depth target took different sample orders on a device without multisampled storage images");
+        refused(noStorage, withStencil, "lacks shaderStorageImageMultisample", "a color target on a device without multisampled storage images");
         auto noSampleShading = context;
         noSampleShading.sampleRateShading = false;
         refused(noSampleShading, withStencil, "sampleRateShading", "a device without sample-rate shading");

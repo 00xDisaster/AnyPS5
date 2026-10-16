@@ -594,6 +594,7 @@ VkFormat SampleOrderStorageFormat(const Context& context, VkFormat format, std::
 
 std::string SampleOrderRefusal(const Context& context, const State& state) {
     if (!context.sampleRateShading) return "the device lacks sampleRateShading";
+    if (!context.storageImageMultisample) return "the device lacks shaderStorageImageMultisample";
     for (const auto& color : state.colors) {
         if (color.samples > 1u && SampleOrderStorageFormat(context, color.format, color.elementBytes, color.samples) == VK_FORMAT_UNDEFINED) return "color format " + std::to_string(color.format) + " has no storage view at " + std::to_string(color.samples) + " samples";
     }
