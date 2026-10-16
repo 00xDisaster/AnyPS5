@@ -100,6 +100,7 @@ void CheckProfile() {
     invalid([](auto& value) { value.capabilities.push_back(spv::CapabilityStorageImageMultisample); }, "shaderStorageImageMultisample");
     invalid([](auto& value) { value.capabilities.push_back(spv::CapabilityFragmentBarycentricKHR); }, "fragmentShaderBarycentric");
     invalid([](auto& value) { value.capabilities.push_back(spv::CapabilityMeshShadingEXT); }, "meshShader");
+    invalid([](auto& value) { value.capabilities.push_back(spv::CapabilityDrawParameters); }, "shaderDrawParameters");
     invalid([](auto& value) { value.extensions.push_back("SPV_KHR_terminate_invocation"); }, "shaderTerminateInvocation");
     ProfileInput enabled;
     enabled.capabilities.push_back(spv::CapabilitySampledImageArrayDynamicIndexing);
@@ -108,6 +109,12 @@ void CheckProfile() {
     enabled.indexing.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
     const AgcDriver::ShaderDeviceProfile accepted(enabled.Target(), enabled.device, enabled.limits);
     Require(accepted.Target().supportedCapabilities.size() == 6u, "enabled descriptor indexing was rejected");
+    ProfileInput drawParameters;
+    drawParameters.capabilities.push_back(spv::CapabilityDrawParameters);
+    VkPhysicalDeviceShaderDrawParametersFeatures drawFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES, &drawParameters.bda, VK_TRUE};
+    drawParameters.device.pNext = &drawFeatures;
+    const AgcDriver::ShaderDeviceProfile drawParametersAccepted(drawParameters.Target(), drawParameters.device, drawParameters.limits);
+    Require(std::ranges::find(drawParametersAccepted.Target().supportedCapabilities, spv::CapabilityDrawParameters) != drawParametersAccepted.Target().supportedCapabilities.end(), "enabled shaderDrawParameters was rejected");
     ProfileInput terminating;
     VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR terminate{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES_KHR, &terminating.bda, VK_TRUE};
     terminating.device.pNext = &terminate;

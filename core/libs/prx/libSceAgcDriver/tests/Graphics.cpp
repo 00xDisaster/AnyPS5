@@ -6737,7 +6737,7 @@ void validationTests() {
         pixel.spirv = makeModule({.fragment = true});
         expectFailure([&] { AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, true); }, "requires a fragment shader");
         const auto validateTerminate = [&](bool enabled) {
-            return AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, false, false, false, false, false, false, false, false, false, false, enabled);
+            return AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, false, false, false, false, false, false, false, false, false, false, false, enabled);
         };
         vertex.spirv = makeModule({});
         pixel.spirv = makeModule({.fragment = true, .terminateInvocation = true});
