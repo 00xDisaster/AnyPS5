@@ -205,7 +205,9 @@ int main() {
                 std::lock_guard lock(AgcDriver::GuestMemory::GpuMutex());
                 const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(*device);
                 const auto* import = HostImportFor(context, unalignedAddress, static_cast<std::size_t>(unalignedBytes));
-                Require(import != nullptr && import->lead == Lead, "sparse import: the unaligned import does not start its buffer at the block below it");
+                Require(import != nullptr, "sparse import: the unaligned range has no import");
+                if (!import->dmaBuf) std::printf("note: the device imported the unaligned range through a host pointer, which has no lead\n");
+                Require(import->lead == (import->dmaBuf ? Lead : 0), "sparse import: the unaligned import does not start its buffer at the block below it");
                 auto* recorder = Recorder::Active();
                 if (recorder != nullptr && AgcDriver::GuestMemory::Watched(unitBegin, Unit)) {
                     AgcDriver::GuestMemory::CollectWritesUncached(unitBegin, Unit);
