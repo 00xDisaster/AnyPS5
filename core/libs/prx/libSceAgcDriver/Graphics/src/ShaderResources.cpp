@@ -382,6 +382,7 @@ struct LookupRecord {
 };
 
 thread_local std::vector<LookupRecord>* lookupLogSlot = nullptr;
+constexpr std::size_t LookupLogBound = 1024;
 constexpr std::size_t NoBuildLookups = std::numeric_limits<std::size_t>::max();
 thread_local std::size_t buildLookupsStart = NoBuildLookups;
 thread_local bool buildLookupsPastBound = false;
@@ -392,11 +393,10 @@ std::vector<LookupRecord>& lookupLog() {
 }
 
 void logLookup(const LookupRecord& record) {
-    constexpr std::size_t bound = 1024;
     auto& log = lookupLog();
-    if (log.size() >= bound) {
-        const auto dropped = std::min(bound / 2, buildLookupsStart);
-        if (dropped < bound / 2) buildLookupsPastBound = true;
+    if (log.size() >= LookupLogBound) {
+        const auto dropped = std::min(LookupLogBound / 2, buildLookupsStart);
+        if (dropped < LookupLogBound / 2) buildLookupsPastBound = true;
         log.erase(log.begin(), log.begin() + static_cast<std::ptrdiff_t>(dropped));
         if (buildLookupsStart != NoBuildLookups) buildLookupsStart -= dropped;
     }
@@ -411,6 +411,9 @@ public:
         buildLookupsStart = NoBuildLookups;
         if (buildLookupsPastBound) lookupBuildsPastBound.fetch_add(1, std::memory_order_relaxed);
         buildLookupsPastBound = false;
+        auto& log = lookupLog();
+        if (log.size() > LookupLogBound) log.erase(log.begin(), log.end() - static_cast<std::ptrdiff_t>(LookupLogBound));
+        if (log.capacity() > LookupLogBound + LookupLogBound / 2) log.shrink_to_fit();
     }
     BuildLookups(const BuildLookups&) = delete;
     BuildLookups& operator=(const BuildLookups&) = delete;
@@ -2486,6 +2489,10 @@ void ShaderResources::captureValidation() {
         if (const auto* found = record(textures[i].get())) validatedTextures[i] = {found->resource, found->bytes, found->keys, found->generation, 0, found->source, found->depth, true};
     }
     lookupLog().clear();
+}
+
+std::size_t ShaderResources::LookupLogCapacity() {
+    return lookupLog().capacity();
 }
 
 // Proves every texture and storage image still current without repeating its lookup: exactly the

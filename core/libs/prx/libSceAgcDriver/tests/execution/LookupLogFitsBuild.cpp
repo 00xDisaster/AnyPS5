@@ -45,6 +45,7 @@ using ShaderRecompiler::ShaderStage;
 
 constexpr std::uint32_t Lanes = 64;
 constexpr std::uint32_t Textures = 1500;
+constexpr std::size_t LogBound = 1024;
 constexpr std::uint32_t Stride = 32;
 constexpr std::size_t SurfaceBytes = 256;
 constexpr std::uint32_t Format8888UNorm = 56;
@@ -166,6 +167,9 @@ void RunTests(const AgcDriver::VulkanDevice& device) {
     std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
     auto resources = std::make_shared<ShaderResources>(context, shader);
     Require(resources->Reusable() && resources->SampledTextures().size() == Textures, "lookup log: the set over " + std::to_string(Textures) + " textures is not reusable");
+    const auto capacity = ShaderResources::LookupLogCapacity();
+    Require(capacity <= LogBound, "lookup log: the thread's log kept a capacity of " + std::to_string(capacity) + " records after a build of " + std::to_string(Textures) + " textures, over the bound of " + std::to_string(LogBound));
+    std::printf("the thread's log capacity is %zu records after the build\n", capacity);
     bool current = false;
     auto report = Prove(*resources, shader, current);
     Require(current && report.path == ShaderResources::ProofPath::Fast, "lookup log: a set over " + std::to_string(Textures) + " textures took the " + Path(report) + " with its memory unchanged after the build");
@@ -176,6 +180,7 @@ void RunTests(const AgcDriver::VulkanDevice& device) {
     *first = saved;
     report = Prove(*resources, shader, current);
     Require(report.path == ShaderResources::ProofPath::Full, "lookup log: a store over texture " + std::to_string(Textures / 3u) + " took the " + Path(report) + ", not the full walk");
+    Require(ShaderResources::LookupLogCapacity() <= LogBound, "lookup log: the thread's log kept a capacity of " + std::to_string(ShaderResources::LookupLogCapacity()) + " records after a full walk over " + std::to_string(Textures) + " textures");
     if (current) {
         report = Prove(*resources, shader, current);
         Require(current && report.path == ShaderResources::ProofPath::Fast, "lookup log: a set over " + std::to_string(Textures) + " textures took the " + Path(report) + " with its memory unchanged after a full walk");
