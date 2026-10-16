@@ -1129,7 +1129,7 @@ int DoMprotect(const void* addr, size_t len, int prot) {
 #else
         bool protectedPages = mprotect(insidePointer, insideBytes, nativeProtection) == 0;
         if (!protectedPages && errno == ENOMEM) {
-            MapUnmappedPages(insidePointer, insideBytes);
+            MapUnmappedPages(insidePointer, static_cast<std::size_t>((stackEnd & ~hostPageMask) - inside));
             protectedPages = mprotect(insidePointer, insideBytes, nativeProtection) == 0;
         }
 #endif

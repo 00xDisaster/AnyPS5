@@ -320,6 +320,7 @@ static int ProtectMainStackBottom(std::initializer_list<int> protections, std::u
         void* endAfter = nullptr;
         Require(sceKernelIsStack(&local, &startAfter, &endAfter) == SCE_OK && startAfter == start && endAfter == end);
     }
+    for (const auto offset : {GuardBytes, GuardBytes + 0x40000}) reinterpret_cast<volatile unsigned char*>(low + offset)[0] = 8;
     Require(QueryPage(low).raw == raw);
     return 0;
 }
@@ -347,7 +348,7 @@ static bool ChildPasses(const char* mode, bool unlimitedStack) {
 }
 
 static void ProtectMainStacks() {
-    Require(ChildPasses("--reprotect-bottom", false));
+    for (const char* mode : {"--read-only-bottom", "--reprotect-bottom"}) Require(ChildPasses(mode, false));
     rlimit limit{};
     Require(getrlimit(RLIMIT_STACK, &limit) == 0);
     if (limit.rlim_max != RLIM_INFINITY || OvercommitStrict()) {
@@ -365,6 +366,7 @@ int main(int argc, char** argv) {
     ProtectHostStacks();
 #else
     if (argc > 1 && std::strcmp(argv[1], "--unlimited-stack") == 0) return ProtectUnlimitedStack();
+    if (argc > 1 && std::strcmp(argv[1], "--read-only-bottom") == 0) return ProtectMainStackBottom({1}, 3);
     if (argc > 1 && std::strcmp(argv[1], "--reprotect-bottom") == 0) return ProtectMainStackBottom({0, 3}, 7);
     ProtectMainStacks();
     ProtectStack(0);
