@@ -1252,6 +1252,38 @@ void evictingRefusalJoinTests(const Context& context) {
     Require(HostImportCovers(window.importing, window.Address(0), 3 * piece) && counted().made == after.made + 1, "the join was answered from the full budget's refusal after the budget grew");
 }
 
+void evictingRefusalStepDownTests(const Context& context) {
+    PieceWindow window(context);
+    constexpr auto piece = PieceWindow::Piece;
+    constexpr auto fillers = PieceWindow::Window / 2;
+    window.AddPieces(0, 4 * piece);
+    for (std::size_t filler = 0; filler < 4; ++filler) {
+        window.Add(fillers + 2 * filler * piece, piece);
+        Require(HostImportFor(window.importing, window.Address(fillers + 2 * filler * piece), 16) != nullptr, "a filler piece inside the import budget was not imported");
+    }
+    SetHostImportBudget(HostImportLiveBytes() + 2 * piece);
+    {
+        GuestBufferMemory leased(window.importing);
+        leased.AcquireRegistered();
+        leased.Upload(true);
+        leased.WriteBack();
+    }
+    Require(window.Block(0, 2 * piece) && window.Serial(2 * piece) == 0, "the address-based build did not step down from the refused 256 KiB block to the 128 KiB block that fits");
+    {
+        GuestBufferMemory upload(window.importing);
+        upload.Upload(false);
+        upload.WriteBack();
+    }
+    const auto counted = [] { return HostImportCounters().requesters[static_cast<std::size_t>(ImportRequester::Access)]; };
+    const auto before = counted();
+    for (int request = 0; request < 8; ++request) Require(HostImportFor(window.importing, window.Address(2 * piece), 16) == nullptr, "the rest of a block over a full budget with nothing evictable was imported");
+    const auto after = counted();
+    const auto scans = (after.refused - before.refused) - (after.remembered - before.remembered);
+    Require(after.refused - before.refused == 16 && scans == 1, "8 evicting requests that step down from a refused block scanned the imports " + std::to_string(scans) + " times, not once");
+    SetHostImportBudget(HostImportLiveBytes() + piece);
+    Require(HostImportFor(window.importing, window.Address(2 * piece), 16) != nullptr && window.Block(2 * piece, piece), "a 64 KiB range was answered from a block's refusal remembered before the budget grew instead of stepping down to its own import");
+}
+
 void evictingRefusalWindowTests(const Context& context) {
     PieceWindow window(context);
     constexpr auto piece = PieceWindow::Piece;
@@ -2528,6 +2560,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     evictingRefusalWindowTests(context);
     evictingRefusalBlockRangesTests(context);
     evictingRefusalJoinTests(context);
+    evictingRefusalStepDownTests(context);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
