@@ -1680,21 +1680,9 @@ bool settledImportsWatchPrivate(const Context& context) {
     return watched;
 }
 
-bool settleFirstUseTests(const Device& device) {
+bool settleFirstUseRaced(const Context& context, int copies) {
     using namespace AgcDriver::GuestMemory;
-    const auto& context = device.GetContext();
     constexpr std::size_t unit = 65536;
-    constexpr int copies = 4096;
-    if (context.hostImportAlignment == 0 || context.hostImportAlignment > unit || context.settleQueue == VK_NULL_HANDLE || !WriteWatched()) {
-        std::cout << "host imports within 64 KiB, a settle queue or write watching unavailable: the first use of a settled import not tested\n";
-        return false;
-    }
-    std::unique_lock gpu(GpuMutex());
-    PrepareImportWatch(context);
-    if (!settledImportsWatchPrivate(context)) {
-        std::cout << "this device compares every Windows import: the first use of a settled import not tested\n";
-        return false;
-    }
     void* small = AllocateWatched(unit, unit);
     struct Release {
         void* small;
@@ -1740,17 +1728,40 @@ bool settleFirstUseTests(const Device& device) {
     CollectWritesUncached(address, unit);
     const bool unchanged = returned && UnchangedSince(address, unit, collected);
     const auto since = [&](std::chrono::steady_clock::time_point at) { return std::chrono::duration<double, std::milli>(at - submittedAt).count(); };
-    std::cout << "(f) settled import back in the write watch " << since(returnedAt) << " ms after main-queue copies of it were submitted, copies reaped by " << since(reapedAt) << " ms; driver marks after its return=" << !unchanged << '\n';
+    std::cout << "(f) settled import back in the write watch " << since(returnedAt) << " ms after " << copies << " main-queue copies of it were submitted, copies reaped by " << since(reapedAt) << " ms; driver marks after its return=" << !unchanged << '\n';
     Require(returned, "(f) a settled import did not return to the write watch");
-    Require(racing, "(f) the main-queue copies had finished before the import returned to the write watch, so its read did not race them");
     Require(unchanged, "(f) the driver marked a settled import's pages after its settle read completed while earlier main-queue copies of it ran");
     {
         GuestAllocations::Mutation mutation;
         mutation.Remove(small);
     }
     HostImportFor(context, address, unit);
-    std::cout << "settled import first use tests passed\n";
-    return true;
+    return racing;
+}
+
+bool settleFirstUseTests(const Device& device) {
+    using namespace AgcDriver::GuestMemory;
+    const auto& context = device.GetContext();
+    constexpr std::size_t unit = 65536;
+    if (context.hostImportAlignment == 0 || context.hostImportAlignment > unit || context.settleQueue == VK_NULL_HANDLE || !WriteWatched()) {
+        std::cout << "host imports within 64 KiB, a settle queue or write watching unavailable: the first use of a settled import not tested\n";
+        return false;
+    }
+    std::unique_lock gpu(GpuMutex());
+    PrepareImportWatch(context);
+    if (!settledImportsWatchPrivate(context)) {
+        std::cout << "this device compares every Windows import: the first use of a settled import not tested\n";
+        return false;
+    }
+    for (int copies = 4096; copies <= 65536; copies *= 4) {
+        if (settleFirstUseRaced(context, copies)) {
+            std::cout << "settled import first use tests passed\n";
+            return true;
+        }
+        std::cout << "(f) the main-queue copies had finished before the import returned to the write watch, so its read did not race them\n";
+    }
+    std::cout << "(f) the main-queue copies finished first in every round: the first use of a settled import not tested\n";
+    return false;
 }
 
 bool settleEarlierImportTests(const Device& device) {
