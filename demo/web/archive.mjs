@@ -110,6 +110,10 @@ export class Archive {
     let total = 0;
     for await (const entry of this.reader.getEntriesGenerator()) {
       if (this.entries.length >= MAX_ENTRIES) throw new Error("Input contains more than 100,000 entries");
+      if (Number.isInteger(entry.versionMadeBy) && entry.versionMadeBy >> 8 === 0 && entry.filename.includes("\\")) {
+        entry.filename = entry.filename.replaceAll("\\", "/");
+        if (entry.filename.endsWith("/")) entry.directory = true;
+      }
       validPath(entry.filename);
       const key = entry.filename.replace(/\/$/u, "").toLowerCase();
       if (paths.has(key)) throw new Error(`Duplicate ZIP path: ${entry.filename}`);
