@@ -59,6 +59,35 @@ void leaseSnapshotTests() {
         GuestAllocations::Mutation mutation;
     }
     Require(held.use_count() == 1, "a snapshot outlived a registry change");
+    std::weak_ptr<const GuestAllocations::Range> readable;
+    {
+        const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+        const auto found = std::find_if(lease.begin(), lease.end(), [&](const auto& range) { return range->address == address + 64; });
+        Require(found != lease.end(), "the snapshot misses a readable range");
+        readable = *found;
+        Require(!GuestAllocations::GuestAllocationsAcquireAll_nid_postfix().empty(), "the snapshot of all ranges is empty");
+    }
+    Require(readable.use_count() == 3, "the kept snapshots do not hold a readable range once each");
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Protect(memory.data() + 64, 64, false, false, true, [] {});
+    }
+    Require(readable.expired(), "a kept snapshot holds a range that a protection change replaced");
+    {
+        const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+        Require(std::none_of(lease.begin(), lease.end(), [&](const auto& range) { return range->address == address + 64; }), "a lease taken after a range turned unreadable returned the old snapshot");
+        const auto all = GuestAllocations::GuestAllocationsAcquireAll_nid_postfix();
+        const auto found = std::find_if(all.begin(), all.end(), [&](const auto& range) { return range->address == address + 64; });
+        Require(found != all.end() && !(*found)->readable && !(*found)->writable, "a lease of all ranges taken after a range turned unreadable returned the old snapshot");
+    }
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Protect(memory.data() + 64, 64, true, true, true, [] {});
+    }
+    {
+        const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+        Require(std::any_of(lease.begin(), lease.end(), [&](const auto& range) { return range->address == address + 64 && range->readable; }), "a lease taken after a range turned readable again returned the old snapshot");
+    }
     GuestAllocations::Mutation mutation;
     mutation.Remove(memory.data());
     mutation.Remove(memory.data() + 64);
