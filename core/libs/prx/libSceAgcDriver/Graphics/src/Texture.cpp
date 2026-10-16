@@ -3971,6 +3971,10 @@ std::size_t StorageTexture::StoreSmallPending(const char* reason) {
     return stored;
 }
 
+bool StorageTexture::StoreLinearReadback(std::uint64_t address, std::size_t bytes) {
+    return FlushPending(address, bytes, nullptr, "linear readback");
+}
+
 bool StorageTexture::AnyPending() {
     auto& pending = Pending();
     std::lock_guard lock(pending.mutex);

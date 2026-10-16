@@ -10,14 +10,36 @@
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Pm4.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "Optimization/ResourceProgram.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <exception>
+#include <span>
 #include <stdexcept>
 
 namespace AgcDriver::DriverDetail {
 
 namespace {
+
+void StoreLinearWrites(const ShaderRecompiler::RecompileResult& compiled) {
+    static const bool disabled = std::getenv("APS5_NO_LINEAR_READBACK_STORE") != nullptr;
+    if (disabled) return;
+    for (const auto& binding : compiled.bindings) {
+        if (binding.role != ShaderRecompiler::DescriptorRole::GuestImages) continue;
+        for (std::size_t offset = 0; offset + 8 <= binding.guestDescriptor.size(); offset += 8) {
+            const auto words = std::span<const std::uint32_t>(binding.guestDescriptor).subspan(offset, 8);
+            if (Graphics::IsNullTextureResource(words)) continue;
+            try {
+                const auto image = Graphics::DecodeTextureResource(words);
+                if (image.tileMode != Graphics::TextureTileMode::kLinear || image.baseAddress == 0) continue;
+                static_cast<void>(Graphics::StorageTexture::StoreLinearReadback(image.baseAddress, static_cast<std::size_t>(Graphics::DescribeSurface(image).guestBytes)));
+            } catch (const std::exception&) {
+            }
+        }
+    }
+}
 
 bool DispatchItemsEnabled() {
     static const bool enabled = [] {
@@ -474,6 +496,7 @@ void Driver::dispatch(QueueState& queue, std::span<const std::uint32_t> packet, 
                     } else {
                         localDevice->Dispatch(compiledCommit, groups[0], groups[1], groups[2], snapshots, address, std::move(prepared), &builtRecipe);
                     }
+                    StoreLinearWrites(compiledCommit);
                     break;
                 }
                 if (noteWrites && !writerKeyedEvidence()) noteWrittenBuffers(address, queueId, compiledCommit);
@@ -577,6 +600,7 @@ void Driver::dispatch(QueueState& queue, std::span<const std::uint32_t> packet, 
         } catch (const std::exception& error) {
             if (rethrow(error)) return;
         }
+        StoreLinearWrites(compiled);
         if (builtRecipe != nullptr) {
             if (dataHit) {
 
