@@ -228,6 +228,7 @@ static bool isMountedDirectory(const std::string& path) {
     for (const auto& slot : g_slots) {
         if (!slot.used) continue;
         if (slot.real_path == path) return true;
+        if (!std::filesystem::exists(path) || !std::filesystem::exists(slot.real_path)) continue;
         std::error_code error;
         const bool sameDirectory = std::filesystem::equivalent(slot.real_path, path, error);
         if (error && error != std::errc::no_such_file_or_directory) {

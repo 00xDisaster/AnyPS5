@@ -62,6 +62,13 @@ void CheckFailedMountKeepsResult() {
     mount.mount_mode = MountReadWrite;
     Check(sceSaveDataMount3(&mount, &result) == SaveDataErrorNotFound, "open of a missing save is NOT_FOUND");
     Check(std::memcmp(&result, &mounted, sizeof(result)) == 0, "a NOT_FOUND mount leaves the result as it was");
+    MountAndCheck("new-create", MountReadWrite | MountCreate, 1u, "CREATE while another save is mounted");
+    MountAndCheck("new-create2", MountReadWrite | MountCreate2, 1u, "CREATE2 while another save is mounted");
+    Check(std::filesystem::remove(std::filesystem::path("_sd") / "held"), "the mounted backing directory is removed");
+    mount.dir_name = &held;
+    Check(sceSaveDataMount3(&mount, &result) == SaveDataErrorBusy, "the same name remains BUSY after its backing directory disappears");
+    Check(std::memcmp(&result, &mounted, sizeof(result)) == 0, "a missing backing directory leaves the BUSY result unchanged");
+    MountAndCheck("made", MountReadWrite, 0u, "open of another save while a mounted backing directory is missing");
     Check(sceSaveDataUmount2(0, &result.mount_point) == 0, "the kept mount point unmounts the save");
 }
 
@@ -76,7 +83,8 @@ void CheckEquivalentMounts() {
 
     const auto originalPath = std::filesystem::path("_sd") / "identity";
     std::error_code error;
-    const bool caseAlias = std::filesystem::equivalent(originalPath, std::filesystem::path("_sd") / "IDENTITY", error);
+    const auto casePath = std::filesystem::path("_sd") / "IDENTITY";
+    const bool caseAlias = std::filesystem::exists(casePath) && std::filesystem::equivalent(originalPath, casePath, error);
     Check(!error || error == std::errc::no_such_file_or_directory, "case-alias identity check succeeds");
     std::filesystem::create_directory_symlink("identity", std::filesystem::path("_sd") / "linked", error);
     const bool symlinkAlias = !error;
