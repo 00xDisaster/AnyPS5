@@ -179,21 +179,23 @@ static void MapUnmappedPages(void* addr, size_t len) {
     constexpr std::uintptr_t hostPage = 0x1000;
     auto cursor = reinterpret_cast<std::uintptr_t>(addr);
     const auto end = cursor + len;
+    const auto half = [&](std::size_t bytes) { return std::max<std::size_t>(hostPage, (bytes / 2) & ~(hostPage - 1)); };
     while (cursor < end) {
-        auto runEnd = cursor;
-        while (runEnd < end && ::msync(reinterpret_cast<void*>(runEnd), hostPage, MS_ASYNC) != 0 && errno == ENOMEM) runEnd += hostPage;
-        if (runEnd == cursor) {
-            cursor += hostPage;
+        auto* run = reinterpret_cast<void*>(cursor);
+        auto bytes = static_cast<std::size_t>(end - cursor);
+        if (::msync(run, hostPage, MS_ASYNC) == 0) {
+            while (bytes > hostPage && ::msync(run, bytes, MS_ASYNC) != 0) bytes = half(bytes);
+            cursor += bytes;
             continue;
         }
-        auto* run = reinterpret_cast<void*>(cursor);
-        void* mapped = ::mmap(run, runEnd - cursor, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        void* mapped = MAP_FAILED;
+        while ((mapped = ::mmap(run, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE | MAP_NORESERVE, -1, 0)) == MAP_FAILED && errno == EEXIST && bytes > hostPage) bytes = half(bytes);
         if (mapped != run) {
             const int error = mapped == MAP_FAILED ? errno : EEXIST;
-            if (mapped != MAP_FAILED) ::munmap(mapped, runEnd - cursor);
+            if (mapped != MAP_FAILED) ::munmap(mapped, bytes);
             throw std::system_error(error, std::generic_category(), "cannot map the unmapped pages of a host stack");
         }
-        cursor = runEnd;
+        cursor += bytes;
     }
 }
 #endif

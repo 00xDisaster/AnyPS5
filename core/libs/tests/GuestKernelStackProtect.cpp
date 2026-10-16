@@ -11,7 +11,11 @@
 #include <windows.h>
 #else
 #include <cstdio>
+#include <cstring>
 #include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 extern "C" {
@@ -282,12 +286,60 @@ static void ProtectHostStacks() {
     for (void* partial : {static_cast<void*>(nullptr), reinterpret_cast<void*>(1)}) RunOnReservedStack(ProtectReservedStack, partial);
     RunOnReservedStack(ProtectStackBottom, nullptr);
 }
+#else
+static int ProtectUnlimitedStack() {
+    int local = 0;
+    void* start = nullptr;
+    void* end = nullptr;
+    Require(sceKernelIsStack(&local, &start, &end) == SCE_OK);
+    const auto low = (reinterpret_cast<std::uintptr_t>(start) + Page - 1) & ~(Page - 1);
+    const auto high = reinterpret_cast<std::uintptr_t>(end);
+    if (high - low < (std::uintptr_t{1} << 40)) {
+        std::puts("skipped the unlimited main stack check, the reported stack is smaller than 1 TiB");
+        return 0;
+    }
+    alarm(5);
+    Require(mprotect_nid_postfix(reinterpret_cast<void*>(low), high - low, 3) == 0);
+    reinterpret_cast<volatile unsigned char*>(low)[0] = 9;
+    return 0;
+}
+
+static bool OvercommitStrict() {
+    std::FILE* setting = std::fopen("/proc/sys/vm/overcommit_memory", "r");
+    if (setting == nullptr) return false;
+    const bool strict = std::fgetc(setting) == '2';
+    std::fclose(setting);
+    return strict;
+}
+
+static void ProtectMainStacks() {
+    rlimit limit{};
+    Require(getrlimit(RLIMIT_STACK, &limit) == 0);
+    if (limit.rlim_max != RLIM_INFINITY || OvercommitStrict()) {
+        std::puts("skipped the unlimited main stack check, the stack limit cannot be raised or overcommit is strict");
+        return;
+    }
+    const pid_t child = fork();
+    Require(child >= 0);
+    if (child == 0) {
+        limit.rlim_cur = RLIM_INFINITY;
+        if (setrlimit(RLIMIT_STACK, &limit) == 0) execl("/proc/self/exe", "/proc/self/exe", "--unlimited-stack", static_cast<char*>(nullptr));
+        std::_Exit(127);
+    }
+    int status = 0;
+    Require(waitpid(child, &status, 0) == child);
+    Require(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
 #endif
 
-int main() {
+int main(int argc, char** argv) {
 #ifdef _WIN32
+    (void)argc;
+    (void)argv;
     ProtectHostStacks();
 #else
+    if (argc > 1 && std::strcmp(argv[1], "--unlimited-stack") == 0) return ProtectUnlimitedStack();
+    ProtectMainStacks();
     ProtectStack(0);
 #endif
     std::atomic<bool> passed{false};
