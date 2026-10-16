@@ -158,3 +158,4 @@
 - [scePadControllerUpdateResetController](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadControllerUpdateGetReconnectStatus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadControllerUpdateTerm](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
+- [scePadUnknown_n3kSX62fgNo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad, NID `n3kSX62fgNo`) - PPSA01530 and PPSA13356 import it and fail to load without it. The real name is unknown; it is declared without parameters and throws
