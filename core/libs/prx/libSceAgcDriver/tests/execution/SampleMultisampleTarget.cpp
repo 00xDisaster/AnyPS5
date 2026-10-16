@@ -328,6 +328,7 @@ void CheckNativeIndices(AgcDriver::VulkanDevice& device, const Block& source, co
         Require(native != nullptr && native == adjacent, "the native indices and their neighbor do not share a host import");
     }
     const auto state = TargetState(DecodeTarget(destination));
+    AgcDriver::Graphics::NoteColorMetadataFill(source.Address(), static_cast<std::size_t>(colorBytes), FillOnes);
     std::uint32_t missed = 0;
     for (const std::uint32_t indexSize : {2u, 4u}) {
         if (indexSize == 2u) {
@@ -361,7 +362,6 @@ void CheckNativeIndices(AgcDriver::VulkanDevice& device, const Block& source, co
             missed += refused ? 0u : 1u;
         }
     }
-    AgcDriver::Graphics::NoteColorMetadataFill(source.Address(), static_cast<std::size_t>(colorBytes), FillOnes);
     CheckUniform(LoadSamples(device, source), Ones, "after native draw-input alias attempts");
     std::puts("native index controls: shared-import=1 source-samples=1024 neighbor-triangle=passed");
     Require(missed == 0, "native indices missed " + std::to_string(missed) + " resident-image refusals");
