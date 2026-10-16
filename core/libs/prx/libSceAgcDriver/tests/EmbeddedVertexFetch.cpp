@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <span>
+#include <vector>
 
 using namespace ShaderRecompiler;
 
@@ -35,6 +36,54 @@ int Expect(const char* name, std::uint32_t source, std::uint32_t field, std::uin
     return 1;
 }
 
+int NoCarryOffsets() {
+    const std::array<std::uint32_t, 10> code{
+        0x4a0a0a10u, 0x4a101011u,
+        0xf4080506u, 0xfa000000u,
+        0x02060b08u,
+        0xbf8cc07fu,
+        0xe0002000u, 0x80050a03u,
+        0xbf8c3f70u, 0xbf810000u,
+    };
+    const auto decoded = RdnaInstructionDecoder{}.Decode(code);
+    int failures = 0;
+    for (const auto wave : {32u, 64u}) {
+        const auto analyze = [&](const RdnaProgram& program) { return EmbeddedVertexFetchAnalyzer{}.Analyze(program, 6, 4, 8, 16, wave); };
+        const auto plan = analyze(decoded);
+        if (plan.loads.size() != 1 || plan.vertexOffsetSgpr != 16 || plan.instanceOffsetSgpr != 17 || plan.vertexOffsetShared || plan.instanceOffsetShared || plan.vertexIndexObserved || plan.instanceIndexObserved) {
+            std::fprintf(stderr, "wave%u: no-carry offsets: loads=%zu vertex=%d instance=%d shared=%d/%d observed=%d/%d\n", wave, plan.loads.size(), plan.vertexOffsetSgpr, plan.instanceOffsetSgpr, plan.vertexOffsetShared, plan.instanceOffsetShared, plan.vertexIndexObserved, plan.instanceIndexObserved);
+            ++failures;
+        }
+        const auto rejected = [&](const char* label, auto change) {
+            auto program = decoded;
+            change(program.instructions.front());
+            if (analyze(program).vertexOffsetSgpr == -1) return;
+            std::fprintf(stderr, "wave%u: %s was admitted as a no-carry offset\n", wave, label);
+            ++failures;
+        };
+        rejected("VOP3 saturation", [](auto& add) { add.family = RdnaInstructionFamily::VOP3; add.wordCount = 2; add.destination.clamp = true; });
+        rejected("extended VOP2", [](auto& add) { add.wordCount = 2; });
+        rejected("vector offset", [](auto& add) { add.source0.kind = RdnaOperandKind::VectorRegister; });
+        rejected("different index source", [](auto& add) { ++add.source1.reg; });
+        rejected("non-user scalar", [](auto& add) { add.source0.reg = 31; });
+        rejected("subtraction", [](auto& add) { add.op = RdnaOpcode::VSubNcU32; });
+        auto sharedCode = std::vector<std::uint32_t>(code.begin(), code.end());
+        sharedCode.insert(sharedCode.end() - 1, 0x7e080210u);
+        const auto shared = analyze(RdnaInstructionDecoder{}.Decode(sharedCode));
+        if (shared.vertexOffsetSgpr != 16 || !shared.vertexOffsetShared) {
+            std::fprintf(stderr, "wave%u: a second reader of the offset was not marked shared\n", wave);
+            ++failures;
+        }
+        auto observedCode = std::vector<std::uint32_t>(code.begin(), code.end());
+        observedCode.insert(observedCode.begin(), 0x7e020305u);
+        if (!analyze(RdnaInstructionDecoder{}.Decode(observedCode)).vertexIndexObserved) {
+            std::fprintf(stderr, "wave%u: a read before the offset add was not preserved\n", wave);
+            ++failures;
+        }
+    }
+    return failures;
+}
+
 }
 
 int main() {
@@ -43,5 +92,6 @@ int main() {
     failures += Expect("width 8 at offset 4", 0xfff00320u, 0x00080004u, 0x32u);
     failures += Expect("width 0", 0x00000320u, 0x00000000u, 0u);
     failures += Expect("width above 32", 0x00000320u, 0x007f0000u, 0x320u);
+    failures += NoCarryOffsets();
     return failures == 0 ? 0 : 1;
 }
