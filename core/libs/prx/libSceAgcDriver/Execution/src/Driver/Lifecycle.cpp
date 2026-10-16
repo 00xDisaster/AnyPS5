@@ -116,11 +116,11 @@ void Driver::stop() {
     }
     StopWorkerSampler();
     CloseRegistrationPreparation();
+    Graphics::StopPipelineLibraryWorker();
     std::lock_guard gpuLock(GuestMemory::GpuMutex());
     device.Reset();
     replacedDevices.clear();
     Graphics::ShutdownGuestBufferWorkers();
-    Graphics::StopPipelineLibraryWorker();
     Graphics::StopCompareHelpers();
     PerformanceTrace::StopOutput();
     StopProfileOutput_nid_no_patch();
