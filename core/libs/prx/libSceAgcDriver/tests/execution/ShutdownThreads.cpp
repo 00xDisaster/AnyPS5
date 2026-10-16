@@ -1,4 +1,6 @@
+#include "prx/libSceAgcDriver/Execution/include/AsyncLog.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ParallelCompare.hpp"
@@ -141,6 +143,25 @@ void ShutdownJoinsShaderCacheWriter(bool lateInitialization = false) {
     std::filesystem::remove_all(directory, error);
 }
 
+void ShutdownPassesHeldAsyncLog() {
+    static_cast<void>(AgcDriver::DriverDetail::Driver::Get());
+    std::promise<void> held;
+    std::promise<void> release;
+    auto released = release.get_future();
+    std::thread holder([&held, &released] {
+        const auto lock = AgcDriver::HoldAsyncLog();
+        held.set_value();
+        released.wait();
+    });
+    held.get_future().wait();
+    auto shutdown = std::async(std::launch::async, [] { AgcDriverShutdown_nid_postfix(); });
+    const bool returned = shutdown.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
+    release.set_value();
+    holder.join();
+    shutdown.get();
+    Require(returned, "the driver's shutdown waited for the async log's lock");
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -151,6 +172,7 @@ int main(int argc, char** argv) {
         else if (mode == "--draw-committer") ShutdownJoinsDrawCommitter();
         else if (mode == "--shader-cache-writer") ShutdownJoinsShaderCacheWriter();
         else if (mode == "--late-shader-cache") ShutdownJoinsShaderCacheWriter(true);
+        else if (mode == "--async-log-held") ShutdownPassesHeldAsyncLog();
         else ClosingStartsNoPreparation();
         std::cout << "shutdown threads tests passed\n";
         return 0;

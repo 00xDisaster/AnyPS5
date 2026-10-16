@@ -131,7 +131,7 @@ void Driver::stop() {
     Graphics::StopCompareHelpers();
     ShaderRecompiler::ShaderDiskCache::Shutdown();
     PerformanceTrace::StopOutput();
-    FlushAsyncLog_nid_no_patch();
+    FlushAsyncLogAtEnd_nid_no_patch();
     StopProfileOutput_nid_no_patch();
     stopped = true;
 }
@@ -227,6 +227,14 @@ void Driver::checkStopping() const {
 bool& Driver::onWorkerThread() {
     static thread_local bool worker = false;
     return worker;
+}
+
+}
+
+namespace AgcDriver {
+
+std::unique_lock<std::mutex> HoldAsyncLog() {
+    return AsyncLog::Get().Hold();
 }
 
 }
