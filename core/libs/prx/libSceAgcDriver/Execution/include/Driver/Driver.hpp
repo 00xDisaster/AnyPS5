@@ -77,6 +77,7 @@ public:
     DispatchCacheFootprint DispatchCacheSize();
     static std::uint64_t DispatchCacheBytes();
     static ShaderMemory::PendingWrite QueryPendingSpan(std::uint64_t address, std::size_t bytes, std::span<std::byte> known);
+    std::shared_ptr<const ShaderRegistry> RegisteredShaders();
 
 private:
     friend class SampledReadScope;
@@ -113,6 +114,7 @@ private:
     static bool stampValidate();
     static bool dataHits();
     static bool verifyDataHits();
+    static bool pipelineDispatch();
     static std::size_t dispatchVariants();
     static bool insertCompare();
     static std::size_t dispatchCacheEntries();
