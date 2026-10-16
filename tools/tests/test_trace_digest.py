@@ -495,6 +495,13 @@ class IntervalDigestTests(unittest.TestCase):
         self.assertIsNone(third["top_phase"])
         self.assertEqual(result["identity_changed_at"], [3])
 
+    def test_identity_changes_are_reported_where_they_happen(self):
+        lines = [interval_line(30.0 * index, 30.0 * (index + 1), 20.0, 5.0, commit=commit)
+                 for index, commit in enumerate(("a", "a", "b", "b", "a"))]
+        result = trace_digest.digest_intervals(lines)
+        self.assertEqual(result["identity_changed_at"], [2, 4])
+        self.assertIn("commit, environment, GPU, driver or OS changed at interval 3, 5", trace_digest.markdown_intervals(result).splitlines())
+
     def test_sparkline_scales_to_the_largest_value(self):
         self.assertEqual(trace_digest.sparkline([0.0, 5.0, 10.0]), ".+@")
         self.assertEqual(trace_digest.sparkline([0.0, 0.0]), "..")

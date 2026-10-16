@@ -289,7 +289,7 @@ def digest_intervals(lines):
                      "trace_dropped": line.get("trace_dropped", False)})
     first = lines[0] if lines else {}
     keys = ("commit", "dirty", "env", "gpu", "driver", "os", "resolution")
-    changed = [index for index, line in enumerate(lines) if any(line.get(key) != first.get(key) for key in keys)]
+    changed = [index for index in range(1, len(lines)) if any(lines[index].get(key) != lines[index - 1].get(key) for key in keys)]
     return {"intervals": rows, "identity": {key: first.get(key) for key in keys}, "identity_changed_at": changed}
 
 
