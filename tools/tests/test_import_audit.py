@@ -195,6 +195,53 @@ class ImportAuditTests(unittest.TestCase):
         self.assertTrue(records["missing_function"]["weak"])
         self.assertIsNone(data["stops"][0]["nid"])
 
+    def test_named_imports_fall_back_to_nid_exports(self):
+        work = self.work
+        (work.libs / "libc.prx").write_bytes(exporting("j4ViWNHEgww"))
+        registry, report = work.root / "homebrew.registry.json", work.root / "audit.json"
+        write_registry(registry, [("strlen", ""), ("strlen", ""),
+                                  ("missing_function", "", True)])
+        code, _, err = work.run(registry, "--json", str(report))
+        self.assertEqual((code, err), (1, ""))
+        data = json.loads(report.read_text(encoding="utf-8"))
+        records = {record["nid"]: record for record in data["imports"]}
+        self.assertEqual(data["references"], 3)
+        self.assertEqual(records["strlen"]["references"], 2)
+        self.assertEqual(records["strlen"]["class"], "implemented")
+        self.assertEqual(records["strlen"]["providers"], ["libc.prx"])
+        self.assertEqual(records["missing_function"]["class"], "absent")
+        self.assertTrue(records["missing_function"]["weak"])
+        self.assertIsNone(data["stops"][0]["nid"])
+
+    def test_named_nid_fallback_preserves_stub_and_library_classification(self):
+        nid = nid_names.compute_nid(MESSAGE_NAME)
+        imports = [(MESSAGE_NAME, "libSceOther.prx", False)]
+        records, missing = import_audit.audit(imports, {nid: ["libSceMsgDialog.prx"]},
+                                             {("libSceMsgDialog.prx", nid): MESSAGE_NAME},
+                                             {"libSceMsgDialog.prx", "libSceOther.prx"}, set())
+        self.assertEqual(missing, {})
+        self.assertEqual(records[0]["class"], "stub")
+        self.assertEqual(records[0]["nid"], MESSAGE_NAME)
+        self.assertEqual(records[0]["name"], MESSAGE_NAME)
+        self.assertTrue(records[0]["library_mismatch"])
+
+    def test_literal_exports_take_precedence_over_nid_fallback(self):
+        imports = [("strlen", "", False)]
+        stubs = {("literal.prx", "strlen"): "strlen"}
+        exports = {"strlen": ["literal.prx"], "j4ViWNHEgww": ["libc.prx"]}
+        records, _ = import_audit.audit(imports, exports, stubs, set(exports), set())
+        self.assertEqual(records[0]["class"], "stub")
+        self.assertEqual(records[0]["providers"], ["literal.prx"])
+        module_imports = {"guest.so": (["strlen"], [])}
+        records, _ = import_audit.audit([], {"j4ViWNHEgww": ["libc.prx"]}, {},
+                                       {"libc.prx"}, set(module_imports), module_imports,
+                                       {"strlen": ["other.so"]})
+        self.assertEqual(records[0]["providers"], ["other.so"])
+        records, _ = import_audit.audit([], {"j4ViWNHEgww": ["libc.prx"]}, {},
+                                       {"libc.prx"}, set(module_imports), module_imports)
+        self.assertEqual(records[0]["class"], "implemented")
+        self.assertEqual(records[0]["providers"], ["libc.prx"])
+
     def test_empty_and_control_character_imports_remain_invalid(self):
         registry = self.work.root / "homebrew.registry.json"
         for name in ("", "#A#B", "bad\x00name", "bad\nname", "bad\x7fname", "bad name"):
