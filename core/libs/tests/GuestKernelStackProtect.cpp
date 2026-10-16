@@ -304,6 +304,26 @@ static int ProtectUnlimitedStack() {
     return 0;
 }
 
+static int ProtectMainStackBottom(std::initializer_list<int> protections, std::uint64_t raw) {
+    int local = 0;
+    void* start = nullptr;
+    void* end = nullptr;
+    Require(sceKernelIsStack(&local, &start, &end) == SCE_OK);
+    const auto low = (reinterpret_cast<std::uintptr_t>(start) + Page - 1) & ~(Page - 1);
+    if (QueryPage(low + GuardBytes + 0x100000).mapped) {
+        std::puts("skipped the main stack bottom checks, the stack is mapped within 1 MiB of its bottom");
+        return 0;
+    }
+    for (const int protection : protections) {
+        Require(mprotect_nid_postfix(reinterpret_cast<void*>(low), GuardBytes, protection) == 0);
+        void* startAfter = nullptr;
+        void* endAfter = nullptr;
+        Require(sceKernelIsStack(&local, &startAfter, &endAfter) == SCE_OK && startAfter == start && endAfter == end);
+    }
+    Require(QueryPage(low).raw == raw);
+    return 0;
+}
+
 static bool OvercommitStrict() {
     std::FILE* setting = std::fopen("/proc/sys/vm/overcommit_memory", "r");
     if (setting == nullptr) return false;
@@ -312,23 +332,29 @@ static bool OvercommitStrict() {
     return strict;
 }
 
+static bool ChildPasses(const char* mode, bool unlimitedStack) {
+    const pid_t child = fork();
+    Require(child >= 0);
+    if (child == 0) {
+        rlimit limit{};
+        if (unlimitedStack && getrlimit(RLIMIT_STACK, &limit) == 0) limit.rlim_cur = RLIM_INFINITY;
+        if (!unlimitedStack || setrlimit(RLIMIT_STACK, &limit) == 0) execl("/proc/self/exe", "/proc/self/exe", mode, static_cast<char*>(nullptr));
+        std::_Exit(127);
+    }
+    int status = 0;
+    Require(waitpid(child, &status, 0) == child);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 static void ProtectMainStacks() {
+    Require(ChildPasses("--reprotect-bottom", false));
     rlimit limit{};
     Require(getrlimit(RLIMIT_STACK, &limit) == 0);
     if (limit.rlim_max != RLIM_INFINITY || OvercommitStrict()) {
         std::puts("skipped the unlimited main stack check, the stack limit cannot be raised or overcommit is strict");
         return;
     }
-    const pid_t child = fork();
-    Require(child >= 0);
-    if (child == 0) {
-        limit.rlim_cur = RLIM_INFINITY;
-        if (setrlimit(RLIMIT_STACK, &limit) == 0) execl("/proc/self/exe", "/proc/self/exe", "--unlimited-stack", static_cast<char*>(nullptr));
-        std::_Exit(127);
-    }
-    int status = 0;
-    Require(waitpid(child, &status, 0) == child);
-    Require(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    Require(ChildPasses("--unlimited-stack", true));
 }
 #endif
 
@@ -339,6 +365,7 @@ int main(int argc, char** argv) {
     ProtectHostStacks();
 #else
     if (argc > 1 && std::strcmp(argv[1], "--unlimited-stack") == 0) return ProtectUnlimitedStack();
+    if (argc > 1 && std::strcmp(argv[1], "--reprotect-bottom") == 0) return ProtectMainStackBottom({0, 3}, 7);
     ProtectMainStacks();
     ProtectStack(0);
 #endif
