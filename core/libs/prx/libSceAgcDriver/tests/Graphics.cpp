@@ -5396,6 +5396,7 @@ void sampleOrderTests() {
             pipelineSampleMasks.clear();
             auto context = capable();
             context.graphicsPipelineLibrary = libraries;
+            context.pipelineLinkTimeOptimization = false;
             auto state = maskedPass ? masked : attached(village, VK_FORMAT_UNDEFINED, false);
             const PipelineSetLayouts resources{makeHandle<VkDescriptorSetLayout>(), VK_NULL_HANDLE, false, mainKey, {}};
             std::size_t reorderedMasks = 0;
