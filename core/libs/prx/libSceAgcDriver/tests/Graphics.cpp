@@ -5700,7 +5700,7 @@ void orderedPixelShaderTests() {
     const std::array<std::string_view, 3> terminateExtensions{"SPV_KHR_physical_storage_buffer", "SPV_KHR_8bit_storage", "SPV_KHR_terminate_invocation"};
     auto terminating = faulting;
     terminating.target.supportedExtensions = terminateExtensions;
-    const auto terminated = ShaderRecompiler::Recompile(terminating).spirv.Words();
+    const auto terminated = ShaderRecompiler::Recompile(terminating).spirv.Copy();
     std::size_t terminatedKills = 0, terminatedStops = 0;
     const auto terminatedExits = interlockExits(terminated, terminatedKills, terminatedStops);
     Require(terminatedExits.empty() && terminatedKills == 1u && terminatedStops == 5u, "a primitive-ordered pixel shader with BDA reads and SPV_KHR_terminate_invocation: " + (terminatedExits.empty() ? std::to_string(terminatedKills) + " OpKill and " + std::to_string(terminatedStops) + " OpTerminateInvocation, not the valid-mask kill and 5 BDA fault terminations" : terminatedExits));
@@ -5739,7 +5739,7 @@ void orderedPixelShaderTests() {
         request.target.bdaAbiVersion = ShaderRecompiler::BdaAbi::Version;
         request.layout.pushConstantSizeBytes = 128;
         request.useCache = false;
-        return ShaderRecompiler::Recompile(request).spirv.Words();
+        return ShaderRecompiler::Recompile(request).spirv.Copy();
     };
     const auto vertexStops = vertexWords(bdaExtensions);
     const auto vertexTerminate = vertexWords(terminateExtensions);
