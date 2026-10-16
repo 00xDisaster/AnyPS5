@@ -1225,6 +1225,33 @@ void evictingRefusalBlockRangesTests(const Context& context) {
     Require(HostImportFor(window.importing, window.Address(piece), 16) != nullptr && window.Block(piece, piece), "a 64 KiB range of the block was answered from the full budget's refusal instead of stepping down to its own import once the budget had room for it");
 }
 
+void evictingRefusalJoinTests(const Context& context) {
+    PieceWindow window(context);
+    constexpr auto piece = PieceWindow::Piece;
+    constexpr auto fillers = PieceWindow::Window / 2;
+    window.AddPieces(0, 3 * piece);
+    for (std::size_t filler = 0; filler < 4; ++filler) {
+        window.Add(fillers + 2 * filler * piece, piece);
+        Require(HostImportFor(window.importing, window.Address(fillers + 2 * filler * piece), 16) != nullptr, "a filler piece inside the import budget was not imported");
+    }
+    SetHostImportBudget(HostImportLiveBytes());
+    const auto upload = [&] {
+        GuestBufferMemory plain(window.importing);
+        plain.AddReadable(window.Address(0), 3 * piece);
+        plain.Upload(false);
+        plain.WriteBack();
+    };
+    const auto counted = [] { return HostImportCounters().requesters[static_cast<std::size_t>(ImportRequester::Join)]; };
+    const auto before = counted();
+    for (int request = 0; request < 8; ++request) upload();
+    const auto after = counted();
+    Require(!HostImportCovers(window.importing, window.Address(0), 3 * piece), "a join of three 64 KiB ranges over a full budget with nothing evictable was imported");
+    Require(after.refused - before.refused == 8 && after.remembered - before.remembered == 7, "8 uploads bound across three refused ranges scanned the imports for their join " + std::to_string(8 - (after.remembered - before.remembered)) + " times, not once");
+    SetHostImportBudget(HostImportLiveBytes() + 3 * piece);
+    upload();
+    Require(HostImportCovers(window.importing, window.Address(0), 3 * piece) && counted().made == after.made + 1, "the join was answered from the full budget's refusal after the budget grew");
+}
+
 void evictingRefusalWindowTests(const Context& context) {
     PieceWindow window(context);
     constexpr auto piece = PieceWindow::Piece;
@@ -2500,6 +2527,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     evictingRefusalRangeTests(context);
     evictingRefusalWindowTests(context);
     evictingRefusalBlockRangesTests(context);
+    evictingRefusalJoinTests(context);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
