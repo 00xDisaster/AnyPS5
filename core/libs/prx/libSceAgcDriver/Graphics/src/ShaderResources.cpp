@@ -4305,8 +4305,12 @@ void ShaderResources::resolveImageTables() {
             if (element < binding.imageWritten.size() && binding.imageWritten[element]) {
                 reusable = false;
                 const auto storageBinding = storageTableBindings[table.set];
-                if (storageBinding == std::numeric_limits<std::size_t>::max() || absolute >= StorageTableCapacity(context)) {
-                    table.map[faults + element] = rejectTableElement(table, words, "the image storage table exceeds its capacity of " + std::to_string(StorageTableCapacity(context)) + " images");
+                if (storageBinding == std::numeric_limits<std::size_t>::max()) {
+                    table.map[faults + element] = rejectTableElement(table, words, "set " + std::to_string(table.set) + " has no image storage table, but the shader stores to its table element " + std::to_string(absolute));
+                    continue;
+                }
+                if (absolute >= StorageTableCapacity(context)) {
+                    table.map[faults + element] = rejectTableElement(table, words, "the stored table element " + std::to_string(absolute) + " of set " + std::to_string(table.set) + " is past the image storage table's capacity of " + std::to_string(StorageTableCapacity(context)) + " images");
                     continue;
                 }
                 CompletePendingCpuWrites(context, resource.baseAddress, static_cast<std::size_t>(guestBytes));
