@@ -65,6 +65,46 @@ void CheckFailedMountKeepsResult() {
     Check(sceSaveDataUmount2(0, &result.mount_point) == 0, "the kept mount point unmounts the save");
 }
 
+void CheckEquivalentMounts() {
+    SceSaveDataDirName original{};
+    std::memcpy(original.data, "identity", sizeof("identity"));
+    SaveDataMount3 mount{};
+    mount.dir_name = &original;
+    mount.mount_mode = MountReadWrite | MountCreate2;
+    SaveDataMountResult first{};
+    Check(sceSaveDataMount3(&mount, &first) == 0, "original save mounts");
+
+    const auto originalPath = std::filesystem::path("_sd") / "identity";
+    std::error_code error;
+    const bool caseAlias = std::filesystem::equivalent(originalPath, std::filesystem::path("_sd") / "IDENTITY", error);
+    Check(!error || error == std::errc::no_such_file_or_directory, "case-alias identity check succeeds");
+    std::filesystem::create_directory_symlink("identity", std::filesystem::path("_sd") / "linked", error);
+    const bool symlinkAlias = !error;
+    Check(caseAlias || symlinkAlias, "a host alias is available to check mount identity");
+
+    const auto checkAlias = [&](const char* name) {
+        SceSaveDataDirName alias{};
+        std::memcpy(alias.data, name, std::strlen(name) + 1);
+        mount.dir_name = &alias;
+        mount.mount_mode = MountReadWrite;
+        SaveDataMountResult result;
+        std::memset(&result, 0xCD, sizeof(result));
+        const SaveDataMountResult before = result;
+        Check(sceSaveDataMount3(&mount, &result) == SaveDataErrorBusy, std::string(name) + " cannot mount the same directory twice");
+        Check(std::memcmp(&result, &before, sizeof(result)) == 0, std::string(name) + " leaves the result unchanged");
+    };
+    if (caseAlias) checkAlias("IDENTITY");
+    if (symlinkAlias) checkAlias("linked");
+
+    Check(sceSaveDataUmount2(0, &first.mount_point) == 0, "original save unmounts");
+    if (caseAlias) MountAndCheck("IDENTITY", MountReadWrite, 0u, "case alias after unmount");
+    if (symlinkAlias) {
+        MountAndCheck("linked", MountReadWrite, 0u, "symlink alias after unmount");
+        std::filesystem::remove(std::filesystem::path("_sd") / "linked", error);
+        Check(!error, "symlink alias is removed");
+    }
+}
+
 std::set<std::filesystem::path> Tree() {
     std::set<std::filesystem::path> paths;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(std::filesystem::current_path())) paths.insert(entry.path());
@@ -112,6 +152,7 @@ int main() {
     MountAndCheck("made", MountReadWrite | MountCreate, 1u, "CREATE of a missing save");
     MountAndCheck("made", MountReadWrite, 0u, "open of an existing save");
     CheckFailedMountKeepsResult();
+    CheckEquivalentMounts();
     CheckInvalidNamesAreRejected();
     std::filesystem::current_path(previous);
     std::error_code error;
