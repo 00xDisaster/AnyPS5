@@ -118,6 +118,7 @@ def main():
         assert result.returncode == 0, (result.stdout, result.stderr)
         relocated_plain = relocated_plain_path.read_bytes()
         relocated_fixed = relocated_fixed_path.read_bytes()
+        assert struct.unpack_from("<H", relocated_fixed, 0x38)[0] > struct.unpack_from("<H", relocated, 0x38)[0], "the output program header table did not grow past the input's slots"
         assert struct.unpack_from("<Q", relocated_fixed, 0x20)[0] != 0x40, "the input table had slots for the output layout"
         relocated_plain_headers = headers(relocated_plain)
         relocated_fixed_headers = headers(relocated_fixed)
@@ -126,6 +127,12 @@ def main():
             shift = 0 if before[0] in (PT_NULL, PT_GNU_STACK) else BASE
             assert after == (*before[:3], before[3] + shift, before[4] + shift, *before[5:]), (before, after)
         assert min(header[3] for header in relocated_fixed_headers if header[0] == PT_LOAD) == BASE, "the relocated image does not start at the base"
+        relocated_entry = struct.unpack_from("<Q", relocated_fixed, 24)[0]
+        assert relocated_entry == struct.unpack_from("<Q", relocated_plain, 24)[0] + BASE, "entry not rebased"
+        entry_offset = mapped(relocated_fixed, relocated_entry)
+        assert entry_offset < len(relocated_fixed), ("the entry's mapping lies outside the output file", entry_offset)
+        covering = next(header for header in relocated_fixed_headers if header[0] == PT_LOAD and header[3] <= relocated_entry < header[3] + header[5])
+        assert covering[1] & 1, "the segment covering the entry is not executable"
 
         filled = bytearray(relocated)
         filled[0x158:0x198] = b"\x41" * 0x40
