@@ -1890,6 +1890,14 @@ std::optional<State> maskedState(const State& state, const std::set<std::uint32_
     return masked;
 }
 
+std::optional<DepthSampleLocations> passDepthLocations(const Context& context, const State& state, const Pipeline& pipeline) {
+    if (!state.depth || state.depth->samples <= 1u || !state.customSampleLocations || !pipeline.SampleLocationsEnabled()) return std::nullopt;
+    auto locations = DepthSurfaceSampleLocations(context, *state.depth);
+    locations.grid = pipeline.HostSampleLocationGrid();
+    locations.locations = SampleLocations(state);
+    return locations;
+}
+
 // Debug aid: APS5_DUMP_TARGETS=<n> saves the first n renders of every color target as a raw file
 // (u32 width, u32 height, u32 VkFormat, then tightly packed rows).
 int DumpTargetLimit() {
@@ -2271,12 +2279,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
             Require(reordered.back().method == step.method, "a reordered attachment's surface disagrees with the planned way of putting its samples in order");
         }
     }
-    std::optional<DepthSampleLocations> depthLocations;
-    if (state.depth && state.depth->samples > 1u && pipelineState.customSampleLocations && pipeline->SampleLocationsEnabled()) {
-        depthLocations = DepthSurfaceSampleLocations(context, *state.depth);
-        depthLocations->grid = pipeline->HostSampleLocationGrid();
-        depthLocations->locations = SampleLocations(pipelineState);
-    }
+    const auto depthLocations = passDepthLocations(context, pipelineState, *pipeline);
     timer.phase(PhasePipeline);
     APS5_LOG_CHARS_OUT_DEBUG("Pipeline created");
     if (lean) {
@@ -2696,6 +2699,7 @@ DrawRecipeOutcome DrawWithRecipe(const Context& context, const State& state, con
     for (const auto& color : state.colors) record.targetSlices.push_back(color.arraySlice);
     record.pushBytes = &recipe.pushBytes;
     record.pushStages = recipe.pushStages;
+    record.depthLocations = passDepthLocations(context, state, *record.pipeline);
     recordDraw(context, state, draw, shaders, inputs, record, outcome, timer, ownWaitedMs);
     if (profile) {
         result.recordUs = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - recordStart).count();
