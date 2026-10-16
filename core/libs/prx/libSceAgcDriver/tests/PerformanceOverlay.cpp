@@ -575,7 +575,7 @@ void costReport(const Device& device, PerformanceOverlay& overlay) {
     const auto vramUs = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - sampled).count() / 100;
     std::printf("VRAM budget read in %.1f us (%s), once a second while the overlay is shown\n", vramUs, device.MemoryBudget() ? "VK_EXT_memory_budget" : "no VK_EXT_memory_budget");
     for (const VkExtent2D extent : {VkExtent2D{1920, 1080}, VkExtent2D{3840, 2160}}) {
-        Image destination(context, VK_FORMAT_B8G8R8A8_UNORM, extent, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        Image destination(context, VK_FORMAT_B8G8R8A8_UNORM, extent, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         const auto content = fullPanel(fixedDetails(extent, extent));
         std::vector<double> gpuMs;
         std::vector<double> cpuMs;
