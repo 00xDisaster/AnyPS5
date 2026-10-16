@@ -52,20 +52,19 @@ int CreateEndpoint(std::int32_t* id, std::map<std::int32_t, Endpoint>& endpoints
     return 0;
 }
 
-int DeleteEndpoint(std::int32_t id, std::map<std::int32_t, Endpoint>& endpoints, std::int32_t Connection::*side, const QoS& qos) {
-    if (!endpoints.contains(id)) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
-    for (const auto& entry : qos.connections) {
-        if (entry.second.*side == id) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
-    }
-    endpoints.erase(id);
-    return 0;
+int DeleteEndpoint(std::int32_t id, std::map<std::int32_t, Endpoint>& endpoints) {
+    return endpoints.erase(id) != 0 ? 0 : SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
 }
 
 int SetAttribute(std::map<std::int32_t, Endpoint>& endpoints, std::int32_t id, std::int32_t attribute, const void* value, std::int32_t size) {
     const auto endpoint = endpoints.find(id);
-    if (endpoint == endpoints.end() || !value || size <= 0) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
-    const auto* bytes = static_cast<const std::uint8_t*>(value);
-    endpoint->second[attribute].assign(bytes, bytes + size);
+    if (endpoint == endpoints.end() || !value) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
+    if (size > 0) {
+        const auto* bytes = static_cast<const std::uint8_t*>(value);
+        endpoint->second[attribute].assign(bytes, bytes + size);
+    } else {
+        endpoint->second[attribute].clear();
+    }
     return 0;
 }
 
@@ -100,14 +99,15 @@ int APS5_VABI sceVoiceQoSEnd() {
     });
 }
 
-int APS5_VABI sceVoiceQoSCreateLocalEndpoint(int32_t* localId, int32_t userId, int32_t device) {
+int APS5_VABI sceVoiceQoSCreateLocalEndpoint(int32_t* localId, int32_t userId, int32_t deviceInId, int32_t deviceOutId) {
     (void)userId;
-    (void)device;
+    (void)deviceInId;
+    (void)deviceOutId;
     return Locked([&](QoS& qos) { return CreateEndpoint(localId, qos.locals, qos); });
 }
 
 int APS5_VABI sceVoiceQoSDeleteLocalEndpoint(int32_t localId) {
-    return Locked([&](QoS& qos) { return DeleteEndpoint(localId, qos.locals, &Connection::local, qos); });
+    return Locked([&](QoS& qos) { return DeleteEndpoint(localId, qos.locals); });
 }
 
 int APS5_VABI sceVoiceQoSCreateRemoteEndpoint(int32_t* remoteId) {
@@ -115,15 +115,12 @@ int APS5_VABI sceVoiceQoSCreateRemoteEndpoint(int32_t* remoteId) {
 }
 
 int APS5_VABI sceVoiceQoSDeleteRemoteEndpoint(int32_t remoteId) {
-    return Locked([&](QoS& qos) { return DeleteEndpoint(remoteId, qos.remotes, &Connection::remote, qos); });
+    return Locked([&](QoS& qos) { return DeleteEndpoint(remoteId, qos.remotes); });
 }
 
 int APS5_VABI sceVoiceQoSConnect(int32_t* connectionId, int32_t localId, int32_t remoteId) {
     return Locked([&](QoS& qos) {
         if (!connectionId || !qos.locals.contains(localId) || !qos.remotes.contains(remoteId)) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
-        for (const auto& entry : qos.connections) {
-            if (entry.second.local == localId && entry.second.remote == remoteId) return SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID;
-        }
         *connectionId = NewId(qos);
         qos.connections.emplace(*connectionId, Connection{localId, remoteId});
         return 0;
