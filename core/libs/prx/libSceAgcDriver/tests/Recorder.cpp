@@ -1680,6 +1680,143 @@ bool settledImportsWatchPrivate(const Context& context) {
     return watched;
 }
 
+bool settleFirstUseTests(const Device& device) {
+    using namespace AgcDriver::GuestMemory;
+    const auto& context = device.GetContext();
+    constexpr std::size_t unit = 65536;
+    constexpr int copies = 4096;
+    if (context.hostImportAlignment == 0 || context.hostImportAlignment > unit || context.settleQueue == VK_NULL_HANDLE || !WriteWatched()) {
+        std::cout << "host imports within 64 KiB, a settle queue or write watching unavailable: the first use of a settled import not tested\n";
+        return false;
+    }
+    std::unique_lock gpu(GpuMutex());
+    PrepareImportWatch(context);
+    if (!settledImportsWatchPrivate(context)) {
+        std::cout << "this device compares every Windows import: the first use of a settled import not tested\n";
+        return false;
+    }
+    void* small = AllocateWatched(unit, unit);
+    struct Release {
+        void* small;
+        ~Release() { ReleaseWatched(small, unit); }
+    } release{small};
+    const auto address = reinterpret_cast<std::uint64_t>(small);
+    std::memset(small, 0x11, unit);
+    Recorder recorder(context);
+    recorder.Activate();
+    Buffer scratch(context, unit, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Add(small, unit, true, true, true);
+    }
+    const auto* import = HostImportFor(context, address, unit);
+    Require(import != nullptr && import->unwatched && !Watched(address, unit), "(f) a 64 KiB import was not compared at first");
+    const auto commands = recorder.Commands();
+    for (int copy = 0; copy < copies; ++copy) CopyBuffer(context, commands, import->buffer, 0, scratch.Handle(), 0, unit);
+    recorder.Submit();
+    const auto submittedAt = std::chrono::steady_clock::now();
+    const auto deadline = submittedAt + std::chrono::seconds(5);
+    std::uint64_t collected = 0;
+    bool returned = false;
+    auto returnedAt = submittedAt;
+    while (!returned && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        HostImportFor(context, address, unit);
+        if (Watched(address, unit)) {
+            returnedAt = std::chrono::steady_clock::now();
+            BumpCollectEpoch();
+            collected = CollectWrites(address, unit);
+            returned = true;
+        }
+    }
+    recorder.Reap();
+    const bool racing = returned && recorder.InFlightBatches() != 0;
+    while (recorder.InFlightBatches() != 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+        recorder.Reap();
+    }
+    const auto reapedAt = std::chrono::steady_clock::now();
+    recorder.Sync();
+    CollectWritesUncached(address, unit);
+    const bool unchanged = returned && UnchangedSince(address, unit, collected);
+    const auto since = [&](std::chrono::steady_clock::time_point at) { return std::chrono::duration<double, std::milli>(at - submittedAt).count(); };
+    std::cout << "(f) settled import back in the write watch " << since(returnedAt) << " ms after main-queue copies of it were submitted, copies reaped by " << since(reapedAt) << " ms; driver marks after its return=" << !unchanged << '\n';
+    Require(returned, "(f) a settled import did not return to the write watch");
+    Require(racing, "(f) the main-queue copies had finished before the import returned to the write watch, so its read did not race them");
+    Require(unchanged, "(f) the driver marked a settled import's pages after its settle read completed while earlier main-queue copies of it ran");
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Remove(small);
+    }
+    HostImportFor(context, address, unit);
+    std::cout << "settled import first use tests passed\n";
+    return true;
+}
+
+bool settleEarlierImportTests(const Device& device) {
+    using namespace AgcDriver::GuestMemory;
+    const auto& context = device.GetContext();
+    constexpr std::size_t unit = 65536;
+    constexpr int copies = 4096;
+    if (context.hostImportAlignment == 0 || context.hostImportAlignment > unit || context.settleQueue == VK_NULL_HANDLE || !WriteWatched()) {
+        std::cout << "host imports within 64 KiB, a settle queue or write watching unavailable: an earlier import's first use after a settled import's return not tested\n";
+        return false;
+    }
+    std::unique_lock gpu(GpuMutex());
+    PrepareImportWatch(context);
+    if (!settledImportsWatchPrivate(context)) {
+        std::cout << "this device compares every Windows import: an earlier import's first use after a settled import's return not tested\n";
+        return false;
+    }
+    void* pair = AllocateWatched(2 * unit, unit);
+    struct Release {
+        void* pair;
+        ~Release() {
+            SetHostImportRangeWindow(std::uint64_t{64} << 20u);
+            ReleaseWatched(pair, 2 * unit);
+        }
+    } release{pair};
+    const auto address = reinterpret_cast<std::uint64_t>(pair);
+    std::memset(pair, 0x11, 2 * unit);
+    Recorder recorder(context);
+    recorder.Activate();
+    Buffer scratch(context, unit, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    SetHostImportRangeWindow(unit);
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Add(pair, 2 * unit, true, true, true);
+    }
+    const auto* earlier = HostImportFor(context, address, 16);
+    Require(earlier != nullptr && earlier->base == address && earlier->bytes == unit && earlier->unwatched, "(e) the first window of the range was not imported compared");
+    const auto commands = recorder.Commands();
+    for (int copy = 0; copy < copies; ++copy) CopyBuffer(context, commands, earlier->buffer, 0, scratch.Handle(), 0, unit);
+    const auto* whole = HostImportFor(context, address + unit - 16, 32);
+    Require(whole != nullptr && whole->base == address && whole->bytes == 2 * unit && whole->unwatched, "(e) an access across the windows did not replace the first window's import");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!Watched(address, 2 * unit) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        HostImportFor(context, address + unit - 16, 32);
+    }
+    Require(Watched(address, 2 * unit), "(e) the range's import did not return to the write watch");
+    Require(recorder.Recording(), "(e) the earlier import's copies were submitted before the range's import returned to the write watch");
+    BumpCollectEpoch();
+    const auto collected = CollectWrites(address, 2 * unit);
+    const auto submittedAt = std::chrono::steady_clock::now();
+    recorder.Sync();
+    const auto syncedAt = std::chrono::steady_clock::now();
+    CollectWritesUncached(address, 2 * unit);
+    const bool unchanged = UnchangedSince(address, 2 * unit, collected);
+    std::cout << "(e) the range's import back in the write watch before the replaced window's first use ran (" << std::chrono::duration<double, std::milli>(syncedAt - submittedAt).count() << " ms of copies after it); driver marks after its return=" << !unchanged << '\n';
+    Require(unchanged, "(e) the driver marked the pages of a settled import while a replaced import of them ran its first use");
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Remove(pair);
+    }
+    HostImportFor(context, address, 16);
+    std::cout << "earlier import first use tests passed\n";
+    return true;
+}
+
 bool settleRetireTests(const Device& device) {
     using namespace AgcDriver::GuestMemory;
     const auto& context = device.GetContext();
@@ -8256,6 +8393,8 @@ int main(int argc, char** argv) {
             }
             return deferredSettleTests(device) ? 0 : 77;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--settle-first-use-only") return settleFirstUseTests(device) ? 0 : 77;
+        if (argc == 2 && std::string_view(argv[1]) == "--settle-earlier-import-only") return settleEarlierImportTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--settle-retire-only") return settleRetireTests(device) ? 0 : 77;
 #endif
         if (argc == 2 && std::string_view(argv[1]) == "--host-import-retirement-only") {
