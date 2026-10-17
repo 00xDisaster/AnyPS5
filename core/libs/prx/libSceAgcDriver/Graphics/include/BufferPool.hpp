@@ -2,7 +2,6 @@
 #define CORE_LIBS_PRX_LIBSCEAGCDRIVER_GRAPHICS_INCLUDE_BUFFERPOOL_HPP
 
 #include "prx/libSceAgcDriver/Graphics/include/Context.hpp"
-#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -56,8 +55,6 @@ class BufferPool {
 public:
     explicit BufferPool(const Context& context);
     static VkDeviceSize DeviceBudget(const VkPhysicalDeviceMemoryProperties& memory, const VkPhysicalDeviceMemoryBudgetPropertiesEXT* reported = nullptr);
-    using CacheReclaim = VkDeviceSize (*)(VkDeviceSize bytes);
-    static void SetCacheReclaim(CacheReclaim reclaim);
     static VkDeviceSize ReclaimTarget(VkDeviceSize bytes);
     ~BufferPool();
     BufferPool(const BufferPool&) = delete;
@@ -131,8 +128,8 @@ private:
     void evictOldest(Tier& tier, std::vector<BufferAllocation>& evicted);
     // The retained-slot bound of each tier (APS5_BUFFER_POOL_SLOTS, default `defaultSlots`), read once.
     static std::size_t MaxSlots();
-    static std::atomic<CacheReclaim>& cacheReclaim();
     std::size_t maxSlots;
+    VkDeviceSize (*cacheReclaim)(VkDeviceSize bytes);
     VkDevice device;
     PFN_vkUnmapMemory unmap;
     PFN_vkDestroyBuffer destroyBuffer;

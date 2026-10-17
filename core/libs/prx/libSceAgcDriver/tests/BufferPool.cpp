@@ -528,14 +528,11 @@ void CacheReclaimRecovery() {
     Expect(BufferPool::ReclaimTarget(4 * MiB) == 260 * MiB, "a 4 MiB request does not ask the caches for 256 MiB on top of itself");
     Expect(BufferPool::ReclaimTarget(512 * MiB) == 1024 * MiB, "a 512 MiB request does not ask the caches for twice its size");
     constexpr auto usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    BufferPool::SetCacheReclaim(mockCacheReclaim);
-    struct Reset {
-        ~Reset() { BufferPool::SetCacheReclaim(nullptr); }
-    } reset;
     mock = MockDevice{};
     reclaimMock = ReclaimMock{};
     {
         auto context = mockContext();
+        context.cacheReclaim = mockCacheReclaim;
         { DeviceBuffer idle(context, 2 * MiB, usage); }
         ExternalAllocation(10 * MiB);
         mock.limit = 12 * MiB;
@@ -554,6 +551,7 @@ void CacheReclaimRecovery() {
     reclaimMock = ReclaimMock{};
     {
         auto context = mockContext();
+        context.cacheReclaim = mockCacheReclaim;
         ExternalAllocation(10 * MiB);
         mock.limit = 12 * MiB;
         const auto before = mock.attempts;
@@ -569,6 +567,7 @@ void CacheReclaimRecovery() {
     reclaimMock = ReclaimMock{};
     {
         auto context = mockContext();
+        context.cacheReclaim = mockCacheReclaim;
         mock.limit = 2 * MiB;
         const auto before = mock.attempts;
         std::string failure;
