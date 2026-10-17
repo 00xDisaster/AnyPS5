@@ -76,6 +76,7 @@ void AppendLabel(std::vector<std::uint32_t>& words, std::uint32_t* target, std::
 
 struct Blocker {
     std::atomic<bool> release{false};
+    ~Blocker() { release = true; }
     void Enqueue() {
         DrawPipeline::Queue0().Enqueue([this] {
             while (!release.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -157,6 +158,32 @@ void FillIntoFullPipeline() {
     for (std::size_t i = 0; i < Output.size(); ++i) Require(Output[i] == (i < 256 ? 0x5a5a5a5au : 0xcafebabeu), "a fill behind a full draw pipeline did not land at " + std::to_string(i));
 }
 
+void SatisfiedWaitKeepsUnrelatedQueuedWork() {
+    alignas(8) static std::uint32_t gate = 1;
+    alignas(8) static std::uint32_t marker = 0;
+    marker = 0;
+
+    Blocker blocker;
+    blocker.Enqueue();
+
+    const auto address = reinterpret_cast<std::uintptr_t>(&gate);
+    std::vector<std::uint32_t> words{
+        0xc0063c00u, 0x13u, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u),
+        1u, 0xffffffffu, 0x19u};
+    AppendLabel(words, &marker, 1);
+    Packet packet{words.data(), static_cast<std::uint32_t>(words.size()), 0, {}};
+    AgcDriver::Submit(&packet, 0);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (DrawPipeline::Queue0().Outstanding() < 2 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const bool keptQueued = DrawPipeline::Queue0().Outstanding() >= 2;
+    blocker.release = true;
+    Finish();
+    Require(keptQueued, "a satisfied WAIT_REG_MEM drained unrelated queued work");
+    Require(marker == 1, "a label after a satisfied WAIT_REG_MEM did not execute");
+}
+
 }
 
 int main() {
@@ -172,6 +199,7 @@ int main() {
         }
         InputsAfterQueuedLabels();
         FillIntoFullPipeline();
+        SatisfiedWaitKeepsUnrelatedQueuedWork();
         AgcDriverShutdown_nid_postfix();
         std::puts("pipelined fill tests passed");
         return 0;
