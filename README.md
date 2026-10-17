@@ -2,7 +2,7 @@
 
 Tool for automatic executables porting to Linux and Windows.
 
-The relinker-only build runs on macOS, including Apple silicon. Game execution on a macOS host is not yet supported.
+The relinker-only build runs on macOS, including Apple silicon.
 
 [**Web converter**](https://boykopovar.github.io/AnyPS5/) - files stay on your device.
 
