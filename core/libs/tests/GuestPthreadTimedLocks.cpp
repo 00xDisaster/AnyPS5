@@ -29,6 +29,7 @@ struct Holder {
     void* lock;
     bool mutex;
     std::atomic<bool> held{false};
+    std::atomic<bool> releasing{false};
     Pthread thread = nullptr;
 };
 
@@ -39,6 +40,7 @@ static void* APS5_VABI Hold(void* arg) {
     Require((holder.mutex ? pthread_mutex_lock_nid_postfix(mutex) : pthread_rwlock_wrlock_nid_postfix(rwlock)) == 0);
     holder.held.store(true);
     std::this_thread::sleep_for(HoldTime);
+    holder.releasing.store(true);
     Require((holder.mutex ? pthread_mutex_unlock_nid_postfix(mutex) : pthread_rwlock_unlock_nid_postfix(rwlock)) == 0);
     return nullptr;
 }
@@ -48,9 +50,8 @@ static void RequireWaitsForHolder(void* lock, bool mutex, Lock acquire) {
     Holder holder{lock, mutex};
     Require(scePthreadCreate(&holder.thread, nullptr, Hold, &holder, nullptr) == SCE_OK);
     while (!holder.held.load()) std::this_thread::yield();
-    const auto start = std::chrono::steady_clock::now();
     Require(acquire() == 0);
-    Require(std::chrono::steady_clock::now() - start >= HoldTime / 2);
+    Require(holder.releasing.load());
     Require(scePthreadJoin(holder.thread, nullptr) == SCE_OK);
 }
 
