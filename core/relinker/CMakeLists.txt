@@ -542,6 +542,7 @@ if(BUILD_TESTING)
         add_asan_test_options(guest_module_args verify_asan_link_order=0)
         add_asan_test_options(guest_deferred_dependencies verify_asan_link_order=0)
         add_asan_test_options(guest_module_fini verify_asan_link_order=0)
+        add_asan_test_options(guest_preinit verify_asan_link_order=0)
         add_test(NAME guest_needed_nested_modules COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_needed_nested_modules.py $<TARGET_FILE:relinker>)
         set(windows_stdio_host_arguments)
