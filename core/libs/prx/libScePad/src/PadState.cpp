@@ -15,6 +15,10 @@ namespace {
     std::mutex stateMutex;
     PadInputState state;
     std::uint32_t pressedSinceRead = 0;
+    std::uint8_t pressedAnalogL2 = 0;
+    std::uint8_t pressedAnalogR2 = 0;
+    std::uint64_t pressedAt = 0;
+    constexpr std::uint64_t kLatchExpiry = 100000;
     PadOutputState output;
     std::chrono::steady_clock::time_point audioHapticEnd;
     std::uint64_t timestamp = 0;
@@ -109,6 +113,7 @@ void Pad::Initialize() {
         timestamp = sceKernelGetProcessTime();
         lastFuseTime = timestamp;
         queue.clear();
+        pressedSinceRead = 0;
     }
     initialized = true;
 }
@@ -217,7 +222,11 @@ PadData Pad::ReadState() {
     const std::uint64_t now = sceKernelGetProcessTime();
     const auto injected = InjectedInput(now);
     PadData data = BuildData(state, timestamp, now, injected);
-    data.buttons |= pressedSinceRead;
+    if (pressedSinceRead != 0 && now - pressedAt <= kLatchExpiry) {
+        data.buttons |= pressedSinceRead;
+        if (pressedSinceRead & 0x100u) data.analog_buttons_l2 = std::max(data.analog_buttons_l2, pressedAnalogL2);
+        if (pressedSinceRead & 0x200u) data.analog_buttons_r2 = std::max(data.analog_buttons_r2, pressedAnalogR2);
+    }
     pressedSinceRead = 0;
     return data;
 }
@@ -227,6 +236,7 @@ int Pad::Read(PadData* data, int num) {
     std::lock_guard lock(stateMutex);
     if (failure) std::rethrow_exception(failure);
     if (!initialized) throw std::runtime_error("Pad: read before initialization");
+    pressedSinceRead = 0;
     const std::uint64_t now = sceKernelGetProcessTime();
     const auto injected = InjectedInput(now);
     if (queue.empty()) {
@@ -361,9 +371,15 @@ extern "C" void PadPublishInput_nid_postfix(const PadInputState& input) {
         state.touchLeft == input.touchLeft && state.touchRight == input.touchRight &&
         state.hasMotion == input.hasMotion && state.accel == input.accel && state.gyro == input.gyro &&
         state.touch == input.touch && state.deviceKind == input.deviceKind) return;
-    pressedSinceRead |= input.buttons & ~state.buttons;
-    state = input;
+    const std::uint32_t pressed = input.buttons & ~state.buttons;
     timestamp = sceKernelGetProcessTime();
+    if (pressed != 0) {
+        pressedSinceRead |= pressed;
+        pressedAt = timestamp;
+        if (pressed & 0x100u) pressedAnalogL2 = input.analogButtonsL2;
+        if (pressed & 0x200u) pressedAnalogR2 = input.analogButtonsR2;
+    }
+    state = input;
     if (queue.size() == kQueueCapacity) queue.pop_front();
     queue.push_back({input, timestamp});
 }
