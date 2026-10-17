@@ -102,6 +102,8 @@ static int NativeUnlink(const std::filesystem::path& p) {
     return -1;
 }
 static std::filesystem::path NativeMetadataPath(const std::filesystem::path& path, std::error_code& error) {
+    const auto& input = path.native();
+    if (input.starts_with(L"\\\\?\\") || input.starts_with(L"\\\\.\\")) return path;
     auto absolute = std::filesystem::absolute(path, error);
     if (error) return {};
     absolute = absolute.lexically_normal().make_preferred();

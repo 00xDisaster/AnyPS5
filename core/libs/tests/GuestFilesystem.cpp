@@ -284,6 +284,12 @@ static void TestLongHostPathStat() {
     Require(sceKernelStat("/long-stat-host/missing.bin", &status) == static_cast<int>(0x80020002u));
     Require(sceKernelStat("/long-stat-host/", &status) == 0 && (status.st_mode & 0170000) == 0040000);
     RemovePathAlias_nid_no_patch("/long-stat-host");
+    const auto extendedHost = ExtendedPath(deep).string();
+    AddPathAlias_nid_no_patch("/long-stat-extended", extendedHost.c_str());
+    Require(ResolvePath_nid_no_patch("/long-stat-extended/payload.bin").native().starts_with(L"\\\\?\\"));
+    Require(sceKernelStat("/long-stat-extended/payload.bin", &status) == 0 && status.st_size == 8);
+    Require(sceKernelStat("/long-stat-extended/missing.bin", &status) == static_cast<int>(0x80020002u));
+    RemovePathAlias_nid_no_patch("/long-stat-extended");
     ::DeleteFileW(ExtendedPath(file).c_str());
     for (auto path = deep; ; path = path.parent_path()) {
         ::RemoveDirectoryW(ExtendedPath(path).c_str());
