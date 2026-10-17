@@ -1574,6 +1574,19 @@ void Driver::ResolveGraphicsStagesAbi(std::span<const Shader* const> stages, std
     transaction.Commit();
 }
 
+std::size_t Driver::PreparedEntries(const Shader* shader) {
+    std::shared_ptr<const ShaderSnapshot> snapshot;
+    {
+        std::lock_guard lock(mutex);
+        if (shaders == nullptr) return 0;
+        snapshot = RegisteredHeader(*shaders, shader);
+    }
+    if (snapshot == nullptr) return 0;
+    std::unique_lock lock(snapshot->prepared->mutex);
+    AwaitRegisteredPreparation(*snapshot->prepared, lock);
+    return snapshot->prepared->entries.size();
+}
+
 void Driver::ResolveShaderAbi(const Shader* shader, std::span<const ShaderRegister> context, std::span<const ShaderRegister> primitive) {
     BindTitleThread();
     PerformanceContext timingContext(FrameTiming::Preparation());
