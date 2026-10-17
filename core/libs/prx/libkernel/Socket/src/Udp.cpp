@@ -401,6 +401,11 @@ int GuestSockets::Family(int descriptor) {
     const auto found = sockets.find(descriptor);
     return found == sockets.end() ? -1 : found->second->family;
 }
+int GuestSockets::Type(int descriptor) {
+    std::lock_guard lock(socketsMutex);
+    const auto found = sockets.find(descriptor);
+    return found == sockets.end() ? -1 : found->second->type;
+}
 bool GuestSockets::Listening(int descriptor) {
     std::shared_ptr<Socket> socket;
     {
