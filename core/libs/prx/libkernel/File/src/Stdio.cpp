@@ -115,8 +115,9 @@ static int NativeFtruncate(int descriptor, std::int64_t length) {
     const int result = File::TruncateSharedMemory_nid_no_patch(descriptor, length);
     if (result != -2) return result;
     const auto handle = reinterpret_cast<HANDLE>(WithoutParameterHandler([descriptor] { return ::_get_osfhandle(descriptor); }));
-    if (handle != INVALID_HANDLE_VALUE && ::GetFileType(handle) != FILE_TYPE_DISK) return EINVAL;
-    return static_cast<int>(::_chsize_s(descriptor, length));
+    if (handle == INVALID_HANDLE_VALUE) return EBADF;
+    if (::GetFileType(handle) != FILE_TYPE_DISK) return EINVAL;
+    return static_cast<int>(WithoutParameterHandler([descriptor, length] { return ::_chsize_s(descriptor, length); }));
 }
 static int NativeTruncate(const std::filesystem::path& path, std::int64_t length) {
     const int descriptor = ::_wopen(path.c_str(), _O_WRONLY | _O_BINARY);
@@ -608,6 +609,9 @@ int APS5_VABI close_nid_postfix(int d) {
         return -1;
     }
     if (GuestSockets::IsOpen(d)) return GuestSockets::Close(d);
+#ifdef _WIN32
+    const auto positioned = File::LockPositionedTransfer(d);
+#endif
     EqueueDescriptorClosed(d);
     File::ForgetRandomDevice(d);
     File::ForgetDescriptor(d);
