@@ -89,11 +89,17 @@ def load_summary(path, trace_path):
 
 def load_stacks(path):
     stacks = []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
+    for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
         if line.startswith("#") or not line.strip():
             continue
         frames, _, count = line.rpartition(" ")
-        stacks.append((frames.split(";"), int(count)))
+        try:
+            weight = int(count)
+        except ValueError as error:
+            raise ValueError(f"{path}:{number}: sample count must be a positive integer") from error
+        if weight <= 0 or any(not frame.strip() for frame in frames.split(";")):
+            raise ValueError(f"{path}:{number}: expected nonempty frames and a positive sample count")
+        stacks.append((frames.split(";"), weight))
     return stacks
 
 
@@ -309,8 +315,12 @@ def main(arguments=None):
         result = digest_intervals(load_intervals(options.trace))
         sys.stdout.write(json.dumps(result, indent=1) + "\n" if options.json else markdown_intervals(result))
         return 0
+    try:
+        stacks = load_stacks(options.stacks) if options.stacks else None
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     result = digest(load_trace(options.trace), load_summary(options.summary, options.trace),
-                    load_stacks(options.stacks) if options.stacks else None, options.frames, options.top)
+                    stacks, options.frames, options.top)
     sys.stdout.write(json.dumps(result, indent=1) + "\n" if options.json else markdown(result))
     return 0
 
