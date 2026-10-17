@@ -10,6 +10,7 @@ NO_DISPLAY = re.compile(r"skipped,.*no display", re.IGNORECASE)
 NO_VULKAN_DEVICE = re.compile(r"skipped,.*no usable Vulkan device", re.IGNORECASE)
 
 HIGH_REFRESH_LIMITATION = re.compile(r"current display does not provide 120 Hz", re.IGNORECASE)
+SKIP_RETURN_CODE = re.compile(r"SKIP_RETURN_CODE=\d+")
 
 WINDOWS_PREFIX = "agc"
 
@@ -35,7 +36,8 @@ def skips(path):
         name = case.get("name")
         if not name:
             raise ValueError(f"{path}: skipped testcase has no name")
-        output = ["skipped, " + reason.strip() for reason in (skipped.get("message", ""), skipped.text or "") if reason.strip()]
+        output = ["skipped, " + reason.strip() for reason in (skipped.get("message", ""), skipped.text or "")
+                  if reason.strip() and not SKIP_RETURN_CODE.fullmatch(reason.strip())]
         output += [case.findtext(channel) or "" for channel in ("system-out", "system-err")]
         yield name, "\n".join(output)
 
