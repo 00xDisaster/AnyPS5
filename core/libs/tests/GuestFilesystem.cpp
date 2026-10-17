@@ -20,6 +20,9 @@
 #else
 #include <unistd.h>
 #endif
+#ifdef __linux__
+#include <sys/inotify.h>
+#endif
 extern "C" {
 int APS5_VABI remove_nid_postfix(const char*);
 int APS5_VABI rename_nid_postfix(const char*, const char*);
@@ -246,10 +249,102 @@ static void TestRelinkedModuleNameCase() {
     std::filesystem::remove_all(root);
 }
 
+#ifdef _WIN32
+static std::filesystem::path ExtendedPath(const std::filesystem::path& path) {
+    const auto& native = path.native();
+    if (native.starts_with(L"\\\\?\\") || native.starts_with(L"\\\\.\\")) return path;
+    return native.starts_with(L"\\\\") ? std::filesystem::path(L"\\\\?\\UNC\\" + native.substr(2))
+                                            : std::filesystem::path(L"\\\\?\\" + native);
+}
+
+static void TestLongHostPathStat() {
+    auto root = std::filesystem::absolute(std::filesystem::temp_directory_path()).lexically_normal();
+    if (root.filename().empty()) root = root.parent_path();
+    root /= L"anyps5-stat-long-" + std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count());
+    auto deep = root;
+    while (deep.native().size() < MAX_PATH + 24) deep /= std::wstring(40, L'd');
+    Require(::CreateDirectoryW(ExtendedPath(root).c_str(), nullptr) != 0);
+    auto directory = root;
+    for (const auto& component : std::filesystem::path(deep).lexically_relative(root)) {
+        directory /= component;
+        Require(::CreateDirectoryW(ExtendedPath(directory).c_str(), nullptr) != 0);
+    }
+    const auto file = deep / L"payload.bin";
+    const auto handle = ::CreateFileW(ExtendedPath(file).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    Require(handle != INVALID_HANDLE_VALUE);
+    DWORD written = 0;
+    const bool wrote = ::WriteFile(handle, "metadata", 8, &written, nullptr) != 0 && written == 8;
+    ::CloseHandle(handle);
+    Require(wrote);
+    const auto host = deep.string();
+    AddPathAlias_nid_no_patch("/long-stat-host", host.c_str());
+    FileStat status{};
+    Require(ResolvePath_nid_no_patch("/long-stat-host/payload.bin").native().size() > MAX_PATH);
+    Require(sceKernelStat("/long-stat-host/payload.bin", &status) == 0 && status.st_size == 8);
+    Require(sceKernelStat("/long-stat-host/missing.bin", &status) == static_cast<int>(0x80020002u));
+    Require(sceKernelStat("/long-stat-host/", &status) == 0 && (status.st_mode & 0170000) == 0040000);
+    RemovePathAlias_nid_no_patch("/long-stat-host");
+    const auto extendedHost = ExtendedPath(deep).string();
+    AddPathAlias_nid_no_patch("/long-stat-extended", extendedHost.c_str());
+    Require(ResolvePath_nid_no_patch("/long-stat-extended/payload.bin").native().starts_with(L"\\\\?\\"));
+    Require(sceKernelStat("/long-stat-extended/payload.bin", &status) == 0 && status.st_size == 8);
+    Require(sceKernelStat("/long-stat-extended/missing.bin", &status) == static_cast<int>(0x80020002u));
+    RemovePathAlias_nid_no_patch("/long-stat-extended");
+    ::DeleteFileW(ExtendedPath(file).c_str());
+    for (auto path = deep; ; path = path.parent_path()) {
+        ::RemoveDirectoryW(ExtendedPath(path).c_str());
+        if (path == root) break;
+    }
+}
+#endif
+
+#ifdef __linux__
+static int DirectoryOpens(int watch) {
+    alignas(inotify_event) char buffer[4096];
+    int opens = 0;
+    for (ssize_t size; (size = read(watch, buffer, sizeof buffer)) > 0;) {
+        for (char* event = buffer; event < buffer + size; event += sizeof(inotify_event) + reinterpret_cast<inotify_event*>(event)->len)
+            if (reinterpret_cast<inotify_event*>(event)->mask & IN_OPEN) ++opens;
+    }
+    return opens;
+}
+
+static void TestMissingPathListsDirectoryOnce() {
+    const auto root = std::filesystem::path("anyps5-missing-listing-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    Require(std::filesystem::create_directories(root));
+    { std::ofstream file(root / "present.txt"); file << "present"; }
+    const int watch = inotify_init1(IN_NONBLOCK);
+    Require(watch >= 0 && inotify_add_watch(watch, root.c_str(), IN_OPEN | IN_CLOSE_NOWRITE) >= 0);
+    const auto missing = (root / "Missing.txt").generic_string();
+    FileStat status{};
+    Require(sceKernelStat(missing.c_str(), &status) == static_cast<int>(0x80020002u) && DirectoryOpens(watch) == 1);
+    Require(sceKernelCheckReachability(missing.c_str()) == static_cast<int>(0x80020002u) && DirectoryOpens(watch) == 1);
+    Require(sceKernelOpen(missing.c_str(), 0, 0) == static_cast<int>(0x80020002u) && DirectoryOpens(watch) == 1);
+    close(watch);
+    { std::ofstream file(root / "plugin.prx.guest.prx"); file << "lower"; }
+    { std::ofstream file(root / "Plugin.prx.guest.prx"); file << "upper"; }
+    bool ambiguous = false;
+    try {
+        sceKernelStat((root / "PLUGIN.prx").generic_string().c_str(), &status);
+    } catch (const std::runtime_error&) {
+        ambiguous = true;
+    }
+    Require(ambiguous);
+    std::filesystem::remove_all(root);
+}
+#endif
+
 int main() {
     TestParentTraversal();
     TestRelinkedModuleNames();
     TestRelinkedModuleNameCase();
+#ifdef _WIN32
+    TestLongHostPathStat();
+#endif
+#ifdef __linux__
+    TestMissingPathListsDirectoryOnce();
+#endif
     Require(chmod_nid_postfix(nullptr, 0600) == -1 && *__error_nid_postfix() == 14);
     Require(sceKernelChmod_nid_postfix(nullptr, 0600) == static_cast<int>(0x8002000eu));
     Require(chmod_nid_postfix("", 0600) == -1 && *__error_nid_postfix() == 2);
@@ -261,6 +356,7 @@ int main() {
     std::uint64_t throttling[4] = {1, 2, 3, 4};
     Require(sceKernelWriteThrottlingStatus(throttling) == 0);
     Require(throttling[0] == 0xffffffffu && throttling[1] == 0 && throttling[2] == 0 && throttling[3] == 0);
+    Require(sceKernelWriteThrottlingStatus(nullptr) == static_cast<int>(0x8002000eu));
     Require(sceKernelDebugOutText(0, nullptr) == static_cast<int>(0x8002000eu));
     auto* captured = std::tmpfile();
     Require(captured != nullptr);
