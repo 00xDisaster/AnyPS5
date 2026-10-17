@@ -62,7 +62,7 @@ int main() {
     Require(sceMsgDialogUpdateStatus() == kStatusFinished);
     Require(sceMsgDialogGetStatus() == kStatusFinished);
 
-    MsgDialogResult result{};
+    result = MsgDialogResult{};
     result.button_id = -1;
     Require(sceMsgDialogGetResult(&result) == 0);
     Require(result.result == 0);

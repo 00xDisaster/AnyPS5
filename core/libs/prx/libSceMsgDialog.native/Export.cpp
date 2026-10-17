@@ -13,7 +13,6 @@ constexpr int COMMON_DIALOG_RESULT_OK = 0;
 constexpr int COMMON_DIALOG_ERROR_ALREADY_INITIALIZED = static_cast<int>(0x80B80004u);
 constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u);
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80005u);
-constexpr int COMMON_DIALOG_ERROR_BUSY = static_cast<int>(0x80B80007u);
 constexpr int COMMON_DIALOG_ERROR_NOT_RUNNING = static_cast<int>(0x80B8000Bu);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B8000Du);
 constexpr int BUTTON_ID_OK = 1;
@@ -49,7 +48,6 @@ int APS5_VABI sceMsgDialogInitialize(void) {
 int APS5_VABI sceMsgDialogOpen(const void* param) {
     const int status = g_status.load();
     if (status == 0) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
-    if (status == COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_BUSY;
     if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
     g_status = COMMON_DIALOG_STATUS_FINISHED;
     return 0;
@@ -72,9 +70,8 @@ int APS5_VABI sceMsgDialogProgressBarInc(int target, std::uint32_t delta) {
 
 int APS5_VABI sceMsgDialogProgressBarSetMsg(int target, const char* msg) {
     (void)target;
-    if (g_status.load() != COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_NOT_RUNNING;
-    if (msg == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
-    return 0;
+    (void)msg;
+    return g_status.load() == COMMON_DIALOG_STATUS_RUNNING ? 0 : COMMON_DIALOG_ERROR_NOT_RUNNING;
 }
 
 int APS5_VABI sceMsgDialogProgressBarSetValue(int target, std::uint32_t rate) {
