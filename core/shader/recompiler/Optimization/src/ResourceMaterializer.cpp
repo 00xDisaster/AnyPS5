@@ -597,27 +597,42 @@ private:
                 skip(NarrowSkip::Pending);
                 return;
             }
-            for (std::uint64_t index = 0; index < positions; index++) {
-                const auto address = base + first + index * domain.stride;
-                if (!PageAccessible(address, base, base + size)) {
-                    skip(NarrowSkip::Unmapped);
-                    return;
+            if (runtime.readWords != nullptr && positions != 0u && domain.stride % 4u == 0u && domain.stride <= 64u) {
+                const auto words = static_cast<std::size_t>(((positions - 1u) * domain.stride) / 4u + 1u);
+                for (std::uint64_t page = (base + first) & ~(PageBytes - 1u); page < base + first + words * 4u; page += PageBytes) {
+                    if (!PageAccessible(std::max(page, base + first), base, base + size)) {
+                        skip(NarrowSkip::Unmapped);
+                        return;
+                    }
                 }
-                values.push_back(Read(address));
+                if (keyWords.size() < words) keyWords.resize(words);
+                if (!runtime.readWords(runtime.userContext, base + first, keyWords.data(), words)) throw std::runtime_error("image table: failed to read guest memory at 0x" + hexText(base + first));
+                const auto step = static_cast<std::size_t>(domain.stride / 4u);
+                values.reserve(values.size() + positions);
+                for (std::size_t index = 0; index < words; index += step) values.push_back(keyWords[index]);
+            } else {
+                for (std::uint64_t index = 0; index < positions; index++) {
+                    const auto address = base + first + index * domain.stride;
+                    if (!PageAccessible(address, base, base + size)) {
+                        skip(NarrowSkip::Unmapped);
+                        return;
+                    }
+                    values.push_back(Read(address));
+                }
             }
             if (positions != 0u) scanned.emplace_back(base, size);
         }
         records.states.assign(records.keys, RecordState::OutsideDomain);
         records.outside = false;
+        const std::uint32_t unwrapped = std::numeric_limits<std::uint32_t>::max() / column.stride;
         for (const auto value : values) {
             const std::uint32_t relative = value * column.stride;
-            const bool aligned = relative % column.stride == 0u;
-            const auto record = relative / column.stride;
-            if (aligned && record < records.keys) {
+            const auto record = value <= unwrapped ? value : relative % column.stride == 0u ? relative / column.stride : records.keys;
+            if (record < records.keys) {
                 records.states[record] = RecordState::Read;
                 continue;
             }
-            if (column.address || ImageTableAbi::ScalarBufferDword(relative + column.addend, column.offset, records.size).has_value()) records.outside = true;
+            if (!records.outside && (column.address || ImageTableAbi::ScalarBufferDword(relative + column.addend, column.offset, records.size).has_value())) records.outside = true;
         }
         records.narrowed = true;
         for (const auto& [base, size] : scanned) tables.ranges.emplace_back(base, size);
@@ -1059,6 +1074,7 @@ private:
     SrtWriteStamp stamp;
     std::vector<std::pair<std::uint64_t, std::uint32_t>> comparedRuns;
     std::vector<std::uint32_t> comparedWords;
+    std::vector<std::uint32_t> keyWords;
 };
 
 void materializeSnapshot(const IrResourcePlan& plan, const SrtRuntime& runtime, SrtWalker& walker, ResourceSnapshot& snapshot, std::vector<std::uint8_t>& activeSources) {
@@ -1872,7 +1888,8 @@ void ResourceMaterializer::ApplyStaticInterface(IrProgram& program, bool nativeS
         if (image.table == NoTable) continue;
         tables = true;
         const auto modes = RuntimeImageModes(image);
-        if (modes.empty() || modes.size() > ImageTableAbi::MaxModes) image.tableOperation = TableOperation::Unsupported;
+        const bool storage = image.resourceClass == ImageResourceClass::Storage;
+        if (modes.empty() || modes.size() > ImageTableAbi::MaxModes || (storage && image.mipMode == ImageMipMode::DynamicStorage)) image.tableOperation = TableOperation::Unsupported;
     }
     for (const auto& pair : resources.info.sampledPairs) {
         if (pair.image >= images.size() || pair.sampler >= resources.info.samplers.size()) throw std::runtime_error("static sampled pair is out of range");
