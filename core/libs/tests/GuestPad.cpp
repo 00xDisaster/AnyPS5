@@ -191,6 +191,23 @@ static void CheckReadQueue(int handle) {
     Require(data[0].buttons == 0);
 }
 
+static void CheckTapBetweenReads() {
+    const auto cross = static_cast<std::uint32_t>(Pad::PadButton::Cross);
+    PadPublishInput_nid_postfix(PadInputState{});
+    Pad::ReadState();
+    PadInputState pressed;
+    pressed.buttons = cross;
+    PadPublishInput_nid_postfix(pressed);
+    PadPublishInput_nid_postfix(PadInputState{});
+    Require((Pad::ReadState().buttons & cross) != 0);
+    Require((Pad::ReadState().buttons & cross) == 0);
+    PadPublishInput_nid_postfix(pressed);
+    Require((Pad::ReadState().buttons & cross) != 0);
+    Require((Pad::ReadState().buttons & cross) != 0);
+    PadPublishInput_nid_postfix(PadInputState{});
+    Require((Pad::ReadState().buttons & cross) == 0);
+}
+
 static void CheckReadStateHandle(int handle) {
     PadData data{};
     Require(scePadReadState(0, &data) == PAD_ERROR_INVALID_HANDLE);
@@ -309,6 +326,7 @@ int main() {
     CheckTouchContact();
     CheckPartialTrigger();
     CheckReadQueue(handle);
+    CheckTapBetweenReads();
     CheckReadStateHandle(handle);
     CheckRemoteController(handle);
     CheckInjectedState(commandPath);

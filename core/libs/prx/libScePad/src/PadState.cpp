@@ -14,6 +14,7 @@
 namespace {
     std::mutex stateMutex;
     PadInputState state;
+    std::uint32_t pressedSinceRead = 0;
     PadOutputState output;
     std::chrono::steady_clock::time_point audioHapticEnd;
     std::uint64_t timestamp = 0;
@@ -215,7 +216,10 @@ PadData Pad::ReadState() {
     if (!initialized) throw std::runtime_error("Pad: read before initialization");
     const std::uint64_t now = sceKernelGetProcessTime();
     const auto injected = InjectedInput(now);
-    return BuildData(state, timestamp, now, injected);
+    PadData data = BuildData(state, timestamp, now, injected);
+    data.buttons |= pressedSinceRead;
+    pressedSinceRead = 0;
+    return data;
 }
 
 int Pad::Read(PadData* data, int num) {
@@ -357,6 +361,7 @@ extern "C" void PadPublishInput_nid_postfix(const PadInputState& input) {
         state.touchLeft == input.touchLeft && state.touchRight == input.touchRight &&
         state.hasMotion == input.hasMotion && state.accel == input.accel && state.gyro == input.gyro &&
         state.touch == input.touch && state.deviceKind == input.deviceKind) return;
+    pressedSinceRead |= input.buttons & ~state.buttons;
     state = input;
     timestamp = sceKernelGetProcessTime();
     if (queue.size() == kQueueCapacity) queue.pop_front();
