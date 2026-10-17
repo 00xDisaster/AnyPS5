@@ -45,6 +45,18 @@ extern "C" int* APS5_VABI __error_nid_postfix();
 namespace {
 
 #ifdef _WIN32
+std::mutex sharedDescriptorAccessMutex;
+std::unordered_map<int, bool> sharedDescriptorAccess;
+
+const std::wstring& WindowsNamedRoot() {
+    static const std::wstring root = [] {
+        auto value = std::filesystem::absolute(std::filesystem::temp_directory_path() / L"AnyPS5" / L"shm").lexically_normal().wstring();
+        while (!value.empty() && (value.back() == L'\\' || value.back() == L'/')) value.pop_back();
+        return value;
+    }();
+    return root;
+}
+
 void IgnoreDescriptorParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {}
 #endif
 
@@ -59,6 +71,10 @@ bool IsHostSharedMemoryDescriptor(int descriptor) {
     return std::string_view(objectPath).starts_with("/dev/shm/anyps5-shm-") ||
         std::string_view(objectPath).starts_with("/memfd:anyps5 shm_open");
 #elif defined(_WIN32)
+    {
+        std::lock_guard lock(sharedDescriptorAccessMutex);
+        if (!sharedDescriptorAccess.contains(descriptor)) return false;
+    }
     const auto previous = _set_thread_local_invalid_parameter_handler(IgnoreDescriptorParameter);
     const auto handleValue = ::_get_osfhandle(descriptor);
     _set_thread_local_invalid_parameter_handler(previous);
@@ -69,13 +85,12 @@ bool IsHostSharedMemoryDescriptor(int descriptor) {
     if (length == 0 || length >= pathBuffer.size()) return false;
     std::wstring objectPath(pathBuffer.data(), length);
     if (objectPath.starts_with(L"\\\\?\\")) objectPath.erase(0, 4);
-    std::wstring root;
+    std::wstring_view root;
     try {
-        root = std::filesystem::absolute(std::filesystem::temp_directory_path() / L"AnyPS5" / L"shm").lexically_normal().wstring();
+        root = WindowsNamedRoot();
     } catch (...) {
         return false;
     }
-    while (!root.empty() && (root.back() == L'\\' || root.back() == L'/')) root.pop_back();
     if (objectPath.size() <= root.size() || objectPath[root.size()] != L'\\') return false;
     if (::CompareStringOrdinal(objectPath.data(), static_cast<int>(root.size()), root.data(), static_cast<int>(root.size()), TRUE) != CSTR_EQUAL) return false;
     const std::wstring_view relative(objectPath.data() + root.size() + 1, objectPath.size() - root.size() - 1);
@@ -135,11 +150,6 @@ constexpr int GuestCloseOnExec = 0x00100000;
 constexpr int AcceptedFlags = SCE_KERNEL_O_ACCMODE | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_EXCL | SCE_KERNEL_O_TRUNC | GuestCloseOnExec;
 
 const char* const anonymousObject = reinterpret_cast<const char*>(1);
-
-#ifdef _WIN32
-std::mutex sharedDescriptorAccessMutex;
-std::unordered_map<int, bool> sharedDescriptorAccess;
-#endif
 
 int Fail(int error) {
     *__error_nid_postfix() = error;
@@ -222,7 +232,7 @@ int WindowsNamedError(DWORD error) {
 }
 
 std::filesystem::path WindowsNamedPath(const std::string& name) {
-    return std::filesystem::temp_directory_path() / L"AnyPS5" / L"shm" / std::filesystem::path(name + ".dat");
+    return std::filesystem::path(WindowsNamedRoot()) / std::filesystem::path(name + ".dat");
 }
 
 void EnsurePrivateWindowsDirectory(const std::filesystem::path& path, bool objectDirectory = false) {
@@ -554,11 +564,13 @@ int CloseSharedMemoryDescriptorInternal(int descriptor) {
     if (!IsHostSharedMemoryDescriptor(descriptor)) return -2;
     const int savedError = errno;
     const auto finalPath = SharedMemoryDescriptorPath(descriptor);
-    const int result = ::_close(descriptor);
-    if (result == 0) {
-        File::ForgetSharedMemoryDescriptor_nid_no_patch(descriptor);
-        ReapSharedMemoryDescriptorPath(finalPath);
+    int result;
+    {
+        std::lock_guard lock(sharedDescriptorAccessMutex);
+        result = ::_close(descriptor);
+        if (result == 0) sharedDescriptorAccess.erase(descriptor);
     }
+    if (result == 0) ReapSharedMemoryDescriptorPath(finalPath);
     if (result == 0) errno = savedError;
     return result;
 }

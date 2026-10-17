@@ -1,7 +1,9 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libkernel/File/include/SharedMemory.hpp"
 #include "nid/Sha1.hpp"
 #include <windows.h>
 #include <io.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <cstdint>
 #include <cstdio>
@@ -57,6 +59,45 @@ void RequireNoUnlinkedFiles(const std::string& name) {
         Require(!filename.starts_with(prefix + "-unlinked-"),
                 "closing the last descriptor did not reap its unlinked host object");
     }
+}
+
+void VerifyUntrackedDescriptor(int descriptor) {
+    Require(File::IsSharedMemoryDescriptor_nid_no_patch(descriptor), "named descriptor was not tracked");
+    std::vector<wchar_t> path(32768);
+    const DWORD length = ::GetFinalPathNameByHandleW(reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor)),
+        path.data(), static_cast<DWORD>(path.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    Require(length > 0 && length < path.size(), "locating the tracked file failed");
+    const HANDLE handle = ::CreateFileW(path.data(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    Require(handle != INVALID_HANDLE_VALUE, "opening an untracked handle to the named file failed");
+    const int untracked = ::_open_osfhandle(reinterpret_cast<std::intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    if (untracked < 0) ::CloseHandle(handle);
+    Require(untracked >= 0, "creating an untracked descriptor failed");
+    const bool classified = File::IsSharedMemoryDescriptor_nid_no_patch(untracked);
+    Require(::_close(untracked) == 0, "closing the untracked descriptor failed");
+    Require(!classified, "an untracked descriptor entered the named shared-memory path");
+    Require(!File::IsSharedMemoryDescriptor_nid_no_patch(untracked), "a closed untracked descriptor was classified as shared memory");
+}
+
+void VerifyConcurrentDescriptorReuse(const std::string& name) {
+    std::barrier start(3);
+    std::vector<int> okay(2, 1);
+    std::vector<std::thread> workers;
+    for (int index = 0; index < 2; ++index) {
+        workers.emplace_back([&, index] {
+            start.arrive_and_wait();
+            for (int iteration = 0; iteration < 64; ++iteration) {
+                const int descriptor = shm_open_nid_postfix(name.c_str(), ReadWrite, 0);
+                if (descriptor < 0) { okay[index] = 0; break; }
+                if (!File::IsSharedMemoryDescriptor_nid_no_patch(descriptor) ||
+                    pwrite_nid_disambig1_nid_postfix(descriptor, "x", 1, 64) != 0) okay[index] = 0;
+                if (close_nid_postfix(descriptor) != 0) okay[index] = 0;
+            }
+        });
+    }
+    start.arrive_and_wait();
+    for (auto& worker : workers) worker.join();
+    Require(okay[0] && okay[1], "concurrent close/open lost named-descriptor tracking or bounded writes");
 }
 
 bool RunResizeWriteRace(const std::string& name) {
@@ -148,7 +189,9 @@ void Run() {
     *__error_nid_postfix() = 73;
     const int original = shm_open_nid_postfix(name.c_str(), ReadWrite | Create | Exclusive, 0600);
     Require(original >= 0 && *__error_nid_postfix() == 73, "exclusive creation failed or changed guest errno");
+    VerifyUntrackedDescriptor(original);
     Require(ftruncate_nid_postfix(original, 64) == 0, "sizing the named object failed");
+    VerifyConcurrentDescriptorReuse(name);
     const char originalBytes[] = "original";
     Require(pwrite_nid_disambig1_nid_postfix(original, originalBytes, sizeof(originalBytes), 0) == sizeof(originalBytes),
             "write to named object failed");
