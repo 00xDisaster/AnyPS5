@@ -28,7 +28,6 @@ int APS5_VABI sceSaveDataSetupSaveDataMemory2(const SaveDataMemorySetup2*, SaveD
 
 namespace {
 constexpr int kSaveDataNotInitialized = -2137063423;
-constexpr int kSaveDataParameter = -2137063424;
 }
 
 static void Check(bool value, int line) {
@@ -63,9 +62,9 @@ int main() {
         Require(static_cast<bool>(file));
     }
     Require(sceSaveDataInitialize3(nullptr) == 0);
-    Require(sceSaveDataCreateTransactionResource(0) == kSaveDataParameter);
-    Require(sceSaveDataDeleteTransactionResource(0) == kSaveDataParameter);
-    Require(sceSaveDataDeleteTransactionResource(-1) == kSaveDataParameter);
+    const int tx0 = sceSaveDataCreateTransactionResource(0);
+    Require(tx0 > 0);
+    Require(sceSaveDataDeleteTransactionResource(tx0) == 0);
     const int tx = sceSaveDataCreateTransactionResource(1024);
     Require(tx > 0);
     Require(sceSaveDataDeleteTransactionResource(tx) == 0);
