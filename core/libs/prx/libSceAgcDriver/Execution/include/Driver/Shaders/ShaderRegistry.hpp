@@ -153,6 +153,13 @@ struct PreparedShaderState {
     bool deferred = false;
 };
 struct PreparedShaders : PreparedShaderState {
+    struct DeferredAbi {
+        std::vector<std::uint64_t> key;
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> context;
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> primitive;
+        std::weak_ptr<VulkanDevice> device;
+    };
+    std::vector<DeferredAbi> deferredAbis;
     std::mutex mutex;
     std::condition_variable settled;
     std::exception_ptr failure;
