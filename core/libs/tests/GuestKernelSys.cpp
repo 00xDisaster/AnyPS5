@@ -289,13 +289,18 @@ int main() {
         const auto absolute = std::filesystem::absolute(root / "absolute");
         Require(CreateSymbolicLinkW(absolute.wstring().c_str(), std::filesystem::absolute(original).wstring().c_str(),
             SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0);
-        std::memset(buffer, '#', sizeof(buffer));
-        const auto absoluteLength = readlink_nid_postfix((root / "absolute").string().c_str(), buffer, sizeof(buffer));
-        Require(absoluteLength > 0 && static_cast<std::size_t>(absoluteLength) < sizeof(buffer) && buffer[absoluteLength] == '#');
-        const std::string absoluteTarget(buffer, static_cast<std::size_t>(absoluteLength));
-        Require(absoluteTarget.find('?') == std::string::npos);
+        char absoluteBuffer[512];
+        std::memset(absoluteBuffer, '#', sizeof(absoluteBuffer));
+        const auto absoluteLength = readlink_nid_postfix((root / "absolute").string().c_str(), absoluteBuffer, sizeof(absoluteBuffer));
+        const bool absoluteFits = absoluteLength > 0 && static_cast<std::size_t>(absoluteLength) < sizeof(absoluteBuffer) &&
+            absoluteBuffer[absoluteLength] == '#';
+        const std::string absoluteTarget = absoluteFits ? std::string(absoluteBuffer, static_cast<std::size_t>(absoluteLength)) : std::string();
         std::error_code absoluteError;
-        Require(std::filesystem::equivalent(absoluteTarget, original, absoluteError) && !absoluteError);
+        const bool absoluteMatches = absoluteFits && absoluteTarget.find('?') == std::string::npos &&
+            std::filesystem::equivalent(absoluteTarget, original, absoluteError) && !absoluteError;
+        if (!absoluteMatches)
+            std::fprintf(stderr, "absolute link returned %lld bytes\n", static_cast<long long>(absoluteLength));
+        Require(absoluteMatches);
 #else
         Require(std::filesystem::is_symlink(std::filesystem::symlink_status(symbolic)));
         Require(readlink_nid_postfix(symbolic.c_str(), buffer, sizeof(buffer)) == 12 && std::memcmp(buffer, "original.bin", 12) == 0);
