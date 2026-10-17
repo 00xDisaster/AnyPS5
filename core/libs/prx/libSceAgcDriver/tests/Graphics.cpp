@@ -733,17 +733,81 @@ void msaaEnableClearOneSampleTargetTests() {
         queue = twoTargets(first, second);
         expectFailure([&] { DecodeState(queue); }, "a color target's sample count differs from the rasterizer's");
     }
-    queue = drawC();
-    queue.context[0x293] = 0;
-    queue.context[0x0] = 0;
-    queue.context[0x002] = 0;
-    queue.context[0x007] = (3u << 16u) | 63u;
-    queue.context[0x00a] = 0;
-    queue.context[0x00b] = 0;
-    queue.context[0x011] = 0x20000180;
-    for (const auto offset : {0x012u, 0x014u}) queue.context[offset] = 0x100;
-    queue.context[0x200] = 0x16;
-    expectFailure([&] { DecodeState(queue); }, "depth target");
+    const auto depthTarget = [&](bool color, std::uint32_t config = 0x0020c002u) {
+        auto depth = drawC(config);
+        depth.context[0x0] = 0;
+        depth.context[0x002] = 0;
+        depth.context[0x007] = (3u << 16u) | 63u;
+        depth.context[0x00a] = 0;
+        depth.context[0x00b] = 0;
+        depth.context[0x011] = 0x20000180;
+        for (const auto offset : {0x012u, 0x014u}) depth.context[offset] = 0x100;
+        depth.context[0x200] = 0x16;
+        if (!color) depth.context[0x8e] = 0;
+        return depth;
+    };
+    const auto requireOneSampleDepth = [](const AgcDriver::QueueState& queue, std::size_t colors, const std::string& what) {
+        const auto state = DecodeState(queue);
+        Require(state.samples == 1 && state.depth && state.depth->samples == 1 && state.colors.size() == colors && std::ranges::all_of(state.colors, [](const auto& color) { return color.samples == 1; }), what + " was not drawn as one sample");
+        Require(!state.customSampleLocations && !state.sampleLocationGrid && !state.perSampleShading && state.sampleLocations == decltype(state.sampleLocations){}, what + " kept the multisampled rasterizer's sample state");
+        const auto rejection = DrawRejection(queue, false);
+        Require(rejection.empty(), "the precheck refused " + what + ": " + rejection);
+    };
+    queue = depthTarget(false);
+    requireOneSampleDepth(queue, 0, "PPSA18216's opening-movie draw (a one-sample depth target and no color target under a 4x PA_SC_AA_CONFIG without MSAA_ENABLE)");
+    const auto movie = DecodeState(queue);
+    const auto movieReference = DecodeState(depthTarget(false, 0));
+    Require(!movie.hasColorTarget && movie.renderExtent.width == movieReference.renderExtent.width && movie.renderExtent.height == movieReference.renderExtent.height && movie.depth->format == movieReference.depth->format && movie.sampleLocations == movieReference.sampleLocations && movie.customSampleLocations == movieReference.customSampleLocations, "the opening-movie draw decoded differently from the same draw with a one-sample PA_SC_AA_CONFIG");
+    requireOneSampleDepth(depthTarget(true), 1, "a one-sample depth and color pair under a 4x PA_SC_AA_CONFIG without MSAA_ENABLE");
+    queue = depthTarget(false);
+    queue.context[0x302] = 0xae62e62a;
+    requireOneSampleDepth(queue, 0, "a one-sample depth target under a 4x pattern that varies between pixels");
+    for (const auto config : {0x00100001u, 0x00306003u}) {
+        requireOneSampleDepth(depthTarget(false, config), 0, "a one-sample depth target under a 2x or 8x PA_SC_AA_CONFIG without MSAA_ENABLE");
+        requireOneSampleDepth(depthTarget(true, config), 1, "a one-sample depth and color pair under a 2x or 8x PA_SC_AA_CONFIG without MSAA_ENABLE");
+    }
+    for (const auto input : {ShaderRecompiler::PixelInput::PerspectiveSample, ShaderRecompiler::PixelInput::PerspectiveCentroid, ShaderRecompiler::PixelInput::LinearSample, ShaderRecompiler::PixelInput::LinearCentroid}) {
+        queue = depthTarget(false);
+        queue.context[0x203] |= 0x40u;
+        queue.context[0x1b3] = queue.context[0x1b4] = 2u | ShaderRecompiler::PixelInputBit(input);
+        requireOneSampleDepth(queue, 0, "a one-sample depth target under a 4x PA_SC_AA_CONFIG without MSAA_ENABLE with sample or centroid inputs");
+    }
+    queue = depthTarget(false);
+    queue.context[0x293] = 0x10000u;
+    queue.context[0x1b3] = queue.context[0x1b4] = 2u | ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::Ancillary) | ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::SampleCoverage);
+    Require(AgcDriver::Graphics::PixelProgramSkipped(queue), "the depth-only draw did not skip its pixel program");
+    requireOneSampleDepth(queue, 0, "a one-sample depth target whose skipped pixel program has PS_ITER_SAMPLE and sample index and coverage inputs");
+    constexpr std::string_view depthRefused = "a one-sample depth target under a multisampled rasterizer without MSAA_ENABLE is unsupported for points or lines and with alpha-to-coverage, PS_ITER_SAMPLE, a sample index or coverage input, a sample-mask export, or DB_EQAA Z interpolation or overrasterization";
+    for (const bool color : {false, true}) {
+        for (const auto input : {ShaderRecompiler::PixelInput::Ancillary, ShaderRecompiler::PixelInput::SampleCoverage}) {
+            queue = depthTarget(color);
+            queue.context[0x203] |= 0x40u;
+            queue.context[0x1b3] = queue.context[0x1b4] = 2u | ShaderRecompiler::PixelInputBit(input);
+            expectFailure([&] { DecodeState(queue); }, depthRefused);
+        }
+        queue = depthTarget(color);
+        queue.context[0x203] |= 0x40u;
+        queue.context[0x293] = 0x10000u;
+        expectFailure([&] { DecodeState(queue); }, depthRefused);
+        queue = depthTarget(color);
+        queue.context[0x1c4] = 9;
+        queue.context[0x203] |= 0x100u;
+        expectFailure([&] { DecodeState(queue); }, depthRefused);
+        queue = depthTarget(color);
+        queue.context[0x2dc] = 0x0000aa01u;
+        expectFailure([&] { DecodeState(queue); }, depthRefused);
+        queue = depthTarget(color);
+        queue.userConfig[0x242] = 2;
+        expectFailure([&] { DecodeState(queue); }, depthRefused);
+        for (const auto eqaa : {0x00050002u, 0x00090002u, 0x01010002u, 0x08010002u}) {
+            queue = depthTarget(color);
+            queue.context[0x201] = eqaa;
+            expectFailure([&] { DecodeState(queue); }, depthRefused);
+        }
+    }
+    queue = depthTarget(true);
+    queue.context[0x31d] = 0x12000;
+    expectFailure([&] { DecodeState(queue); }, "a color target's sample count differs from the rasterizer's");
 }
 
 void MsaaEnableSingleSampleTests() {
