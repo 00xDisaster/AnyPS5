@@ -162,7 +162,14 @@ int main() {
 #endif
         if (committed) {
 #ifdef __linux__
-            std::fprintf(stderr, "skipped: the host can commit 300 GiB (vm.overcommit_memory=%d), so the failed commit and arena release checks did not run\n", overcommitMode());
+            int mode = overcommitMode();
+            if (mode == 1) {
+                std::fprintf(stderr, "skipped: the host can commit 300 GiB (vm.overcommit_memory=%d), so the failed commit and arena release checks did not run\n", mode);
+            } else {
+                char detail[64];
+                std::snprintf(detail, sizeof(detail), "committed 300 GiB with vm.overcommit_memory=%d", mode);
+                report("malloc(300 GiB)", detail);
+            }
 #else
             std::fputs("skipped: the host can commit 300 GiB, so the failed commit and arena release checks did not run\n", stderr);
 #endif
