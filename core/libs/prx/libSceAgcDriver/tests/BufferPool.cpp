@@ -678,6 +678,7 @@ int main(int argc, char** argv) {
         SmallDeviceClasses();
         SlabMetadataFailure();
         SlabMapFailure();
+        DeviceBindingFailures();
         Slabs();
         for (const auto result : {VK_ERROR_OUT_OF_DEVICE_MEMORY, VK_ERROR_OUT_OF_HOST_MEMORY}) {
             AllocationRecovery(result, false);
@@ -691,7 +692,6 @@ int main(int argc, char** argv) {
         AllocationFailure(VK_ERROR_OUT_OF_DEVICE_MEMORY, VK_ERROR_DEVICE_LOST, true);
         SuccessfulAllocationKeepsPool();
         PartialSlabDoesNotRetry();
-        DeviceBindingFailures();
         HostPlacement();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what());
