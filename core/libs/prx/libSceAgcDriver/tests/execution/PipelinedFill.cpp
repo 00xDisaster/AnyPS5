@@ -170,7 +170,7 @@ void SatisfiedWaitKeepsUnrelatedQueuedWork() {
 
     const auto address = reinterpret_cast<std::uintptr_t>(&gate);
     std::vector<std::uint32_t> words{
-        0xc0063c00u, 0x13u, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u),
+        0xc0053c00u, 0x13u, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u),
         1u, 0xffffffffu, 0x19u};
     AppendLabel(words, &marker, 1);
     Packet packet{words.data(), static_cast<std::uint32_t>(words.size()), 0, {}};
@@ -198,7 +198,7 @@ void SatisfiedWaitDrainsOverlappingQueuedWork() {
     blocker.Enqueue({{address, address + sizeof(gate)}});
 
     std::vector<std::uint32_t> words{
-        0xc0063c00u, 0x13u, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u),
+        0xc0053c00u, 0x13u, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u),
         1u, 0xffffffffu, 0x19u};
     AppendLabel(words, &marker, 1);
     Packet packet{words.data(), static_cast<std::uint32_t>(words.size()), 0, {}};
