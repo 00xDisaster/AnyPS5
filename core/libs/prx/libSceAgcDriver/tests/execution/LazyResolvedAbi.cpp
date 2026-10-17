@@ -379,6 +379,10 @@ std::size_t Entries(const Synthetic& program) {
     return AgcDriver::DriverDetail::Driver::Get().PreparedEntries(&program.header.shader);
 }
 
+std::string Uses(const AgcDriver::DriverDetail::Driver::DeferredAbiUseCounts& uses) {
+    return std::to_string(uses.firstUses) + " first uses, " + std::to_string(uses.found) + " found, " + std::to_string(uses.own) + " own, " + std::to_string(uses.unmatchedEntries) + " of " + std::to_string(uses.entries) + " entries unmatched";
+}
+
 constexpr std::uint32_t Matching = Programs;
 constexpr std::uint32_t Twice = Programs + 1;
 constexpr std::uint32_t Replaced = Programs + 2;
@@ -437,7 +441,7 @@ std::vector<std::string> EagerResolutionEntries(const Report& eager, std::uint32
     return made;
 }
 
-Report Scenario(const Layout& layout, std::vector<std::uint8_t>& first) {
+Report Scenario(const Layout& layout, std::vector<std::uint8_t>& first, std::array<AgcDriver::DriverDetail::Driver::DeferredAbiUseCounts, 3>* uses = nullptr) {
     auto& driver = AgcDriver::DriverDetail::Driver::Get();
     Report report;
     report["libraries before"] = Text(driver.PrebuiltLibraries());
@@ -471,7 +475,15 @@ Report Scenario(const Layout& layout, std::vector<std::uint8_t>& first) {
         Require(std::ranges::any_of(bytes, [](std::uint8_t byte) { return byte != 0; }), "lazy resolved ABI: drawn shader " + std::to_string(index) + " wrote nothing");
         if (index == 0) first = std::move(bytes);
     };
-    for (const auto index : {0u, 1u, Matching, Twice}) draw(index, programs[index]);
+    const auto count = [&](std::size_t slot) {
+        if (uses != nullptr) (*uses)[slot] = AgcDriver::DriverDetail::Driver::DeferredAbiUses();
+    };
+    count(0);
+    for (const auto index : {0u, 1u}) draw(index, programs[index]);
+    count(1);
+    draw(Matching, programs[Matching]);
+    count(2);
+    draw(Twice, programs[Twice]);
     draw(Replacement, programs[Replacement]);
     AgcDriverRegisterShader_nid_postfix(&programs[Replaced].header.shader);
     draw(Replaced, programs[Replaced]);
@@ -523,7 +535,8 @@ void LazyResolution(const Layout& layout, const std::filesystem::path& reference
         Require(eager.contains("libraries drawn"), "lazy resolved ABI: the eager report is missing or short");
     }
     std::vector<std::uint8_t> first;
-    const auto lazy = Scenario(layout, first);
+    std::array<AgcDriver::DriverDetail::Driver::DeferredAbiUseCounts, 3> uses{};
+    const auto lazy = Scenario(layout, first, &uses);
     for (std::uint32_t index = 0; index <= Replaced; ++index) {
         const auto key = "resolved " + std::to_string(index);
         Require(Count(lazy.at(key)) == 0, "lazy resolved ABI: ResolveShaderAbi prepared " + std::to_string(Count(lazy.at(key))) + " entries for shader " + std::to_string(index) + " under APS5_LAZY_SHADER_PREPARE");
@@ -539,6 +552,11 @@ void LazyResolution(const Layout& layout, const std::filesystem::path& reference
         const auto key = "drawn " + std::to_string(index);
         Require(Count(lazy.at(key)) == 0, "lazy resolved ABI: shader " + std::to_string(index) + ", which never drew, holds " + std::to_string(Count(lazy.at(key))) + " prepared entries");
     }
+    const auto& [start, unmatched, matched] = uses;
+    Require(unmatched.firstUses - start.firstUses == Drawn && unmatched.own - start.own == Drawn && unmatched.found == start.found, "lazy resolved ABI: draws whose state differs from the resolved ABI did not count as preparing their own artifact (before: " + Uses(start) + "; after: " + Uses(unmatched) + ")");
+    Require(unmatched.entries > start.entries && unmatched.unmatchedEntries - start.unmatchedEntries == unmatched.entries - start.entries, "lazy resolved ABI: entries prepared for an ABI no draw used do not count as unmatched (before: " + Uses(start) + "; after: " + Uses(unmatched) + ")");
+    Require(matched.firstUses == unmatched.firstUses + 1 && matched.found == unmatched.found + 1 && matched.own == unmatched.own, "lazy resolved ABI: a draw whose state matches the resolved ABI did not count as finding its artifact (before: " + Uses(unmatched) + "; after: " + Uses(matched) + ")");
+    Require(matched.entries > unmatched.entries && matched.unmatchedEntries == unmatched.unmatchedEntries + (matched.entries - unmatched.entries) - 1, "lazy resolved ABI: the entry a matching draw used still counts as unmatched (before: " + Uses(unmatched) + "; after: " + Uses(matched) + ")");
     for (const auto index : {Matching, Twice, Replaced}) Require(eager.at("drawn " + std::to_string(index)) == eager.at("resolved " + std::to_string(index)), "lazy resolved ABI: shader " + std::to_string(index) + ", drawn with its resolved ABI's state, did not find the ABI's entries with eager preparation");
     for (std::uint32_t index = 0; index < Drawn; ++index) Require(Count(eager.at("drawn " + std::to_string(index))) == Count(eager.at("resolved " + std::to_string(index))) + 1, "lazy resolved ABI: a draw whose state differs from its resolved ABI did not prepare its own entry with eager preparation");
     Require(Count(eager.at("drawn " + std::to_string(Replacement))) == Count(eager.at("registered " + std::to_string(Replacement))) + 1, "lazy resolved ABI: the header registered over a resolved one did not prepare its own entry at its draw with eager preparation");

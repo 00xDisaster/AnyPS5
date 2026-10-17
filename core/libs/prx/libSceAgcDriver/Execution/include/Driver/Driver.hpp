@@ -68,6 +68,14 @@ public:
     void ResolveGraphicsAbi(const Shader* vertex, const Shader* pixel, std::uint32_t primitiveType);
     void SettleShaderPreparations(std::span<const Shader* const> stages);
     [[nodiscard]] std::size_t PreparedEntries(const Shader* shader);
+    struct DeferredAbiUseCounts {
+        std::uint64_t firstUses;
+        std::uint64_t found;
+        std::uint64_t own;
+        std::uint64_t entries;
+        std::uint64_t unmatchedEntries;
+    };
+    [[nodiscard]] static DeferredAbiUseCounts DeferredAbiUses();
     [[nodiscard]] std::vector<std::array<std::uint64_t, 2>> PreparedEntryHashes(const Shader* shader);
     [[nodiscard]] std::array<std::uint64_t, 4> PrebuiltLibraries();
     static void FoldDrawOffsets(const ShaderRecompiler::RecompileResult& result, const DrawProgram& program, Pm4::DrawParameters& parameters);

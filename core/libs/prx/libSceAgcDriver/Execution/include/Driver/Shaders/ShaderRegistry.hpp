@@ -127,6 +127,8 @@ struct PreparedShaderState {
     struct Entry {
         std::size_t codeOffset;
         std::shared_ptr<const ShaderRecompiler::SourceHandle> handle;
+        bool fromDeferredAbi = false;
+        bool matched = false;
     };
     struct Rectangle {
         std::uint64_t vertexId;
