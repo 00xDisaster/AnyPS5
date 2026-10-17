@@ -263,6 +263,24 @@ static void SocketPair() {
     Require(Wait(kq, events, 4) == 1 && events[0].filter == EvfiltWrite);
     RequireFailure(Apply(kq, Change(static_cast<std::uintptr_t>(pair[1]), EvfiltWrite, EvDelete)), GuestEnoent);
     Require(Throws([kq, &pair] { Apply(kq, Change(static_cast<std::uintptr_t>(pair[1]), EvfiltRead, EvAdd | EvClear)); }));
+    const int space = kqueue_nid_postfix();
+    Require(Apply(space, Change(static_cast<std::uintptr_t>(pair[1]), EvfiltWrite, EvAdd)) == 0);
+    Require(Poll(space, events, 4) == 1 && events[0].filter == EvfiltWrite);
+    const std::intptr_t idle = events[0].data;
+    Require(idle > 0);
+    const std::string payload(1000, 'p');
+    Require(send_nid_postfix(pair[1], payload.data(), payload.size(), 0) == static_cast<std::int64_t>(payload.size()));
+    Require(Poll(space, events, 4) == 1 && events[0].filter == EvfiltWrite);
+#if defined(__linux__)
+    Require(events[0].data <= idle - static_cast<std::intptr_t>(payload.size()));
+#else
+    Require(events[0].data > 0 && events[0].data <= idle);
+#endif
+    std::string drained(payload.size(), '\0');
+    Require(recv_nid_postfix(pair[0], drained.data(), drained.size(), 0) == static_cast<std::int64_t>(drained.size()));
+    Require(Poll(space, events, 4) == 1 && events[0].filter == EvfiltWrite && events[0].data == idle);
+    Require(Apply(space, Change(static_cast<std::uintptr_t>(pair[1]), EvfiltWrite, EvDelete)) == 0);
+    Require(close_nid_postfix(space) == 0);
     Require(close_nid_postfix(pair[0]) == 0);
     RequireFailure(Apply(kq, Change(static_cast<std::uintptr_t>(pair[0]), EvfiltRead, EvDelete)), GuestEbadf);
     Require(close_nid_postfix(pair[1]) == 0);
