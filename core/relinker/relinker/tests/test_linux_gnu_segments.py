@@ -36,19 +36,20 @@ def main():
         work = Path(directory)
         source = work / "input.elf"
         source.write_bytes(image())
-        for options, base in (([], 0), (["--linux-fixed-base", hex(BASE)], BASE)):
+        for options, base, keeps_relro in (([], 0, True), (["--linux-fixed-base", hex(BASE)], BASE, True), (["--lazy-binding"], 0, False)):
             output = work / ("fixed.elf" if base else "plain.elf")
             result = subprocess.run([str(relinker), "--skip-sce-module", *options, str(source), str(output)],
                                     capture_output=True, text=True, timeout=20)
             assert result.returncode == 0, (result.stdout, result.stderr)
             found = {header[0]: header for header in headers(output.read_bytes())}
             assert PT_GNU_STACK in found, "PT_GNU_STACK was dropped"
-            assert PT_GNU_RELRO in found, "PT_GNU_RELRO was dropped"
+            assert (PT_GNU_RELRO in found) == keeps_relro, "PT_GNU_RELRO presence does not match the binding mode"
             stack = found[PT_GNU_STACK]
-            relro = found[PT_GNU_RELRO]
             assert stack[1] == 6 and stack[2:6] == (0, 0, 0, 0), stack
-            assert relro[3:5] == (0x500 + base, 0x500 + base), relro
-            assert relro[5:7] == (0x100, 0x100), relro
+            if keeps_relro:
+                relro = found[PT_GNU_RELRO]
+                assert relro[3:5] == (0x500 + base, 0x500 + base), relro
+                assert relro[5:7] == (0x100, 0x100), relro
     print("Linux GNU segment tests passed")
 
 
