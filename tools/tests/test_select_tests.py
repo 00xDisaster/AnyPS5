@@ -129,6 +129,16 @@ class CaseInsensitivePathTests(unittest.TestCase):
             self.assertIsNone(build.repo(os.path.join(os.sep, "WORK", "SOURCE", "BUILD", "Generated.h")))
             self.assertEqual(build.key(os.path.join("tests", "MemoryPoolTest.exe")), build.key(os.path.join(os.sep, "WORK", "SOURCE", "BUILD", "TESTS", "memorypooltest.exe")))
 
+    def test_trailing_separator_in_root_is_handled(self):
+        with mock.patch.object(select_tests.os.path, "normcase", str.lower):
+            build = self.build()
+            build.source = build.source + os.sep
+            build.path = build.path + os.sep
+            self.assertEqual(build.output(os.path.join(os.sep, "work", "source", "build", "tests", "MemoryPoolTest.exe")), "tests/MemoryPoolTest.exe")
+            self.assertEqual(build.output(os.path.join("tests", "MemoryPoolTest.exe")), "tests/MemoryPoolTest.exe")
+            self.assertEqual(build.repo(os.path.join(os.sep, "work", "source", "core", "libSceAgc", "Driver.cpp")), "core/libSceAgc/Driver.cpp")
+            self.assertIsNone(build.repo(os.path.join(os.sep, "WORK", "SOURCE", "BUILD", "Generated.h")))
+
 
 if __name__ == "__main__":
     unittest.main()
