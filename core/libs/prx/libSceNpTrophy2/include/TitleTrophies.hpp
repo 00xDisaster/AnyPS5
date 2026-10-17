@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "prx/libSceNpTrophy2/include/TrophyPackage.hpp"
+#include "prx/libSceNpTrophy2/include/TrophyStore.hpp"
 
 namespace NpTrophy2 {
 
@@ -26,15 +28,11 @@ const TitleTrophies& Title(std::uint32_t serviceLabel);
 const TrophyPackage* Package(std::uint32_t serviceLabel);
 void CopyText(char* destination, std::size_t size, std::string_view text);
 
-struct ContextOwner {
-    std::int32_t userId = 0;
-    std::uint32_t serviceLabel = 0;
-};
+using UnlockedQuery = std::function<bool(std::int32_t)>;
 
-int CreateContext(std::int32_t userId, std::uint32_t serviceLabel);
-void DestroyContext(int context);
-std::optional<ContextOwner> FindContext(int context);
+UnlockedQuery UnlockedBy(std::int32_t userId, std::uint32_t serviceLabel);
 
+std::optional<std::int32_t> PlatinumToUnlock(const TrophyPackage& package, std::int32_t trophyId, const UnlockedQuery& unlocked);
 std::optional<std::uint64_t> ProgressTarget(const TrophyDefinition& trophy);
 std::uint64_t TrophyProgress(const TrophyDefinition& trophy, std::optional<std::uint64_t> stat, bool unlocked);
 
@@ -47,7 +45,7 @@ struct TrophyCounts {
     std::uint32_t Percentage() const;
 };
 
-TrophyCounts CountTrophies(const TrophyPackage& package, std::optional<std::int32_t> group);
+TrophyCounts CountTrophies(const TrophyPackage& package, std::optional<std::int32_t> group, const UnlockedQuery& unlocked);
 
 }
 

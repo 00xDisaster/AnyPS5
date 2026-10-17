@@ -1,5 +1,6 @@
 #include "prx/libSceNpTrophy2/include/TitleTrophies.hpp"
 #include "prx/libSceNpTrophy2/include/TrophyPackage.hpp"
+#include "prx/libSceNpTrophy2/include/TrophyStore.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <random>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -241,8 +243,10 @@ void testPackage() {
     check(thrown, "language 31 has a tag");
 }
 
-void testProgressAndCounts() {
+void testProgressAndPlatinum() {
     const auto package = NpTrophy2::ParseTrophyPackage(trophyPackage(), "en-US");
+    std::set<std::int32_t> unlocked;
+    const NpTrophy2::UnlockedQuery isUnlocked = [&unlocked](std::int32_t id) { return unlocked.contains(id); };
     const auto& progressive = package.trophies.at(5);
     check(NpTrophy2::TrophyProgress(progressive, std::nullopt, false) == 0 && NpTrophy2::TrophyProgress(progressive, 3, false) == 3 && NpTrophy2::TrophyProgress(progressive, 9, false) == 5 &&
               NpTrophy2::TrophyProgress(progressive, 1, true) == 5,
@@ -255,14 +259,24 @@ void testProgressAndCounts() {
     }
     check(thrown, "a trophy that is not progressive reported progress");
 
-    const auto all = NpTrophy2::CountTrophies(package, std::nullopt);
-    check(all.trophies == 8 && all.unlocked == 0 && all.grades[NpTrophy2::GradePlatinum] == 1 && all.grades[NpTrophy2::GradeGold] == 1 && all.grades[NpTrophy2::GradeSilver] == 1 &&
-              all.grades[NpTrophy2::GradeBronze] == 5,
+    unlocked = {1, 2, 3, 4};
+    check(!NpTrophy2::PlatinumToUnlock(package, 4, isUnlocked), "the platinum unlocked before trophy 5");
+    unlocked.insert(5);
+    check(NpTrophy2::PlatinumToUnlock(package, 5, isUnlocked) == std::optional<std::int32_t>(0), "the platinum did not unlock after the last trophy that names it");
+    check(!NpTrophy2::PlatinumToUnlock(package, 6, isUnlocked) && !NpTrophy2::PlatinumToUnlock(package, 0, isUnlocked) && !NpTrophy2::PlatinumToUnlock(package, 42, isUnlocked),
+          "a trophy that names no platinum unlocked one");
+    unlocked.insert(0);
+    check(!NpTrophy2::PlatinumToUnlock(package, 5, isUnlocked), "an unlocked platinum was unlocked again");
+
+    unlocked = {1, 6};
+    const auto all = NpTrophy2::CountTrophies(package, std::nullopt, isUnlocked);
+    check(all.trophies == 8 && all.unlocked == 2 && all.grades[NpTrophy2::GradePlatinum] == 1 && all.grades[NpTrophy2::GradeGold] == 1 && all.grades[NpTrophy2::GradeSilver] == 1 &&
+              all.grades[NpTrophy2::GradeBronze] == 5 && all.unlockedGrades[NpTrophy2::GradeGold] == 1 && all.unlockedGrades[NpTrophy2::GradeBronze] == 1,
           "the game counts are wrong");
-    check(all.Percentage() == 0, "a game without unlocks has progress");
-    const auto expansion = NpTrophy2::CountTrophies(package, 1);
-    check(expansion.trophies == 2 && expansion.unlocked == 0 && expansion.Percentage() == 0, "the group counts are wrong");
-    check(NpTrophy2::CountTrophies(package, 5).trophies == 0 && NpTrophy2::CountTrophies(package, 5).Percentage() == 0, "an empty group has trophies");
+    check(all.Percentage() == (6 + 1) * 100 / (6 + 2 + 5), "the progress percentage does not weigh gold 6, silver 2 and bronze 1");
+    const auto expansion = NpTrophy2::CountTrophies(package, 1, isUnlocked);
+    check(expansion.trophies == 2 && expansion.unlocked == 1 && expansion.Percentage() == 50, "the group counts are wrong");
+    check(NpTrophy2::CountTrophies(package, 5, isUnlocked).trophies == 0 && NpTrophy2::CountTrophies(package, 5, isUnlocked).Percentage() == 0, "an empty group has trophies");
 }
 
 }
@@ -275,7 +289,7 @@ int main() {
     testContainer();
     testJson();
     testPackage();
-    testProgressAndCounts();
+    testProgressAndPlatinum();
     std::filesystem::current_path(previous);
     std::filesystem::remove_all(root);
     std::puts("Trophy package tests passed");

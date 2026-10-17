@@ -109,6 +109,22 @@ void CopyText(char* destination, std::size_t size, std::string_view text) {
     destination[length] = '\0';
 }
 
+UnlockedQuery UnlockedBy(std::int32_t userId, std::uint32_t serviceLabel) {
+    return [userId, serviceLabel](std::int32_t trophyId) { return TitleStore().UnlockTick(userId, serviceLabel, trophyId).has_value(); };
+}
+
+std::optional<std::int32_t> PlatinumToUnlock(const TrophyPackage& package, std::int32_t trophyId, const UnlockedQuery& unlocked) {
+    const auto trophy = package.trophies.find(trophyId);
+    if (trophy == package.trophies.end() || !trophy->second.platinumId) return std::nullopt;
+    const auto platinumId = *trophy->second.platinumId;
+    const auto platinum = package.trophies.find(platinumId);
+    if (platinum == package.trophies.end() || platinum->second.grade != GradePlatinum || unlocked(platinumId)) return std::nullopt;
+    for (const auto& [id, other] : package.trophies) {
+        if (id != platinumId && other.platinumId == platinumId && !unlocked(id)) return std::nullopt;
+    }
+    return platinumId;
+}
+
 std::optional<std::uint64_t> ProgressTarget(const TrophyDefinition& trophy) {
     if (!trophy.progressive) return std::nullopt;
     return trophy.target;
@@ -121,12 +137,15 @@ std::uint64_t TrophyProgress(const TrophyDefinition& trophy, std::optional<std::
     return std::min(stat.value_or(0), *target);
 }
 
-TrophyCounts CountTrophies(const TrophyPackage& package, std::optional<std::int32_t> group) {
+TrophyCounts CountTrophies(const TrophyPackage& package, std::optional<std::int32_t> group, const UnlockedQuery& unlocked) {
     TrophyCounts counts;
     for (const auto& [id, trophy] : package.trophies) {
         if (group && trophy.groupId != *group) continue;
         ++counts.trophies;
         ++counts.grades[static_cast<std::size_t>(trophy.grade)];
+        if (!unlocked(id)) continue;
+        ++counts.unlocked;
+        ++counts.unlockedGrades[static_cast<std::size_t>(trophy.grade)];
     }
     return counts;
 }
