@@ -263,6 +263,8 @@ ShaderRecompiler::SpirvTarget OfflineTarget(bool barycentric) {
 }
 
 void ExpectFailure(std::span<const std::uint32_t> code, std::uint32_t input0, bool barycentric, const char* expected, const char* message) {
+    static constexpr std::array<std::uint32_t, 1> capabilities{spv::CapabilityFloat64};
+    target.supportedCapabilities = capabilities;
     try {
         static_cast<void>(RecompilePixel(code, 64u, input0, OfflineTarget(barycentric), 0u));
     } catch (const std::exception& error) {
@@ -281,7 +283,8 @@ void ExpectRejected(std::uint32_t word0, std::uint32_t word1, const char* expect
 
 int main() {
     try {
-        ExpectFailure(PixelCode, Fp16Input, false, "requires fragmentShaderBarycentric", "16-bit interpolation was accepted without barycentrics");
+        Require(RecompilePixel(PixelCode, 64u, Fp16Input, OfflineTarget(false), 0u).barycentricEmulation.active, "16-bit interpolation without barycentrics does not emulate them");
+        Require(!RecompilePixel(PixelCode, 64u, Fp16Input, OfflineTarget(true), 0u).barycentricEmulation.active, "16-bit interpolation emulates barycentrics on a device that has them");
         ExpectFailure(PixelCode, 0x03000000u, true, "without FP16_INTERP_MODE", "16-bit interpolation of a 32-bit input was accepted");
         ExpectFailure(PixelCode, 0x03080420u, true, "passes its vertices through unchanged", "16-bit interpolation of a pass-through input was accepted");
         ExpectRejected(0xd75a001bu, 0x0c6a0200u, "interpolation modifiers", "v_interp_p2_f16 accepted an output modifier");
