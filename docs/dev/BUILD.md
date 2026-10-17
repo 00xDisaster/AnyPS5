@@ -205,7 +205,9 @@ A class range covers a command together with its own barriers. In `VulkanDevice:
 
 ## Guest clock scale
 
-Set `APS5_TIME_SCALE=<factor>` to scale the guest process monotonic clocks and timestamp counter (TSC) from their first observed value. A positive factor below 1 slows guest time; a factor above 1 speeds it up. An unset, zero, negative or non-numeric value uses `1.0` (normal speed). Host sleeps and waits still take real time, so this is a diagnostic aid for titles whose frame or timeout logic depends on guest time; it does not speed up the emulator or GPU work. The setting is read once when the process starts.
+Set `APS5_TIME_SCALE=<factor>` to scale `sceKernelGetProcessTime`, `sceKernelGetProcessTimeCounter` and `sceKernelReadTsc` from their first observed value. A positive factor below 1 slows guest time; a factor above 1 speeds it up. An unset, zero, negative or non-numeric value uses `1.0` (normal speed). On Windows, `sceKernelClockGettime` monotonic clock ids are scaled too; on Linux they return the native host monotonic clock unchanged. A title's own `rdtsc` instruction and `sceKernelGetTscFrequency` are unscaled, so dividing scaled TSC deltas by the reported real frequency gives guest-time intervals. Host sleeps and waits still take real time, so this is a diagnostic aid for titles whose frame or timeout logic depends on guest time; it does not speed up the emulator or GPU work. The setting is read once when the process starts.
+
+`APS5_PAD_INPUT_FILE` command durations and reload polling use `sceKernelGetProcessTime`, so they follow the scale. At `0.02`, a 1-second injected press lasts about 50 seconds of real time, and a new command can take up to 5 seconds to be noticed.
 
 ## Driver thread priority
 
