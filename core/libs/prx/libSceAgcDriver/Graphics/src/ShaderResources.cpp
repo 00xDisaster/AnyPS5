@@ -3150,6 +3150,7 @@ std::shared_ptr<ShaderResources> ResourceCache::Find(const Key& key) {
         return nullptr;
     }
     entries.splice(entries.begin(), entries, found->second);
+    noteUse(key);
     return found->second->second;
 }
 
@@ -3170,7 +3171,28 @@ void ResourceCache::noteEvicted(const Key& key) {
     if (!churning || capacity >= MaximumEntries) return;
     const auto previous = capacity;
     capacity = std::min(capacity * 2u, MaximumEntries);
+    if (shrankLast) shrinkWindow = std::min(shrinkWindow * 2u, MaximumShrinkWindow);
+    shrankLast = false;
+    usedKeys.clear();
+    usesSinceCheck = 0;
     std::fprintf(stderr, "[rescache] capacity %zu -> %zu entries: keys it evicted keep coming back\n", previous, capacity);
+}
+
+void ResourceCache::noteUse(const Key& key) {
+    if (fixedCapacity || capacity <= InitialEntries) return;
+    usedKeys.insert(KeyHash{}(key));
+    if (++usesSinceCheck < capacity * shrinkWindow) return;
+    const auto used = usedKeys.size();
+    const auto uses = usesSinceCheck;
+    usedKeys.clear();
+    usesSinceCheck = 0;
+    if (used * 4u > capacity) return;
+    const auto previous = capacity;
+    capacity = std::max(capacity / 2u, InitialEntries);
+    shrankLast = true;
+    evictionsSinceCheck = 0;
+    returnsSinceCheck = 0;
+    std::fprintf(stderr, "[rescache] capacity %zu -> %zu entries: %zu keys served the last %zu uses\n", previous, capacity, used, uses);
 }
 
 void ResourceCache::noteReturn(const Key& key) {
@@ -3315,6 +3337,7 @@ void ResourceCache::Insert(const Key& key, std::shared_ptr<ShaderResources> reso
         fixedCapacity = parsed != 0;
         capacity = fixedCapacity ? static_cast<std::size_t>(parsed) : InitialEntries;
     }
+    noteUse(key);
     while (entries.size() > capacity) {
         noteEvicted(entries.back().first);
         if (evicted != nullptr) evicted->push_back(std::move(entries.back().second));
@@ -3365,6 +3388,7 @@ bool ResourceCache::Touch(const Key& key) {
     const auto found = index.find(key);
     if (found == index.end()) return false;
     entries.splice(entries.begin(), entries, found->second);
+    noteUse(key);
     return true;
 }
 
@@ -3384,6 +3408,11 @@ void ResourceCache::Clear() {
     evictedOrder.clear();
     evictionsSinceCheck = 0;
     returnsSinceCheck = 0;
+    usedKeys.clear();
+    usesSinceCheck = 0;
+    shrinkWindow = InitialShrinkWindow;
+    shrankLast = false;
+    if (!fixedCapacity) capacity = 0;
 }
 
 std::size_t ResourceCache::Size() const {
