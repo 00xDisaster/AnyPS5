@@ -20,7 +20,7 @@ RULES = {
     "system-dependency": ("error", "CONTRIBUTING.md#code", "Third-party code is a submodule under 3rdparty/ built from source, not found on the system"),
     "title-specific": ("error", "CONTRIBUTING.md#code", "Implement the general behaviour, not what one title needs; title-specific code belongs in its sce_module"),
     "extension": ("error", "CONTRIBUTING.md#code", "Avoid non-standard extensions where standard C++ is enough"),
-    "notes-file": ("error", "CONTRIBUTING.md#branches-and-pull-requests", "Notes, investigation and agent files go in the pull request, not in the repository"),
+    "notes-file": ("error", "CONTRIBUTING.md#branches-and-pull-requests", "Notes, investigation and agent files go in the pull request, not in the repository; only the root AGENTS.md is allowed"),
     "binary": ("error", "docs/dev/CONVENTIONS.md", "Only UTF-8 text files in the repository; images go in the gist comments"),
     "ci-gate": ("error", "CONTRIBUTING.md#build-and-test", "A job that runs for pull requests needs a file filter: paths on the pull_request trigger, or needs eligibility and an if on its outputs"),
     "doc-link": ("error", "CONTRIBUTING.md#documentation", "Relative link to a file that does not exist"),
@@ -50,7 +50,7 @@ SYSTEM_DEPENDENCY = re.compile(r"\b(find_package\s*\((?!\s*(Python3|Threads|Git)
 TITLE = re.compile(r"\b(PPSA|CUSA)\d{5}\b")
 EXTENSION = re.compile(r"__attribute__|__declspec|#\s*pragma\s+(?!once\b)")
 LINK = re.compile(r"\[[^\]]+\]\(([^)\s]+)")
-FENCE = re.compile(r"^ {0,3}(```|~~~).*?^ {0,3}\1[ \t]*$|^ {0,3}(?:```|~~~).*\Z", re.S | re.M)
+FENCE = re.compile(r"^ {0,3}(```|~~~).*?^ {0,3}\1[ \t]*\r?$|^ {0,3}(?:```|~~~).*\Z", re.S | re.M)
 INLINE = re.compile(r"`[^`\n]*`")
 SECTION = re.compile(r"^###(?!#)\s*(.+?)\s*$", re.M)
 KEY = re.compile(r"^( *)([A-Za-z0-9_-]+|'[^']*'|\"[^\"]*\"):(?:\s+(.*?))?\s*$")
@@ -393,7 +393,7 @@ def library(path):
 def allowed_notes(path):
     p = PurePosixPath(path)
     if p.name.lower() in AGENT_FILES:
-        return False
+        return path == "AGENTS.md"
     if p.suffix.lower() not in NOTES:
         return None
     return path in ("README.md", "CONTRIBUTING.md") or p.parts[0] == ".github" or p.parts[:2] in (("docs", "dev"), ("docs", "user"))
