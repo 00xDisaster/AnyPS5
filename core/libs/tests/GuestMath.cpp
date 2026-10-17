@@ -81,6 +81,7 @@ double APS5_VABI expm1_nid_postfix(double);
 float APS5_VABI expm1f_nid_postfix(float);
 float APS5_VABI erff_nid_postfix(float);
 double APS5_VABI lgamma_nid_postfix(double);
+extern int signgam_nid_postfix;
 float APS5_VABI logbf_nid_postfix(float);
 double APS5_VABI exp2_nid_postfix(double);
 float APS5_VABI __powisf2_nid_postfix(float, int);
@@ -108,6 +109,7 @@ std::int64_t APS5_VABI llround_nid_postfix(double);
 std::int64_t APS5_VABI llroundf_nid_postfix(float);
 std::int64_t APS5_VABI llroundl_nid_postfix(long double);
 int APS5_VABI __isfinitef_nid_postfix(float);
+int APS5_VABI __isfinitel_nid_postfix(long double);
 int APS5_VABI __isnormal_nid_postfix(double);
 int APS5_VABI __isnormalf_nid_postfix(float);
 int APS5_VABI __isinff_nid_postfix(float);
@@ -923,6 +925,23 @@ int main() {
     Require(lgamma_nid_postfix(1.) == 0. && lgamma_nid_postfix(2.) == 0. && std::isinf(lgamma_nid_postfix(0.)));
     Require(std::abs(lgamma_nid_postfix(0.5) - 0.5723649429247001) < 1e-15 && std::abs(lgamma_nid_postfix(10.) - 12.801827480081469) < 1e-13);
     Require(std::abs(lgamma_nid_postfix(-0.5) - 1.2655121234846454) < 1e-15);
+    for (const double sign : {1.0, -1.0}) {
+        std::feclearexcept(FE_ALL_EXCEPT);
+        Require(std::abs(lgamma_nid_postfix(sign * std::numeric_limits<double>::denorm_min()) - 744.44007192138122) < 1e-12);
+        Require(std::abs(lgamma_nid_postfix(sign * 0x1p-1025) - 710.47586007394398) < 1e-12);
+        Require(std::abs(lgamma_nid_postfix(sign * 0x1p-1022) - 708.39641853226408) < 1e-12);
+        Require(std::abs(lgamma_nid_postfix(sign * 0x1p-57) - 39.509389291916882) < 1e-13);
+        Require(std::fetestexcept(FE_OVERFLOW | FE_DIVBYZERO | FE_INVALID) == 0);
+    }
+    const auto gammaSign = [](double x) {
+        signgam_nid_postfix = 7;
+        lgamma_nid_postfix(x);
+        return signgam_nid_postfix;
+    };
+    Require(gammaSign(0.5) == 1 && gammaSign(10.) == 1 && gammaSign(0.) == 1 && gammaSign(-0.) == -1);
+    Require(gammaSign(-0.5) == -1 && gammaSign(-1.5) == 1 && gammaSign(-2.5) == -1 && gammaSign(-0x1p-80) == -1);
+    Require(gammaSign(-1.) == 1 && gammaSign(-2.) == 1 && gammaSign(-0x1p60) == 1 && gammaSign(-4503599627370495.5) == 1);
+    Require(gammaSign(INFINITY) == 1 && gammaSign(-INFINITY) == 1 && gammaSign(NAN) == 1);
     Require(llroundl_nid_postfix(2.5L) == 3 && llroundl_nid_postfix(-2.5L) == -3 && llroundl_nid_postfix(0.49999999999999999L) == 0);
     Require(llroundl_nid_postfix(9007199254740993.0L) == 9007199254740993LL && llroundl_nid_postfix(-1e30L) == INT64_MIN);
     for (const int mode : {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO}) {
@@ -1002,6 +1021,21 @@ int main() {
     Require(__isinf_nid_postfix(0.) == 0 && __isinf_nid_postfix(1e308 * 10) == 1);
     Require(__isfinitef_nid_postfix(0.f) == 1 && __isfinitef_nid_postfix(infinity) == 0);
     Require(__isfinitef_nid_postfix(nan) == 0);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    std::feraiseexcept(FE_DIVBYZERO);
+    for (const long double value : {0.0L, -0.0L, 1.0L, -1.0L, std::numeric_limits<long double>::denorm_min(),
+                                  -std::numeric_limits<long double>::denorm_min(), std::numeric_limits<long double>::min(),
+                                  std::numeric_limits<long double>::max(), std::numeric_limits<long double>::lowest(),
+                                  0x1p1024L, -0x1p1024L, 0x1p-16382L}) {
+        Require(__isfinitel_nid_postfix(value) == 1);
+    }
+    for (const long double value : {std::numeric_limits<long double>::infinity(), -std::numeric_limits<long double>::infinity(),
+                                  std::numeric_limits<long double>::quiet_NaN(), -std::numeric_limits<long double>::quiet_NaN(),
+                                  std::numeric_limits<long double>::signaling_NaN(), -std::numeric_limits<long double>::signaling_NaN()}) {
+        Require(__isfinitel_nid_postfix(value) == 0);
+    }
+    Require(std::fetestexcept(FE_ALL_EXCEPT) == FE_DIVBYZERO);
+    std::feclearexcept(FE_ALL_EXCEPT);
     Require(__isnormalf_nid_postfix(1.f) == 1 && __isnormalf_nid_postfix(0.f) == 0);
     Require(__isnormalf_nid_postfix(std::numeric_limits<float>::denorm_min()) == 0);
     Require(__isnormal_nid_postfix(1.) == 1 && __isnormal_nid_postfix(0.) == 0);

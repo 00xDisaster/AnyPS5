@@ -9,6 +9,7 @@
 
 #include "SDL.h"
 #include "prx/libSceVideoOut/include/PadInput.hpp"
+#include "prx/libSceMouse/include/MouseState.hpp"
 #include "prx/libSceVideoOut/include/DisplayWindow.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Presentation.hpp"
 #include "prx/libScePad/include/PadState.hpp"
@@ -225,6 +226,7 @@ void PadInput::HandleEvent(const SDL_Event& event, DisplayWindow& window) {
         event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP;
     if (!input || ignoreInput) return;
     if (event.type == SDL_KEYDOWN && ImeCapturesKeyboard_nid_postfix()) return;
+    keyboardMouse.SetTitleReadsMouse(MouseIsOpen_nid_no_patch());
     const auto requests = keyboardMouse.HandleEvent(event, std::chrono::steady_clock::now());
     if (requests.toggleFullscreen && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) window.ToggleFullscreen();
     if (requests.togglePerformanceOverlay && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverTogglePerformanceOverlay_nid_postfix();
