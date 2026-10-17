@@ -175,7 +175,7 @@ static int SceErrorFromErrno(int error) {
 
 static int SceStatErrorFromErrno(int error) {
 #ifdef ELOOP
-    if (error == ELOOP) return SceKernelError(62);
+    if (error == ELOOP) return SCE_KERNEL_ERROR_ELOOP;
 #endif
     return SceErrorFromErrno(error);
 }
