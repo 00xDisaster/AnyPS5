@@ -176,6 +176,23 @@ class TraceDigestTests(unittest.TestCase):
         self.assertAlmostEqual(largest[("Driver.Present", "presenter")], 16.0)
         self.assertAlmostEqual(largest[("Driver.Present.inflight_wait", "presenter")], 14.5)
 
+    def test_markdown_thread_names_cannot_split_table_cells_or_rows(self):
+        name = "worker|<gpu>\nrow & more"
+        phase = "phase|<tag>\r\nnext"
+        trace = trace_digest.Trace({"traceEvents": [
+            {"ph": "M", "name": "thread_name", "tid": 1, "args": {"name": name}},
+            complete(1, phase, 0, 1000),
+        ]})
+        result = trace_digest.digest(trace)
+        self.assertEqual(result["threads"][0]["thread"], name)
+        self.assertEqual(result["threads"][0]["top"][0]["name"], phase)
+        rows = [line for line in trace_digest.markdown(result).splitlines() if line.startswith("|")]
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(line.count("|") == 7 for line in rows), rows)
+        self.assertIn("worker&#124;&lt;gpu&gt;<br>row &amp; more", rows[2])
+        self.assertIn("phase&#124;&lt;tag&gt;<br>next", rows[2])
+
+
     def test_threads_split_busy_and_wait(self):
         threads = {thread["thread"]: thread for thread in self.result()["threads"]}
         worker = threads["queue worker 0x0"]
@@ -410,6 +427,30 @@ class IntervalDigestTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             trace_digest.main([str(self.path)])
         self.assertIn("no interval lines", output.getvalue())
+
+    def test_interval_phase_names_preserve_json_and_markdown_table_structure(self):
+        for name, escaped in (("Draw|<pass>&", "Draw&#124;&lt;pass&gt;&amp;"),
+                              ("Draw\r\npass", "Draw<br>pass"),
+                              ("Draw\rpass\nend", "Draw<br>pass<br>end")):
+            with self.subTest(name=name):
+                line = interval_line(0.0, 30.0, 20.0, 5.0, top_phases_ms_per_frame={name: 7.5})
+                self.path.write_text(json.dumps(line) + "\n", encoding="utf-8")
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(trace_digest.main([str(self.path), "--json"]), 0)
+                row = json.loads(output.getvalue())["intervals"][0]
+                self.assertEqual(row["top_phase"], {"name": name, "ms_per_frame": 7.5})
+                self.assertEqual(row["frame_ms"], line["frame_ms"])
+                self.assertEqual(row["gpu_busy_ms_per_present"], 5.0)
+                self.assertEqual((row["start_s"], row["end_s"], row["presents"]), (0.0, 30.0, 1800))
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(trace_digest.main([str(self.path)]), 0)
+                rows = [line for line in output.getvalue().splitlines() if line.startswith("|")]
+                self.assertEqual(len(rows), 3)
+                self.assertTrue(all(line.count("|") == 11 for line in rows), rows)
+                cells = [cell.strip() for cell in rows[2].split("|")[1:-1]]
+                self.assertEqual(cells, ["1", "0-30", "1800", "16.6", "18.0", "20.0", "25.0", "5.0", "50 %", escaped + " 7.5"])
 
 if __name__ == "__main__":
     unittest.main()
