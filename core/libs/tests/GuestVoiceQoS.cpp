@@ -1,6 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdlib>
+#include <stdexcept>
 #include <vector>
 
 extern "C" {
@@ -14,9 +15,31 @@ int APS5_VABI sceVoiceQoSConnect(std::int32_t*, std::int32_t, std::int32_t);
 int APS5_VABI sceVoiceQoSDisconnect(std::int32_t);
 int APS5_VABI sceVoiceQoSSetLocalEndpointAttribute(std::int32_t, std::int32_t, const void*, std::int32_t);
 int APS5_VABI sceVoiceQoSSetRemoteEndpointAttribute(std::int32_t, std::int32_t, const void*, std::int32_t);
+int APS5_VABI sceVoiceQoSGetLocalEndpointAttribute();
+int APS5_VABI sceVoiceQoSGetRemoteEndpointAttribute();
+int APS5_VABI sceVoiceQoSGetConnectionAttribute();
+int APS5_VABI sceVoiceQoSGetLocalEndpoint();
+int APS5_VABI sceVoiceQoSGetRemoteEndpoint();
+int APS5_VABI sceVoiceQoSEnableChat();
+int APS5_VABI sceVoiceQoSDisableChat();
+int APS5_VABI sceVoiceQoSGetStatus();
+int APS5_VABI sceVoiceQoSDebugGetStatus();
+int APS5_VABI sceVoiceQoSInitHQ();
+int APS5_VABI sceVoiceQoSSetMode();
+int APS5_VABI sceVoiceQoSTerminate();
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
+
+template <typename TCall>
+static bool NotImplemented(TCall call) {
+    try {
+        call();
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+    return false;
+}
 
 int main(int argc, char** argv) {
     Require(argc == 2);
@@ -87,4 +110,17 @@ int main(int argc, char** argv) {
     Require(sceVoiceQoSEnd() == 0);
     Require(sceVoiceQoSEnd() == notInitialized);
     Require(sceVoiceQoSInit(nullptr, 0x40000, appType) == argumentInvalid);
+
+    Require(NotImplemented([] { sceVoiceQoSGetLocalEndpointAttribute(); }));
+    Require(NotImplemented([] { sceVoiceQoSGetRemoteEndpointAttribute(); }));
+    Require(NotImplemented([] { sceVoiceQoSGetConnectionAttribute(); }));
+    Require(NotImplemented([] { sceVoiceQoSGetLocalEndpoint(); }));
+    Require(NotImplemented([] { sceVoiceQoSGetRemoteEndpoint(); }));
+    Require(NotImplemented([] { sceVoiceQoSEnableChat(); }));
+    Require(NotImplemented([] { sceVoiceQoSDisableChat(); }));
+    Require(NotImplemented([] { sceVoiceQoSGetStatus(); }));
+    Require(NotImplemented([] { sceVoiceQoSDebugGetStatus(); }));
+    Require(NotImplemented([] { sceVoiceQoSInitHQ(); }));
+    Require(NotImplemented([] { sceVoiceQoSSetMode(); }));
+    Require(NotImplemented([] { sceVoiceQoSTerminate(); }));
 }
