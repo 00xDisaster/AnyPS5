@@ -374,6 +374,7 @@ extern "C" void PadPublishInput_nid_postfix(const PadInputState& input) {
     const std::uint32_t pressed = input.buttons & ~state.buttons;
     timestamp = sceKernelGetProcessTime();
     if (pressed != 0) {
+        if (pressedSinceRead != 0 && timestamp - pressedAt > kLatchExpiry) pressedSinceRead = 0;
         pressedSinceRead |= pressed;
         pressedAt = timestamp;
         if (pressed & 0x100u) pressedAnalogL2 = input.analogButtonsL2;
