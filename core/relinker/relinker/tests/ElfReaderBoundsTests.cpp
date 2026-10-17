@@ -142,6 +142,12 @@ int main() {
                 Require(headers.size() == 2 && headers[1].Type == 7 && headers[1].MappedAddress == address);
             }
         }},
+        {"TLS image inside uncovered SCE RELRO", [] {
+            auto bytes = TlsFixture(0x1008, 8, 16, 8);
+            Write<std::uint32_t>(bytes, 0x260, 0x61000010);
+            const auto headers = Relinker::ElfReader(std::move(bytes)).ReadProgramHeaders();
+            Require(headers.size() == 2 && headers[0].Type == 1 && headers[1].Type == 7 && headers[1].MappedAddress == 0x1008);
+        }},
         {"TLS image outside load memory", [] {
             constexpr std::uint64_t addresses[] = {0x0ff8, 0x103c, 0x2000, std::numeric_limits<std::uint64_t>::max() - 3};
             for (const std::uint64_t address : addresses) {
