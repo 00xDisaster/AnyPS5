@@ -38,12 +38,14 @@ bool keepsDrawPipeline(std::span<const std::uint32_t> packet, std::uint32_t head
             if (destination == Pm4::DmaSelectGds || destination == Pm4::DmaDestinationNowhere) return true;
             const auto bytes = Pm4::DmaBytes(packet);
             if (bytes == 0) return true;
+            const auto source = Pm4::DmaSource(packet);
+            if ((source == 0 || source == 3) && DrawPipeline::Queue0().Overlaps(packet[2] | (static_cast<std::uint64_t>(packet[3]) << 32u), bytes)) return false;
             const auto address = packet[4] | (static_cast<std::uint64_t>(packet[5]) << 32u);
             return !DrawPipeline::Queue0().Overlaps(address, bytes);
         }
         case 0x10: {
             const auto operation = (header >> 2u) & 0x3fu;
-            return operation != 0x09;
+            return operation == 0 || operation == 0x09 || operation == 0x0b || operation == 0x0c || operation == 0x1a;
         }
         default: return false;
     }
