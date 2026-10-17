@@ -3,12 +3,12 @@
 #include "ControlFlow/RequestSerializer.hpp"
 #include "SpirvBackend/SpirvBda.hpp"
 #include <spirv/unified1/GLSL.std.450.h>
-#include <array>
 #include <cstring>
 #include <functional>
 #include <initializer_list>
 #include <string>
 #include <vector>
+#include <array>
 
 namespace {
 
