@@ -7,6 +7,9 @@
 #else
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#ifdef __linux__
+#include <linux/sockios.h>
+#endif
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
@@ -740,6 +743,10 @@ bool GuestSockets::Ready(int descriptor, bool write, std::int64_t* data, bool* e
         int size = 0;
         socklen_t length = sizeof(size);
         if (getsockopt(socket->value, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<char*>(&size), &length) == 0) *data = size;
+#ifdef __linux__
+        int queued = 0;
+        if (*data > 0 && ::ioctl(socket->value, SIOCOUTQ, &queued) == 0) *data = std::max<std::int64_t>(0, *data - queued);
+#endif
     } else {
 #ifdef _WIN32
         unsigned long available = 0;
