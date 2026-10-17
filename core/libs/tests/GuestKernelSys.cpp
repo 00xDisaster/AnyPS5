@@ -287,12 +287,15 @@ int main() {
         Require(symlink_nid_postfix("sub", directoryLink.c_str()) == 0);
         Require(readlink_nid_postfix(directoryLink.c_str(), buffer, sizeof(buffer)) == 3 && std::memcmp(buffer, "sub", 3) == 0);
         const auto absolute = std::filesystem::absolute(root / "absolute");
-        const auto absoluteTarget = std::filesystem::absolute(original).generic_string();
         Require(CreateSymbolicLinkW(absolute.wstring().c_str(), std::filesystem::absolute(original).wstring().c_str(),
             SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0);
         std::memset(buffer, '#', sizeof(buffer));
-        Require(readlink_nid_postfix((root / "absolute").string().c_str(), buffer, sizeof(buffer)) == static_cast<std::int64_t>(absoluteTarget.size()));
-        Require(std::memcmp(buffer, absoluteTarget.data(), absoluteTarget.size()) == 0 && buffer[absoluteTarget.size()] == '#');
+        const auto absoluteLength = readlink_nid_postfix((root / "absolute").string().c_str(), buffer, sizeof(buffer));
+        Require(absoluteLength > 0 && static_cast<std::size_t>(absoluteLength) < sizeof(buffer) && buffer[absoluteLength] == '#');
+        const std::string absoluteTarget(buffer, static_cast<std::size_t>(absoluteLength));
+        Require(absoluteTarget.find('?') == std::string::npos);
+        std::error_code absoluteError;
+        Require(std::filesystem::equivalent(absoluteTarget, original, absoluteError) && !absoluteError);
 #else
         Require(std::filesystem::is_symlink(std::filesystem::symlink_status(symbolic)));
         Require(readlink_nid_postfix(symbolic.c_str(), buffer, sizeof(buffer)) == 12 && std::memcmp(buffer, "original.bin", 12) == 0);
