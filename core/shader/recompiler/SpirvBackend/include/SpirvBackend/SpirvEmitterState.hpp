@@ -101,6 +101,8 @@ struct SpirvEmitterState {
     std::uint32_t laneCount = 1;
     std::uint32_t hostSubgroupSize = 0;
     bool splitSubgroup = false;
+    bool spannedWave = false;
+    std::uint32_t spannedExchangeVariable = 0;
     bool narrowSubgroupClock = false;
     bool float64DenormPreserve = false;
     bool registrationModules = false;
@@ -165,6 +167,8 @@ struct SpirvEmitterState {
     std::uint32_t numWorkgroupsVariable = 0;
     std::array<std::uint32_t, 2> scratchVariable {};
     std::array<std::uint32_t, 2> vectorWindowVariable {};
+    std::uint32_t vectorWindowIndexed = 0;
+    std::array<std::vector<std::uint32_t>, 2> vectorWindowSlots {};
     std::array<std::uint32_t, ImageBindingCount> imageVariables {};
     std::uint32_t samplerVariable = 0;
     std::vector<SpirvTableImageVariable> tableImageVariables;
@@ -184,6 +188,7 @@ struct SpirvEmitterState {
     std::uint32_t sampleMaskInputVariable = 0;
     std::uint32_t quadSampleCoverage = 0;
     std::uint32_t subgroupLocalInvocationIdVariable = 0;
+    std::uint32_t subgroupIdVariable = 0;
     std::uint32_t perVertexVariable = 0;
     std::uint32_t pointSizeVariable = 0;
     std::uint32_t clipDistanceVariable = 0;
@@ -210,6 +215,7 @@ struct SpirvValueEmitContext {
     std::uint32_t Ballot(const IrValue* predicate);
     std::uint32_t FirstLane(std::uint32_t ballot);
     std::uint32_t Shuffle(const IrValue& inst, std::size_t index, std::uint32_t lane);
+    std::uint32_t ShuffleInHalf(const IrValue& inst, std::size_t index, std::uint32_t lane);
     std::uint32_t Result(const IrValue& inst);
     std::uint32_t Define(const IrValue& inst, std::uint32_t value);
     std::uint32_t ResourceIndex(const IrValue* value, IrOpcode opcode);
