@@ -29,6 +29,7 @@
 #include "prx/libkernel/File/include/DescriptorControl.hpp"
 #include "prx/libkernel/Equeue/Equeue.hpp"
 #include "prx/libkernel/File/include/File.hpp"
+#include "prx/libkernel/File/include/RandomDevice.hpp"
 #include "prx/libkernel/Time/include/TimedWait.hpp"
 #include "prx/libkernel/Socket/include/SocketPoll.hpp"
 #include "prx/libkernel/Socket/include/SocketConnect.hpp"
@@ -1415,6 +1416,12 @@ int APS5_VABI poll_nid_postfix(GuestPollDescriptor* descriptors, std::uint32_t c
             if (!DescriptorIsOpen_nid_no_patch(entry.descriptor)) {
                 entry.revents = GuestPollInvalid;
                 ++ready;
+                continue;
+            }
+            if (File::IsRandomDevice(entry.descriptor)) {
+                const short readable = static_cast<short>(entry.events & GuestPollReadable);
+                entry.revents = readable != 0 ? readable : entry.events;
+                if (entry.revents) ++ready;
                 continue;
             }
             if (File::IsVnode(entry.descriptor)) {
