@@ -81,7 +81,7 @@ struct Blocker {
     void Enqueue(std::vector<DrawPipeline::Range> writes = {}) {
         DrawPipeline::Queue0().Enqueue([this] {
             while (!release.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            if (target != nullptr) std::atomic_ref<std::uint32_t>(*target).store(0);
+            if (target != nullptr) std::atomic_ref<std::uint32_t>(*target).store(1);
             std::lock_guard gpuLock(AgcDriver::GuestMemory::GpuMutex());
         }, std::move(writes));
     }
@@ -212,9 +212,6 @@ void SatisfiedWaitDrainsOverlappingQueuedWork() {
     const bool drained = DrawPipeline::DrainRequestsByOpcode(0x3c) > drainsBefore;
     const bool labelQueuedEarly = DrawPipeline::Queue0().Outstanding() >= 2;
     blocker.release = true;
-    while (std::atomic_ref<std::uint32_t>(gate).load() != 0 && std::chrono::steady_clock::now() < deadline)
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    std::atomic_ref<std::uint32_t>(gate).store(1);
     Require(submitted.wait_for(std::chrono::seconds(20)) == std::future_status::ready,
             "WAIT_REG_MEM submission did not finish after the overlapping write");
     submitted.get();
