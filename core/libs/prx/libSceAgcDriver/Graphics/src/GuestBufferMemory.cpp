@@ -295,7 +295,7 @@ void shareDmaBufImport(const Context& context, VkBufferCreateInfo& info, ImportF
 const char* bindImport(const Context& context, HostImport& entry, VkExternalMemoryHandleTypeFlagBits handleType, const void* import, std::uint32_t importTypes, bool& allocated, VkResult& failure) {
     const auto failed = [&](const char* step, VkResult result) -> const char* {
         if (entry.buffer) context.Function<PFN_vkDestroyBuffer>("vkDestroyBuffer")(context.device, entry.buffer, nullptr);
-        if (entry.memory) context.Function<PFN_vkFreeMemory>("vkFreeMemory")(context.device, entry.memory, nullptr);
+        if (allocated && entry.memory) context.Function<PFN_vkFreeMemory>("vkFreeMemory")(context.device, entry.memory, nullptr);
         entry.buffer = VK_NULL_HANDLE;
         entry.memory = VK_NULL_HANDLE;
         failure = result;
@@ -323,9 +323,7 @@ const char* bindImport(const Context& context, HostImport& entry, VkExternalMemo
     VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &flags};
     allocation.allocationSize = entry.bytes;
     allocation.memoryTypeIndex = static_cast<std::uint32_t>(std::countr_zero(types));
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (const auto result = context.Function<PFN_vkAllocateMemory>("vkAllocateMemory")(context.device, &allocation, nullptr, &memory); result != VK_SUCCESS) return failed("vkAllocateMemory", result);
-    entry.memory = memory;
+    if (const auto result = context.Function<PFN_vkAllocateMemory>("vkAllocateMemory")(context.device, &allocation, nullptr, &entry.memory); result != VK_SUCCESS) return failed("vkAllocateMemory", result);
     allocated = true;
     if (const auto result = context.Function<PFN_vkBindBufferMemory>("vkBindBufferMemory")(context.device, entry.buffer, entry.memory, 0); result != VK_SUCCESS) return failed("vkBindBufferMemory", result);
     const VkBufferDeviceAddressInfo addressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, entry.buffer};
