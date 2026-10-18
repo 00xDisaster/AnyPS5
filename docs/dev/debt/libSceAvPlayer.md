@@ -7,6 +7,8 @@
 
 ### Unknown function info
 
+- [Paused initial video](../../../core/libs/prx/libSceAvPlayer/src/Source.cpp) (libSceAvPlayer) keeps the first picture available when audio has already established the playback epoch before the caller pauses. Further pictures of that epoch stay blocked, as after a paused jump. The console's exact initial preparation ordering has not been measured.
+
 - [AvPlayer loop warnings](../../../core/libs/prx/libSceAvPlayer/src/Source.cpp) are queued when the first audio or video frame of a loop is delivered, following [KytyPS5's playback boundary tracking](https://github.com/KytyPS5/KytyPS5/blob/a6f4e8e7f456b8697d3102823d3f16400c3e121e/src/libs/avPlayer.cpp#L1038-L1043). The console's exact callback timing is unverified. Decode-ahead does not announce a loop while the caller is consuming the previous pass.
 
 - [sceAvPlayerAddSource](../../../core/libs/prx/libSceAvPlayer/src/Source.cpp) (libSceAvPlayer) - requests up to 4 additional decode-ahead video framebuffers from the memory replacement beyond `num_output_video_framebuffers` when memory is available; the console's internal buffering behaviour is unknown
