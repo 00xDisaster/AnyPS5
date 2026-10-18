@@ -3179,7 +3179,7 @@ void ResourceCache::noteEvicted(const Key& key) {
 }
 
 void ResourceCache::noteUse(const Key& key) {
-    if (fixedCapacity || capacity <= InitialEntries) return;
+    if (fixedCapacity || capacity <= baseEntries) return;
     usedKeys.insert(KeyHash{}(key));
     if (++usesSinceCheck < capacity * shrinkWindow) return;
     const auto used = usedKeys.size();
@@ -3188,7 +3188,7 @@ void ResourceCache::noteUse(const Key& key) {
     usesSinceCheck = 0;
     if (used * 4u > capacity) return;
     const auto previous = capacity;
-    capacity = std::max(capacity / 2u, InitialEntries);
+    capacity = std::max(capacity / 2u, baseEntries);
     shrankLast = true;
     evictionsSinceCheck = 0;
     returnsSinceCheck = 0;
@@ -3335,7 +3335,7 @@ void ResourceCache::Insert(const Key& key, std::shared_ptr<ShaderResources> reso
         const char* value = std::getenv("APS5_RESOURCE_CACHE_ENTRIES");
         const auto parsed = value ? std::strtoull(value, nullptr, 10) : 0ull;
         fixedCapacity = parsed != 0;
-        capacity = fixedCapacity ? static_cast<std::size_t>(parsed) : InitialEntries;
+        capacity = fixedCapacity ? static_cast<std::size_t>(parsed) : baseEntries;
     }
     noteUse(key);
     while (entries.size() > capacity) {
@@ -3410,9 +3410,15 @@ void ResourceCache::Clear() {
     returnsSinceCheck = 0;
     usedKeys.clear();
     usesSinceCheck = 0;
-    shrinkWindow = InitialShrinkWindow;
+    shrinkWindow = baseShrinkWindow;
     shrankLast = false;
     if (!fixedCapacity) capacity = 0;
+}
+
+void ResourceCache::SetBase(std::size_t entries, std::size_t window) {
+    std::lock_guard lock(mutex);
+    baseEntries = entries;
+    baseShrinkWindow = window;
 }
 
 std::size_t ResourceCache::Size() const {
@@ -3422,7 +3428,7 @@ std::size_t ResourceCache::Size() const {
 
 std::size_t ResourceCache::Capacity() const {
     std::lock_guard lock(mutex);
-    return capacity == 0 ? InitialEntries : capacity;
+    return capacity == 0 ? baseEntries : capacity;
 }
 
 std::uint64_t ResourceCache::TableElementBudget() {

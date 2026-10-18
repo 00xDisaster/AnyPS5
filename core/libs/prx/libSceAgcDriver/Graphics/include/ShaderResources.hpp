@@ -631,6 +631,7 @@ public:
     void Clear();
     std::size_t Size() const;
     std::size_t Capacity() const;
+    void SetBase(std::size_t entries, std::size_t shrinkWindow);
     std::uint64_t TableElements() const;
     static std::uint64_t TableElementBudget();
     static constexpr std::size_t InitialEntries = 1024;
@@ -662,6 +663,8 @@ private:
     std::size_t usesSinceCheck = 0;
     static constexpr std::size_t InitialShrinkWindow = 8;
     static constexpr std::size_t MaximumShrinkWindow = 1024;
+    std::size_t baseEntries = InitialEntries;
+    std::size_t baseShrinkWindow = InitialShrinkWindow;
     std::size_t shrinkWindow = InitialShrinkWindow;
     bool shrankLast = false;
 };
