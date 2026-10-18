@@ -203,6 +203,12 @@ A class range covers a command together with its own barriers. In `VulkanDevice:
 - `shadow-publish`: copies of unit shadow slabs into the import, with their barriers (`recordCopies` in `UnitShadow.cpp`, reached from `PublishShadow`). Copied bytes.
 - `template-refresh`: the `vkCmdUpdateBuffer` updates of a cached dispatch's changed data words, as one range from the first update to the last (`ShaderResources::refreshData`, called from `recordDispatch`). Refreshed bytes.
 
+## Guest clock scale
+
+Set `APS5_TIME_SCALE=<factor>` to scale `sceKernelGetProcessTime`, `sceKernelGetProcessTimeCounter` and `sceKernelReadTsc` from their first observed value. A positive factor below 1 slows guest time; a factor above 1 speeds it up. An unset, zero, negative or non-numeric value uses `1.0` (normal speed). On Windows, `sceKernelClockGettime` monotonic clock ids are scaled too; on Linux they return the native host monotonic clock unchanged. A title's own `rdtsc` instruction and `sceKernelGetTscFrequency` are unscaled, so dividing scaled TSC deltas by the reported real frequency gives guest-time intervals. Host sleeps and waits still take real time, so this is a diagnostic aid for titles whose frame or timeout logic depends on guest time; it does not speed up the emulator or GPU work. The setting is read once when the process starts.
+
+`APS5_PAD_INPUT_FILE` command durations and reload polling use `sceKernelGetProcessTime`, so they follow the scale. At `0.02`, a 1-second injected press lasts about 50 seconds of real time, and a new command can take up to 5 seconds to be noticed.
+
 ## Driver profile lines
 
 With `APS5_PROFILE_DRAW` set (any value), the driver prints a profile line on stderr at most every 10 s. A line either counts the last 10 s (its counters are read and cleared when it is printed; the text says `(10 s)` or `over 10 s`) or counts from the start of the process (the text says `(cumulative)`). A rate is the difference of two cumulative lines divided by the time between them.
