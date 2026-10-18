@@ -3182,7 +3182,8 @@ void multisampleTests() {
         Require(iteratedSmooth.samples == 1 && !iteratedSmooth.mergedCoverage && !iteratedSmooth.perSampleShading, "an overrasterized draw that runs per sample into a one-sample target did not rasterize sample 0 alone");
         smooth.context[0x293] = 0u;
         smooth.context[0x292] = 2u;
-        expectFailure([&] { DecodeState(smooth); }, "a color target's sample count differs from the rasterizer's");
+        const auto unmerged = DecodeState(smooth);
+        Require(unmerged.samples == 1 && !unmerged.mergedCoverage, "an overrasterized draw into a one-sample target without MSAA_ENABLE did not rasterize as one sample");
     }
     queue.context[0x302] = 0x44cc;
     state = DecodeState(queue);
