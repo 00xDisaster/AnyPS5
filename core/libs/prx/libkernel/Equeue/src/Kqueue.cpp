@@ -98,9 +98,6 @@ std::optional<std::uint64_t> TimerPeriodNanos(std::int64_t data, std::uint32_t f
         unit = 1000ULL;
         break;
     case NOTE_NSECONDS:
-        if (data >= 1000000000LL && data % 1000000000LL != 0) {
-            NotImplemented_nid_no_patch("kevent: EVFILT_TIMER NOTE_NSECONDS period above one second with a fraction");
-        }
         unit = 1;
         break;
     default:
@@ -318,6 +315,12 @@ std::optional<std::uint64_t> ScanDeadline(const KernelTimespec& timeout) {
 
 bool IsKqueueDescriptor(int descriptor) {
     return static_cast<bool>(FindKqueue(descriptor));
+}
+
+std::optional<bool> KqueueReadable(int descriptor) {
+    const auto queue = FindKqueue(descriptor);
+    if (!queue) return std::nullopt;
+    return queue->HasTriggeredEvents();
 }
 
 void KqueueDescriptorClosed(int descriptor) {
