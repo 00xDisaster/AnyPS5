@@ -134,36 +134,35 @@ std::uint32_t LoadSubwordInBounds(SpirvValueEmitContext& ctx, const MemoryResour
     return Binary(state, spv::OpShiftRightArithmetic, TypeU32(state), left, ConstantU32(state, 32u - bits));
 }
 
-std::uint32_t LoadWordPrepared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, const MemoryResourceAccess& resource) {
+std::uint32_t LoadEnable(SpirvEmitterState& state, const MemoryResourceAccess& resource, std::uint32_t index, std::uint32_t active) {
+    const auto inBounds = EmitMemoryElementInBounds(state, resource, index);
+    return active == 0u ? inBounds : Binary(state, spv::OpLogicalAnd, TypeBool(state), active, inBounds);
+}
+
+std::uint32_t LoadWordPrepared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, const MemoryResourceAccess& resource, std::uint32_t active) {
     auto& state = ctx.state;
     const auto index = EmitMemoryElementIndex(state, resource, DwordIndex(ctx, inst, mem));
-    return EmitValueOrZeroIfCondition(state, EmitMemoryElementInBounds(state, resource, index), [&]() {
-        return LoadWordInBounds(ctx, resource, index);
-    });
+    const auto enable = LoadEnable(state, resource, index, active);
+    if (!LoadsSelectable(state, resource)) return EmitValueOrZeroIfCondition(state, enable, [&] { return LoadWordInBounds(ctx, resource, index); });
+    return EmitValueOrZero(state, enable, LoadWordInBounds(ctx, resource, GuardedElementIndex(state, resource, enable, index)));
 }
 
 std::uint32_t LoadWord(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem) {
-    return EmitValueOrZeroIfCondition(ctx.state, ActiveArgument(ctx, inst), [&]() {
-        const auto resource = PrepareMemoryResourceAccess(ctx.state, mem);
-        return LoadWordPrepared(ctx, inst, mem, resource);
-    });
+    return LoadWordPrepared(ctx, inst, mem, PrepareMemoryResourceAccess(ctx.state, mem), ActiveArgument(ctx, inst));
 }
 
-std::uint32_t LoadSubwordPrepared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, const MemoryResourceAccess& resource, std::uint32_t bits, bool signExtend) {
+std::uint32_t LoadSubwordPrepared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, const MemoryResourceAccess& resource, std::uint32_t bits, bool signExtend, std::uint32_t active) {
     auto& state = ctx.state;
     const auto address = ByteAddress(ctx, inst, mem);
     const auto rawIndex = Binary(state, spv::OpShiftRightLogical, TypeU32(state), address, ConstantU32(state, 2u));
     const auto index = EmitMemoryElementIndex(state, resource, rawIndex);
-    return EmitValueOrZeroIfCondition(state, EmitMemoryElementInBounds(state, resource, index), [&]() {
-        return LoadSubwordInBounds(ctx, resource, address, index, bits, signExtend);
-    });
+    const auto enable = LoadEnable(state, resource, index, active);
+    if (!LoadsSelectable(state, resource)) return EmitValueOrZeroIfCondition(state, enable, [&] { return LoadSubwordInBounds(ctx, resource, address, index, bits, signExtend); });
+    return EmitValueOrZero(state, enable, LoadSubwordInBounds(ctx, resource, address, GuardedElementIndex(state, resource, enable, index), bits, signExtend));
 }
 
 std::uint32_t LoadSubword(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, std::uint32_t bits) {
-    return EmitValueOrZeroIfCondition(ctx.state, ActiveArgument(ctx, inst), [&]() {
-        const auto resource = PrepareMemoryResourceAccess(ctx.state, mem);
-        return LoadSubwordPrepared(ctx, inst, mem, resource, bits, false);
-    });
+    return LoadSubwordPrepared(ctx, inst, mem, PrepareMemoryResourceAccess(ctx.state, mem), bits, false, ActiveArgument(ctx, inst));
 }
 
 std::uint32_t ConstantDeviceAddress(SpirvEmitterState& state, std::uint64_t value) {
@@ -368,20 +367,19 @@ std::uint32_t ConstructU32Composite(SpirvEmitterState& state, std::uint32_t comp
 
 std::uint32_t LoadWideShared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, std::uint32_t components) {
     auto& state = ctx.state;
-    return EmitValueOrDefaultIfCondition(state, ActiveArgument(ctx, inst), TypeU32Composite(state, components), ConstantU32CompositeZero(state, components), [&]() {
-        const auto resource = PrepareMemoryResourceAccess(state, mem);
-        const auto base = ByteAddress(ctx, inst, mem);
-        std::array<std::uint32_t, 4> values{};
-        for (std::uint32_t component = 0; component < components; component++) {
-            const auto address = component == 0u ? base : Binary(state, spv::OpIAdd, TypeU32(state), base, ConstantU32(state, component * 4u));
-            const auto rawIndex = Binary(state, spv::OpShiftRightLogical, TypeU32(state), address, ConstantU32(state, 2u));
-            const auto index = EmitMemoryElementIndex(state, resource, rawIndex);
-            values.at(component) = EmitValueOrZeroIfCondition(state, EmitMemoryElementInBounds(state, resource, index), [&]() {
-                return LoadWordInBounds(ctx, resource, index);
-            });
-        }
-        return ConstructU32Composite(state, components, values);
-    });
+    const auto active = ActiveArgument(ctx, inst);
+    const auto resource = PrepareMemoryResourceAccess(state, mem);
+    const auto base = ByteAddress(ctx, inst, mem);
+    std::array<std::uint32_t, 4> values{};
+    for (std::uint32_t component = 0; component < components; component++) {
+        const auto address = component == 0u ? base : Binary(state, spv::OpIAdd, TypeU32(state), base, ConstantU32(state, component * 4u));
+        const auto rawIndex = Binary(state, spv::OpShiftRightLogical, TypeU32(state), address, ConstantU32(state, 2u));
+        const auto index = EmitMemoryElementIndex(state, resource, rawIndex);
+        const auto enable = LoadEnable(state, resource, index, active);
+        values.at(component) = LoadsSelectable(state, resource) ? EmitValueOrZero(state, enable, LoadWordInBounds(ctx, resource, GuardedElementIndex(state, resource, enable, index)))
+                                                                : EmitValueOrZeroIfCondition(state, enable, [&] { return LoadWordInBounds(ctx, resource, index); });
+    }
+    return ConstructU32Composite(state, components, values);
 }
 
 void StoreWideShared(SpirvValueEmitContext& ctx, const IrValue& inst, const MemoryInfo& mem, std::uint32_t components) {
@@ -762,6 +760,11 @@ std::uint32_t UpdateFunctionElement(SpirvEmitterState& state, std::uint32_t poin
 
 template<typename TUpdate>
 std::uint32_t LockedLdsUpdate(SpirvEmitterState& state, std::uint32_t type, std::uint32_t zero, TUpdate&& update);
+
+template<typename TNext>
+std::uint32_t LdsBufferAtomic64(SpirvEmitterState& state, std::uint32_t low, TNext&& next) {
+    return Unary(state, spv::OpBitcast, TypeU64(state), AtomicUpdateTyped(state, EmitLdsBufferU64Pointer(state, low), ResourceKind::Lds, TypeScalarU64(state), next));
+}
 
 template<typename TOperation>
 std::uint32_t EmitLdsAtomic32(SpirvEmitterState& state, const MemoryInfo& mem, TOperation&& operation) {
@@ -1147,7 +1150,7 @@ std::uint32_t ApertureAtomic64(SpirvValueEmitContext& ctx, const IrValue& inst, 
     const auto unaligned = Binary(state, spv::OpINotEqual, TypeBool(state), Binary(state, spv::OpBitwiseAnd, TypeU32(state), byteOffset, ConstantU32(state, 7u)), ConstantU32(state, 0u));
     EmitIfCondition(state, unaligned, [&] { RecordBdaFault(state, address, ConstantU32(state, 8u), instruction, BdaAbi::FaultReason::Unaligned); });
     if (kind == ResourceKind::Scratch && state.program.Info().scratchDwords == 0u) return ConstantU64(state, 0u);
-    if (kind == ResourceKind::Lds && !state.requirements.ldsLock) ctx.Fail(inst, "64-bit LDS atomic reached through a flat address without the workgroup lock");
+    if (kind == ResourceKind::Lds && !state.requirements.ldsLock && !state.requirements.ldsBufferInt64Atomics) ctx.Fail(inst, "64-bit LDS atomic reached through a flat address without the workgroup lock");
     MemoryInfo storage{};
     storage.kind = kind;
     const auto resource = PrepareMemoryResourceAccess(state, storage);
@@ -1157,6 +1160,7 @@ std::uint32_t ApertureAtomic64(SpirvValueEmitContext& ctx, const IrValue& inst, 
     const auto opcode = inst.Opcode();
     return EmitValueOrDefaultIfCondition(state, aligned, TypeU64(state), ConstantU64(state, 0u), [&] {
         return EmitValueOrDefaultIfCondition(state, EmitMemoryElementInBounds(state, resource, high), TypeU64(state), ConstantU64(state, 0u), [&] {
+            if (kind == ResourceKind::Lds && state.requirements.ldsBufferInt64Atomics) return LdsBufferAtomic64(state, low, [&](std::uint32_t old) { return FlatAtomicNext64(state, opcode, old, value, comparator); });
             const auto update = [&]() {
                 const auto lowPointer = EmitMemoryElementPointer(state, resource, low);
                 const auto highPointer = EmitMemoryElementPointer(state, resource, high);
@@ -1365,7 +1369,7 @@ std::uint32_t LockedLdsUpdate(SpirvEmitterState& state, std::uint32_t type, std:
     state.module.AddFunction(spv::OpPhi, TypeBool(state), doneNext, served, servedMerge, done, body);
     state.module.AddFunction(spv::OpPhi, type, resultNext, servedResult, servedMerge, result, body);
     const auto ballot = state.module.AllocateId();
-    EmitSubgroupBallot(state, ballot, Unary(state, spv::OpLogicalNot, TypeBool(state), doneNext));
+    EmitHostSubgroupBallot(state, ballot, Unary(state, spv::OpLogicalNot, TypeBool(state), doneNext));
     std::uint32_t remaining = ConstantU32(state, 0u);
     for (std::uint32_t component = 0; component < 4u; ++component) {
         const auto word = state.module.AllocateId();
@@ -1389,6 +1393,12 @@ std::uint32_t SharedAtomic64(SpirvValueEmitContext& ctx, const IrValue& inst, TR
         const auto low = EmitMemoryElementIndex(state, resource, rawIndex);
         const auto high = EmitMemoryElementIndex(state, resource, Binary(state, spv::OpIAdd, TypeU32(state), rawIndex, ConstantU32(state, 1u)));
         return EmitValueOrDefaultIfCondition(state, EmitMemoryElementInBounds(state, resource, high), TypeU64(state), ConstantU64(state, 0u), [&]() {
+            if (state.requirements.ldsBufferInt64Atomics) {
+                const auto unaligned = Binary(state, spv::OpINotEqual, TypeBool(state), Binary(state, spv::OpBitwiseAnd, TypeU32(state), low, ConstantU32(state, 1u)), ConstantU32(state, 0u));
+                EmitIfCondition(state, unaligned, [&] { RecordBdaFaultWords(state, Binary(state, spv::OpShiftLeftLogical, TypeU32(state), rawIndex, ConstantU32(state, 2u)), ConstantU32(state, 0u), ConstantU32(state, 8u), ConstantU32(state, inst.Flags<MemoryFlags>().pc), BdaAbi::FaultReason::Unaligned); });
+                const auto aligned = Unary(state, spv::OpLogicalNot, TypeBool(state), unaligned);
+                return EmitValueOrDefaultIfCondition(state, aligned, TypeU64(state), ConstantU64(state, 0u), [&]() { return LdsBufferAtomic64(state, low, [&](std::uint32_t old) { return replacement(state, old); }); });
+            }
             const auto update = [&]() {
                 const auto lowPointer = EmitMemoryElementPointer(state, resource, low);
                 const auto highPointer = EmitMemoryElementPointer(state, resource, high);
