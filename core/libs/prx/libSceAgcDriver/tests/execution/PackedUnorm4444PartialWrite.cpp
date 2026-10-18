@@ -47,6 +47,9 @@ constexpr std::uint32_t Unorm4_4_4_4Info = 0x8000u | (19u << 2u) | (2u << 11u);
 constexpr std::uint32_t TiledAttrib3 = 0x4dc6c000u;
 constexpr std::uint32_t Float32Export = 9;
 constexpr std::uint32_t Float16Export = 4;
+constexpr std::uint32_t PositionInputs = 0x300u;
+constexpr std::uint32_t LateKill = 0x40u;
+constexpr std::array<std::uint32_t, 5> CheckerboardKill{0x7e040f00u, 0x7e060f01u, 0x3a040702u, 0x36040481u, 0x7da40480u};
 
 alignas(256) constexpr std::array<std::uint32_t, 6> VertexCode{
     0xe0382000, 0x80000005, 0xbf8c3f70, 0xf80008cf, 0x03020100, 0xbf810000,
@@ -77,10 +80,13 @@ std::uint32_t Half(float value) {
     return ((((bits >> 23u) & 0xffu) - 112u) << 10u) | ((bits >> 13u) & 0x3ffu);
 }
 
-std::span<const std::uint32_t> Program(const std::array<std::uint32_t, 4>& vgprs, bool compressed) {
+std::span<const std::uint32_t> Program(const std::array<std::uint32_t, 4>& vgprs, bool compressed, bool killing = false) {
     Require(programCount < Programs.size(), "too many test programs");
     auto& code = Programs[programCount++];
     std::size_t at = 0;
+    if (killing) {
+        for (const auto word : CheckerboardKill) code[at++] = word;
+    }
     for (std::uint32_t vgpr = 0; vgpr < (compressed ? 2u : 4u); ++vgpr) {
         code[at++] = 0x7e0002ffu | ((4u + vgpr) << 17u);
         code[at++] = vgprs[vgpr];
@@ -91,8 +97,8 @@ std::span<const std::uint32_t> Program(const std::array<std::uint32_t, 4>& vgprs
     return std::span<const std::uint32_t>(code.data(), at);
 }
 
-std::span<const std::uint32_t> Float32Program(std::array<float, 4> rgba) {
-    return Program({std::bit_cast<std::uint32_t>(rgba[0]), std::bit_cast<std::uint32_t>(rgba[1]), std::bit_cast<std::uint32_t>(rgba[2]), std::bit_cast<std::uint32_t>(rgba[3])}, false);
+std::span<const std::uint32_t> Float32Program(std::array<float, 4> rgba, bool killing = false) {
+    return Program({std::bit_cast<std::uint32_t>(rgba[0]), std::bit_cast<std::uint32_t>(rgba[1]), std::bit_cast<std::uint32_t>(rgba[2]), std::bit_cast<std::uint32_t>(rgba[3])}, false, killing);
 }
 
 std::span<const std::uint32_t> Float16Program(std::array<float, 4> rgba) {
@@ -171,7 +177,7 @@ AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
     return color;
 }
 
-std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTarget color, std::uint32_t exportedMask, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode) {
+std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTarget color, std::uint32_t exportedMask, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode, bool killing = false) {
     const auto target = device.Target();
     constexpr std::uint32_t waveSize = 64;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
@@ -210,7 +216,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
     state.blendConstants = {};
 
     const auto codeAddress = reinterpret_cast<std::uintptr_t>(pixelCode.data());
-    const AgcDriver::Registers context{{0x1b6, 0x8000}, {0x1b3, 0}, {0x1b4, 0}, {0x203, 0}, {0x1c5, exportFormat}};
+    const AgcDriver::Registers context{{0x1b6, 0x8000}, {0x1b3, killing ? PositionInputs : 0u}, {0x1b4, killing ? PositionInputs : 0u}, {0x203, killing ? LateKill : 0u}, {0x1c5, exportFormat}};
     const std::array<ShaderRecompiler::MemoryRegion, 1> pixelMemory{{{codeAddress, std::as_bytes(pixelCode)}}};
     ShaderRecompiler::RecompileRequest fragment{
         {ShaderStage::Fragment, codeAddress, pixelCode, 0, {}},
@@ -225,6 +231,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
     fragment.context.pixel = AgcDriver::Graphics::DecodePixelStageInfo(context, AgcDriver::Graphics::ExportMappings(state));
     fragment.context.pixel->targetExportPacking = AgcDriver::Graphics::ExportPackings(state);
     fragment.context.pixel->targetMerge = AgcDriver::Graphics::ExportTargetMerge(state);
+    Require(fragment.context.pixel->pixelKillEnable == killing && !fragment.context.pixel->earlyZ && !fragment.context.pixel->targetMerge.depthStencilWrites, "the draw's pixel kill under late tests or its depth and stencil writes did not decode");
     Require((fragment.context.pixel->targetMerge.mask != 0u) == partial && fragment.context.pixel->targetMerge.mask == color.partialWriteMask, "the draw's target merge disagrees with its write mask");
     const ShaderRecompiler::SrtRuntime runtime{};
     const auto invocation = AgcDriver::DriverDetail::InvocationFor(snapshot, 0, fragment);
@@ -300,6 +307,21 @@ void BackToBack(AgcDriver::VulkanDevice& device, Block& block, const ColorTarget
     }
 }
 
+void ExpectKilled(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint16_t>& before, std::uint32_t word, std::uint32_t wordMask, const std::string& what) {
+    const auto stored = ReadBack(device, block);
+    for (std::uint32_t y = 0; y < Height; ++y) {
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            const auto index = layout.Offset(x, y) / 2u;
+            const bool kept = x < ScissorWidth && ((x ^ y) & 1u) == 0u;
+            const std::uint32_t expected = kept ? (before[index] & ~wordMask) | (word & wordMask) : before[index];
+            if (stored[index] == expected) continue;
+            char detail[192];
+            std::snprintf(detail, sizeof(detail), ": %s pixel (%u, %u) holds 0x%04x, expected 0x%04x (it held 0x%04x)", kept ? "a surviving" : x < ScissorWidth ? "a killed" : "an unscissored", x, y, stored[index], expected, before[index]);
+            throw std::runtime_error(what + detail);
+        }
+    }
+}
+
 std::string Describe(std::uint32_t mask, std::array<float, 4> rgba) {
     char text[160];
     std::snprintf(text, sizeof(text), "CB_TARGET_MASK 0x%x write of (%.9g, %.9g, %.9g, %.9g)", mask, rgba[0], rgba[1], rgba[2], rgba[3]);
@@ -350,7 +372,12 @@ int main() {
         const std::array<float, 4> halves{0.5f, 0.75f, 0.125f, 0.25f};
         const auto wordMask = Draw(*device, color, 0x9u, Float16Export, Float16Program(halves));
         ExpectSurface(*device, block, layout, before, Packed(halves), wordMask, "an FP16_ABGR " + Describe(0x9u, halves) + " into a tiled 4_4_4_4 unorm target");
-        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws and 3 back-to-back sequences merged into a %ux%u tiled target, the pixels outside the scissor kept\n", cases.size() + 1u, Width, Height);
+        for (const auto& [mask, rgba] : {Case{0x1u, {0.6f, 0.2f, 0.8f, 0.4f}}, Case{0x6u, {1.0f, 2.0f / 15.0f, 13.0f / 15.0f, 0.0f}}}) {
+            before = Fill(block, 91u + mask);
+            const auto killedMask = Draw(*device, color, mask, Float32Export, Float32Program(rgba, true), true);
+            ExpectKilled(*device, block, layout, before, Packed(rgba), killedMask, "a late-test checkerboard-killing " + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
+        }
+        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences and 2 checkerboard-killing draws merged into a %ux%u tiled target, the killed pixels and those outside the scissor kept\n", cases.size() + 1u, Width, Height);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

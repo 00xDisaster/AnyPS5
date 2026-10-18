@@ -4831,6 +4831,10 @@ void verifyPixelRequestSerialization() {
         movedMerge.context.pixel->targetMerge.descriptor[0] = 0x200u;
         RecompileCacheKey::Build(movedMerge, replayKey);
         require(key == replayKey, "the merged target's descriptor changed the static shader identity");
+        auto depthWritingMerge = request;
+        depthWritingMerge.context.pixel->targetMerge.depthStencilWrites = true;
+        RecompileCacheKey::Build(depthWritingMerge, replayKey);
+        require(key != replayKey, "the merge draw's depth or stencil writes did not change the static shader identity");
         auto withoutMerge = request;
         withoutMerge.context.pixel->targetMerge = {};
         RecompileCacheKey::Build(withoutMerge, replayKey);
@@ -5114,12 +5118,12 @@ void verifyVertexInfoVersion19() {
     require(allBitsOffset == flagOffset + 2u, "the front-face all-bits flag does not follow the dithered coverage flag");
     require(blendOffset == allBitsOffset + 18u, "the reversed-order blend code is not serialized after the front-face all-bits flag, quad pixel mask and quad sample masks");
     constexpr std::size_t iterationBytes = 35u;
-    constexpr std::size_t mergeBytes = 38u;
+    constexpr std::size_t mergeBytes = 39u;
     const auto mergeOffset = static_cast<std::ptrdiff_t>(blendOffset + 4u + iterationBytes);
     auto merging = pixel;
-    merging.context.pixel->targetMerge = {3u, 0xf00fu, 1u, {1u, 2u, 3u, 4u, 5u, 6u, 7u, 0x89abcdefu}};
+    merging.context.pixel->targetMerge = {3u, 0xf00fu, 1u, {1u, 2u, 3u, 4u, 5u, 6u, 7u, 0x89abcdefu}, true};
     const auto mergingBytes = decodeBase64(serializer.Serialize(merging));
-    require(mergingBytes.size() == plainPixel.size() && std::equal(plainPixel.begin(), plainPixel.begin() + mergeOffset, mergingBytes.begin()) && mergingBytes[mergeOffset] == 3u && mergingBytes[mergeOffset + 1] == 0x0fu && mergingBytes[mergeOffset + 2] == 0xf0u && mergingBytes[mergeOffset + 5] == 1u && mergingBytes[mergeOffset + 6] == 1u && mergingBytes[mergeOffset + 34] == 0xefu && mergingBytes[mergeOffset + 37] == 0x89u && std::equal(plainPixel.begin() + mergeOffset + static_cast<std::ptrdiff_t>(mergeBytes), plainPixel.end(), mergingBytes.begin() + mergeOffset + static_cast<std::ptrdiff_t>(mergeBytes)), "the color target merge is not the 38 bytes the version 40 pixel info adds after the pixel iteration fields");
+    require(mergingBytes.size() == plainPixel.size() && std::equal(plainPixel.begin(), plainPixel.begin() + mergeOffset, mergingBytes.begin()) && mergingBytes[mergeOffset] == 3u && mergingBytes[mergeOffset + 1] == 0x0fu && mergingBytes[mergeOffset + 2] == 0xf0u && mergingBytes[mergeOffset + 5] == 1u && mergingBytes[mergeOffset + 6] == 1u && mergingBytes[mergeOffset + 34] == 0xefu && mergingBytes[mergeOffset + 37] == 0x89u && mergingBytes[mergeOffset + 38] == 1u && std::equal(plainPixel.begin() + mergeOffset + static_cast<std::ptrdiff_t>(mergeBytes), plainPixel.end(), mergingBytes.begin() + mergeOffset + static_cast<std::ptrdiff_t>(mergeBytes)), "the color target merge is not the 39 bytes the version 40 pixel info adds after the pixel iteration fields");
     require(serializer.Deserialize(serializer.Serialize(merging)).request.context.pixel->targetMerge == merging.context.pixel->targetMerge, "a serialized request lost its color target merge");
     const auto withoutMerge = [&](std::vector<std::uint8_t> bytes) {
         bytes.erase(bytes.begin() + mergeOffset, bytes.begin() + mergeOffset + static_cast<std::ptrdiff_t>(mergeBytes));

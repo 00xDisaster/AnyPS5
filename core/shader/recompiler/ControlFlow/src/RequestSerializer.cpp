@@ -359,6 +359,7 @@ void writePixelInfo(Writer& writer, const ShaderPixelStageInfo& info) {
     writer.WriteU32(info.targetMerge.mask);
     writer.WriteU8(info.targetMerge.samples);
     for (const std::uint32_t word : info.targetMerge.descriptor) writer.WriteU32(word);
+    writer.WriteBool(info.targetMerge.depthStencilWrites);
 }
 
 ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
@@ -434,6 +435,7 @@ ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
         info.targetMerge.mask = static_cast<std::uint16_t>(mask);
         info.targetMerge.samples = reader.ReadU8();
         for (std::uint32_t& word : info.targetMerge.descriptor) word = reader.ReadU32();
+        info.targetMerge.depthStencilWrites = reader.ReadBool();
     }
     if (version < 5u) {
         const auto input = [](PixelInput value, bool present) { return present ? PixelInputBit(value) : 0u; };

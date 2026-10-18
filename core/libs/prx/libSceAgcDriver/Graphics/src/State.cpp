@@ -1529,6 +1529,12 @@ std::uint16_t PackedWriteMask(std::uint8_t componentMapping, std::uint32_t expor
     return mask;
 }
 
+bool DepthStencilWrites(const State& state) {
+    if (!state.depth) return false;
+    const auto writes = [](const VkStencilOpState& face) { return (face.writeMask & 0xffu) != 0 && (face.failOp != VK_STENCIL_OP_KEEP || face.passOp != VK_STENCIL_OP_KEEP || face.depthFailOp != VK_STENCIL_OP_KEEP); };
+    return state.depthWrite || (state.stencilTest && (writes(state.stencilFront) || writes(state.stencilBack)));
+}
+
 ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
     ShaderRecompiler::TargetMerge merge;
     for (const auto& color : state.colors) {
@@ -1538,6 +1544,7 @@ ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
         merge.mask = color.partialWriteMask;
         merge.samples = static_cast<std::uint8_t>(color.samples);
         merge.descriptor = EncodeTextureResource(SurfaceForTarget(color));
+        merge.depthStencilWrites = DepthStencilWrites(state);
     }
     return merge;
 }

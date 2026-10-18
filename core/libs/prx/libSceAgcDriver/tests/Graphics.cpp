@@ -8813,7 +8813,38 @@ void unorm4_4_4_4TargetTests() {
         const auto merge = AgcDriver::Graphics::ExportTargetMerge(partial);
         const auto expected = AgcDriver::Graphics::SurfaceForTarget(partial.color);
         const auto surface = AgcDriver::Graphics::DecodeTextureResource(merge.descriptor);
-        Require(merge.target == 0u && merge.mask == wordMask && merge.samples == 1u && surface.baseAddress == expected.baseAddress && surface.pipeBankXor == expected.pipeBankXor && surface.width == expected.width && surface.height == expected.height && surface.format == expected.format && surface.tileMode == expected.tileMode && surface.dimension == AgcDriver::Graphics::TextureDimension::k2D && surface.mipCount == 1u && surface.samples == 1u, "the merge descriptor of CB_TARGET_MASK " + std::to_string(targetMask) + " does not decode to the target's surface");
+        Require(merge.target == 0u && merge.mask == wordMask && merge.samples == 1u && !merge.depthStencilWrites && surface.baseAddress == expected.baseAddress && surface.pipeBankXor == expected.pipeBankXor && surface.width == expected.width && surface.height == expected.height && surface.format == expected.format && surface.tileMode == expected.tileMode && surface.dimension == AgcDriver::Graphics::TextureDimension::k2D && surface.mipCount == 1u && surface.samples == 1u, "the merge descriptor of CB_TARGET_MASK " + std::to_string(targetMask) + " does not decode to the target's surface");
+    }
+    {
+        auto depthQueue = queue;
+        depthQueue.context[0x8e] = 1;
+        depthQueue.context[0x000] = 0;
+        depthQueue.context[0x002] = 0;
+        depthQueue.context[0x007] = (1u << 16u) | 3u;
+        depthQueue.context[0x00a] = 7;
+        depthQueue.context[0x00b] = 0;
+        depthQueue.context[0x010] = 0x22900983;
+        depthQueue.context[0x011] = 0x20000181;
+        for (const auto offset : {0x012u, 0x014u}) depthQueue.context[offset] = 0x100;
+        for (const auto offset : {0x013u, 0x015u}) depthQueue.context[offset] = 0x200;
+        depthQueue.context[0x005] = 0x300;
+        depthQueue.context[0x01e] = 0x1;
+        struct DepthStencilCase {
+            std::uint32_t control;
+            std::uint32_t ops;
+            std::uint32_t masks;
+            bool writes;
+        };
+        for (const auto& [control, ops, masks, writes] : {DepthStencilCase{0x00700710u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700712u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700714u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700716u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0u, 0x01ffff01u, false}, DepthStencilCase{0x00700711u, 0x00050050u, 0x0100ff01u, false}, DepthStencilCase{0x00700713u, 0u, 0x01ffff01u, false}}) {
+            depthQueue.context[0x200] = control;
+            depthQueue.context[0x10b] = ops;
+            depthQueue.context[0x10c] = depthQueue.context[0x10d] = masks;
+            const auto what = "DB_DEPTH_CONTROL " + std::to_string(control) + " with stencil operations " + std::to_string(ops) + " and masks " + std::to_string(masks);
+            Require(AgcDriver::Graphics::DrawRejection(depthQueue, false).empty(), "the draw precheck refused a partial 4_4_4_4 write under " + what);
+            const auto partial = AgcDriver::Graphics::DecodeState(depthQueue);
+            const auto merge = AgcDriver::Graphics::ExportTargetMerge(partial);
+            Require(partial.depth.has_value() == ((control & 3u) != 0u) && merge.mask == 0xf000u && AgcDriver::Graphics::DepthStencilWrites(partial) == writes && merge.depthStencilWrites == writes, "a partial 4_4_4_4 write under " + what + (writes ? " did not report" : " reported") + " depth or stencil writes");
+        }
     }
     {
         changed.context[0x8e] = 1;
@@ -8871,7 +8902,21 @@ void unorm4_4_4_4TargetTests() {
         auto killing = merging;
         killing.context.pixel->pixelKillEnable = true;
         killing.context.pixel->earlyZ = false;
-        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(killing)); }, "kills pixels under late tests");
+        for (const bool registration : {false, true}) {
+            killing.target.registrationModules = registration;
+            const auto words = ShaderRecompiler::Recompile(killing).spirv.Copy();
+            std::size_t reads = 0, writes = 0;
+            for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+                reads += static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpImageRead ? 1u : 0u;
+                writes += static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpImageWrite ? 1u : 0u;
+            }
+            Require(reads == 1u && writes == 1u && interlockShape(words) == "capability extension ordered begin end " && declaresEarlyFragmentTests(killing), "a killing 4_4_4_4 merge module under late tests of a draw without depth or stencil writes did not merge inside a pixel interlock after early tests");
+        }
+        killing.context.pixel->targetMerge.depthStencilWrites = true;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(killing)); }, "kills pixels under late tests of a draw writing depth or stencil");
+        auto earlyKilling = killing;
+        earlyKilling.context.pixel->earlyZ = true;
+        static_cast<void>(ShaderRecompiler::Recompile(earlyKilling));
         auto exporting = merging;
         exporting.context.pixel->depthExportEnable = true;
         expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(exporting)); }, "exports depth");

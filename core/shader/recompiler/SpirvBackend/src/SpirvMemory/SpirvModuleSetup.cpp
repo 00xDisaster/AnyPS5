@@ -384,8 +384,8 @@ void DefineModule(SpirvEmitterState& state) {
             state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeStencilRefReplacingEXT);
         }
         const bool merge = pixel.mergeMask != 0u;
-        if (merge && (state.depthVariable != 0 || state.stencilRefVariable != 0 || pixel.psDepthExportEnable || pixel.psSampleMaskExportEnable || pixel.psStencilRefExportEnable || pixel.psAlphaToCoverage || pixel.QuadMasked() || (pixel.psPixelKillEnable && !pixel.psEarlyZ))) {
-            throw std::runtime_error("a partial write of a packed color target merges inside the pixel shader after early depth and stencil tests, which a shader that kills pixels under late tests, exports depth, stencil or coverage, or runs with a quad sample mask cannot use");
+        if (merge && (state.depthVariable != 0 || state.stencilRefVariable != 0 || pixel.psDepthExportEnable || pixel.psSampleMaskExportEnable || pixel.psStencilRefExportEnable || pixel.psAlphaToCoverage || pixel.QuadMasked() || (pixel.psPixelKillEnable && !pixel.psEarlyZ && pixel.mergeDepthStencilWrites))) {
+            throw std::runtime_error("a partial write of a packed color target merges inside the pixel shader after early depth and stencil tests, which a shader that kills pixels under late tests of a draw writing depth or stencil, exports depth, stencil or coverage, or runs with a quad sample mask cannot use");
         }
         if ((pixel.psEarlyZ && !pixel.psAlphaToCoverage && !pixel.QuadMasked()) || merge) {
             state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeEarlyFragmentTests);
