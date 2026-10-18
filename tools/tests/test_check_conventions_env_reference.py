@@ -106,6 +106,43 @@ class EnvReferenceDiffTests(unittest.TestCase):
         head = {SAMPLE: base[SAMPLE] + "int unrelated;\n"}
         self.assertEqual(self.run_case(base, head), [])
 
+    def test_a_row_the_pull_request_removes_is_reported_while_the_code_still_reads_it(self):
+        base = {
+            DOC: DOC_TEXT,
+            SAMPLE: 'static bool a = std::getenv("APS5_DOCUMENTED") != nullptr;\n',
+        }
+        head = {DOC: "| `APS5_GONE` | presence |\n"}
+        self.assertEqual(self.run_case(base, head), [("env-reference", DOC, 0,
+                                                      "APS5_DOCUMENTED is still read by the code but this pull request removes its row")])
+
+    def test_a_removed_row_is_kept_quiet_when_the_code_stops_reading_it_too(self):
+        base = {
+            DOC: DOC_TEXT,
+            SAMPLE: 'static bool a = std::getenv("APS5_DOCUMENTED") != nullptr;\n'
+                    'static bool b = std::getenv("APS5_GONE") != nullptr;\n',
+        }
+        head = {
+            DOC: "| `APS5_DOCUMENTED` | presence |\n",
+            SAMPLE: 'static bool a = std::getenv("APS5_DOCUMENTED") != nullptr;\n',
+        }
+        self.assertEqual(self.run_case(base, head), [])
+
+    def test_an_added_line_starting_with_plus_does_not_shift_the_reported_line(self):
+        base = {DOC: DOC_TEXT, SAMPLE: "int a;\n"}
+        head = {SAMPLE: "int a;\n+++x;\n" 'static bool b = std::getenv("APS5_NEW_READ") != nullptr;\n'}
+        findings = self.run_case(base, head)
+        self.assertEqual(findings, [("env-reference", SAMPLE, 3,
+                                     f"APS5_NEW_READ is read here but has no row in {DOC}")])
+
+    def test_a_removed_line_starting_with_minus_still_counts_as_a_removed_read(self):
+        base = {
+            DOC: DOC_TEXT,
+            SAMPLE: '--x; std::getenv("APS5_GONE") != nullptr;\n',
+        }
+        head = {SAMPLE: "int unrelated;\n"}
+        self.assertEqual(self.run_case(base, head), [("env-reference", DOC, 0,
+                                                      "APS5_GONE has a row but the code no longer reads it")])
+
 
 if __name__ == "__main__":
     unittest.main()
