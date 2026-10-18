@@ -5,7 +5,7 @@
 #include "SDL_gamecontroller.h"
 #include "prx/libScePad/include/KeyboardMouse.hpp"
 #include "prx/libScePad/include/PadState.hpp"
-#include <array>
+#include "prx/libSceVideoOut/include/PadOutputPacing.hpp"
 #include <chrono>
 
 class DisplayWindow;
@@ -36,9 +36,8 @@ private:
     PadOutputState outputState{};
     bool outputPending = false;
     std::chrono::steady_clock::time_point nextRumbleRefresh{};
-    std::chrono::steady_clock::time_point nextOutputAllowed{};
-    std::array<Uint8, 47> sentTriggerEffect{};
-    bool triggerEffectSent = false;
+    LightBarPacer lightBar;
+    TriggerEffectCache triggerEffect;
 };
 
 #endif
