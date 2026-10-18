@@ -13,6 +13,7 @@ from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nid_names import CPP_TOKEN
+import env_reference
 
 RULES = {
     "comment": ("error", "docs/dev/CONVENTIONS.md", "Comments are only for technical debt, so they need a change to docs/dev/TechnicalDebt.md or docs/dev/debt/ in the same pull request; #endif and namespace ends are always allowed"),
@@ -58,15 +59,6 @@ FENCE = re.compile(r"^ {0,3}(```|~~~).*?^ {0,3}\1[ \t]*\r?$|^ {0,3}(?:```|~~~).*
 INLINE = re.compile(r"`[^`\n]*`")
 SECTION = re.compile(r"^###(?!#)\s*(.+?)\s*$", re.M)
 KEY = re.compile(r"^( *)([A-Za-z0-9_-]+|'[^']*'|\"[^\"]*\"):(?:\s+(.*?))?\s*$")
-ENV_PREFIX = r"(?:APS5|ANYPS5)_[A-Za-z0-9_]+"
-ENV_GREP = (r'(std::)?getenv\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|IsEnvironmentSet\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|kibSetting\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|MaskFromEnvironment\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|EnvInt\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"'
-            r'|GetEnvironmentVariableA\([[:space:]]*"(APS5|ANYPS5)_[A-Za-z0-9_]+"')
-ENV_READER = re.compile(r'(?:(?:std::)?getenv|IsEnvironmentSet|kibSetting|MaskFromEnvironment|EnvInt|GetEnvironmentVariableA)\(\s*"(' + ENV_PREFIX + r')"')
-ENV_NAME = re.compile(r"`(" + ENV_PREFIX + r")`")
 
 
 def git(*args, text=True):
@@ -289,12 +281,12 @@ class Check:
         doc = "docs/dev/ENVIRONMENT.md"
         if doc not in self.tree:
             return
-        result = subprocess.run(["git", "grep", "-nE", ENV_GREP, self.head, "--", "core"],
+        result = subprocess.run(["git", "grep", "-nE", env_reference.GREP, self.head, "--", "core"],
                                 capture_output=True, encoding="utf-8", errors="replace")
         reads = set()
         for line in result.stdout.splitlines():
-            reads.update(match.group(1) for match in ENV_READER.finditer(line))
-        documented = set(ENV_NAME.findall(self.show(doc)))
+            reads.update(match.group("name") for _, match in env_reference.line_reads(line))
+        documented = set(env_reference.documented_pattern(env_reference.PREFIXES).findall(self.show(doc)))
         for name in sorted(reads - documented):
             self.report("env-reference", doc, 0, f"{name} is read by the code but has no row")
         for name in sorted(documented - reads):

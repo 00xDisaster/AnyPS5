@@ -18,6 +18,13 @@ static const char* f = std::getenv("PATH");
 static const char* g = std::getenv("TZ");
 static int h = EnvInt("APS5_THREAD_NICE", -10);
 static int i = GetEnvironmentVariableA("APS5_CRASH_INDIRECT_MEMORY", nullptr, 0);
+static unsigned long j = configured("APS5_PIPELINE_JOURNAL_MAX_MIB", 1024u) << 20u;
+static unsigned long k = PipelineSwitch("APS5_PIPELINE_STORE_ENTRIES", 1024u);
+static unsigned long l = configured("APS5_PIPELINE_JOURNAL_THREADS", std::max(1u, hardware / 2u));
+static std::size_t m = environmentCount("APS5_PM4_RING", 16, MaximumCapacity, "APS5_PM4_RING must be a number");
+static int n = GetEnvironmentVariableW(L"ANYPS5_LOADEXEC_ARGV_SKIP", skip, 2);
+static const auto* o = addWideString(u"ANYPS5_LOADEXEC_PARENT");
+static unsigned long p = reconfigured("APS5_NOT_A_READ", 1);
 """
 
 
@@ -37,10 +44,18 @@ class EnvReferenceTests(unittest.TestCase):
             set(found),
             {"APS5_PROFILE_DRAW", "APS5_TRACE_GPU", "APS5_HOST_IMPORT_MIB",
              "APS5_WORKER_AFFINITY_MASK", "ANYPS5_GPU", "APS5_THREAD_NICE",
-             "APS5_CRASH_INDIRECT_MEMORY"})
+             "APS5_CRASH_INDIRECT_MEMORY", "APS5_PIPELINE_JOURNAL_MAX_MIB",
+             "APS5_PIPELINE_STORE_ENTRIES", "APS5_PIPELINE_JOURNAL_THREADS", "APS5_PM4_RING",
+             "ANYPS5_LOADEXEC_ARGV_SKIP", "ANYPS5_LOADEXEC_PARENT"})
         self.assertEqual(found["APS5_PROFILE_DRAW"][0][1], 1)
         self.assertEqual(found["APS5_THREAD_NICE"][0][2:], ("integer", "-10"))
         self.assertEqual(found["APS5_HOST_IMPORT_MIB"][0][2:], ("integer", "6144"))
+        self.assertEqual(found["APS5_PIPELINE_JOURNAL_MAX_MIB"][0][2:], ("integer", "1024"))
+        self.assertEqual(found["APS5_PIPELINE_STORE_ENTRIES"][0][2:], ("integer", "1024"))
+        self.assertEqual(found["APS5_PIPELINE_JOURNAL_THREADS"][0][2:], ("integer", ""))
+        self.assertEqual(found["APS5_PM4_RING"][0][2:], ("integer", "16"))
+        self.assertEqual(found["ANYPS5_LOADEXEC_ARGV_SKIP"][0][2:], ("string", ""))
+        self.assertEqual(found["ANYPS5_LOADEXEC_PARENT"][0][2:], ("string", ""))
 
     def test_the_default_prefixes_cover_both(self):
         root = self.fixture()

@@ -1,4 +1,5 @@
 import argparse
+import functools
 import re
 import sys
 from pathlib import Path
@@ -9,38 +10,51 @@ ROOTS = ("core",)
 EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".py"}
 SKIP = {"build", "build-linux", "build-relinker", "3rdparty", ".git"}
 
-READERS = {
-    "IsEnvironmentSet": "presence",
-    "kibSetting": "integer",
-    "MaskFromEnvironment": "integer",
-}
+INTEGER_READERS = {"kibSetting", "MaskFromEnvironment", "EnvInt", "configured", "environmentCount"}
+STRING_READERS = {"GetEnvironmentVariableA", "GetEnvironmentVariableW", "addWideString"}
 NULL_TEST = re.compile(r"[!=]=\s*(nullptr|NULL|0)\b|!\s*(?:std::)?getenv\(")
 INTEGER_TEST = re.compile(r"\b(atoi|strtol|strtoul|strtoll|strtoull|stoi|stol|stoul|from_chars|atoi64)\s*\(")
+GREP = (r'(getenv|IsEnvironmentSet|kibSetting|MaskFromEnvironment|EnvInt|GetEnvironmentVariable[AW]'
+        r'|configured|PipelineSwitch|environmentCount|addWideString)'
+        r'\([[:space:]]*(u|L)?"(APS5|ANYPS5)_[A-Za-z0-9_]+"')
 
 
-def pattern(prefixes):
-    name = "(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ")[A-Za-z0-9_]+"
-    return re.compile(
-        r"(?P<getenv>(?:std::)?getenv)\(\s*\"(?P<getenv_name>" + name + r")\"\s*\)"
-        r"|IsEnvironmentSet\(\s*\"(?P<presence_name>" + name + r")\"\s*\)"
-        r"|MaskFromEnvironment\(\s*\"(?P<mask_name>" + name + r")\"\s*\)"
-        r"|kibSetting\(\s*\"(?P<kib_name>" + name + r")\"\s*,\s*(?P<kib_default>[0-9]+)"
-        r"|EnvInt\(\s*\"(?P<envint_name>" + name + r")\"\s*,\s*(?P<envint_default>-?[0-9]+)"
-        r"|GetEnvironmentVariableA\(\s*\"(?P<win_name>" + name + r")\""
+def _name(prefixes):
+    return "(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ")[A-Za-z0-9_]+"
+
+
+@functools.lru_cache(maxsize=None)
+def forms(prefixes=PREFIXES):
+    name = _name(prefixes)
+    return (
+        ("getenv", re.compile(r'(?:std::)?getenv\(\s*"(?P<name>' + name + r')"\s*\)')),
+        ("IsEnvironmentSet", re.compile(r'IsEnvironmentSet\(\s*"(?P<name>' + name + r')"\s*\)')),
+        ("MaskFromEnvironment", re.compile(r'MaskFromEnvironment\(\s*"(?P<name>' + name + r')"\s*\)')),
+        ("kibSetting", re.compile(r'kibSetting\(\s*"(?P<name>' + name + r')"\s*,\s*(?P<default>[0-9]+)')),
+        ("EnvInt", re.compile(r'EnvInt\(\s*"(?P<name>' + name + r')"\s*,\s*(?P<default>-?[0-9]+)')),
+        ("configured", re.compile(r'\b(?:configured|PipelineSwitch)\(\s*"(?P<name>' + name + r')"'
+                                  r'(?:\s*,\s*(?P<default>[0-9]+)[uUlL]*)?')),
+        ("environmentCount", re.compile(r'\benvironmentCount\(\s*"(?P<name>' + name + r')"\s*,\s*(?P<default>[0-9]+)')),
+        ("GetEnvironmentVariableA", re.compile(r'GetEnvironmentVariableA\(\s*"(?P<name>' + name + r')"')),
+        ("GetEnvironmentVariableW", re.compile(r'GetEnvironmentVariableW\(\s*L"(?P<name>' + name + r')"')),
+        ("addWideString", re.compile(r'\baddWideString\(\s*u"(?P<name>' + name + r')"\s*\)')),
     )
 
 
+def line_reads(line, prefixes=PREFIXES):
+    return [(reader, match) for reader, form in forms(tuple(prefixes)) for match in form.finditer(line)]
+
+
 def documented_pattern(prefixes):
-    name = "(?:" + "|".join(re.escape(prefix) for prefix in prefixes) + ")[A-Za-z0-9_]+"
-    return re.compile(r"`(" + name + r")`")
+    return re.compile(r"`(" + _name(prefixes) + r")`")
 
 
 def kind_of(reader, window):
     if reader == "IsEnvironmentSet":
         return "presence"
-    if reader in ("kibSetting", "MaskFromEnvironment", "EnvInt"):
+    if reader in INTEGER_READERS:
         return "integer"
-    if reader == "GetEnvironmentVariableA":
+    if reader in STRING_READERS:
         return "string"
     if NULL_TEST.search(window):
         return "presence"
@@ -50,9 +64,9 @@ def kind_of(reader, window):
 
 
 def default_of(match, window):
-    for group in ("kib_default", "envint_default"):
-        if match.group(group):
-            return match.group(group)
+    default = match.groupdict().get("default")
+    if default:
+        return default
     found = re.search(r"\?[\s\S]*?:\s*([0-9]+)", window)
     return found.group(1) if found else ""
 
@@ -68,7 +82,6 @@ def source_files(root):
 
 
 def reads(roots, prefixes=PREFIXES):
-    read = pattern(prefixes)
     found = {}
     for root in roots:
         for path in source_files(root):
@@ -78,26 +91,11 @@ def reads(roots, prefixes=PREFIXES):
                 continue
             lines = text.splitlines()
             for number, line in enumerate(lines, 1):
-                if not read.search(line):
+                if not any(prefix in line for prefix in prefixes):
                     continue
                 window = "\n".join(lines[number - 1:number + 2])
-                for match in read.finditer(line):
-                    name = (match.group("getenv_name") or match.group("presence_name") or
-                            match.group("mask_name") or match.group("kib_name") or
-                            match.group("envint_name") or match.group("win_name"))
-                    if match.group("getenv"):
-                        reader = "getenv"
-                    elif match.group("presence_name"):
-                        reader = "IsEnvironmentSet"
-                    elif match.group("mask_name"):
-                        reader = "MaskFromEnvironment"
-                    elif match.group("envint_name"):
-                        reader = "EnvInt"
-                    elif match.group("win_name"):
-                        reader = "GetEnvironmentVariableA"
-                    else:
-                        reader = "kibSetting"
-                    found.setdefault(name, []).append(
+                for reader, match in line_reads(line, prefixes):
+                    found.setdefault(match.group("name"), []).append(
                         (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
     for sites in found.values():
         sites.sort()
