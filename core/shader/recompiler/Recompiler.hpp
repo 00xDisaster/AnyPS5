@@ -197,8 +197,6 @@ struct ShaderVertexStageInfo {
     bool fetchEmbedded;
     std::uint32_t paClVsOutCntl = 0;
     std::uint32_t depthRemapMode = 0;
-    std::uint32_t depthRemapScale = 0;
-    std::uint32_t depthRemapOffset = 0;
 };
 
 struct ShaderFloatMode {
@@ -330,6 +328,8 @@ inline constexpr std::uint32_t MeshDrawPushOffsetBytes = 104;
 inline constexpr std::uint32_t MeshDrawPushBytes = 24;
 inline constexpr std::uint32_t TessellationLevelPushOffsetBytes = 120;
 inline constexpr std::uint32_t TessellationLevelPushBytes = 8;
+inline constexpr std::uint32_t DepthRemapPushOffsetBytes = 104;
+inline constexpr std::uint32_t DepthRemapPushBytes = 8;
 inline constexpr std::uint32_t MeshArgumentAddressDword = 4;
 inline constexpr std::uint32_t MeshArgumentIndexCountDword = 3;
 inline constexpr std::uint32_t MeshArgumentFirstIndexDword = 4;

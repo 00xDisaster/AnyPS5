@@ -1,5 +1,6 @@
 #include "prx/libSceAgcDriver/Execution/include/VulkanDevice.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Pipeline.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/State.hpp"
 #include "Recompiler.hpp"
 #include "DepthFastClearHarness.hpp"
@@ -87,8 +88,6 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const T
     target.depthRangeRemap = state.depthRemap.mode != 0u;
     ShaderRecompiler::ShaderVertexStageInfo vertexInfo{};
     vertexInfo.depthRemapMode = state.depthRemap.mode;
-    vertexInfo.depthRemapScale = std::bit_cast<std::uint32_t>(state.depthRemap.scale);
-    vertexInfo.depthRemapOffset = std::bit_cast<std::uint32_t>(state.depthRemap.offset);
     std::vector<std::uint32_t> vertexUserData(4, 0u);
     const auto vertexBuffer = Harness::BufferDescriptor(vertices.data(), 16u, static_cast<std::uint32_t>(vertices.size()));
     std::copy(vertexBuffer.begin(), vertexBuffer.end(), vertexUserData.begin());
@@ -182,6 +181,26 @@ int main() {
                 }
                 ++ran;
             }
+        }
+        // Scale and offset reach the vertex shader through the draw's push block, so two draws whose depth remap
+        // differs only in them build one pipeline between them: the second finds it in the store, and both
+        // store the depth they should.
+        {
+            constexpr Transform widerScale{false, 4.0f, -1.5f, 0.0f, 1.0f};
+            Require(surfaces + 2u <= Depths.size(), "the test ran out of depth surfaces");
+            const auto depthA = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(Depths[surfaces++].data()));
+            const auto depthB = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(Depths[surfaces++].data()));
+            const auto first = Draw(*device, depthA, widened, true, 0.5f + Step / 2.0f, true);
+            const auto before = AgcDriver::Graphics::PipelineStoreTotals();
+            const auto second = Draw(*device, depthB, widerScale, true, 0.5f + Step / 4.0f, true);
+            const auto after = AgcDriver::Graphics::PipelineStoreTotals();
+            Require(first == Harness::Covered && second == Harness::Covered, "a draw with a remapped depth did not cover the target");
+            Require(after.misses == before.misses && after.hits > before.hits, "a draw that differs only in the depth scale and offset built another pipeline");
+            for (const auto depth : {depthA, depthB}) {
+                Require(Draw(*device, depth, Plain, false, 0.5f, false) == Harness::Covered, "a depth remapped by a shared pipeline was stored below 0.5 + 1/64");
+                Require(Draw(*device, depth, Plain, false, 0.5f + 2.0f * Step, false) == 0u, "a depth remapped by a shared pipeline was stored above 0.5 + 1/64");
+            }
+            ++ran;
         }
         std::printf("depth range remap draw tests passed (%zu cases, unrestricted path %s)\n", ran, context.depthRangeUnrestricted ? "compared" : "absent");
         return 0;

@@ -807,8 +807,6 @@ std::string RequestSerializer::Serialize(const RecompileRequest& request) const 
     writer.WriteBool(request.target.depthRangeRemap);
     if (request.context.vertex.has_value()) {
         writer.WriteU32(request.context.vertex->depthRemapMode);
-        writer.WriteU32(request.context.vertex->depthRemapScale);
-        writer.WriteU32(request.context.vertex->depthRemapOffset);
     }
     return base64Encode(buffer);
 }
@@ -859,8 +857,6 @@ DeserializedRequest RequestSerializer::Deserialize(std::string_view text) const 
         result.request.target.depthRangeRemap = reader.ReadBool();
         if (result.vertex.has_value()) {
             result.vertex->depthRemapMode = reader.ReadU32();
-            result.vertex->depthRemapScale = reader.ReadU32();
-            result.vertex->depthRemapOffset = reader.ReadU32();
             result.request.context.vertex = result.vertex;
         }
     }

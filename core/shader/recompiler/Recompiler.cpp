@@ -908,9 +908,10 @@ RecompileResult materializeResult(const CompiledVariant& variant, const Recompil
     }
     const bool depthRemap = request.target.depthRangeRemap && request.shader.stage == ShaderStage::Vertex && request.context.vertex.has_value();
     if (depthRemap) {
+        if (request.context.vertex->depthRemapMode != 0u && request.layout.pushConstantOffsetBytes % (RuntimeAbi::PushConstantDwords * 4u) + request.layout.pushConstantSizeBytes > DepthRemapPushOffsetBytes) {
+            throw std::runtime_error("a remapped vertex shader's push data must end before the depth remap words");
+        }
         moduleKey.push_back(request.context.vertex->depthRemapMode);
-        moduleKey.push_back(request.context.vertex->depthRemapScale);
-        moduleKey.push_back(request.context.vertex->depthRemapOffset);
     }
     result.vertexAttributes.reserve(result.vertexInputs.size());
     std::array<std::uint32_t, ShaderVertexStageInfo::MaxResources> vertexClasses{};
@@ -1246,8 +1247,6 @@ std::uint64_t snapshotHash(const RecompileRequest& request, const ResourceSnapsh
             for (const auto field : vertex.resources[i].fields) mix(field);
             mix(vertex.resourcesDst[i].fetchIndex);
         }
-        mix(vertex.depthRemapScale);
-        mix(vertex.depthRemapOffset);
     } else {
         mix(1ull << 32u);
     }

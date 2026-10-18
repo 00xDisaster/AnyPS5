@@ -526,12 +526,18 @@ std::uint32_t RemapPositionDepth(SpirvEmitterState& state, std::uint32_t positio
         state.module.AddFunction(spv::OpCompositeExtract, f32, components.at(i), position, i);
     }
     const auto mode = state.module.SpecializationConstant(u32, PipelineSpecialization::DepthRemapBase, remap.mode);
-    const auto scaleBits = state.module.SpecializationConstant(u32, PipelineSpecialization::DepthRemapBase + 1u, remap.scaleBits);
-    const auto offsetBits = state.module.SpecializationConstant(u32, PipelineSpecialization::DepthRemapBase + 2u, remap.offsetBits);
-    const auto scale = state.module.AllocateId();
-    state.module.AddFunction(spv::OpBitcast, f32, scale, scaleBits);
-    const auto offset = state.module.AllocateId();
-    state.module.AddFunction(spv::OpBitcast, f32, offset, offsetBits);
+    if (state.pushConstantVariable == 0u) throw std::runtime_error("depth remap push constants were not declared");
+    const auto pushFloat = [&](std::uint32_t dword) {
+        const auto pointer = state.module.AllocateId();
+        state.module.AddFunction(spv::OpAccessChain, TypePushConstantElementPointer(state), pointer, state.pushConstantVariable, ConstantU32(state, 0u), ConstantU32(state, DepthRemapPushOffsetBytes / 4u + dword));
+        const auto bits = state.module.AllocateId();
+        state.module.AddFunction(spv::OpLoad, u32, bits, pointer);
+        const auto value = state.module.AllocateId();
+        state.module.AddFunction(spv::OpBitcast, f32, value, bits);
+        return value;
+    };
+    const auto scale = pushFloat(0u);
+    const auto offset = pushFloat(1u);
     const auto scaled = state.module.AllocateId();
     state.module.AddFunction(spv::OpFMul, f32, scaled, components[2], scale);
     const auto shifted = state.module.AllocateId();

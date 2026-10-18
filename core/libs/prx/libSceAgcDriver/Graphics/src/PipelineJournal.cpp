@@ -217,8 +217,6 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.perSampleShading);
     for (const auto mask : state.quadSampleMask) writer.Raw(mask);
     writer.U32(state.depthRemap.mode);
-    writer.Raw(state.depthRemap.scale);
-    writer.Raw(state.depthRemap.offset);
 }
 
 void decodeState(Reader& reader, State& state) {
@@ -278,8 +276,6 @@ void decodeState(Reader& reader, State& state) {
     state.perSampleShading = reader.Bool();
     for (auto& mask : state.quadSampleMask) mask = reader.Raw<std::uint16_t>();
     state.depthRemap.mode = reader.U32();
-    state.depthRemap.scale = reader.Raw<float>();
-    state.depthRemap.offset = reader.Raw<float>();
 }
 
 void encodeRecipe(Writer& writer, const GraphicsPipelineRecipe& recipe) {
@@ -1043,7 +1039,7 @@ State CanonicalPipelineState(const State& state) {
     canonical.sampleLocationGrid = state.sampleLocationGrid;
     canonical.perSampleShading = state.perSampleShading;
     canonical.quadSampleMask = state.quadSampleMask;
-    canonical.depthRemap = state.depthRemap;
+    canonical.depthRemap.mode = state.depthRemap.mode;
     return canonical;
 }
 

@@ -71,8 +71,6 @@ struct ShaderStageRuntime {
 
 struct ShaderDepthRemap {
     std::uint32_t mode = 0;
-    std::uint32_t scaleBits = 0;
-    std::uint32_t offsetBits = 0;
 };
 
 struct ShaderClipSpaceTransform {

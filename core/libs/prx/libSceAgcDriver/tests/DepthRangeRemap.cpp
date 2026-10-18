@@ -10,6 +10,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -18,6 +19,8 @@ struct ModuleFacts {
     std::uint32_t clipDistanceLength = 0;
     bool clipDistanceBuiltIn = false;
     std::size_t multiplies = 0;
+    bool pushConstantVariable = false;
+    std::set<std::uint32_t> pushDwordLoads;
 };
 
 ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
@@ -30,6 +33,8 @@ ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
     std::map<std::uint32_t, std::uint32_t> pointerTargets;
     std::map<std::uint32_t, std::uint32_t> variableTypes;
     std::set<std::uint32_t> clipVariables;
+    std::set<std::uint32_t> pushVariables;
+    std::vector<std::uint32_t> pushIndexIds;
     for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
         const auto op = static_cast<spv::Op>(words[at] & 0xffffu);
         const auto count = words[at] >> 16u;
@@ -40,10 +45,16 @@ ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
         if (op == spv::OpTypeArray && count == 4) arrayLengths[words[at + 1]] = words[at + 3];
         if (op == spv::OpTypePointer && count == 4) pointerTargets[words[at + 1]] = words[at + 3];
         if (op == spv::OpVariable && count >= 4) variableTypes[words[at + 2]] = words[at + 1];
+        if (op == spv::OpVariable && count >= 4 && words[at + 3] == spv::StorageClassPushConstant) pushVariables.insert(words[at + 2]);
+        if (op == spv::OpAccessChain && count == 6 && pushVariables.contains(words[at + 3])) pushIndexIds.push_back(words[at + 5]);
         if (op == spv::OpFMul) ++facts.multiplies;
     }
     for (const auto& [id, specId] : specIds) {
         if (const auto value = specValues.find(id); value != specValues.end()) facts.specializationDefaults[specId] = value->second;
+    }
+    facts.pushConstantVariable = !pushVariables.empty();
+    for (const auto id : pushIndexIds) {
+        if (const auto value = constants.find(id); value != constants.end()) facts.pushDwordLoads.insert(value->second);
     }
     for (const auto variable : clipVariables) {
         facts.clipDistanceBuiltIn = true;
@@ -68,8 +79,6 @@ ShaderRecompiler::RecompileRequest baseRequest(bool remap) {
     request.context.waveSize = 64;
     ShaderVertexStageInfo vertex{};
     vertex.depthRemapMode = 2u;
-    vertex.depthRemapScale = std::bit_cast<std::uint32_t>(1.0f);
-    vertex.depthRemapOffset = std::bit_cast<std::uint32_t>(0.0f);
     request.context.vertex = vertex;
     request.target.vulkanVersion = 0x00401000u;
     request.target.spirvVersion = 0x00010300u;
@@ -77,7 +86,7 @@ ShaderRecompiler::RecompileRequest baseRequest(bool remap) {
     static constexpr std::array<std::uint32_t, 2> capabilities{spv::CapabilityShader, spv::CapabilityClipDistance};
     request.target.supportedCapabilities = capabilities;
     request.target.depthRangeRemap = remap;
-    request.layout.pushConstantSizeBytes = 128;
+    request.layout.pushConstantSizeBytes = ShaderRecompiler::DepthRemapPushOffsetBytes;
     request.useCache = false;
     return request;
 }
@@ -91,20 +100,37 @@ void preparedTransformTests() {
     auto request = baseRequest(true);
     request.useCache = true;
     const auto handle = PrepareShader(request);
-    const auto materialize = [&](float scale, float offset) {
+    const auto materialize = [&](std::uint32_t mode) {
         auto moved = request;
-        moved.context.vertex->depthRemapScale = std::bit_cast<std::uint32_t>(scale);
-        moved.context.vertex->depthRemapOffset = std::bit_cast<std::uint32_t>(offset);
+        moved.context.vertex->depthRemapMode = mode;
         const auto invocation = PreparedShaderInvocation::TryCreate(moved, handle);
-        require(invocation.has_value(), "another depth transform did not match the prepared vertex shader");
+        require(invocation.has_value(), "the prepared vertex shader did not match a request of its own mode");
         return invocation->Materialize(*invocation->Capture(SrtRuntime{}));
     };
-    const auto first = materialize(1.0f, 0.0f);
-    const auto scaled = materialize(4.0f, -1.5f);
-    require(scaled->PipelineVariantId() != first->PipelineVariantId(), "a prepared vertex shader reused the result materialized for another depth transform");
-    require(materialize(1.0f, 0.0f)->PipelineVariantId() == first->PipelineVariantId(), "the same depth transform did not reuse its materialized vertex shader");
+    const auto first = materialize(2u);
+    require(materialize(2u)->PipelineVariantId() == first->PipelineVariantId(), "the same depth remap mode did not reuse its materialized vertex shader");
+    auto other = request;
+    other.context.vertex->depthRemapMode = 1u;
+    require(!PreparedShaderInvocation::TryCreate(other, handle).has_value(), "a prepared vertex shader matched a request of another depth remap mode");
 }
 
+void pushedTransformTests() {
+    using namespace ShaderRecompiler;
+    const auto remapped = Recompile(baseRequest(true));
+    const auto plain = Recompile(baseRequest(false));
+    const auto facts = inspect(remapped);
+    require(facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase) && !facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 1u) && !facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 2u), "only the depth remap mode may be a specialization constant");
+    require(facts.pushConstantVariable && facts.pushDwordLoads.contains(DepthRemapPushOffsetBytes / 4u) && facts.pushDwordLoads.contains(DepthRemapPushOffsetBytes / 4u + 1u), "the remapped vertex shader does not read the scale and offset from the push block");
+    require(!inspect(plain).pushConstantVariable, "a vertex shader without a depth remap gained a push constant block");
+    auto crowded = baseRequest(true);
+    crowded.layout.pushConstantSizeBytes = DepthRemapPushOffsetBytes + 4u;
+    bool refused = false;
+    try {
+        static_cast<void>(Recompile(crowded));
+    } catch (const std::runtime_error&) {
+        refused = true;
+    }
+    require(refused, "a remapped vertex shader with push data over the depth remap words was accepted");
 }
 
 int main() {
@@ -116,6 +142,7 @@ int main() {
         require(remapped.multiplies >= plain.multiplies + 2u, "the remap does not scale the clip z and offset it by w");
         require(!plain.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase) && !remapped.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 3u), "unexpected specialization constants");
         preparedTransformTests();
+        pushedTransformTests();
         std::cout << "Depth range remap tests passed\n";
         return 0;
     } catch (const std::exception& error) {
