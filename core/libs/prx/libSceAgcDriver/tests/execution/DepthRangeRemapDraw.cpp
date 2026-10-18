@@ -3,6 +3,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/Pipeline.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/State.hpp"
 #include "Recompiler.hpp"
+#include "Optimization/ResourceProgram.hpp"
 #include "DepthFastClearHarness.hpp"
 #include "VulkanTestDevice.hpp"
 #include <algorithm>
@@ -55,7 +56,7 @@ alignas(256) std::array<std::uint32_t, 14> FetchlessCode{
     0x7e0602ffu, 0u, 0x7e0802f2u, 0xf80008cfu, 0x04030201u, 0xbf810000u,
 };
 
-std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const Transform& transform, bool remap, float z, bool write, bool fetchless = false) {
+std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const Transform& transform, bool remap, float z, bool write, bool fetchless = false, bool targetRemap = false, bool prepared = false) {
     Require(vertexSets < VertexSets.size(), "the test ran out of vertex sets");
     auto& vertices = VertexSets[vertexSets++];
     vertices = {{{-1.0f, -1.0f, z, 1.0f}, {3.0f, -1.0f, z, 1.0f}, {-1.0f, 3.0f, z, 1.0f}}};
@@ -92,7 +93,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const T
     Require((state.depthRemap.mode != 0u) == (remap && !inRange), "the draw did not take the depth path the test asked for");
 
     auto target = device.Target();
-    target.depthRangeRemap = state.depthRemap.mode != 0u;
+    target.depthRangeRemap = state.depthRemap.mode != 0u || targetRemap;
     ShaderRecompiler::ShaderVertexStageInfo vertexInfo{};
     vertexInfo.depthRemapMode = state.depthRemap.mode;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
@@ -110,8 +111,17 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const T
         target,
         {0, 0, 0, 64}
     };
-    vertex.useCache = false;
-    const auto vertexResult = ShaderRecompiler::Recompile(vertex);
+    vertex.useCache = prepared;
+    std::shared_ptr<const ShaderRecompiler::RecompileResult> vertexHolder;
+    if (prepared) {
+        const auto handle = ShaderRecompiler::PrepareShader(vertex);
+        const auto invocation = ShaderRecompiler::PreparedShaderInvocation::TryCreate(vertex, handle);
+        Require(invocation.has_value(), "the prepared vertex shader did not match its own request");
+        vertexHolder = invocation->Materialize(*invocation->Capture(ShaderRecompiler::SrtRuntime{std::span<const std::uint32_t>(vertexUserData)}));
+    } else {
+        vertexHolder = std::make_shared<const ShaderRecompiler::RecompileResult>(ShaderRecompiler::Recompile(vertex));
+    }
+    const auto& vertexResult = *vertexHolder;
     const auto vertexPush = static_cast<std::uint32_t>(vertexResult.pushConstants.size());
     if (fetchless) Require(vertexPush == 0u, "the fetchless vertex shader carries push data of its own");
 
@@ -225,6 +235,17 @@ int main() {
             Require(drawn == Harness::Covered, "a fetchless remapped vertex shader did not cover the target");
             Require(Draw(*device, depth, Plain, false, 0.5f, false) == Harness::Covered, "a fetchless remapped vertex shader stored a depth below 0.5 + 1/64, so its scale and offset did not arrive");
             Require(Draw(*device, depth, Plain, false, 0.5f + 2.0f * Step, false) == 0u, "a fetchless remapped vertex shader stored a depth above 0.5 + 1/64");
+            ++ran;
+        }
+        // On a device without VK_EXT_depth_range_unrestricted the target remaps every vertex shader, so an ordinary
+        // in-range draw (mode 0) with no push data of its own still carries the remap's push block: it must validate
+        // and draw, from a direct build and from a prepared one.
+        for (const bool prepared : {false, true}) {
+            Require(surfaces < Depths.size(), "the test ran out of depth surfaces");
+            const auto depth = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(Depths[surfaces++].data()));
+            const auto drawn = Draw(*device, depth, Plain, false, 0.5f + Step / 2.0f, true, true, true, prepared);
+            Require(drawn == Harness::Covered, prepared ? "a fetchless mode 0 vertex shader on a remapping target, prepared, did not cover the target" : "a fetchless mode 0 vertex shader on a remapping target did not cover the target");
+            Require(Draw(*device, depth, Plain, false, 0.5f, false) == Harness::Covered && Draw(*device, depth, Plain, false, 0.5f + 2.0f * Step, false) == 0u, "a fetchless mode 0 vertex shader on a remapping target stored the wrong depth");
             ++ran;
         }
         std::printf("depth range remap draw tests passed (%zu cases, unrestricted path %s)\n", ran, context.depthRangeUnrestricted ? "compared" : "absent");
