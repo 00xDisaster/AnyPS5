@@ -37,4 +37,12 @@ std::optional<VirtualAddress> FindSceCodeEnd(std::span<const std::uint8_t> segme
     return segmentVAddr + *plt + pltSize;
 }
 
+std::vector<CodeRange> SceUnwindRanges(std::span<const std::uint8_t> segment, VirtualAddress segmentVAddr, const std::vector<UnusedNidFilter::StrictCodeRegion>& functions) {
+    std::vector<CodeRange> ranges;
+    for (const auto& function : functions)
+        if (function.Begin >= segmentVAddr && function.Begin - segmentVAddr < segment.size() && function.End > function.Begin)
+            ranges.push_back({function.Begin - segmentVAddr, std::min<ByteCount>(function.End - segmentVAddr, segment.size())});
+    return ranges;
+}
+
 }

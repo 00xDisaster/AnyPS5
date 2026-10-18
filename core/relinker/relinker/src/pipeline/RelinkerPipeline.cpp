@@ -362,18 +362,22 @@ RelinkResult RelinkerPipeline::Relink() {
     for (const auto& ref : nidRefs)
         validationPolicy->ValidateRelocationTypeSupported(ref.RelocationTypeValue, ref.RelocationTableOffset);
 
+    std::vector<std::vector<CodeRange>> unwindRanges(executableSegments.size());
     if (std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_SCE_DYNLIBDATA; })) {
         const auto functions = UnusedNidFilter::ReadExceptionFunctions(raw, programHeaders, {}, {});
-        for (auto& [segment, segmentVAddr, segmentFileOffset] : executableSegments) {
+        for (std::size_t index = 0; index < executableSegments.size(); ++index) {
+            auto& [segment, segmentVAddr, segmentFileOffset] = executableSegments[index];
             static_cast<void>(segmentFileOffset);
             if (const auto codeEnd = FindSceCodeEnd(segment, segmentVAddr, functions, gotVAddr, dynJmpRelSize))
                 segment.resize(*codeEnd - segmentVAddr);
+            unwindRanges[index] = SceUnwindRanges(segment, segmentVAddr, functions);
         }
     }
 
     std::vector<RelinkPatch> syscallPatches;
-    for (auto& [segment, segmentVAddr, segmentFileOffset] : executableSegments) {
-        for (const auto offset : syscallScanner->ScanCodeSectionForSyscalls(segment, segmentVAddr, segment.size())) {
+    for (std::size_t index = 0; index < executableSegments.size(); ++index) {
+        auto& [segment, segmentVAddr, segmentFileOffset] = executableSegments[index];
+        for (const auto offset : syscallScanner->ScanCodeSectionForSyscalls(segment, segmentVAddr, segment.size(), {}, unwindRanges[index])) {
             if (offset > segment.size() || segment.size() - offset < 2u)
                 throw RelinkerException("Syscall trap patch exceeds executable segment", segmentVAddr + offset);
             segment[offset] = 0x0F;
@@ -536,10 +540,11 @@ RelinkResult RelinkerPipeline::Relink() {
         entries.push_back(std::move(entry));
     }
 
-    for (const auto& [segment, segmentVAddr, segmentFileOffset] : executableSegments) {
+    for (std::size_t index = 0; index < executableSegments.size(); ++index) {
+        const auto& [segment, segmentVAddr, segmentFileOffset] = executableSegments[index];
         static_cast<void>(segmentFileOffset);
         for (auto& entry : entries) {
-            auto segmentSites = callSiteResolver->ResolveCallSites(segment, segmentVAddr, entry.TargetOffset, 8);
+            auto segmentSites = callSiteResolver->ResolveCallSites(segment, segmentVAddr, entry.TargetOffset, 8, unwindRanges[index]);
             entry.CallSites.insert(entry.CallSites.end(), segmentSites.begin(), segmentSites.end());
             entry.CallSitesResolved = !entry.CallSites.empty();
         }
