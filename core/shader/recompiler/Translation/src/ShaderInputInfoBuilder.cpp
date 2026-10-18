@@ -155,6 +155,10 @@ ShaderStageInputInfo BuildShaderStageInputInfo(ShaderStageKind stage, const Gues
         pixelStorage.psIteratesSamples = pixel.iteratesSamples;
         pixelStorage.psPositionLocation = pixel.positionLocation;
         pixelStorage.sampleLocations = pixel.sampleLocations;
+        if (pixel.targetMerge.mask != 0u && (pixel.targetMerge.target >= 8u || pixel.targetMerge.samples != 1u)) throw std::runtime_error("ShaderInputInfoBuilder: invalid color target merge");
+        pixelStorage.mergeTarget = pixel.targetMerge.target;
+        pixelStorage.mergeMask = pixel.targetMerge.mask;
+        pixelStorage.mergeSamples = pixel.targetMerge.samples;
         ShaderStageInputInfo result;
         result.pixel = &pixelStorage;
         return result;

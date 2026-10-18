@@ -8803,9 +8803,82 @@ void unorm4_4_4_4TargetTests() {
     Require(state.color.format == VK_FORMAT_R16_UINT && state.color.elementBytes == 2 && state.color.componentMapping == 0x1bu && state.color.packing == ColorExportPacking::Unorm4_4_4_4, "a 4_4_4_4 unorm target did not decode to an R16_UINT attachment with reversed exports");
     const auto packings = AgcDriver::Graphics::ExportPackings(state);
     Require(packings[0] == ColorExportPacking::Unorm4_4_4_4 && std::all_of(packings.begin() + 1, packings.end(), [](ColorExportPacking packing) { return packing == ColorExportPacking::None; }), "export 0 did not carry the 4_4_4_4 unorm packing");
+    Require(state.color.partialWriteMask == 0u && state.blends[0].colorWriteMask == 0xfu && AgcDriver::Graphics::ExportTargetMerge(state).mask == 0u, "a full write of a 4_4_4_4 unorm target merged into the target");
     auto changed = queue;
-    changed.context[0x8e] = 7;
-    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "partial writes of a 4_4_4_4 unorm color target");
+    for (const auto& [targetMask, wordMask] : {std::pair{1u, 0xf000u}, std::pair{7u, 0xfff0u}, std::pair{8u, 0x000fu}, std::pair{0xau, 0x0f0fu}}) {
+        changed.context[0x8e] = targetMask;
+        const auto partial = AgcDriver::Graphics::DecodeState(changed);
+        Require(partial.color.partialWriteMask == wordMask && partial.colors.front().partialWriteMask == wordMask && partial.blends[0].colorWriteMask == 0u && partial.blend.colorWriteMask == 0u, "CB_TARGET_MASK " + std::to_string(targetMask) + " of a 4_4_4_4 unorm target did not merge its nibbles behind a closed write mask");
+        const auto merge = AgcDriver::Graphics::ExportTargetMerge(partial);
+        const auto expected = AgcDriver::Graphics::SurfaceForTarget(partial.color);
+        const auto surface = AgcDriver::Graphics::DecodeTextureResource(merge.descriptor);
+        Require(merge.target == 0u && merge.mask == wordMask && merge.samples == 1u && surface.baseAddress == expected.baseAddress && surface.pipeBankXor == expected.pipeBankXor && surface.width == expected.width && surface.height == expected.height && surface.format == expected.format && surface.tileMode == expected.tileMode && surface.dimension == AgcDriver::Graphics::TextureDimension::k2D && surface.mipCount == 1u && surface.samples == 1u, "the merge descriptor of CB_TARGET_MASK " + std::to_string(targetMask) + " does not decode to the target's surface");
+    }
+    {
+        changed.context[0x8e] = 1;
+        const auto partial = AgcDriver::Graphics::DecodeState(changed);
+        constexpr std::array<std::uint32_t, 3> mergeCode{0xf800180fu, 0x07060504u, 0xbf810000u};
+        auto merging = packedExportRequest(changed, partial, mergeCode);
+        merging.context.pixel->targetMerge = AgcDriver::Graphics::ExportTargetMerge(partial);
+        const std::array<std::uint32_t, 3> capabilities{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat};
+        merging.target.supportedCapabilities = capabilities;
+        merging.target.registrationWordLimit = 1u << 20u;
+        const ShaderRecompiler::RequestSerializer mergeSerializer;
+        Require(mergeSerializer.Deserialize(mergeSerializer.Serialize(merging)).request.context.pixel->targetMerge == merging.context.pixel->targetMerge, "the 4_4_4_4 target merge was lost in serialization");
+        auto unmerged = merging;
+        unmerged.context.pixel->targetMerge = {};
+        auto moved = merging;
+        moved.context.pixel->targetMerge.descriptor[0] += 0x100u;
+        std::vector<std::uint64_t> mergedKey, unmergedKey, movedKey;
+        ShaderRecompiler::RecompileCacheKey::BuildInterface(merging, mergedKey);
+        ShaderRecompiler::RecompileCacheKey::BuildInterface(unmerged, unmergedKey);
+        ShaderRecompiler::RecompileCacheKey::BuildInterface(moved, movedKey);
+        Require(mergedKey != unmergedKey && mergedKey == movedKey, "the static shader key does not separate merging from plain writes, or depends on the merged target's address");
+        for (const bool registration : {false, true}) {
+            merging.target.registrationModules = registration;
+            const auto merged = ShaderRecompiler::Recompile(merging);
+            const auto words = merged.spirv.Copy();
+            std::size_t reads = 0, writes = 0;
+            for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+                reads += static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpImageRead ? 1u : 0u;
+                writes += static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpImageWrite ? 1u : 0u;
+            }
+            const auto what = std::string(registration ? "a registration" : "a specialized") + " 4_4_4_4 merge module";
+            Require(merged.registrationModule == registration && reads == 1u && writes == 1u && interlockShape(words) == "capability extension ordered begin end " && declaresEarlyFragmentTests(merging), what + " did not read and write the target once inside a pixel interlock after early tests: " + interlockShape(words));
+            const auto bound = std::ranges::any_of(merged.bindings, [&](const ShaderRecompiler::DescriptorBinding& binding) {
+                if (binding.role != ShaderRecompiler::DescriptorRole::GuestImages || binding.kind != ShaderRecompiler::DescriptorKind::StorageImage) return false;
+                for (std::size_t offset = 0; offset + 8u <= binding.guestDescriptor.size(); offset += 8u) {
+                    if (std::equal(merging.context.pixel->targetMerge.descriptor.begin(), merging.context.pixel->targetMerge.descriptor.end(), binding.guestDescriptor.begin() + static_cast<std::ptrdiff_t>(offset))) return true;
+                }
+                return false;
+            });
+            Require(bound, what + " does not bind the merged target as a storage image");
+            ShaderRecompiler::RecompileResult vertex;
+            vertex.spirv = makeModule({});
+            const VkPhysicalDeviceSubgroupProperties subgroup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+            const std::array<AgcDriver::Graphics::CompiledShader, 2> shaders{{{ShaderRecompiler::ShaderStage::Vertex, &vertex, 0}, {ShaderRecompiler::ShaderStage::Fragment, &merged, 0}}};
+            Require(AgcDriver::Graphics::ValidateShaders(shaders, partial, subgroup, false) == std::set<std::uint32_t>{0u}, what + " lost its export to attachment 0");
+        }
+        auto lacking = merging;
+        const std::array<std::uint32_t, 2> noInterlock{spv::CapabilityShader, spv::CapabilityStorageImageReadWithoutFormat};
+        lacking.target.supportedCapabilities = noInterlock;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(lacking)); }, "fragmentShaderPixelInterlock");
+        auto unformatted = merging;
+        const std::array<std::uint32_t, 2> noFormatlessReads{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT};
+        unformatted.target.supportedCapabilities = noFormatlessReads;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(unformatted)); }, "storage image reads without a format");
+        auto killing = merging;
+        killing.context.pixel->pixelKillEnable = true;
+        killing.context.pixel->earlyZ = false;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(killing)); }, "kills pixels under late tests");
+        auto exporting = merging;
+        exporting.context.pixel->depthExportEnable = true;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(exporting)); }, "exports depth");
+    }
+    changed = queue;
+    changed.context[0x8e] = 0xau;
+    changed.context[0x31d] = (changed.context.at(0x31d) & ~0x3f000u) | (1u << 12u) | (1u << 15u);
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "partial writes of a multisampled 4_4_4_4 unorm color target");
     for (const auto& [number, swap] : {std::pair{1u, 2u}, std::pair{4u, 2u}, std::pair{0u, 0u}, std::pair{0u, 1u}, std::pair{0u, 3u}}) {
         changed = queue;
         changed.context[0x31c] = (changed.context[0x31c] & ~((7u << 8u) | (3u << 11u))) | (number << 8u) | (swap << 11u);

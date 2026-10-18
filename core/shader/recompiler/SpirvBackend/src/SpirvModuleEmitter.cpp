@@ -414,6 +414,28 @@ std::uint32_t SelectExportPacking(SpirvEmitterState& state, std::uint32_t target
     return result;
 }
 
+void MergeColorTarget(SpirvEmitterState& state, std::uint32_t color) {
+    const auto& pixel = PixelInfo(state);
+    const auto& images = state.program.Info().images;
+    const auto image = std::ranges::find_if(images, [](const ImageResource& candidate) { return candidate.targetMerge; });
+    if (image == images.end()) FailEmit("the color target merge image was not collected");
+    if (InputVariableForKind(state, StageInputKind::FragCoord) == 0u) FailEmit("the color target merge inputs were not declared");
+    const auto resource = static_cast<std::uint32_t>(image - images.begin());
+    const auto position = [&](std::uint32_t component) { return Unary(state, spv::OpConvertFToU, TypeU32(state), Unary(state, spv::OpBitcast, TypeF32(state), EmitBuiltinU32(state, StageInputKind::FragCoord, component))); };
+    const auto x = position(0u);
+    const auto y = position(1u);
+    const auto coord = state.module.AllocateId();
+    state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 2u), coord, x, y);
+    const auto stored = state.module.AllocateId();
+    state.module.AddFunction(spv::OpCompositeExtract, TypeU32(state), stored, EmitStorageImageRead(state, resource, coord), 0u);
+    const auto word = PackExport(state, IrBufferFormat::Format4_4_4_4UNorm, color);
+    const auto kept = EmitBinaryU32(state, spv::OpBitwiseAnd, stored, ConstantU32(state, ~static_cast<std::uint32_t>(pixel.mergeMask)));
+    const auto merged = EmitOrU32(state, kept, EmitBinaryU32(state, spv::OpBitwiseAnd, word, ConstantU32(state, pixel.mergeMask)));
+    const auto texel = state.module.AllocateId();
+    state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 4u), texel, merged, ConstantU32(state, 0u), ConstantU32(state, 0u), ConstantU32(state, 0u));
+    EmitStorageImageWrite(state, resource, 0u, coord, texel, 0u);
+}
+
 bool AlphaToCoverage(const SpirvEmitterState& state) {
     return state.program.Resources().stage == IrShaderStage::Pixel && state.inputInfo.pixel != nullptr && state.inputInfo.pixel->psAlphaToCoverage;
 }
@@ -1847,6 +1869,10 @@ void EmitSetAttribute(SpirvValueEmitContext& ctx, const IrValue& inst) {
             value = mapped;
             if (exp.index == 0u && !uintOutput && AlphaToCoverage(state)) StoreAlphaCoverage(state, value);
             const auto mode = MrtOutputMode(state, exp);
+            if (PixelInfo(state).mergeMask != 0u && exp.index == PixelInfo(state).mergeTarget) {
+                if (uintOutput || mode == 5u || mode == 6u) FailEmit("a partial write of a packed color target cannot take an integer or 16-bit normalized export");
+                MergeColorTarget(state, value);
+            }
             if (!uintOutput && mode != 5u && mode != 6u) value = SelectExportPacking(state, exp.index, value);
         }
         if (exp.kind == ExportTargetKind::Position) {

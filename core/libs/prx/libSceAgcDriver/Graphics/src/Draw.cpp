@@ -2433,6 +2433,12 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
     for (const auto& binding : targets) {
         if (binding.multisampled) Require(std::find(resources->MultisampleSources().begin(), resources->MultisampleSources().end(), binding.color.surfaceAddress) == resources->MultisampleSources().end(), "sampling a multisampled color target the draw renders to is not implemented");
     }
+    for (const auto& binding : targets) {
+        if (binding.color.partialWriteMask == 0) continue;
+        Require(lean && binding.resident != nullptr && !binding.proxied, "a partial write of a packed color target is merged into its resident image by a recorded draw only");
+        const auto images = resources->StorageImages();
+        Require(std::ranges::any_of(images, [&](const std::pair<VkImage, bool>& image) { return image.first == binding.resident->Image() && image.second; }), "the partial write of a packed color target does not store into the target's resident image");
+    }
     if (!lean && !resolved.moved.empty()) {
         resolved.resources = std::make_shared<ShaderResources>(context, shaders, state.color, static_cast<std::uint32_t>(state.colors.size()), draw.indexAddress, static_cast<std::size_t>(indexBytes), snapshots);
         resolved.moved.clear();

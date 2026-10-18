@@ -151,6 +151,15 @@ inline constexpr std::uint32_t One = 3u;
 
 }
 
+struct TargetMerge {
+    std::uint8_t target = 0;
+    std::uint16_t mask = 0;
+    std::uint8_t samples = 1;
+    std::array<std::uint32_t, 8> descriptor{};
+
+    bool operator==(const TargetMerge&) const = default;
+};
+
 struct ShaderPixelStageInfo {
     std::uint32_t interpolatorCount;
     std::array<std::uint32_t, 32> interpolatorSettings;
@@ -191,6 +200,7 @@ struct ShaderPixelStageInfo {
     bool iteratesSamples = false;
     PixelPositionLocation positionLocation = PixelPositionLocation::Center;
     std::array<std::uint8_t, 32> sampleLocations{};
+    TargetMerge targetMerge{};
 };
 
 struct ShaderVertexBufferResource {

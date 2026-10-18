@@ -217,6 +217,9 @@ private:
         append(key, value.positionLocation);
         append(key, value.sampleLocations);
         append(key, value.targetOutputMode);
+        append(key, value.targetMerge.target);
+        append(key, value.targetMerge.mask);
+        append(key, value.targetMerge.samples);
     }
 
     static void append(std::vector<std::uint64_t>& key, const ShaderVertexResourceDestination& value) {

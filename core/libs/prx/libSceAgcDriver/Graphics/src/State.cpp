@@ -1397,7 +1397,7 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
     result.blends.assign(exportCount, VkPipelineColorBlendAttachmentState{});
     std::array<float, 3> requiredBlendConstants{};
     std::uint32_t requiredBlendMask = 0;
-    for (const auto& color : result.colors) {
+    for (auto& color : result.colors) {
         const auto slot = color.slot;
         const auto blend = read(cx, 0x1e0 + slot);
         APS5_LOG_OUT_DEBUG("Blend %u control=0x%x", slot, blend);
@@ -1465,8 +1465,16 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
             const auto slotExport = (exportFormat >> (4u * color.exportIndex)) & 0xfu;
             if (slotExport == 5 || slotExport == 6) throw std::runtime_error("AGC graphics: color export format " + std::to_string(slotExport) + " into " + packed + " target is unsupported");
             Require(!state.blendEnable, "blending into " + packed + " color target is unsupported");
-            const std::uint32_t packedMask = color.packing == ShaderRecompiler::ColorExportPacking::Unorm4_4_4_4 ? 0xfu : 7u;
-            Require((exportedMask & packedMask) == packedMask, "partial writes of " + packed + " color target are unsupported");
+            const bool nibbles = color.packing == ShaderRecompiler::ColorExportPacking::Unorm4_4_4_4;
+            const std::uint32_t packedMask = nibbles ? 0xfu : 7u;
+            Require(nibbles || (exportedMask & packedMask) == packedMask, "partial writes of " + packed + " color target are unsupported");
+            if ((exportedMask & packedMask) != packedMask) {
+                Require(color.samples == 1u, "partial writes of a multisampled " + std::string(PackedColorTargetName(color.packing)) + " color target are not implemented");
+                Require(color.mipCount == 1u && color.depth == 1u && color.layers == 1u && color.arrayLastSlice == 0u, "partial writes of a mipmapped, volume or array " + std::string(PackedColorTargetName(color.packing)) + " color target are not implemented");
+                Require(std::ranges::none_of(result.colors, [](const ColorTarget& other) { return other.partialWriteMask != 0; }), "partial writes of more than one packed color target are not implemented");
+                color.partialWriteMask = PackedWriteMask(mapping, exportedMask);
+                state.colorWriteMask = 0;
+            }
         }
         if (state.blendEnable && !reversed && (secondSource(state.srcColorBlendFactor) || secondSource(state.dstColorBlendFactor) || secondSource(state.srcAlphaBlendFactor) || secondSource(state.dstAlphaBlendFactor))) {
             const auto addition = [](VkBlendOp op) { return op == VK_BLEND_OP_ADD || op == VK_BLEND_OP_SUBTRACT || op == VK_BLEND_OP_REVERSE_SUBTRACT; };
@@ -1483,7 +1491,10 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
     for (std::uint32_t i = 0; i < 3; ++i) {
         if ((requiredBlendMask & (1u << i)) != 0) result.blendConstants[i] = requiredBlendConstants[i];
     }
-    if (!result.colors.empty()) result.blend = result.blends[result.colors.front().exportIndex];
+    if (!result.colors.empty()) {
+        result.color = result.colors.front();
+        result.blend = result.blends[result.colors.front().exportIndex];
+    }
     Require(result.reversedBlend == 0 || (exportSlots.size() == 1 && exportCount == 1), "blending into a color target with a reversed component order through a second source color needs that target to be the shader's only color export");
     if (result.dualSourceBlend) {
         Require(exportSlots.size() == 2 && exportSlots[0] == 0 && exportSlots[1] == 1 && exportCount == 1, "dual-source blending needs pixel exports to MRT slots 0 and 1 and color writes to slot 0 alone");
@@ -1508,6 +1519,27 @@ std::array<ShaderRecompiler::ColorExportPacking, 8> ExportPackings(const State& 
         if (color.exportIndex < packings.size()) packings[color.exportIndex] = color.packing;
     }
     return packings;
+}
+
+std::uint16_t PackedWriteMask(std::uint8_t componentMapping, std::uint32_t exportedMask) {
+    std::uint16_t mask = 0;
+    for (std::uint32_t component = 0; component < 4; ++component) {
+        if (((exportedMask >> ((componentMapping >> (2u * component)) & 3u)) & 1u) != 0) mask = static_cast<std::uint16_t>(mask | (0xfu << (4u * component)));
+    }
+    return mask;
+}
+
+ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
+    ShaderRecompiler::TargetMerge merge;
+    for (const auto& color : state.colors) {
+        if (color.partialWriteMask == 0) continue;
+        Require(merge.mask == 0 && color.exportIndex < 8u && color.samples == 1u, "a draw merges into one single-sample packed color target at most");
+        merge.target = static_cast<std::uint8_t>(color.exportIndex);
+        merge.mask = color.partialWriteMask;
+        merge.samples = static_cast<std::uint8_t>(color.samples);
+        merge.descriptor = EncodeTextureResource(SurfaceForTarget(color));
+    }
+    return merge;
 }
 
 bool PartialSampleMask(const State& state) {

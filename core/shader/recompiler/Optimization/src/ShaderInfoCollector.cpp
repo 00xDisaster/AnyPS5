@@ -1,4 +1,5 @@
 #include "Optimization/ShaderInfoCollector.hpp"
+#include "Optimization/ResourceMaterializer.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -519,6 +520,24 @@ std::uint16_t SamplerUseOf(IrOpcode opcode, std::uint32_t flags, IrShaderStage s
     return static_cast<std::uint16_t>(use);
 }
 
+void AddTargetMerge(const ShaderPixelInputInfo& pixel, ShaderInfo& info) {
+    if (info.runtimeImageModes.size() != info.images.size() || std::ranges::any_of(info.images, [](const ImageResource& image) { return image.targetMerge; })) {
+        return Fail("color target merge image cannot join the prepared images");
+    }
+    ImageResource image;
+    image.source = std::numeric_limits<std::uint32_t>::max();
+    image.resourceClass = ImageResourceClass::Storage;
+    image.numericClass = IrTextureNumericClass::Uint;
+    image.dimension = RdnaImageDimension::Dim2D;
+    image.read = true;
+    image.written = true;
+    image.fmaskCompatible = false;
+    image.targetMerge = true;
+    info.images.push_back(image);
+    info.runtimeImageModes.push_back(ResourceMaterializer::RuntimeImageModes(image));
+    AddInput(info, StageInputKind::FragCoord, 0, 4, "gl_FragCoord");
+}
+
 void CollectSamplerUses(const IrProgram& program, ShaderInfo& info) {
     for (auto& sampler : info.samplers) {
         sampler.uses = 0;
@@ -588,6 +607,7 @@ void ShaderInfoCollector::Collect(IrProgram& program, const ShaderStageInputInfo
     }
     CollectBuiltinInputs(program, next);
     CollectOutputs(program, inputInfo, next);
+    if (program.Resources().stage == IrShaderStage::Pixel && inputInfo.pixel->mergeMask != 0u) AddTargetMerge(*inputInfo.pixel, next);
     CollectSamplerUses(program, next);
     program.Info() = std::move(next);
     program.Metadata().shaderInfoComplete = true;

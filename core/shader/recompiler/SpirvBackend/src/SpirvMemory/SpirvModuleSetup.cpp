@@ -383,12 +383,16 @@ void DefineModule(SpirvEmitterState& state) {
             state.module.EmitExtension("SPV_EXT_shader_stencil_export");
             state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeStencilRefReplacingEXT);
         }
-        if (pixel.psEarlyZ && !pixel.psAlphaToCoverage && !pixel.QuadMasked()) {
+        const bool merge = pixel.mergeMask != 0u;
+        if (merge && (state.depthVariable != 0 || state.stencilRefVariable != 0 || pixel.psDepthExportEnable || pixel.psSampleMaskExportEnable || pixel.psStencilRefExportEnable || pixel.psAlphaToCoverage || pixel.QuadMasked() || (pixel.psPixelKillEnable && !pixel.psEarlyZ))) {
+            throw std::runtime_error("a partial write of a packed color target merges inside the pixel shader after early depth and stencil tests, which a shader that kills pixels under late tests, exports depth, stencil or coverage, or runs with a quad sample mask cannot use");
+        }
+        if ((pixel.psEarlyZ && !pixel.psAlphaToCoverage && !pixel.QuadMasked()) || merge) {
             state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeEarlyFragmentTests);
         }
-        if (pixel.psOrderedPixelShader) {
+        if (pixel.psOrderedPixelShader || merge) {
             if (std::find(state.supportedCapabilities.begin(), state.supportedCapabilities.end(), static_cast<std::uint32_t>(spv::CapabilityFragmentShaderPixelInterlockEXT)) == state.supportedCapabilities.end()) {
-                throw std::runtime_error("a primitive-ordered pixel shader needs the fragmentShaderPixelInterlock feature, which the device lacks");
+                throw std::runtime_error(merge ? "a partial write of a packed color target needs the fragmentShaderPixelInterlock feature, which the device lacks" : "a primitive-ordered pixel shader needs the fragmentShaderPixelInterlock feature, which the device lacks");
             }
             state.module.EmitCapability(spv::CapabilityFragmentShaderPixelInterlockEXT);
             state.module.EmitExtension("SPV_EXT_fragment_shader_interlock");
