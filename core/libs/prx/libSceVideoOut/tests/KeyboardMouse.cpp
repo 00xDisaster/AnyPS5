@@ -183,6 +183,62 @@ void testSmoothing() {
     check(early > 0.5 * 0.55 && early < 0.5 * 0.72, "smoothing reaches about 63 percent after one time constant");
 }
 
+void testSlowReportingMouse() {
+    const double speed = 0.5 * Pad::MouseFullTiltCountsPerSecond;
+    const double expected = expectedDeflection(defaults().settings, 0.5);
+    for (const double reportHz : {125.0, 250.0, 1000.0}) {
+        std::vector<TimedEvent> events{PadSimulation::MouseModeAt(0.0, true)};
+        PadSimulation::AppendMotion(events, 0.0, 2000.0, speed, 0.0, reportHz);
+        for (const double poll : {16.7, 8.3, 6.9, 1.0}) {
+            const auto samples = Simulate(defaults(), events, poll, 2000.0);
+            double low = 1.0;
+            double high = 0.0;
+            for (const auto& sample : samples) {
+                if (sample.ms < 1000.0) continue;
+                low = std::min(low, axis(sample.state.sticks[2]));
+                high = std::max(high, axis(sample.state.sticks[2]));
+            }
+            check(high - low < 0.125, "a " + std::to_string(reportHz) + " Hz mouse at " + std::to_string(poll) + " ms polls wavers by " + std::to_string(high - low));
+            check(std::abs((high + low) / 2.0 - expected) < 0.05, "a " + std::to_string(reportHz) + " Hz mouse at " + std::to_string(poll) + " ms polls stays around the expected tilt");
+        }
+    }
+}
+
+void testReportRateSmoothing() {
+    for (const double reportHz : {125.0, 250.0, 1000.0}) {
+        Pad::MouseStick mouse(defaults().settings);
+        check(mouse.SmoothingMs() == defaults().settings.mouseSmoothingMs, "smoothing starts at the setting");
+        const double periodSeconds = 1.0 / reportHz;
+        for (int report = 0; report < static_cast<int>(reportHz); ++report) {
+            mouse.Move(6, 0);
+            mouse.Advance(periodSeconds);
+        }
+        check(std::abs(mouse.ReportRate() - reportHz) < 0.1 * reportHz, "measured " + std::to_string(mouse.ReportRate()) + " reports per second for a " + std::to_string(reportHz) + " Hz mouse");
+        const double smoothing = mouse.SmoothingMs();
+        check(std::abs(smoothing - std::max(10.0, 3000.0 / reportHz)) < 0.15 * smoothing, "smoothing " + std::to_string(smoothing) + " ms for a " + std::to_string(reportHz) + " Hz mouse");
+    }
+    Pad::MouseStick slow(defaults().settings);
+    for (int step = 0; step < 40; ++step) {
+        slow.Move(30, 0);
+        slow.Advance(0.025);
+    }
+    check(std::abs(slow.ReportRate() - 40.0) < 2.0 && slow.SmoothingMs() == Pad::MouseSmoothingLimitMs, "smoothing for very slow reports stops at 30 ms");
+    auto off = defaults().settings;
+    off.mouseSmoothingMs = 0.0;
+    Pad::MouseStick unsmoothed(off);
+    for (int report = 0; report < 125; ++report) {
+        unsmoothed.Move(6, 0);
+        unsmoothed.Advance(0.008);
+    }
+    check(unsmoothed.SmoothingMs() == 0.0, "a smoothing of 0 stays off for a slow mouse");
+    Pad::MouseStick single(defaults().settings);
+    for (int report = 0; report < 125; ++report) {
+        single.Move(1, 0);
+        single.Advance(0.008);
+    }
+    check(single.ReportRate() == 0.0 && single.SmoothingMs() == defaults().settings.mouseSmoothingMs, "single-count reports are not taken for a slow mouse");
+}
+
 std::vector<TimedEvent> waveMotion(double base, double swing) {
     constexpr double Pi = 3.14159265358979323846;
     std::vector<TimedEvent> events{PadSimulation::MouseModeAt(0.0, true)};
@@ -364,6 +420,8 @@ int main() {
             {"decay", testDecay},
             {"max speed clamp", testMaxSpeedClamp},
             {"smoothing", testSmoothing},
+            {"slow reporting mouse", testSlowReportingMouse},
+            {"report rate smoothing", testReportRateSmoothing},
             {"poll rate independence", testPollRateIndependence},
             {"vertical scale", testVerticalScale},
             {"mouse mode off", testMouseModeOff},
