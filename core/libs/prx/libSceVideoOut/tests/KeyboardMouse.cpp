@@ -284,12 +284,18 @@ void testToggleRequests() {
     check(keyboardMouse.HandleEvent(PadSimulation::ButtonEvent(SDL_BUTTON_MIDDLE, true), now).toggleMouse, "middle click asks to toggle the mouse");
     check(!keyboardMouse.HandleEvent(PadSimulation::ButtonEvent(SDL_BUTTON_MIDDLE, false), now).toggleMouse, "releasing it asks for nothing");
     check(keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F11, true), now).toggleFullscreen, "F11 asks to toggle fullscreen");
+    const auto overlay = keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F10, true), now);
+    check(overlay.togglePerformanceOverlay && !overlay.toggleFullscreen, "F10 asks to toggle the performance overlay");
+    check(!keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F10, false), now).togglePerformanceOverlay, "releasing F10 asks for nothing");
 }
 
 
 void testTitleReadsMouse() {
     const auto square = static_cast<std::uint32_t>(Pad::PadButton::Square);
     const auto r2 = static_cast<std::uint32_t>(Pad::PadButton::R2);
+    const auto up = static_cast<std::uint32_t>(Pad::PadButton::Up);
+    const auto down = static_cast<std::uint32_t>(Pad::PadButton::Down);
+    const auto wheelDirections = up | down;
     auto now = Pad::KeyboardMouse::Clock::now();
     Pad::KeyboardMouse keyboardMouse(defaults());
     keyboardMouse.HandleEvent(PadSimulation::ButtonEvent(SDL_BUTTON_LEFT, true), now);
@@ -301,6 +307,10 @@ void testTitleReadsMouse() {
     keyboardMouse.HandleEvent(PadSimulation::ButtonEvent(SDL_BUTTON_RIGHT, true), now);
     const auto clicked = keyboardMouse.Compose(PadInputState{});
     check((clicked.buttons & (square | r2)) == 0 && clicked.analogButtonsR2 == 0, "a click while the title reads the mouse pressed a pad button");
+    keyboardMouse.HandleEvent(PadSimulation::WheelEvent(1), now);
+    check((keyboardMouse.Compose(PadInputState{}).buttons & wheelDirections) == 0, "wheel up pressed a pad direction while the title reads the mouse");
+    keyboardMouse.HandleEvent(PadSimulation::WheelEvent(-1), now);
+    check((keyboardMouse.Compose(PadInputState{}).buttons & wheelDirections) == 0, "wheel down pressed a pad direction while the title reads the mouse");
     check(!keyboardMouse.HandleEvent(PadSimulation::ButtonEvent(SDL_BUTTON_MIDDLE, true), now).toggleMouse, "a middle click while the title reads the mouse asked to toggle mouse mode");
     keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_W, true), now);
     check(keyboardMouse.Compose(PadInputState{}).sticks[1] == 0, "keys stopped reaching the pad while the title reads the mouse");
@@ -313,6 +323,8 @@ void testTitleReadsMouse() {
     }
     check(keyboardMouse.Compose(PadInputState{}).sticks[2] == 128, "motion tilted the right stick while the title reads the mouse");
     keyboardMouse.SetTitleReadsMouse(false);
+    keyboardMouse.HandleEvent(PadSimulation::WheelEvent(1), now);
+    check((keyboardMouse.Compose(PadInputState{}).buttons & up) != 0, "wheel bindings did not resume after the title stopped reading the mouse");
     for (int step = 1; step <= 40; ++step) {
         now += std::chrono::milliseconds(8);
         keyboardMouse.HandleEvent(PadSimulation::MotionEvent(200, 0), now);
