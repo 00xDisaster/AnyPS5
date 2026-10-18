@@ -17,7 +17,7 @@ namespace {
 using AgcDriver::Graphics::Require;
 using ShaderRecompiler::ShaderStage;
 
-constexpr std::uint32_t Threads = 8;
+constexpr std::uint32_t Threads = 10;
 constexpr std::uint32_t Inputs = 4;
 constexpr std::uint32_t Results = 2;
 alignas(256) std::array<std::uint32_t, Threads * Inputs> Input{};
@@ -43,6 +43,8 @@ constexpr Rows FmaRows{{
     {0x7c00u, 0x8000u, 0xfc00u},
     {0x7c00u, 0x3c00u, 0xfc00u},
     {0xfc00u, 0x3c00u, 0x7c00u},
+    {0x7c00u, 0x0000u, 0x7e00u},
+    {0x8000u, 0xfc00u, 0x7d00u},
 }};
 constexpr Rows MixRows{{
     {0x00007c00u, 0x00000000u, 0x00000000u},
@@ -53,6 +55,8 @@ constexpr Rows MixRows{{
     {0xfc007c00u, 0x00003c00u, 0x3f800000u},
     {0x7c00fc00u, 0x00004000u, 0x40000000u},
     {0xfc00fc00u, 0x0000b800u, 0xbf000000u},
+    {0x7e00fc00u, 0x00008000u, 0x00000000u},
+    {0x7fff7c00u, 0x00000000u, 0x80000000u},
 }};
 
 struct Mode {
