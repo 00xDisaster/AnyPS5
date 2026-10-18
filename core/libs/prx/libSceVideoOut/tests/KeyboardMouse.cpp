@@ -8,6 +8,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -291,6 +292,23 @@ void testToggleRequests() {
     check(!keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F10, false), now).togglePerformanceOverlay, "releasing F10 asks for nothing");
 }
 
+void testDefaultL2() {
+    const auto l2 = static_cast<std::uint32_t>(Pad::PadButton::L2);
+    const auto r2 = static_cast<std::uint32_t>(Pad::PadButton::R2);
+    const auto now = Pad::KeyboardMouse::Clock::now();
+    for (const auto& [name, press, release] : {
+             std::tuple{"R", KeyEvent(SDL_SCANCODE_R, true), KeyEvent(SDL_SCANCODE_R, false)},
+             std::tuple{"mouse button 4", PadSimulation::ButtonEvent(SDL_BUTTON_X1, true), PadSimulation::ButtonEvent(SDL_BUTTON_X1, false)}}) {
+        Pad::KeyboardMouse keyboardMouse(defaults());
+        keyboardMouse.HandleEvent(press, now);
+        const auto held = keyboardMouse.Compose(PadInputState{});
+        check((held.buttons & l2) != 0 && held.analogButtonsL2 == 255, std::string(name) + " presses L2 fully");
+        check((held.buttons & r2) == 0 && held.analogButtonsR2 == 0, std::string(name) + " leaves R2 alone");
+        keyboardMouse.HandleEvent(release, now);
+        const auto released = keyboardMouse.Compose(PadInputState{});
+        check((released.buttons & l2) == 0 && released.analogButtonsL2 == 0, std::string(name) + " released lets go of L2");
+    }
+}
 
 void testTitleReadsMouse() {
     const auto square = static_cast<std::uint32_t>(Pad::PadButton::Square);
@@ -354,6 +372,7 @@ int main() {
             {"wheel and keys on focus loss", testWheelFocusLoss},
             {"focus loss releases the mouse", testFocusLossReleasesMouse},
             {"toggle requests", testToggleRequests},
+            {"default L2", testDefaultL2},
             {"title reads the mouse", testTitleReadsMouse},
         };
         for (const auto& [name, test] : tests) {

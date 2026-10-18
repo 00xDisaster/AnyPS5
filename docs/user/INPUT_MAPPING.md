@@ -30,6 +30,7 @@ Without an `anyps5-input.ini`, or for actions the file does not mention, these b
 | `Square` | Left mouse button |
 | `L1` | Q |
 | `R1` | E, Left Alt, Right Alt |
+| `L2` | R, Mouse button 4 (X1) |
 | `R2` | Right mouse button |
 | `L3` | Left Shift, Right Shift |
 | `R3` | Left Ctrl, Right Ctrl |
@@ -40,8 +41,6 @@ Without an `anyps5-input.ini`, or for actions the file does not mention, these b
 | `TouchLeft`, `TouchRight` | Backspace, Tab |
 | `ToggleMouse` | Middle mouse button, F7 |
 | `ToggleFullscreen` | F11 |
-
-`L2` has no built-in keyboard or mouse binding.
 
 For example, this changes Cross to F or Space, moves the left stick to IJKL, uses the mouse buttons for Square and R2, and keeps all other built-in bindings:
 
