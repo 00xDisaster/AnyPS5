@@ -193,7 +193,7 @@ std::filesystem::path ResolveHostPath(std::filesystem::path root, const std::vec
         const bool present = parentAttributes != INVALID_FILE_ATTRIBUTES && (parentAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0;
         if (!present && !std::filesystem::exists(parent, error)) { --last; continue; }
         root = parent;
-        first = last;
+        first = std::prev(last);
         break;
     }
 #else
