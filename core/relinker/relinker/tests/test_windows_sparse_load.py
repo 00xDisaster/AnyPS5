@@ -13,6 +13,7 @@ from test_windows_bss import LOAD_RVA, SECTION_ALIGNMENT, sections
 FAR_ADDRESS = 0x7FE00000
 RUNNABLE_FAR_ADDRESS = 0x4000000
 ENTRY = 0x10
+PEAK_MEMORY_LIMIT = 512 << 20
 
 
 def sparse_fixture(far_address=FAR_ADDRESS):
@@ -21,6 +22,15 @@ def sparse_fixture(far_address=FAR_ADDRESS):
     image[0x4000 + ENTRY:0x4000 + ENTRY + 6] = image[0x4000:0x4006]
     struct.pack_into("<IIQQQQQQ", image, 64 + 2 * 56, PT_LOAD, 6, 0, far_address, far_address, 0, 0x1000, 0x1000)
     return image
+
+
+def child_peak_memory():
+    try:
+        import resource
+    except ImportError:
+        return None
+    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    return peak if sys.platform == "darwin" else peak * 1024
 
 
 def main():
@@ -33,6 +43,8 @@ def main():
         result = subprocess.run([str(relinker), "--skip-sce-module", "--windows", str(source), str(output)],
                                 capture_output=True, text=True, timeout=20)
         assert result.returncode == 0, (result.stdout, result.stderr)
+        peak = child_peak_memory()
+        assert peak is None or peak < PEAK_MEMORY_LIMIT, f"{peak} bytes of memory for a {FAR_ADDRESS:#x} byte address gap"
         pe = output.read_bytes()
         assert len(pe) < 1 << 20, f"{len(pe)} byte executable for a {FAR_ADDRESS:#x} byte address gap"
         table, image_size = sections(pe)
@@ -55,6 +67,8 @@ def main():
         result = subprocess.run([str(relinker), "--skip-sce-module", "--macos", str(source), str(macho)],
                                 capture_output=True, text=True, timeout=20)
         assert result.returncode == 0, (result.stdout, result.stderr)
+        peak = child_peak_memory()
+        assert peak is None or peak < PEAK_MEMORY_LIMIT, f"{peak} bytes of memory for a {FAR_ADDRESS:#x} byte address gap"
         assert macho.stat().st_size < 1 << 20, macho.stat().st_size
     print("Windows sparse load image tests passed")
 
