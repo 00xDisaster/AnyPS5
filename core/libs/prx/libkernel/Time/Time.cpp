@@ -318,22 +318,36 @@ int APS5_VABI usleep_nid_postfix(KernelUseconds microseconds) {
 }
 
 #ifdef _WIN32
-static std::uint64_t CpuTimeNanos(bool callingThread, bool countKernel) {
+static constexpr int GUEST_EIO = 5;
+static constexpr int GUEST_EPERM = 1;
+
+int APS5_VABI ClockTimeWin32ErrorToGuestErrno_nid_no_patch(std::uint32_t error) {
+    if (error == ERROR_NOACCESS) return GUEST_EFAULT;
+    if (error == ERROR_ACCESS_DENIED) return GUEST_EPERM;
+    return GUEST_EIO;
+}
+
+static bool CpuTimeNanos(bool callingThread, bool countKernel, std::uint64_t* nanos) {
     FILETIME creation{};
     FILETIME exitTime{};
     FILETIME kernel{};
     FILETIME user{};
     if (callingThread) {
-        if (!GetThreadTimes(GetCurrentThread(), &creation, &exitTime, &kernel, &user))
-            throw std::system_error(GetLastError(), std::system_category(), "clock_gettime: GetThreadTimes failed");
+        if (!GetThreadTimes(GetCurrentThread(), &creation, &exitTime, &kernel, &user)) {
+            *__error_nid_postfix() = ClockTimeWin32ErrorToGuestErrno_nid_no_patch(GetLastError());
+            return false;
+        }
     } else {
-        if (!GetProcessTimes(GetCurrentProcess(), &creation, &exitTime, &kernel, &user))
-            throw std::system_error(GetLastError(), std::system_category(), "clock_gettime: GetProcessTimes failed");
+        if (!GetProcessTimes(GetCurrentProcess(), &creation, &exitTime, &kernel, &user)) {
+            *__error_nid_postfix() = ClockTimeWin32ErrorToGuestErrno_nid_no_patch(GetLastError());
+            return false;
+        }
     }
     const auto toTicks = [](const FILETIME& time) {
         return (static_cast<std::uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
     };
-    return (toTicks(user) + (countKernel ? toTicks(kernel) : 0ULL)) * 100ULL;
+    *nanos = (toTicks(user) + (countKernel ? toTicks(kernel) : 0ULL)) * 100ULL;
+    return true;
 }
 
 static std::uint64_t CpuTimeResolutionNanos() {
@@ -345,10 +359,6 @@ static std::uint64_t CpuTimeResolutionNanos() {
     if (increment == 0)
         throw std::runtime_error("clock_getres: GetSystemTimeAdjustment reported no clock interrupt period");
     return static_cast<std::uint64_t>(increment) * 100ULL;
-}
-
-static std::uint64_t ProcessCpuNanos(bool countSystem) {
-    return CpuTimeNanos(false, countSystem);
 }
 
 static std::uint64_t ProcessCpuResolutionNanos() {
@@ -390,7 +400,12 @@ static int ReadClock(int clockId, KernelTimespec* tp) {
         return 0;
     }
     if (clockId == 1 || clockId == 2) {
+#ifdef _WIN32
+        std::uint64_t nanos = 0;
+        if (!CpuTimeNanos(false, clockId == 2, &nanos)) return -1;
+#else
         const std::uint64_t nanos = ProcessCpuNanos(clockId == 2);
+#endif
         tp->tv_sec = static_cast<std::int64_t>(nanos / 1000000000ULL);
         tp->tv_nsec = static_cast<std::int64_t>(nanos % 1000000000ULL);
         return 0;
@@ -423,7 +438,8 @@ static int ReadClock(int clockId, KernelTimespec* tp) {
         return 0;
     }
     if (clockId == 14 || clockId == 15) {
-        const std::uint64_t nanos = CpuTimeNanos(clockId == 14, true);
+        std::uint64_t nanos = 0;
+        if (!CpuTimeNanos(clockId == 14, true, &nanos)) return -1;
         tp->tv_sec = static_cast<std::int64_t>(nanos / 1000000000ULL);
         tp->tv_nsec = static_cast<std::int64_t>(nanos % 1000000000ULL);
         return 0;
