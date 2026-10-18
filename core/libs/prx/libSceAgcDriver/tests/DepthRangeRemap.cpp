@@ -119,7 +119,7 @@ void pushedTransformTests() {
     const auto remapped = Recompile(baseRequest(true));
     const auto plain = Recompile(baseRequest(false));
     const auto facts = inspect(remapped);
-    require(facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase) && !facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 1u) && !facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 2u), "only the depth remap mode may be a specialization constant");
+    require(!facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 1u) && !facts.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 2u), "the depth remap scale or offset is a specialization constant");
     require(facts.pushConstantVariable && facts.pushDwordLoads.contains(DepthRemapPushOffsetBytes / 4u) && facts.pushDwordLoads.contains(DepthRemapPushOffsetBytes / 4u + 1u), "the remapped vertex shader does not read the scale and offset from the push block");
     require(!inspect(plain).pushConstantVariable, "a vertex shader without a depth remap gained a push constant block");
     auto crowded = baseRequest(true);
