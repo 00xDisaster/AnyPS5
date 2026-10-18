@@ -133,6 +133,8 @@ void pushedTransformTests() {
     require(refused, "a remapped vertex shader with push data over the depth remap words was accepted");
 }
 
+}
+
 int main() {
     using namespace ShaderRecompiler;
     try {
