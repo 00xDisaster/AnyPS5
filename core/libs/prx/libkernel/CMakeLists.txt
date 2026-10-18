@@ -702,7 +702,7 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/Time/TimedWait.cpp)
         target_include_directories(semaphore_trace_tests PRIVATE ${LIBS_INCLUDE_DIR})
         find_package(Threads REQUIRED)
-        target_link_libraries(semaphore_trace_tests PRIVATE Threads::Threads)
+        target_link_libraries(semaphore_trace_tests PRIVATE Threads::Threads libc)
         add_test(NAME guest_semaphore_trace COMMAND ${Python3_EXECUTABLE}
             ${LIBS_INCLUDE_DIR}/tests/test_semaphore_trace.py $<TARGET_FILE:semaphore_trace_tests>)
         set_tests_properties(guest_semaphore_trace PROPERTIES TIMEOUT 20)
