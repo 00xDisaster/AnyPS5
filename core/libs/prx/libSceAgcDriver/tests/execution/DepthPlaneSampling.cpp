@@ -326,8 +326,6 @@ void DepthBitsBaseSliceCase(AgcDriver::VulkanDevice& device, GuestBlock& block, 
     Expect(output, 0x1234u, "D16 depth-bits array from base slice 1");
 }
 
-// A 32_UINT T# with a depth swizzle over guest memory that no depth surface was drawn into: the raw dwords,
-// including float denormals, NaN payloads and the sign bit alone.
 void GuestDepthBitsCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std::span<std::uint32_t> output) {
     constexpr std::array<std::uint32_t, 9> values{0x00000001u, 0x007fffffu, 0x80000000u, 0x80000001u, 0x7f800001u, 0x7fc00001u, 0xffffffffu, 0x3e800000u, 0x12345678u};
     for (std::size_t index = 0; index < values.size(); ++index) {
