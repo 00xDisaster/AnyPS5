@@ -321,31 +321,9 @@ struct Context {
         return std::nullopt;
     }
 
-    std::optional<std::uint32_t> PoolHostFallback(std::uint32_t mask, std::uint32_t type) const {
-        if (type >= memory.memoryTypeCount || (memory.memoryHeaps[memory.memoryTypes[type].heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) return std::nullopt;
-        return HostMemoryType(mask);
-    }
-
-    std::optional<std::uint32_t> RefusedDeviceMemoryFallback(std::uint32_t mask, std::uint32_t refused, VkDeviceSize bytes, const char* what) const {
+    std::optional<std::uint32_t> RefusedDeviceMemoryFallback(std::uint32_t mask, std::uint32_t refused) const {
         if (refused >= memory.memoryTypeCount || (memory.memoryHeaps[memory.memoryTypes[refused].heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) return std::nullopt;
-        const auto host = HostMemoryType(mask);
-        if (!host) return std::nullopt;
-        static std::atomic<std::uint64_t> refusals{0}, refusedBytes{0};
-        const auto count = refusals.fetch_add(1) + 1;
-        const auto total = refusedBytes.fetch_add(bytes) + bytes;
-        if (count <= 5 || (count & (count - 1)) == 0) std::fprintf(stderr, "[gpu] %s: device-local memory type %u is out of device memory for %llu bytes; placed in host memory type %u; %llu such allocations, %llu MiB\n", what, refused, static_cast<unsigned long long>(bytes), *host, static_cast<unsigned long long>(count), static_cast<unsigned long long>(total >> 20u));
-        return host;
-    }
-
-    VkResult AllocateDeviceMemory(VkMemoryAllocateInfo& allocation, std::uint32_t mask, VkDeviceMemory& allocated, const char* what) const {
-        const auto allocate = Function<PFN_vkAllocateMemory>("vkAllocateMemory");
-        auto result = allocate(device, &allocation, nullptr, &allocated);
-        if (result != VK_ERROR_OUT_OF_DEVICE_MEMORY) return result;
-        const auto host = RefusedDeviceMemoryFallback(mask, allocation.memoryTypeIndex, allocation.allocationSize, what);
-        if (!host) return result;
-        allocation.memoryTypeIndex = *host;
-        allocated = VK_NULL_HANDLE;
-        return allocate(device, &allocation, nullptr, &allocated);
+        return HostMemoryType(mask);
     }
 };
 

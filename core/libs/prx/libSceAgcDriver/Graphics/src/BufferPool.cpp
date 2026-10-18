@@ -386,8 +386,8 @@ std::shared_ptr<BufferPool> GetBufferPool(const Context& context) {
     return context.bufferPool;
 }
 
-VkDeviceMemory AllocateAttachmentMemory(const Context& context, const VkMemoryAllocateInfo& allocation, std::uint32_t mask, const char* operation) {
-    return GetBufferPool(context)->AllocateMemory(allocation, operation, context.HostMemoryType(mask));
+VkDeviceMemory AllocateImageMemory(const Context& context, const VkMemoryAllocateInfo& allocation, std::uint32_t mask, const char* operation) {
+    return GetBufferPool(context)->AllocateMemory(allocation, operation, context.RefusedDeviceMemoryFallback(mask, allocation.memoryTypeIndex));
 }
 
 }

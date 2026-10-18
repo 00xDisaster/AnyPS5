@@ -254,7 +254,7 @@ void AttachmentReclaim() {
         Expect(mock.memoryBytes.size() == 1, "a released device buffer was not kept in the device pool");
         const auto pooled = mock.memoryBytes.begin()->first;
         mock.results = results;
-        const auto memory = AllocateAttachmentMemory(context, allocation, 3, "vkAllocateMemory attachment");
+        const auto memory = AllocateImageMemory(context, allocation, 3, "vkAllocateMemory attachment");
         Expect(!mock.memoryBytes.contains(pooled), "an attachment refused device memory did not reclaim the pool before retrying");
         const auto type = mock.memoryTypes.at(memory);
         mockFreeMemory(VK_NULL_HANDLE, memory, nullptr);
@@ -751,6 +751,31 @@ void CacheReclaimRecovery() {
     Expect(mock.liveBytes == 0 && mock.liveBuffers.empty(), "the failed cache release leaked a resource");
 }
 
+void ImageCacheReclaim() {
+    mock = MockDevice{};
+    reclaimMock = ReclaimMock{};
+    auto context = budgetContext();
+    context.cacheReclaim = mockCacheReclaim;
+    reportedBudget = 1620 * MiB;
+    reportedUsage = 200 * MiB;
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = 8 * MiB;
+    allocation.memoryTypeIndex = 0;
+    const auto refuse = [&](std::initializer_list<VkResult> results) {
+        ExternalAllocation(4 * MiB);
+        mock.results = results;
+        const auto requests = reclaimMock.requests;
+        const auto memory = AllocateImageMemory(context, allocation, 3, "vkAllocateMemory texture");
+        Expect(reclaimMock.requests == requests + 1 && reclaimMock.external == VK_NULL_HANDLE, "a texture refused device memory did not release the texture caches before retrying");
+        const auto type = mock.memoryTypes.at(memory);
+        mockFreeMemory(VK_NULL_HANDLE, memory, nullptr);
+        return type;
+    };
+    Expect(refuse({VK_ERROR_OUT_OF_DEVICE_MEMORY}) == 0, "a texture was placed in host memory although releasing the texture caches made room in device memory");
+    Expect(refuse({VK_ERROR_OUT_OF_DEVICE_MEMORY, VK_ERROR_OUT_OF_DEVICE_MEMORY}) == 1, "a texture still refused device memory after releasing the texture caches was not placed in host memory");
+    Expect(mock.liveBytes == 0, "a texture allocation leaked memory");
+}
+
 void SuccessfulAllocationKeepsPool() {
     mock = MockDevice{};
     {
@@ -846,6 +871,7 @@ int main(int argc, char** argv) {
         SuccessfulAllocationKeepsPool();
         PartialSlabDoesNotRetry();
         CacheReclaimRecovery();
+        ImageCacheReclaim();
         HostPlacement();
         RefusedDevicePlacement();
         AttachmentReclaim();
