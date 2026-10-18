@@ -40,6 +40,7 @@ void Expect(bool condition, const std::string& what) {
 
 constexpr std::uint64_t Alignment = 65536;
 constexpr std::uint64_t ChunkBytes = std::uint64_t{64} << 20u;
+constexpr std::uint64_t LargestTestedLimit = std::uint64_t{1} << 30u;
 
 struct Bind {
     VkDeviceSize resourceOffset;
@@ -51,6 +52,7 @@ struct Bind {
 struct MockDevice {
     std::uintptr_t next = 0x1000;
     std::set<VkBuffer> buffers;
+    std::set<VkFence> fences;
     std::set<VkBuffer> sparse;
     std::map<VkBuffer, VkDeviceSize> sizes;
     std::map<VkDeviceMemory, VkDeviceSize> memories;
@@ -63,10 +65,25 @@ MockDevice mock;
 
 VKAPI_ATTR VkResult VKAPI_CALL mockCreateFence(VkDevice, const VkFenceCreateInfo*, const VkAllocationCallbacks*, VkFence* fence) {
     *fence = reinterpret_cast<VkFence>(mock.next++);
+    mock.fences.insert(*fence);
     return VK_SUCCESS;
 }
 
-VKAPI_ATTR void VKAPI_CALL mockDestroyFence(VkDevice, VkFence, const VkAllocationCallbacks*) {}
+VKAPI_ATTR void VKAPI_CALL mockDestroyFence(VkDevice, VkFence fence, const VkAllocationCallbacks*) {
+    mock.fences.erase(fence);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL mockAllocateCommandBuffers(VkDevice, const VkCommandBufferAllocateInfo*, VkCommandBuffer* commands) {
+    *commands = reinterpret_cast<VkCommandBuffer>(mock.next++);
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL mockResetFences(VkDevice, std::uint32_t, const VkFence*) { return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL mockResetCommandBuffer(VkCommandBuffer, VkCommandBufferResetFlags) { return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL mockBeginCommandBuffer(VkCommandBuffer, const VkCommandBufferBeginInfo*) { return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL mockEndCommandBuffer(VkCommandBuffer) { return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL mockQueueSubmit(VkQueue, std::uint32_t, const VkSubmitInfo*, VkFence) { return VK_SUCCESS; }
+VKAPI_ATTR void VKAPI_CALL mockCmdCopyBuffer(VkCommandBuffer, VkBuffer, VkBuffer, std::uint32_t, const VkBufferCopy*) {}
 
 VKAPI_ATTR VkResult VKAPI_CALL mockWaitForFences(VkDevice, std::uint32_t, const VkFence*, VkBool32, std::uint64_t) {
     return VK_SUCCESS;
@@ -132,6 +149,13 @@ VKAPI_ATTR VkDeviceAddress VKAPI_CALL mockGetBufferDeviceAddress(VkDevice, const
 
 PFN_vkVoidFunction VKAPI_CALL mockProc(VkDevice, const char* name) {
     static const std::map<std::string_view, PFN_vkVoidFunction> table{
+        {"vkAllocateCommandBuffers", reinterpret_cast<PFN_vkVoidFunction>(mockAllocateCommandBuffers)},
+        {"vkResetFences", reinterpret_cast<PFN_vkVoidFunction>(mockResetFences)},
+        {"vkResetCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(mockResetCommandBuffer)},
+        {"vkBeginCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(mockBeginCommandBuffer)},
+        {"vkEndCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(mockEndCommandBuffer)},
+        {"vkQueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(mockQueueSubmit)},
+        {"vkCmdCopyBuffer", reinterpret_cast<PFN_vkVoidFunction>(mockCmdCopyBuffer)},
         {"vkCreateFence", reinterpret_cast<PFN_vkVoidFunction>(mockCreateFence)},
         {"vkDestroyFence", reinterpret_cast<PFN_vkVoidFunction>(mockDestroyFence)},
         {"vkWaitForFences", reinterpret_cast<PFN_vkVoidFunction>(mockWaitForFences)},
@@ -214,6 +238,10 @@ struct SharedRange {
         mutation.Add(backing.base, static_cast<std::size_t>(bytes), true, true, true);
     }
 
+    ~SharedRange() {
+        std::erase(backings, &backing);
+    }
+
     std::uint64_t Address() const {
         return reinterpret_cast<std::uint64_t>(backing.base);
     }
@@ -221,6 +249,36 @@ struct SharedRange {
 
 std::uint64_t RangeBytes() {
     return (UdmabufLimitBytes() / ChunkBytes + 1) * ChunkBytes + (std::uint64_t{1} << 20u);
+}
+
+void SettlingSurvivesDeviceReplacement(bool reverse) {
+    const auto baselineBuffers = mock.buffers.size();
+    const auto baselineMemories = mock.memories.size();
+    const auto baselineFences = mock.fences.size();
+    SharedRange range(8u << 20u, 0, true);
+    auto first = mockContext();
+    first.device = reinterpret_cast<VkDevice>(mock.next++);
+    first.settleQueue = reinterpret_cast<VkQueue>(mock.next++);
+    first.settlePool = reinterpret_cast<VkCommandPool>(mock.next++);
+    std::mutex queueMutex;
+    first.settleQueueMutex = &queueMutex;
+    auto second = first;
+    second.device = reinterpret_cast<VkDevice>(mock.next++);
+    second.settlePool = reinterpret_cast<VkCommandPool>(mock.next++);
+    std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
+    for (const auto& context : {first, second, first}) {
+        const auto* imported = HostImportFor(context, range.Address(), 4096);
+        Expect(imported != nullptr && imported->dmaBuf, "replacement device did not settle its dma-buf import");
+    }
+    ClearHostImports(reverse ? second.device : first.device);
+    Expect(mock.fences.size() == baselineFences + 1, "clearing one device did not retain exactly the other device's settle fence");
+    ClearHostImports(reverse ? first.device : second.device);
+    Expect(mock.buffers.size() == baselineBuffers, "device replacement leaked a settle buffer");
+    Expect(mock.memories.size() == baselineMemories, "device replacement leaked settle memory");
+    Expect(mock.fences.size() == baselineFences, "device replacement leaked a settle fence");
+    ClearHostImports(first.device);
+    ClearHostImports(second.device);
+    Expect(mock.fences.size() == baselineFences, "repeated device cleanup changed the live fences");
 }
 
 void ImportsALargeRangeAsOneSparseBuffer() {
@@ -286,9 +344,16 @@ int main() {
         return 77;
     }
     close(udmabuf);
+    if (UdmabufLimitBytes() > LargestTestedLimit) {
+        std::printf("skipped, udmabuf size_limit_mb is above %llu: a range above it is too large to map\n", static_cast<unsigned long long>(LargestTestedLimit >> 20u));
+        return 77;
+    }
     setenv("APS5_WRITE_WATCH_IMPORTS", "unwatch", 1);
+    SetHostImportBudget(~std::uint64_t{0});
     GuestArena::GuestArenaSetSharedBacking_nid_postfix(Resolve);
     try {
+        SettlingSurvivesDeviceReplacement(false);
+        SettlingSurvivesDeviceReplacement(true);
         ImportsALargeRangeAsOneSparseBuffer();
         UnalignedOffsetIsDecidedBeforeImporting();
         FailureAfterTheDecisionThrows(false, VK_SUCCESS, "UDMABUF_CREATE");

@@ -12,6 +12,20 @@ import check_test_registration
 
 
 class RegistrationTests(unittest.TestCase):
+    def test_disabled_property_is_local_to_each_configuration(self):
+        for configurations in (("OFF", "TRUE"), ("TRUE", "OFF"), ("TRUE", "TRUE")):
+            with self.subTest(configurations=configurations):
+                content = 'if(CTEST_CONFIGURATION_TYPE STREQUAL "Debug")\n'
+                for index, disabled in enumerate(configurations):
+                    if index:
+                        content += 'else()\n'
+                    content += f'add_test("bounds" "/build/tests/config{index}/buffer_bounds_tests")\n'
+                    content += f'set_tests_properties("bounds" PROPERTIES DISABLED {disabled})\n'
+                content += 'endif()\n'
+                names = self.registered(content)
+                self.assertEqual("buffer_bounds_tests" in names, "OFF" in configurations)
+
+
     def registered(self, content):
         with tempfile.TemporaryDirectory() as directory:
             build = Path(directory)
@@ -88,6 +102,19 @@ class RegistrationTests(unittest.TestCase):
 
     def test_multiline_test_command_is_recognized(self):
         names = self.registered('add_test("bounds"\n    "/build/tests/buffer_bounds_tests"\n)\n')
+        self.assertIn("buffer_bounds_tests", names)
+
+    def test_multi_config_branches_register_the_executable(self):
+        names = self.registered(
+            'if(CTEST_CONFIGURATION_TYPE MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")\n'
+            '  add_test([=[bounds]=] "/build/tests/Debug/buffer_bounds_tests")\n'
+            '  set_tests_properties([=[bounds]=] PROPERTIES  TIMEOUT "20")\n'
+            'elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")\n'
+            '  add_test([=[bounds]=] "/build/tests/Release/buffer_bounds_tests")\n'
+            '  set_tests_properties([=[bounds]=] PROPERTIES  TIMEOUT "20")\n'
+            'else()\n'
+            '  add_test([=[bounds]=] NOT_AVAILABLE)\n'
+            'endif()\n')
         self.assertIn("buffer_bounds_tests", names)
 
     def test_disabled_test_is_not_counted_as_run(self):
