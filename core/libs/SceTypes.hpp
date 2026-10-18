@@ -1288,7 +1288,7 @@ struct NetCtlIfStat {
     std::uint32_t reserved[8];
 };
 
-using NetCtlCallback = void (*)(int, void*);
+using NetCtlCallback = void (APS5_VABI *)(int, void*);
 
 struct HttpEpoll;
 using HttpEpollHandle = HttpEpoll*;
@@ -1379,10 +1379,6 @@ struct NpUniversalDataSystemMemoryStat {
     std::size_t max_inuse_size;
     std::size_t current_inuse_size;
 };
-
-struct NpUniversalDataSystemEvent {};
-struct NpUniversalDataSystemEventPropertyObject {};
-struct NpUniversalDataSystemEventPropertyArray {};
 
 struct NpUniversalDataSystemStorageStat {
     std::size_t in_events;
