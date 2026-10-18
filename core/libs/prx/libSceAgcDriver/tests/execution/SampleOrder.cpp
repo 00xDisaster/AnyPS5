@@ -994,6 +994,8 @@ struct DepthLocations {
     std::size_t sloped = 0;
     std::size_t guest = 0;
     std::size_t standard = 0;
+    std::array<std::size_t, 2> slopedByRow{};
+    std::array<std::size_t, 2> guestByRow{};
 };
 
 DepthLocations LocateDepth(const Samples& depth, const std::array<std::uint8_t, 32>& locations = VillageLocations) {
@@ -1008,6 +1010,7 @@ DepthLocations LocateDepth(const Samples& depth, const std::array<std::uint8_t, 
         const auto sample = static_cast<std::uint32_t>(index % samples);
         const auto x = pixel % ReferenceExtent.width;
         const auto y = pixel / ReferenceExtent.width;
+        ++located.slopedByRow[y & 1u];
         const auto bits = static_cast<std::uint32_t>(locations[Quad(x, y) * 8u + sample]);
         const std::array<double, 2> guest{0.5 + (static_cast<int>(bits & 7u) - static_cast<int>(bits & 8u)) / 16.0, 0.5 + (static_cast<int>((bits >> 4u) & 7u) - static_cast<int>((bits >> 4u) & 8u)) / 16.0};
         const auto holds = [&](const std::array<double, 2>& at) {
@@ -1016,16 +1019,23 @@ DepthLocations LocateDepth(const Samples& depth, const std::array<std::uint8_t, 
             }
             return false;
         };
-        if (holds(guest)) ++located.guest;
-        else if (holds(standard[sample])) ++located.standard;
+        if (holds(guest)) {
+            ++located.guest;
+            ++located.guestByRow[y & 1u];
+        } else if (holds(standard[sample])) {
+            ++located.standard;
+        }
     }
     return located;
 }
 
-DepthLocations ReportDepthLocations(const std::string& what, const Rendered& rendered, const std::array<std::uint8_t, 32>& locations = VillageLocations) {
-    const auto located = LocateDepth(rendered.depth, locations);
-    std::printf("%s: of %zu sloped depth samples, %zu hold the slope's depth at the guest's sample locations and %zu at the standard 2x locations\n", what.c_str(), located.sloped, located.guest, located.standard);
+DepthLocations PrintDepthLocations(const std::string& what, const DepthLocations& located) {
+    std::printf("%s: of %zu sloped depth samples, %zu hold the slope's depth at the guest's sample locations (%zu of %zu on even rows, %zu of %zu on odd rows) and %zu at the standard 2x locations\n", what.c_str(), located.sloped, located.guest, located.guestByRow[0], located.slopedByRow[0], located.guestByRow[1], located.slopedByRow[1], located.standard);
     return located;
+}
+
+DepthLocations ReportDepthLocations(const std::string& what, const Rendered& rendered, const std::array<std::uint8_t, 32>& locations = VillageLocations) {
+    return PrintDepthLocations(what, LocateDepth(rendered.depth, locations));
 }
 
 Samples ReadTarget(const Context& context, VkImageView view, bool color, std::uint32_t samples) {
@@ -1289,13 +1299,8 @@ int RecipeDepthLocations(AgcDriver::VulkanDevice& device) {
     Draw(device, context, slopes);
     Settle(device);
     const auto replayed = read();
-    const auto report = [&](const char* what, const Samples& values) {
-        const auto located = LocateDepth(values, locations);
-        std::printf("%s: of %zu sloped depth samples, %zu hold the slope's depth at the guest's sample locations and %zu at the standard 2x locations\n", what, located.sloped, located.guest, located.standard);
-        return located;
-    };
-    const auto first = report("the recorded draw", recorded);
-    report("the recipe's replay as the first draw of a pass", replayed);
+    const auto first = PrintDepthLocations("the recorded draw", LocateDepth(recorded, locations));
+    PrintDepthLocations("the recipe's replay as the first draw of a pass", LocateDepth(replayed, locations));
     Require(first.sloped != 0u, "the recorded draw left no sloped depth");
     if (first.guest != first.sloped) {
         std::printf("skipped, the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them\n");
