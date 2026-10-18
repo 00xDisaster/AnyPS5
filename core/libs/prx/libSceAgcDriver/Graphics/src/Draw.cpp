@@ -2447,6 +2447,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
         const auto reads = std::count(sources.begin(), sources.end(), binding.color.surfaceAddress);
         Require(reads == 0 || (reads == 1 && binding.color.partialWriteMask != 0), "sampling a multisampled color target the draw renders to is not implemented");
         Require(binding.color.partialWriteMask == 0 || (reads == 1 && MultisampleTargetStorable(context, binding.color)), "the partial write of a multisampled packed color target does not store into the target's image");
+        if (binding.color.partialWriteMask != 0) static_cast<void>(MultisampleTargetStorageView(context, TargetMergeSurface(binding.color)));
     }
     for (const auto& binding : targets) {
         if (binding.color.partialWriteMask == 0 || binding.multisampled) continue;

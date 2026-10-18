@@ -55,6 +55,7 @@ constexpr std::uint32_t LoadResult = 12;
 constexpr double EdgeMargin = 1.0 / 32.0;
 constexpr std::array<float, 4> First{0.2f, 0.4f, 0.6f, 0.8f};
 constexpr std::array<float, 4> Second{13.0f / 15.0f, 0.0f, 1.0f, 0.0f};
+constexpr std::array<float, 4> Third{1.0f / 15.0f, 1.0f, 0.0f, 4.0f / 15.0f};
 
 alignas(256) constexpr std::array<std::uint32_t, 6> VertexCode{
     0xe0382000, 0x80000005, 0xbf8c3f70, 0xf80008cf, 0x03020100, 0xbf810000,
@@ -73,6 +74,10 @@ constexpr std::array<std::array<float, 4>, 3> Covering{{
 
 constexpr std::array<std::array<float, 4>, 3> Cutting{{
     {-0.93f, -1.0f, 0.5f, 1.0f}, {0.37f, -1.0f, 0.5f, 1.0f}, {-0.21f, 0.94f, 0.5f, 1.0f}
+}};
+
+constexpr std::array<std::array<float, 4>, 3> Overlapping{{
+    {-0.08f, -0.47f, 0.5f, 1.0f}, {1.0f, -0.13f, 0.5f, 1.0f}, {0.29f, 1.0f, 0.5f, 1.0f}
 }};
 
 alignas(256) std::array<std::array<std::uint32_t, 16>, 4> Programs{};
@@ -248,16 +253,20 @@ std::vector<std::uint32_t> LoadSamples(AgcDriver::VulkanDevice& device, const st
     return loaded;
 }
 
-double EdgeDistance(double x, double y, std::size_t from) {
+double EdgeDistance(const std::array<std::array<float, 4>, 3>& triangle, double x, double y, std::size_t from) {
     const auto pixels = [](const std::array<float, 4>& vertex) {
         return std::array<double, 2>{(static_cast<double>(vertex[0]) + 1.0) * 0.5 * Side, Side - (static_cast<double>(vertex[1]) + 1.0) * 0.5 * Side};
     };
-    const auto a = pixels(Cutting[from]);
-    const auto b = pixels(Cutting[(from + 1u) % Cutting.size()]);
-    const auto c = pixels(Cutting[(from + 2u) % Cutting.size()]);
+    const auto a = pixels(triangle[from]);
+    const auto b = pixels(triangle[(from + 1u) % triangle.size()]);
+    const auto c = pixels(triangle[(from + 2u) % triangle.size()]);
     const auto length = std::hypot(b[0] - a[0], b[1] - a[1]);
     const auto side = [&](double px, double py) { return ((b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])) / length; };
     return side(c[0], c[1]) < 0 ? -side(x, y) : side(x, y);
+}
+
+double Inside(const std::array<std::array<float, 4>, 3>& triangle, double x, double y) {
+    return std::min({EdgeDistance(triangle, x, y, 0), EdgeDistance(triangle, x, y, 1), EdgeDistance(triangle, x, y, 2)});
 }
 
 }
@@ -278,14 +287,18 @@ int main() {
         const auto merged = TargetState(color, 0x1u);
         Require(merged.colors.front().partialWriteMask == 0xf000u, "an X write of the 4_4_4_4 target did not merge bits 15..12");
         Draw(*device, merged, Cutting, Float32Program(Second));
+        Draw(*device, full, Overlapping, Float32Program(Third));
         const auto texture = AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color));
         const auto loaded = LoadSamples(*device, texture);
         const auto background = Packed(First);
         const auto written = (background & 0x0fffu) | (Packed(Second) & 0xf000u);
-        Require(written != background, "the test colors do not differ in the merged nibble");
+        const auto over = Packed(Third);
+        Require(written != background && over != written && over != background, "the test colors do not differ in the merged nibble");
         const auto locations = AgcDriver::Graphics::SampleLocations(merged);
         std::array<std::uint32_t, Samples + 1u> pixelsByCoverage{};
         std::uint32_t checked = 0;
+        std::uint32_t overdrawn = 0;
+        std::uint32_t mergedAfterOverdraw = 0;
         for (std::uint32_t y = 0; y < Side; ++y) {
             for (std::uint32_t x = 0; x < Side; ++x) {
                 std::uint32_t covered = 0;
@@ -293,21 +306,26 @@ int main() {
                     const auto word = loaded[(y * Side + x) * Samples + sample];
                     char where[160];
                     std::snprintf(where, sizeof(where), "sample %u of pixel (%u, %u) holds 0x%04x", sample, x, y, word);
-                    Require(word == written || word == background, std::string(where) + ", neither the merged word 0x" + std::to_string(written) + " nor the first draw's word");
+                    Require(word == written || word == background || word == over, std::string(where) + ", neither the merged word, the first draw's word nor the last draw's word");
                     covered += word == written ? 1u : 0u;
                     const auto px = x + static_cast<double>(locations[sample].x);
                     const auto py = y + static_cast<double>(locations[sample].y);
-                    const auto distance = std::min({EdgeDistance(px, py, 0), EdgeDistance(px, py, 1), EdgeDistance(px, py, 2)});
-                    if (std::fabs(distance) < EdgeMargin) continue;
+                    const auto distance = Inside(Cutting, px, py);
+                    const auto overDistance = Inside(Overlapping, px, py);
+                    if (std::fabs(distance) < EdgeMargin || std::fabs(overDistance) < EdgeMargin) continue;
                     ++checked;
-                    Require((word == written) == (distance > 0), std::string(where) + (distance > 0 ? ", which the merging triangle covers" : ", which the merging triangle does not cover"));
+                    const auto expected = overDistance > 0 ? over : distance > 0 ? written : background;
+                    overdrawn += overDistance > 0 && distance > 0 ? 1u : 0u;
+                    mergedAfterOverdraw += overDistance <= 0 && distance > 0 ? 1u : 0u;
+                    Require(word == expected, std::string(where) + (overDistance > 0 ? ", which the last full write covers" : distance > 0 ? ", which only the merging triangle covers" : ", which no later triangle covers"));
                 }
                 ++pixelsByCoverage[covered];
             }
         }
-        Require(checked >= Side * Side * Samples * 9u / 10u, "fewer than nine in ten samples are clear of the triangle's edges");
-        Require(pixelsByCoverage[0] != 0 && pixelsByCoverage[Samples] != 0 && pixelsByCoverage[1] != 0, "the merging triangle does not leave pixels uncovered, covered and partly covered");
-        std::printf("4_4_4_4 unorm 2-sample partial write tests passed: %u partly covered pixels merged bits 15..12 into their covered samples only\n", pixelsByCoverage[1]);
+        Require(checked >= Side * Side * Samples * 8u / 10u, "fewer than eight in ten samples are clear of the triangles' edges");
+        Require(pixelsByCoverage[0] != 0 && pixelsByCoverage[Samples] != 0 && pixelsByCoverage[1] != 0, "the merged samples do not leave pixels unmerged, merged and partly merged");
+        Require(overdrawn != 0 && mergedAfterOverdraw != 0, "the last full write does not cover some merged samples and leave others");
+        std::printf("4_4_4_4 unorm 2-sample partial write tests passed: %u partly merged pixels kept bits 15..12 merged into their covered samples only, and a full write drawn right after covered %u merged samples\n", pixelsByCoverage[1], overdrawn);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
