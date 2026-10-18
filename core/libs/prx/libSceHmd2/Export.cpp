@@ -42,6 +42,16 @@ std::int32_t GetDeviceInformation(Hmd2::DeviceInformation* info) {
 
 extern "C" {
 
+int APS5_VABI sceHmd2ReprojectionGetStatus() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHmd2ReprojectionQuerySeeThroughBufferSizeAlign() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 std::int32_t APS5_VABI sceHmd2Initialize(const void* param) {
     std::lock_guard lock(stateMutex);
     if (initialized) return Hmd2::AlreadyInitialized;
@@ -50,10 +60,56 @@ std::int32_t APS5_VABI sceHmd2Initialize(const void* param) {
     return 0;
 }
 
+std::int32_t APS5_VABI sceHmd2GetFieldOfView(std::int32_t handle, Hmd2::FieldOfView* fieldOfView) {
+    std::lock_guard lock(stateMutex);
+    if (!fieldOfView) return Hmd2::ParameterNull;
+    if (handle == 0 || handle != openHandle) return Hmd2::InvalidHandle;
+    if (!initialized) return Hmd2::NotInitialized;
+    *fieldOfView = DefaultFieldOfView;
+    return 0;
+}
+
+std::int32_t APS5_VABI sceHmd2GetDeviceInformationByHandle(std::int32_t handle, Hmd2::DeviceInformation* info) {
+    std::lock_guard lock(stateMutex);
+    if (handle != openHandle) return Hmd2::InvalidHandle;
+    return GetDeviceInformation(info);
+}
+
 std::int32_t APS5_VABI sceHmd2Terminate() {
     std::lock_guard lock(stateMutex);
     if (!initialized) return Hmd2::NotInitialized;
     initialized = false;
+    return 0;
+}
+
+std::int32_t APS5_VABI sceHmd2Close(std::int32_t handle) {
+    std::lock_guard lock(stateMutex);
+    if (!initialized) return Hmd2::NotInitialized;
+    if (handle != openHandle) return Hmd2::InvalidHandle;
+    openHandle = 0;
+    return 0;
+}
+
+int APS5_VABI sceHmd2GazeGetResult() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHmd2GazeGetResultForFoveatedRendering() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+std::int32_t APS5_VABI sceHmd2GetDeviceInformation(Hmd2::DeviceInformation* info) {
+    std::lock_guard lock(stateMutex);
+    return GetDeviceInformation(info);
+}
+
+std::int32_t APS5_VABI sceHmd2GetFieldOfViewWithoutHandle(Hmd2::FieldOfView* fieldOfView) {
+    std::lock_guard lock(stateMutex);
+    if (!fieldOfView) return Hmd2::ParameterNull;
+    if (!initialized) return Hmd2::NotInitialized;
+    *fieldOfView = DefaultFieldOfView;
     return 0;
 }
 
@@ -68,68 +124,6 @@ std::int32_t APS5_VABI sceHmd2Open(std::int32_t userId, std::int32_t type, std::
     if (openHandle != 0) return Hmd2::AlreadyOpened;
     openHandle = DeviceHandle;
     return DeviceHandle;
-}
-
-std::int32_t APS5_VABI sceHmd2Close(std::int32_t handle) {
-    std::lock_guard lock(stateMutex);
-    if (!initialized) return Hmd2::NotInitialized;
-    if (handle != openHandle) return Hmd2::InvalidHandle;
-    openHandle = 0;
-    return 0;
-}
-
-std::int32_t APS5_VABI sceHmd2GetDeviceInformation(Hmd2::DeviceInformation* info) {
-    std::lock_guard lock(stateMutex);
-    return GetDeviceInformation(info);
-}
-
-std::int32_t APS5_VABI sceHmd2GetDeviceInformationByHandle(std::int32_t handle, Hmd2::DeviceInformation* info) {
-    std::lock_guard lock(stateMutex);
-    if (handle != openHandle) return Hmd2::InvalidHandle;
-    return GetDeviceInformation(info);
-}
-
-std::int32_t APS5_VABI sceHmd2GetFieldOfView(std::int32_t handle, Hmd2::FieldOfView* fieldOfView) {
-    std::lock_guard lock(stateMutex);
-    if (!fieldOfView) return Hmd2::ParameterNull;
-    if (handle == 0 || handle != openHandle) return Hmd2::InvalidHandle;
-    if (!initialized) return Hmd2::NotInitialized;
-    *fieldOfView = DefaultFieldOfView;
-    return 0;
-}
-
-std::int32_t APS5_VABI sceHmd2GetFieldOfViewWithoutHandle(Hmd2::FieldOfView* fieldOfView) {
-    std::lock_guard lock(stateMutex);
-    if (!fieldOfView) return Hmd2::ParameterNull;
-    if (!initialized) return Hmd2::NotInitialized;
-    *fieldOfView = DefaultFieldOfView;
-    return 0;
-}
-
-std::int32_t APS5_VABI sceHmd2SetVibration(std::int32_t handle, std::uint32_t level) {
-    (void)level;
-    std::lock_guard lock(stateMutex);
-    return handle == openHandle ? 0 : Hmd2::InvalidHandle;
-}
-
-int APS5_VABI sceHmd2ReprojectionGetStatus() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHmd2ReprojectionQuerySeeThroughBufferSizeAlign() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHmd2GazeGetResult() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHmd2GazeGetResultForFoveatedRendering() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
 }
 
 int APS5_VABI sceHmd2ReprojectionBeginFrame() {
@@ -219,6 +213,13 @@ int APS5_VABI sceHmd2ReprojectionSetTiming() {
 
 int APS5_VABI sceHmd2ReprojectionTerminate() {
     NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+std::int32_t APS5_VABI sceHmd2SetVibration(std::int32_t handle, std::uint32_t level) {
+    (void)level;
+    std::lock_guard lock(stateMutex);
+    if (handle != openHandle) return Hmd2::InvalidHandle;
     return 0;
 }
 
