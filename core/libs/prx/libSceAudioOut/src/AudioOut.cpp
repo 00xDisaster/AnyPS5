@@ -525,7 +525,10 @@ int APS5_VABI sceAudioOutDeviceIdOpen() {
 }
 
 int APS5_VABI sceAudioOutSysClose(int handle) {
-    std::lock_guard<std::mutex> outputLock(g_outputMutex);
+    if (handle <= 0 || handle > PORTS_MAX) {
+        throw std::runtime_error("sceAudioOutSysClose: handle " + std::to_string(handle) + " is not an open Sys port");
+    }
+    std::lock_guard<std::mutex> outputLock(g_outputMutexes[handle - 1]);
     std::lock_guard<std::mutex> lock(g_mutex);
     Port* port = getPort(handle);
     if (port == nullptr || port->type != PORT_TYPE_SYS) {

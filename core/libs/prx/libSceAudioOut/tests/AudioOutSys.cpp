@@ -58,6 +58,8 @@ int main() {
     const int ex = sceAudioOutExOpen(SYSTEM_USER, 0);
     Require(ex > 0, "an Ex port opens");
     Require(Throws([ex] { sceAudioOutSysClose(ex); }), "an Ex port is not a Sys port");
+    Require(Throws([] { sceAudioOutSysClose(0); }), "handle 0 is not a Sys port");
+    Require(Throws([] { sceAudioOutSysClose(1000); }), "an out-of-range handle is not a Sys port");
     Require(sceAudioOutSysClose(second) == 0, "close the second Sys port");
     return failed ? 1 : 0;
 }
