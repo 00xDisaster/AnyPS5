@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -32,6 +33,7 @@ struct PthreadMutexattrPrivate {
     MutexType type;
     int protocol = 0;
     int ceiling = 0;
+    int pshared = 0;
 };
 
 struct PthreadMutexPrivate {
@@ -58,10 +60,11 @@ struct PthreadRwlockPrivate {
 
 struct PthreadCondattrPrivate {
     int _clockid;
+    int _pshared = 0;
 };
 
 struct PthreadCondPrivate {
-    TimedWait::Condition _cv;
+    std::shared_ptr<TimedWait::Condition> _cv = std::make_shared<TimedWait::Condition>();
     int _clockid = 0;
 };
 
@@ -139,6 +142,8 @@ struct PthreadPrivate {
     void* _retval;
     bool _detached;
     bool _adopted;
+    Pthread* _handleStorage;
+    std::atomic<bool> _joined;
     std::mutex _join_mtx;
     TimedWait::Condition _join_cv;
     std::atomic<bool> cancelPending{false};
@@ -160,5 +165,7 @@ void SetLiveGuestThreadsAffinity(KernelCpumask mask);
 KernelCpumask LiveGuestThreadsAffinity();
 bool GuestThreadIsLive(const PthreadPrivate* thread);
 bool LiveGuestThreadExists(std::int64_t tid);
+bool GetLiveGuestThreadAffinity_nid_no_patch(std::int64_t tid, KernelCpumask& mask);
+bool SetLiveGuestThreadAffinity_nid_no_patch(std::int64_t tid, KernelCpumask mask);
 
 #endif
