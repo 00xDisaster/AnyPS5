@@ -1,11 +1,12 @@
 # Environment variables
 
-The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetting`, `MaskFromEnvironment`, `EnvInt` and `GetEnvironmentVariableA`. This table lists every `APS5_*` and `ANYPS5_*` name it reads, its kind, the value used when it is unset and what it does, one table per library. Regenerate the names with `python3 tools/env_reference.py --table`; the Conventions check fails when a name the code reads has no row here, or a row's name is no longer read.
+The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetting`, `MaskFromEnvironment`, `EnvInt`, `GetEnvironmentVariableA`, `GetEnvironmentVariableW` with a wide literal, `configured`, `PipelineSwitch`, `environmentCount` and `addWideString` (the wide names the Windows entry stub reads). This table lists every `APS5_*` and `ANYPS5_*` name it reads, its kind, the value used when it is unset and what it does, one table per library. Regenerate the names with `python3 tools/env_reference.py --table`; the Conventions check fails when a name the code reads has no row here, or a row's name is no longer read.
 
 ### core/libs
 
 | Name | Kind | Source | Default | Description |
 |------|------|--------|---------|-------------|
+| `ANYPS5_LOADEXEC_PARENT` | string | `core/libs/tests/GuestLoadExecHost.cpp` |  | variable the Windows entry stub reads; its wide name is built in `core/relinker/elfpatcher/src/windows/WindowsEntryStubBuilder.cpp` |
 | `ANYPS5_LOADEXEC_TEST_ROOT` | string | `core/libs/tests/GuestLoadExecHost.cpp` |  | directory the load-exec host test reads its guest executable from |
 | `ANYPS5_TEST_QUOTED_ARGV0` | presence | `core/libs/tests/GuestLoadExecHost.cpp` |  | makes the load-exec test's first argument one with quotes, a backslash and non-ASCII text |
 | `APS5_EBOOT` | string | `core/libs/tests/GuestSystemExit.cpp` |  | host path of the executable launched for /app0/eboot.bin, defaulting to the running executable |
@@ -307,7 +308,12 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_PIPELINE_DRAIN_FILLS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/BufferFill.cpp` |  | runs queue-0 buffer fills through the draw pipeline to keep their order; any value stores them in place instead |
 | `APS5_PIPELINE_DRAIN_LABELS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Packets/PacketExecution.cpp` |  | answers a queue-0 wait from the draw pipeline's own pending labels while it is busy; any value drains the pipeline at the wait |
 | `APS5_PIPELINE_DRAIN_SUBMISSIONS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Packets/PacketExecution.cpp` |  | lets a submission end without submitting its recorded work, so it joins a later submit with the pipeline's queue; any value drains the pipeline and submits at the end of the submission |
+| `APS5_PIPELINE_JOURNAL_ENTRIES` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/PipelineJournal.cpp` | 1024 | number of journal entries loaded at most; a longer journal is truncated to this count |
+| `APS5_PIPELINE_JOURNAL_MAX_MIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/PipelineJournal.cpp` | 1024 | size cap in MiB on the pipeline journal; later pipelines are not recorded once it is reached |
+| `APS5_PIPELINE_JOURNAL_THREADS` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/PipelineJournal.cpp` |  | threads that replay the journal's pipelines, 0 disables the replay; unset uses half the hardware threads, at least one |
 | `APS5_PIPELINE_STATS` | string | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | captures and prints driver statistics for each new pipeline, requiring `VK_KHR_pipeline_executable_properties`; `1` enables |
+| `APS5_PIPELINE_STORE_ENTRIES` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/Pipeline.cpp` | 1024 | LRU bound on the entries of the pipeline store; an entry is evicted only once no recorded draw holds it |
+| `APS5_PM4_RING` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Queues/SubmissionRing.cpp` | 16 | number of submissions the PM4 ring keeps for dumps, from 0 to 4096; 0 disables the ring |
 | `APS5_POLL_REAP` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/WaitMemory.cpp` |  | reaps completions on every poll tick |
 | `APS5_POLL_TRY_EACH` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/WaitMemory.cpp` |  | tries the poll service on every tick instead of at the poll interval |
 | `APS5_PREBUILD_THREADS` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Shaders/ShaderRegistry.cpp` | 1 | number of threads in the one-thread pool that prebuilds registration-form shader libraries |
@@ -335,6 +341,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_SRGB_SHADER_DECODE` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/TextureFormat.cpp` |  | forces shader sRGB decode for the sRGB 8-bit formats |
 | `APS5_STAGING_POOL_MIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/BufferPool.cpp` |  | size in MiB of the device-local staging buffer pool; `0` disables the device tier |
 | `APS5_STALE_EVICT` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/Texture.cpp` |  | also evicts a proved-present dead image's pending layers on an access |
+| `APS5_STALL_WATCHDOG_SECS` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Queues/SubmissionRing.cpp` | 0 | seconds a queue may go without progress before the submission rings are dumped; 0 disables the watchdog, at most 86400 |
 | `APS5_STORE_AT_FLIP` | string | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | stores every pending storage-image result at each display flip; only `1` is accepted |
 | `APS5_STORE_AT_LABEL` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | flushes every pending storage-image result when a label is written on the GPU |
 | `APS5_SUBMISSION_EPOCH_EACH` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Packets/PacketExecution.cpp` |  | bumps the guest-memory collect epoch on every submission instead of only when the submission is newer than the last bump |
@@ -512,6 +519,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 
 | Name | Kind | Source | Default | Description |
 |------|------|--------|---------|-------------|
+| `ANYPS5_LOADEXEC_ARGV_SKIP` | string | `core/libs/prx/libkernel/System/src/Process.cpp` |  | on Windows, set to `1` to drop the first process argument and clear the variable |
 | `APS5_COARSE_TIMED_WAITS` | presence | `core/libs/prx/libkernel/Time/TimedWait.cpp` |  | on Windows, rounds timed waits up to the scheduler tick |
 | `APS5_JOB_AFFINITY` | presence | `core/libs/prx/libkernel/Pthread/src/Thread.cpp` |  | pins the title's job worker threads to the efficiency cores of a hybrid CPU |
 | `APS5_JOB_AFFINITY_MASK` | integer | `core/libs/prx/libkernel/Pthread/src/Thread.cpp` |  | hex core mask that job worker threads are pinned to |
