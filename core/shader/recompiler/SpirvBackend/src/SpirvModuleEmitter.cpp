@@ -1225,6 +1225,7 @@ void EmitProgram(SpirvEmitterState& state) {
         state.sampleOrderWord = selected;
     }
     if (AlphaToCoverage(state)) StoreCoverage(state, ConstantI32(state, -1));
+    EmitBdaAnchors(state);
     if (OrderedPixelShader(state)) {
         state.module.AddFunction(spv::OpBeginInvocationInterlockEXT);
     }
