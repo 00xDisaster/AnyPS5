@@ -221,6 +221,7 @@ function(add_shader_recompiler target runtimeTarget)
     endif()
     set(shaderCacheReviewedNames
             BuildBarycentricGeometryShader
+            BuildBarycentricTessellationShaders
             BuildPreparedShaderKey
             BuildRectListShaders
             CaptureResources
@@ -254,7 +255,14 @@ function(add_shader_recompiler target runtimeTarget)
             SampledTextureNumericClass
             SetDebugProbeActive
             ShaderCacheDirectory
+            ShaderDiskCache::Shutdown
             ShaderStage
+            HashSpirvWords
+            ShaderDiskCache::DecodeResult
+            ShaderDiskCache::Enabled
+            ShaderDiskCache::EncodeResult
+            ShaderDiskCache::EntryDirectory
+            ShaderDiskCache::SourceVersion
             SrgbDecodeBit
             SrgbUnormFormat
             FindUserDataTail

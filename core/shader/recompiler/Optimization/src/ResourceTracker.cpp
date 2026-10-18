@@ -209,6 +209,9 @@ private:
     IrValue* canonicalizeSampleAdjustDword3(IrValue* value) {
         for (;;) {
             value = value->Resolve();
+            if ((possibleU32Bits(value) & ~samplerDword3ReservedMask) == 0u) {
+                return &m_builder.Constant(0u);
+            }
             if (value->Opcode() != IrOpcode::BitwiseOr32) {
                 return value;
             }
@@ -216,9 +219,6 @@ private:
             IrValue* right = value->Argument(1)->Resolve();
             const bool leftReserved = (possibleU32Bits(left) & ~samplerDword3ReservedMask) == 0u;
             const bool rightReserved = (possibleU32Bits(right) & ~samplerDword3ReservedMask) == 0u;
-            if (leftReserved && rightReserved) {
-                return &m_builder.Constant(0u);
-            }
             if (leftReserved) {
                 value = right;
             } else if (rightReserved) {
@@ -542,11 +542,15 @@ private:
     static IrValue* SplitImmediateAddend(IrValue* value, std::uint32_t& addend) {
         value = value->Resolve();
         addend = 0;
-        if (value->Opcode() == IrOpcode::IAdd32 && value->ArgumentCount() == 2u) {
-            if (immediateU32(value->Argument(0), addend)) return value->Argument(1)->Resolve();
-            if (immediateU32(value->Argument(1), addend)) return value->Argument(0)->Resolve();
+        while (value->Opcode() == IrOpcode::IAdd32 && value->ArgumentCount() == 2u) {
+            std::uint32_t immediate = 0;
+            IrValue* rest = nullptr;
+            if (immediateU32(value->Argument(0), immediate)) rest = value->Argument(1)->Resolve();
+            else if (immediateU32(value->Argument(1), immediate)) rest = value->Argument(0)->Resolve();
+            else break;
+            addend += immediate;
+            value = rest;
         }
-        addend = 0;
         return value;
     }
 
@@ -1358,8 +1362,7 @@ private:
                 continue;
             }
             image.table = next++;
-            const bool storage = image.resourceClass == ImageResourceClass::Storage || image.written || image.atomic;
-            if (storage || image.packed || image.byElements != 0u) {
+            if (image.atomic || image.packed || image.byElements != 0u) {
                 image.tableOperation = TableOperation::Unsupported;
             }
         }
@@ -1514,7 +1517,9 @@ private:
         const auto lineSampleFlags = memory.imageSampleFlags & ~RdnaImageSampleFlagCompare;
         const bool flatLineSample = op == IrOpcode::ImageSampleRaw && (lineSampleFlags == RdnaImageSampleFlagLevelZero || lineSampleFlags == 0u);
         const bool flatLineExplicitLod = op == IrOpcode::ImageSampleRaw && memory.imageSampleFlags == RdnaImageSampleFlagLod;
-        image.flatLineCompatible = image.flatLineCompatible && (flatLineLoad || flatLineSample || flatLineExplicitLod) && !memory.imagePacked && memory.imageByElements == 0u;
+        const bool flatLineLevelZero = op == IrOpcode::ImageSampleRaw && memory.imageSampleFlags == RdnaImageSampleFlagLevelZero;
+        const bool flatLineAccess = image.dimension == RdnaImageDimension::Dim2DArray ? flatLineLevelZero || flatLineExplicitLod : flatLineLoad || flatLineSample || flatLineExplicitLod;
+        image.flatLineCompatible = image.flatLineCompatible && flatLineAccess && !memory.imagePacked && memory.imageByElements == 0u;
         image.flatVolumeLineCompatible = image.flatVolumeLineCompatible && (flatLineLoad || flatLineSample) && !memory.imagePacked && memory.imageByElements == 0u;
         if ((memory.imageSampleFlags & RdnaImageSampleFlagCompare) != 0u) {
             constexpr auto unsupported = RdnaImageSampleFlagLod | RdnaImageSampleFlagDerivative;
