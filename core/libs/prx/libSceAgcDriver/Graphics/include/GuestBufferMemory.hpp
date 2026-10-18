@@ -97,7 +97,16 @@ void SetHostImportRangeWindow(std::uint64_t bytes);
 void SetHostImportBudget(std::uint64_t bytes);
 std::uint64_t HostImportBudgetFor(const VkPhysicalDeviceMemoryProperties& memory, const VkPhysicalDeviceMemoryBudgetPropertiesEXT* reported, std::uint64_t configured, std::uint64_t liveBytes);
 std::uint64_t HostImportBudgetWith(std::uint64_t configured, bool set, std::uint64_t reported, bool allocationFailed, std::uint64_t ceiling);
+void SetHostImportDeferredSettles(bool enabled);
 std::uint64_t HostImportLiveBytes();
+struct HostImportSettleCounts {
+    std::uint64_t submitted = 0;
+    std::uint64_t waited = 0;
+    std::uint64_t rewatched = 0;
+    std::uint64_t parked = 0;
+    std::uint64_t unmapWaits = 0;
+};
+HostImportSettleCounts HostImportSettles();
 // Tests: how many imports settleImport has used on the settle queue.
 std::uint64_t HostImportsSettled();
 bool ImportMappedRanges(const Context& context, const GuestAllocations::Mapped& ranges, std::uint64_t generation, bool adoptDevice);
