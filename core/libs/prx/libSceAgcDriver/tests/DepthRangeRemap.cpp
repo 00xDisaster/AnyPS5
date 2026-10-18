@@ -111,7 +111,7 @@ void preparedTransformTests() {
         require(invocation.has_value(), "the prepared vertex shader did not match a request of its own mode");
         return invocation->Materialize(*invocation->Capture(SrtRuntime{}));
     };
-    const auto prepared = inspect(GetPreparedCode(*handle));
+    const auto prepared = inspect(GetPreparedArtifact(*handle).spirv.Words());
     require(prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase) && !prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 1u) && !prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 2u), "only the depth remap mode may be a specialization constant of the prepared module");
     const auto first = materialize(2u);
     require(materialize(2u)->PipelineVariantId() == first->PipelineVariantId(), "the same depth remap mode did not reuse its materialized vertex shader");
