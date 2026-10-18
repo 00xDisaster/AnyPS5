@@ -45,11 +45,23 @@ struct Vertex {
     float w;
 };
 
-constexpr std::array<Vertex, 3> Corners{{{-0.8f, -0.8f, 1.0f}, {0.9f, -0.6f, 2.5f}, {-0.5f, 0.85f, 0.5f}}};
+constexpr std::array<Vertex, 3> TriangleCorners{{{-0.8f, -0.8f, 1.0f}, {0.9f, -0.6f, 2.5f}, {-0.5f, 0.85f, 0.5f}}};
+constexpr std::array<Vertex, 3> RectangleCorners{{{-0.8f, -0.8f, 1.5f}, {0.7f, -0.8f, 1.5f}, {-0.8f, 0.6f, 1.5f}}};
 
-std::array<std::array<float, 4>, 3> ClipPositions() {
+enum class Emulation {
+    Geometry,
+    Tessellation,
+    RectList,
+};
+
+const std::array<Vertex, 3>& Corners(Emulation emulation) {
+    return emulation == Emulation::RectList ? RectangleCorners : TriangleCorners;
+}
+
+std::array<std::array<float, 4>, 3> ClipPositions(Emulation emulation) {
+    const auto& corners = Corners(emulation);
     std::array<std::array<float, 4>, 3> positions{};
-    for (std::size_t i = 0; i < Corners.size(); ++i) positions[i] = {Corners[i].x * Corners[i].w, Corners[i].y * Corners[i].w, 0.5f * Corners[i].w, Corners[i].w};
+    for (std::size_t i = 0; i < corners.size(); ++i) positions[i] = {corners[i].x * corners[i].w, corners[i].y * corners[i].w, 0.5f * corners[i].w, corners[i].w};
     return positions;
 }
 
@@ -58,16 +70,13 @@ std::array<std::uint32_t, 4> BufferDescriptor(const void* data, std::uint32_t st
     return {static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu) | (stride << 16u), count, 0x01016facu};
 }
 
-enum class Emulation {
-    Geometry,
-    Tessellation,
-};
-
 ShaderRecompiler::RecompileResult Draw(AgcDriver::VulkanDevice& device, Emulation emulation, std::span<const std::uint32_t> pixelCode, std::uint32_t inputs, VkCullModeFlags cullMode = VK_CULL_MODE_NONE) {
     Pixels.fill(Unwritten);
     auto target = device.Target();
     target.fragmentShaderBarycentricEnabled = false;
-    static const auto positions = ClipPositions();
+    static const auto trianglePositions = ClipPositions(Emulation::Geometry);
+    static const auto rectanglePositions = ClipPositions(Emulation::RectList);
+    const auto& positions = emulation == Emulation::RectList ? rectanglePositions : trianglePositions;
 
     std::vector<std::uint32_t> vertexUserData(4, 0u);
     const auto vertexBuffer = BufferDescriptor(positions.data(), 16u, static_cast<std::uint32_t>(positions.size()));
@@ -104,7 +113,12 @@ ShaderRecompiler::RecompileResult Draw(AgcDriver::VulkanDevice& device, Emulatio
     std::vector<AgcDriver::Graphics::CompiledShader> shaders{{ShaderStage::Vertex, &vertexResult, 0}};
     ShaderRecompiler::RecompileResult geometry;
     ShaderRecompiler::BarycentricTessellationShaders patches;
-    if (pixelResult.barycentricEmulation.active && emulation == Emulation::Geometry) {
+    ShaderRecompiler::RectListShaders rectangle;
+    if (emulation == Emulation::RectList) {
+        rectangle = ShaderRecompiler::BuildRectListShaders(vertexResult, pixelResult, target);
+        shaders.push_back({ShaderStage::TessellationControl, &rectangle.control, 0});
+        shaders.push_back({ShaderStage::TessellationEvaluation, &rectangle.evaluation, 0});
+    } else if (pixelResult.barycentricEmulation.active && emulation == Emulation::Geometry) {
         geometry = ShaderRecompiler::BuildBarycentricGeometryShader(vertexResult, pixelResult, target, device.GeometryLimits());
         shaders.push_back({ShaderStage::Geometry, &geometry, 0});
     } else if (pixelResult.barycentricEmulation.active) {
@@ -120,7 +134,8 @@ ShaderRecompiler::RecompileResult Draw(AgcDriver::VulkanDevice& device, Emulatio
     state.colors = {state.color};
     state.hasColorTarget = true;
     state.renderExtent = {Width, Height};
-    state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    state.topology = emulation == Emulation::RectList ? VK_PRIMITIVE_TOPOLOGY_PATCH_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    state.rectList = emulation == Emulation::RectList;
     state.viewport = {0, static_cast<float>(Height), static_cast<float>(Width), -static_cast<float>(Height), 0, 1};
     state.negativeOneToOne = false;
     state.scissor = {{0, 0}, {Width, Height}};
@@ -141,9 +156,10 @@ struct Expected {
     std::array<float, 3> perspective;
 };
 
-Expected Barycentrics(std::uint32_t x, std::uint32_t y, bool snapped) {
+Expected Barycentrics(Emulation emulation, std::uint32_t x, std::uint32_t y, bool snapped) {
+    const auto& corners = Corners(emulation);
     std::array<std::array<double, 2>, 3> window{};
-    for (std::size_t i = 0; i < Corners.size(); ++i) window[i] = {(Corners[i].x + 1.0) * Width / 2.0, (1.0 - Corners[i].y) * Height / 2.0};
+    for (std::size_t i = 0; i < corners.size(); ++i) window[i] = {(corners[i].x + 1.0) * Width / 2.0, (1.0 - corners[i].y) * Height / 2.0};
     if (snapped) {
         for (auto& corner : window) {
             for (auto& coordinate : corner) coordinate = std::round(coordinate * 256.0) / 256.0;
@@ -154,22 +170,23 @@ Expected Barycentrics(std::uint32_t x, std::uint32_t y, bool snapped) {
     const auto edge = [](const std::array<double, 2>& a, const std::array<double, 2>& b, double cx, double cy) { return (b[0] - a[0]) * (cy - a[1]) - (b[1] - a[1]) * (cx - a[0]); };
     const double area = edge(window[0], window[1], window[2][0], window[2][1]);
     const std::array<double, 3> b{edge(window[1], window[2], px, py) / area, edge(window[2], window[0], px, py) / area, edge(window[0], window[1], px, py) / area};
-    Expected expected{std::min({b[0], b[1], b[2]}) > 0.02, {}, {}};
+    const bool inside = emulation == Emulation::RectList ? std::min(b[1], b[2]) > 0.02 && std::max(b[1], b[2]) < 0.98 : std::min({b[0], b[1], b[2]}) > 0.02;
+    Expected expected{inside, {}, {}};
     double sum = 0.0;
-    for (std::size_t i = 0; i < 3; ++i) sum += b[i] / Corners[i].w;
+    for (std::size_t i = 0; i < 3; ++i) sum += b[i] / corners[i].w;
     for (std::size_t i = 0; i < 3; ++i) {
         expected.linear[i] = static_cast<float>(b[i]);
-        expected.perspective[i] = static_cast<float>(b[i] / Corners[i].w / sum);
+        expected.perspective[i] = static_cast<float>(b[i] / corners[i].w / sum);
     }
     return expected;
 }
 
-Expected BarycentricsUnsnapped(std::uint32_t x, std::uint32_t y) {
-    return Barycentrics(x, y, false);
+Expected BarycentricsUnsnapped(Emulation emulation, std::uint32_t x, std::uint32_t y) {
+    return Barycentrics(emulation, x, y, false);
 }
 
-Expected BarycentricsSnapped(std::uint32_t x, std::uint32_t y) {
-    return Barycentrics(x, y, true);
+Expected BarycentricsSnapped(Emulation emulation, std::uint32_t x, std::uint32_t y) {
+    return Barycentrics(emulation, x, y, true);
 }
 
 bool MatchesEither(float value, float unsnapped, float snapped) {
@@ -180,13 +197,15 @@ float Pixel(std::uint32_t x, std::uint32_t y, std::uint32_t channel) {
     return Pixels[(y * Width + x) * 4u + channel];
 }
 
-std::uint32_t CheckBarycentrics(const std::string& what, bool perspective) {
+std::uint32_t CheckBarycentrics(Emulation emulation, const std::string& what, bool perspective) {
     std::uint32_t checked = 0;
+    std::uint32_t beyond = 0;
     for (std::uint32_t y = 0; y < Height; ++y) {
         for (std::uint32_t x = 0; x < Width; ++x) {
-            const auto expected = BarycentricsUnsnapped(x, y);
+            const auto expected = BarycentricsUnsnapped(emulation, x, y);
             if (!expected.inside) continue;
-            const auto snapped = BarycentricsSnapped(x, y);
+            const auto snapped = BarycentricsSnapped(emulation, x, y);
+            if (expected.linear[0] < -0.02f) ++beyond;
             const auto& weights = perspective ? expected.perspective : expected.linear;
             const auto& snappedWeights = perspective ? snapped.perspective : snapped.linear;
             for (std::uint32_t channel = 0; channel < 4; ++channel) {
@@ -199,17 +218,18 @@ std::uint32_t CheckBarycentrics(const std::string& what, bool perspective) {
         }
     }
     Require(checked > 200u, what + ": too few interior pixels were checked");
+    Require(emulation != Emulation::RectList || beyond > 200u, what + ": too few pixels past the rectangle's diagonal were checked");
     return checked;
 }
 
-void CheckVertexValues() {
-    const auto positions = ClipPositions();
+void CheckVertexValues(Emulation emulation) {
+    const auto positions = ClipPositions(emulation);
     const auto p0 = positions[0][0];
     const std::array<float, 3> expected{positions[1][0] - p0, positions[2][0] - p0, p0};
     std::uint32_t checked = 0;
     for (std::uint32_t y = 0; y < Height; ++y) {
         for (std::uint32_t x = 0; x < Width; ++x) {
-            if (!BarycentricsUnsnapped(x, y).inside) continue;
+            if (!BarycentricsUnsnapped(emulation, x, y).inside) continue;
             for (std::uint32_t channel = 0; channel < 3; ++channel) {
                 Require(Pixel(x, y, channel) == expected[channel], "v_interp_mov: pixel (" + std::to_string(x) + ", " + std::to_string(y) + ") channel " + std::to_string(channel) + " is " + std::to_string(Pixel(x, y, channel)) + ", expected " + std::to_string(expected[channel]));
             }
@@ -219,14 +239,14 @@ void CheckVertexValues() {
     Require(checked > 200u, "v_interp_mov: too few interior pixels were checked");
 }
 
-void CheckInterpolated() {
-    const auto positions = ClipPositions();
+void CheckInterpolated(Emulation emulation) {
+    const auto positions = ClipPositions(emulation);
     std::uint32_t checked = 0;
     for (std::uint32_t y = 0; y < Height; ++y) {
         for (std::uint32_t x = 0; x < Width; ++x) {
-            const auto expected = BarycentricsUnsnapped(x, y);
+            const auto expected = BarycentricsUnsnapped(emulation, x, y);
             if (!expected.inside) continue;
-            const auto snapped = BarycentricsSnapped(x, y);
+            const auto snapped = BarycentricsSnapped(emulation, x, y);
             float reference = 0.0f;
             float snappedReference = 0.0f;
             for (std::size_t i = 0; i < 3; ++i) {
@@ -257,23 +277,23 @@ void CheckWinding(AgcDriver::VulkanDevice& device, Emulation emulation, const st
 }
 
 void RunEmulation(AgcDriver::VulkanDevice& device, Emulation emulation) {
-    const std::string name = emulation == Emulation::Geometry ? "geometry stage" : "tessellation stages";
+    const std::string name = emulation == Emulation::Geometry ? "geometry stage" : emulation == Emulation::Tessellation ? "tessellation stages" : "rect-list stages";
     const auto perspective = PixelInputBit(PixelInput::PerspectiveCenter);
     const auto linear = PixelInputBit(PixelInput::LinearCenter);
     auto result = Draw(device, emulation, BarycentricPixelCode, perspective);
     Require(result.barycentricEmulation.active && result.barycentricEmulation.smooth && !result.barycentricEmulation.linear, "reading PERSP_CENTER I/J did not emulate perspective barycentrics");
-    const auto smooth = CheckBarycentrics(name + " PERSP_CENTER I/J", true);
+    const auto smooth = CheckBarycentrics(emulation, name + " PERSP_CENTER I/J", true);
     result = Draw(device, emulation, BarycentricPixelCode, linear);
     Require(result.barycentricEmulation.active && !result.barycentricEmulation.smooth && result.barycentricEmulation.linear, "reading LINEAR_CENTER I/J did not emulate linear barycentrics");
-    const auto noPerspective = CheckBarycentrics(name + " LINEAR_CENTER I/J", false);
+    const auto noPerspective = CheckBarycentrics(emulation, name + " LINEAR_CENTER I/J", false);
     result = Draw(device, emulation, VertexValuePixelCode, perspective);
     Require(result.barycentricEmulation.active && result.fragmentParameters.size() == 1 && result.fragmentParameters[0].perVertex, "v_interp_mov of P10 and P20 did not emulate per-vertex parameters");
-    CheckVertexValues();
+    CheckVertexValues(emulation);
     result = Draw(device, emulation, InterpolatedPixelCode, perspective);
     Require(!result.barycentricEmulation.active, "plain v_interp_p1/p2 needed a generated stage");
-    CheckInterpolated();
-    CheckWinding(device, emulation, name);
-    std::printf("barycentric emulation through the %s passed: %u perspective and %u linear I/J pixels, raw vertex values, host interpolation and face culling\n", name.c_str(), smooth, noPerspective);
+    CheckInterpolated(emulation);
+    if (emulation != Emulation::RectList) CheckWinding(device, emulation, name);
+    std::printf("barycentric emulation through the %s passed: %u perspective and %u linear I/J pixels, raw vertex values, host interpolation%s\n", name.c_str(), smooth, noPerspective, emulation == Emulation::RectList ? "" : " and face culling");
 }
 
 }
@@ -290,8 +310,12 @@ int main() {
         }
         if (geometry) RunEmulation(*device, Emulation::Geometry);
         else std::puts("geometry stage skipped, the device lacks geometryShader");
-        if (tessellation) RunEmulation(*device, Emulation::Tessellation);
-        else std::puts("tessellation stages skipped, the device lacks tessellationShader");
+        if (tessellation) {
+            RunEmulation(*device, Emulation::Tessellation);
+            RunEmulation(*device, Emulation::RectList);
+        } else {
+            std::puts("tessellation and rect-list stages skipped, the device lacks tessellationShader");
+        }
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
