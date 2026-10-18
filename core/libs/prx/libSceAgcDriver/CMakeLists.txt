@@ -1675,6 +1675,7 @@ endif()
 
 target_link_libraries(agc_driver_gpu_map_on_fiber_tests PRIVATE libSceFiber)
 
+target_link_libraries(agc_driver_rect_list_corner_tests PRIVATE shader_recompiler_agc_driver)
 target_link_libraries(agc_driver_queue_zero_late_interrupt_tests PRIVATE libkernel)
 
 target_link_libraries(agc_driver_preparation_scope_settle_tests PRIVATE libSceAgc)
