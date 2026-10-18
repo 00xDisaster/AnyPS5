@@ -2085,6 +2085,12 @@ void DepthStencilTests() {
     const auto volume = AgcDriver::Graphics::DecodeState(queue);
     Require(volume.color.address == sliced && volume.color.depth == 4u && volume.color.depthSlice == 2u, "a color view of one 3D depth slice did not keep the surface address and select the slice");
     Require(volume.color.layers == 1 && volume.renderLayers == 1 && volume.layerExports == 0, "a color view of one 3D depth slice became layered");
+    {
+        auto mipmapped = queue;
+        mipmapped.context[0x3b0] |= 2u << 28u;
+        mipmapped.context[0x31b] = (1u << 26u) | (1u << 13u) | 1u;
+        expectFailure([&] { AgcDriver::Graphics::DecodeColorBuffer(mipmapped.context, 0); }, "slot 0, 64x4x4, viewMip 1, maxMip 2, slices 1..1, CB_COLOR_INFO 0x00028028, ATTRIB2 0x200fc003, ATTRIB3 0x0a000003, VIEW 0x04002001");
+    }
     queue.context[0x31b] = 4u | (4u << 13u);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "outside the 3D surface");
     queue.context[0x31b] = 2u | (1u << 13u);
@@ -2563,6 +2569,7 @@ alignas(4096) std::array<std::uint8_t, 4096> cmaskMemory{};
 
 void cmaskTests() {
     using AgcDriver::Graphics::DecodeColorBuffer;
+    using AgcDriver::Graphics::CmaskLayout;
     auto queue = makeState();
     queue.context[0x31c] |= 0x2000;
     const auto cmaskAddress = reinterpret_cast<std::uintptr_t>(cmaskMemory.data());
@@ -2583,16 +2590,59 @@ void cmaskTests() {
     Require(DecodeColorBuffer(makeState().context, 0).cmaskAddress == 0, "a target without FAST_CLEAR got a CMASK");
     using AgcDriver::Graphics::CmaskBytes;
     Require(CmaskBytes(1920, 1080) == 0x6000 && CmaskBytes(960, 544) == 0x2000 && CmaskBytes(800, 450) == 0x1000 && CmaskBytes(1024, 512) == 0x1000 && CmaskBytes(3840, 2160) == 0x14000, "a CMASK does not span whole 1024x512 metablocks");
-    auto mipmapped = queue;
-    mipmapped.context[0x3b0] |= 1u << 28u;
-    expectFailure([&] { DecodeColorBuffer(mipmapped.context, 0); }, "mipmapped, 3D or array");
     constexpr std::size_t blockBytes = 65536u;
     static std::vector<std::byte> mipStorage(16u * blockBytes);
     const auto mipBase = (reinterpret_cast<std::uintptr_t>(mipStorage.data()) + blockBytes - 1u) / blockBytes * blockBytes;
-    auto higherMip = queue;
-    higherMip.context[0x318] = static_cast<std::uint32_t>(mipBase >> 8u);
-    higherMip.context[0x390] = static_cast<std::uint32_t>(mipBase >> 40u);
-    higherMip.context[0x3b0] = (4u << 28u) | (255u << 14u) | 127u;
+    auto tailMipmapped = queue;
+    tailMipmapped.context[0x3b8] = 0x0dc6c000u;
+    tailMipmapped.context[0x318] = static_cast<std::uint32_t>(mipBase >> 8u);
+    tailMipmapped.context[0x390] = static_cast<std::uint32_t>(mipBase >> 40u);
+    tailMipmapped.context[0x3b0] |= 1u << 28u;
+    const auto tailBaseMipTarget = DecodeColorBuffer(tailMipmapped.context, 0);
+    Require(tailBaseMipTarget.cmaskFastClear && tailBaseMipTarget.cmaskAddress == cmaskAddress && tailBaseMipTarget.cmaskBytes == cmaskMemory.size(), "tail-bound mip 0 of a mipmapped fast-clear target did not decode at CMASK base");
+    auto arrayTarget = queue;
+    arrayTarget.context[0x3b8] |= 1u;
+    expectFailure([&] { DecodeColorBuffer(arrayTarget.context, 0); }, "3D or array");
+    auto volumeTarget = queue;
+    volumeTarget.context[0x3b8] = (queue.context.at(0x3b8) & ~0x03000000u) | 0x02000000u;
+    expectFailure([&] { DecodeColorBuffer(volumeTarget.context, 0); }, "3D or array");
+    static std::vector<std::byte> cmaskChainStorage(16u * CmaskLayout::Alignment);
+    const auto cmaskChainBase = (reinterpret_cast<std::uintptr_t>(cmaskChainStorage.data()) + CmaskLayout::Alignment - 1u) / CmaskLayout::Alignment * CmaskLayout::Alignment;
+    auto mipmapped = queue;
+    mipmapped.context[0x3b8] = 0x0dc6c000u;
+    mipmapped.context[0x318] = static_cast<std::uint32_t>(mipBase >> 8u);
+    mipmapped.context[0x390] = static_cast<std::uint32_t>(mipBase >> 40u);
+    mipmapped.context[0x31f] = static_cast<std::uint32_t>(cmaskChainBase >> 8u);
+    mipmapped.context[0x398] = static_cast<std::uint32_t>(cmaskChainBase >> 40u);
+    mipmapped.context[0x3b0] = (4u << 28u) | (255u << 14u) | 127u;
+    const auto baseMipTarget = DecodeColorBuffer(mipmapped.context, 0);
+    Require(baseMipTarget.cmaskFastClear && baseMipTarget.cmaskAddress == cmaskChainBase + 0x2000 && baseMipTarget.cmaskBytes == 4096, "base mip 0 of a mipmapped fast-clear target did not match addrlib CMASK offset");
+    static std::vector<std::byte> largeMipStorage(50331648u + blockBytes);
+    const auto largeMipBase = (reinterpret_cast<std::uintptr_t>(largeMipStorage.data()) + blockBytes - 1u) / blockBytes * blockBytes;
+    static std::vector<std::byte> largeCmaskChainStorage(26u * CmaskLayout::Alignment);
+    const auto largeCmaskChainBase = (reinterpret_cast<std::uintptr_t>(largeCmaskChainStorage.data()) + CmaskLayout::Alignment - 1u) / CmaskLayout::Alignment * CmaskLayout::Alignment;
+    auto largeMipmapped = queue;
+    largeMipmapped.context[0x3b8] = 0x0dc6c000u;
+    largeMipmapped.context[0x318] = static_cast<std::uint32_t>(largeMipBase >> 8u);
+    largeMipmapped.context[0x390] = static_cast<std::uint32_t>(largeMipBase >> 40u);
+    largeMipmapped.context[0x31f] = static_cast<std::uint32_t>(largeCmaskChainBase >> 8u);
+    largeMipmapped.context[0x398] = static_cast<std::uint32_t>(largeCmaskChainBase >> 40u);
+    largeMipmapped.context[0x3b0] = (7u << 28u) | (4095u << 14u) | 2047u;
+    const auto largeBaseMipTarget = DecodeColorBuffer(largeMipmapped.context, 0);
+    Require(largeBaseMipTarget.cmaskFastClear && largeBaseMipTarget.cmaskAddress == largeCmaskChainBase + 0x9000 && largeBaseMipTarget.cmaskBytes == 16u * CmaskLayout::Alignment, "multiblock base mip 0 did not match addrlib CMASK offset");
+    auto nonPowerOfTwo = queue;
+    nonPowerOfTwo.context[0x3b8] = 0x0dc6c000u;
+    nonPowerOfTwo.context[0x318] = static_cast<std::uint32_t>(largeMipBase >> 8u);
+    nonPowerOfTwo.context[0x390] = static_cast<std::uint32_t>(largeMipBase >> 40u);
+    nonPowerOfTwo.context[0x31f] = static_cast<std::uint32_t>(largeCmaskChainBase >> 8u);
+    nonPowerOfTwo.context[0x398] = static_cast<std::uint32_t>(largeCmaskChainBase >> 40u);
+    nonPowerOfTwo.context[0x3b0] = (1u << 28u) | (2048u << 14u) | 1023u;
+    const auto nonPowerOfTwoTarget = DecodeColorBuffer(nonPowerOfTwo.context, 0);
+    Require(nonPowerOfTwoTarget.cmaskFastClear && nonPowerOfTwoTarget.cmaskAddress == largeCmaskChainBase + 0x2000 && nonPowerOfTwoTarget.cmaskBytes == 6u * CmaskLayout::Alignment, "non-power-of-two base mip 0 did not round up mip dimensions");
+    auto smallBppMipmapped = mipmapped;
+    smallBppMipmapped.context[0x31c] = (mipmapped.context[0x31c] & ~0x7cu) | 4u;
+    expectFailure([&] { DecodeColorBuffer(smallBppMipmapped.context, 0); }, "8 or 16 bpp");
+    auto higherMip = mipmapped;
     higherMip.context[0x31b] = 1u << 26u;
     const auto higherTarget = DecodeColorBuffer(higherMip.context, 0);
     Require(!higherTarget.cmaskFastClear && higherTarget.cmaskAddress == 0, "a higher mip of a fast-clear target decoded a CMASK");
@@ -3065,6 +3115,11 @@ void multisampleTests() {
     }
     queue.context[0x32b] = queue.context[0x31c] ^ (1u << 8u);
     expectFailure([&] { DecodeColorMetadataPass(queue); }, "different formats or extents");
+    for (const auto [packedInfo, name] : {std::pair{6u << 2u, "10_11_11 unorm"}, std::pair{(7u << 2u) | (7u << 8u) | (2u << 11u) | 0x40000u, "11_11_10 float"}}) {
+        auto packed = rasterizedResolve;
+        for (const auto offset : {0x31cu, 0x32bu}) packed.context[offset] = (packed.context[offset] & ~0x41f7cu) | packedInfo;
+        expectFailure([&] { DecodeColorMetadataPass(packed); }, std::string("CB resolves of ") + name + " color targets");
+    }
     queue = rasterizedResolve;
     queue.context[0x31c] |= 0x10000000u;
     queue.context[0x325] = 0;
@@ -4549,6 +4604,152 @@ void descriptorSnapshotTests() {
     }
 }
 
+alignas(16) std::array<std::uint32_t, 8> guestMovedFirst{0x51515151, 0x52525252, 0x53535353, 0x54545454, 0x55555555, 0x56565656, 0x57575757, 0x58585858};
+alignas(16) std::array<std::uint32_t, 8> guestMovedSecond{0x61616161, 0x62626262, 0x63636363, 0x64646464, 0x65656565, 0x66666666, 0x67676767, 0x68686868};
+
+void dispatchMoveTests() {
+    using AgcDriver::Graphics::CompiledShader;
+    using AgcDriver::Graphics::DescriptorCache;
+    using AgcDriver::Graphics::Recorder;
+    using AgcDriver::Graphics::ShaderResources;
+    using Refusal = ShaderResources::MoveRefusal;
+    mock = MockVulkan{};
+    mock.allowCopies = true;
+    auto context = mockContext();
+    {
+        DescriptorCache cache(context);
+        context.descriptorCache = &cache;
+        std::lock_guard lock(AgcDriver::GuestMemory::GpuMutex());
+        Recorder recorder(context);
+        ShaderRecompiler::RecompileResult built;
+        auto inputs = makeBinding(Role::GuestBuffers, 0, 2, join(vsharp(guestFirst.data(), 16), vsharp(guestSecond.data(), 32)));
+        inputs.bufferWritten = {false, false};
+        built.bindings.push_back(inputs);
+        auto output = makeBinding(Role::GuestBuffers, 4, 1, vsharp(guestThird.data(), 8));
+        output.bufferWritten = {true};
+        built.bindings.push_back(output);
+        const CompiledShader shader{ShaderRecompiler::ShaderStage::Compute, &built, 0};
+        ShaderResources resources(context, shader);
+        const auto moveTo = [&](std::size_t element, const void* where, std::uint32_t bytes) {
+            auto program = built;
+            const auto words = vsharp(where, bytes);
+            std::copy(words.begin(), words.end(), program.bindings[0].guestDescriptor.begin() + static_cast<std::ptrdiff_t>(element) * 4);
+            return program;
+        };
+        const auto prove = [&](const ShaderRecompiler::RecompileResult& program, std::size_t maxBytes, ShaderResources::MoveProof& proof) {
+            return resources.MovedDispatchBuffers(CompiledShader{ShaderRecompiler::ShaderStage::Compute, &program, 0}, &recorder, maxBytes, proof);
+        };
+        const auto refuses = [&](const ShaderRecompiler::RecompileResult& program, std::size_t maxBytes, Refusal why, const char* what) {
+            ShaderResources::MoveProof refusal;
+            const auto listed = prove(program, maxBytes, refusal);
+            Require(!listed.has_value() && refusal.refusal == why, what);
+        };
+
+        ShaderResources::MoveProof proof;
+        auto moved = prove(built, 0, proof);
+        Require(moved.has_value() && moved->empty() && proof.refusal == Refusal::None && proof.buffers == 0, "a dispatch with every buffer where it was built moved something");
+
+        const auto relocated = moveTo(1, guestMovedSecond.data(), 24);
+        const CompiledShader relocatedShader{ShaderRecompiler::ShaderStage::Compute, &relocated, 0};
+        Require(ShaderResources::ContentKey(shader, false, true) == ShaderResources::ContentKey(relocatedShader, false, true), "moving a read-only buffer changed the movable content key");
+        Require(ShaderResources::ContentKey(shader, false, false) != ShaderResources::ContentKey(relocatedShader, false, false), "the fixed content key ignored a moved buffer");
+
+        moved = prove(relocated, 0, proof);
+        Require(moved.has_value() && moved->size() == 1 && proof.refusal == Refusal::None && proof.buffers == 1 && proof.bytes >= 24, "a moved read-only buffer was not listed");
+        Require(moved->front().address == reinterpret_cast<std::uintptr_t>(guestMovedSecond.data()) && moved->front().size == 24 && moved->front().words.empty(), "the listed buffer is not the moved range");
+
+        moved = prove(moveTo(0, guestFirst.data(), 8), 0, proof);
+        Require(moved.has_value() && moved->size() == 1 && moved->front().address == reinterpret_cast<std::uintptr_t>(guestFirst.data()) && moved->front().size == 8, "a buffer that only changed its size was not listed");
+
+        auto both = relocated;
+        const auto firstWords = vsharp(guestMovedFirst.data(), 12);
+        std::copy(firstWords.begin(), firstWords.end(), both.bindings[0].guestDescriptor.begin());
+        moved = prove(both, 1024, proof);
+        Require(moved.has_value() && moved->size() == 2 && proof.buffers == 2 && proof.bytes >= 36, "two moved buffers were not both listed");
+        refuses(both, 30, Refusal::Limit, "moved buffers past the byte budget together were served");
+
+        auto written = relocated;
+        written.bindings[0].bufferWritten[1] = true;
+        refuses(written, 0, Refusal::Written, "a moved buffer the dispatch writes was served");
+        refuses(moveTo(1, guestMovedSecond.data(), 20000), 0, Refusal::Written, "a moved buffer over the storage buffer range that no registered allocation holds was served");
+        refuses(relocated, 16, Refusal::Limit, "a moved buffer over the byte budget was served");
+        refuses(moveTo(1, reinterpret_cast<const void*>(std::uintptr_t{0x10}), 24), 0, Refusal::Inaccessible, "a moved buffer over unmapped memory was served");
+        refuses(moveTo(1, guestThird.data(), 8), 0, Refusal::Overlap, "a moved buffer over the dispatch's own written range was served");
+        auto shaped = relocated;
+        shaped.bindings[0].guestDescriptor.resize(4);
+        refuses(shaped, 0, Refusal::Shape, "a dispatch with another binding shape was served");
+        recorder.Sync();
+    }
+    {
+        constexpr std::size_t blockBytes = 65536;
+        void* block = ::operator new(blockBytes, std::align_val_t{blockBytes});
+        std::memset(block, 0x5a, blockBytes);
+        {
+            auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+            GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, block, blockBytes, true, true, true);
+            GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+        }
+        const auto* end = static_cast<const std::byte*>(block) + blockBytes;
+        const auto strided = [](const void* pointer, std::uint32_t stride, std::uint32_t records) {
+            auto words = vsharp(pointer, records);
+            words[1] |= stride << 16u;
+            return words;
+        };
+        DescriptorCache cache(context);
+        context.descriptorCache = &cache;
+        std::lock_guard lock(AgcDriver::GuestMemory::GpuMutex());
+        Recorder recorder(context);
+        const auto proveAgainst = [&](const ShaderRecompiler::RecompileResult& built, const std::vector<std::uint32_t>& incoming, ShaderResources::MoveProof& proof, std::optional<std::vector<ShaderResources::MovedBuffer>>& moved) {
+            const CompiledShader shader{ShaderRecompiler::ShaderStage::Compute, &built, 0};
+            ShaderResources resources(context, shader);
+            auto program = built;
+            program.bindings[0].guestDescriptor = incoming;
+            moved = resources.MovedDispatchBuffers(CompiledShader{ShaderRecompiler::ShaderStage::Compute, &program, 0}, &recorder, 0, proof);
+        };
+        const auto readOnly = [&](const std::vector<std::uint32_t>& words) {
+            ShaderRecompiler::RecompileResult built;
+            auto binding = makeBinding(Role::GuestBuffers, 0, 1, words);
+            binding.bufferWritten = {false};
+            built.bindings.push_back(binding);
+            return built;
+        };
+        const auto address = [](const void* pointer) { return reinterpret_cast<std::uintptr_t>(pointer); };
+        ShaderResources::MoveProof proof;
+        std::optional<std::vector<ShaderResources::MovedBuffer>> moved;
+
+        const auto* tail = end - 8192;
+        const auto* nearEnd = end - 4096;
+        const auto oversized = readOnly(vsharp(tail, 0xffffffffu));
+        proveAgainst(oversized, vsharp(tail, 0xffffffffu), proof, moved);
+        Require(moved.has_value() && moved->empty() && proof.refusal == Refusal::None && proof.buffers == 0, "an unchanged V# the build cut to its allocation end was not an exact hit");
+        proveAgainst(oversized, vsharp(nearEnd, 0xffffffffu), proof, moved);
+        Require(moved.has_value() && moved->size() == 1 && proof.buffers == 1 && proof.bytes == 4096 && moved->front().address == address(nearEnd) && moved->front().size == 4096, "a moved V# past the range limit was not snapshotted at its clamped range");
+        proveAgainst(oversized, vsharp(nearEnd, 0xfffffff0u), proof, moved);
+        Require(moved.has_value() && moved->size() == 1 && moved->front().size == 4096, "another oversized size over the same allocation end listed another range");
+        proveAgainst(oversized, vsharp(tail, 4096), proof, moved);
+        Require(moved.has_value() && moved->size() == 1 && moved->front().address == address(tail) && moved->front().size == 4096, "a V# that now fits the range limit was not listed at its own size");
+
+        proveAgainst(oversized, vsharp(block, 0xffffffffu), proof, moved);
+        Require(!moved.has_value() && proof.refusal == Refusal::Limit, "a moved V# the allocation holds past the range limit was served");
+
+        const auto overhang = readOnly(strided(tail, 24, 342));
+        proveAgainst(overhang, strided(tail, 24, 342), proof, moved);
+        Require(moved.has_value() && moved->empty() && proof.refusal == Refusal::None, "an unchanged V# with a stride overhang past the allocation was not an exact hit");
+        proveAgainst(overhang, strided(nearEnd, 24, 171), proof, moved);
+        Require(moved.has_value() && moved->size() == 1 && moved->front().address == address(nearEnd) && moved->front().size == 4096 && proof.bytes == 4096, "a moved V# with a stride overhang was snapshotted past the allocation end");
+        proveAgainst(overhang, strided(nearEnd, 24, 100), proof, moved);
+        Require(moved.has_value() && moved->size() == 1 && moved->front().size == 2400, "a moved V# inside the allocation was not listed at its own size");
+        recorder.Sync();
+        {
+            auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+            GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, block);
+            GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+        }
+        ::operator delete(block, std::align_val_t{blockBytes});
+    }
+    Require(mock.live == 0, "dispatch move resources leaked Vulkan objects");
+}
+
 void resourceTests() {
     mock = MockVulkan{};
     const auto context = mockContext();
@@ -5899,6 +6100,23 @@ void registeredReadableCoverTests() {
     ::operator delete(memory, std::align_val_t{block});
 }
 
+std::size_t VariableBuiltIns(const ShaderRecompiler::RecompileResult& result, spv::BuiltIn builtin) {
+    std::size_t count = 0;
+    const auto& words = result.spirv.Words();
+    for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+        if (static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpDecorate && (words[at] >> 16u) == 4u && words[at + 2] == spv::DecorationBuiltIn && words[at + 3] == builtin) ++count;
+    }
+    return count;
+}
+
+bool MemberBuiltIn(const ShaderRecompiler::RecompileResult& result, spv::BuiltIn builtin) {
+    const auto& words = result.spirv.Words();
+    for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+        if (static_cast<spv::Op>(words[at] & 0xffffu) == spv::OpMemberDecorate && words[at + 3] == spv::DecorationBuiltIn && words[at + 4] == builtin) return true;
+    }
+    return false;
+}
+
 void rectListTests() {
     using namespace ShaderRecompiler;
     using namespace AgcDriver::Graphics;
@@ -5931,6 +6149,21 @@ void rectListTests() {
             state.rectList = false;
             expectFailure([&] { ValidateShaders(shaders, state, VkPhysicalDeviceSubgroupProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES}, false); }, "stage count");
         }
+    }
+    {
+        RecompileResult clipped;
+        clipped.spirv = makeModule({.clipDistanceLength = 2});
+        const std::array<std::uint32_t, 3> clipCapabilities{spv::CapabilityShader, spv::CapabilityTessellation, spv::CapabilityClipDistance};
+        auto clipTarget = target;
+        clipTarget.supportedCapabilities = clipCapabilities;
+        auto clippedRect = BuildRectListShaders(clipped, fragment, clipTarget);
+        for (const auto* stage : {&clippedRect.control, &clippedRect.lastVertexControl, &clippedRect.evaluation}) {
+            Require(!MemberBuiltIn(*stage, spv::BuiltInClipDistance) && VariableBuiltIns(*stage, spv::BuiltInClipDistance) == 2u, "a rect-list stage does not take and forward the vertex clip distances through variables of their own, as the vertex shader writes them");
+        }
+        const std::array<CompiledShader, 4> clippedShaders{{{ShaderStage::Vertex, &clipped, 0}, {ShaderStage::TessellationControl, &clippedRect.control, 0}, {ShaderStage::TessellationEvaluation, &clippedRect.evaluation, 0}, {ShaderStage::Fragment, &fragment, 0}}};
+        auto queue = makeState();
+        queue.userConfig[0x242] = 17;
+        ValidateShaders(clippedShaders, DecodeState(queue), VkPhysicalDeviceSubgroupProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES}, false, false, false, false, false, false, true);
     }
     vertex.spirv = makeModule({.parameterOutput = true});
     fragment.spirv = makeModule({.fragment = true, .rectParameters = true});
@@ -7063,13 +7296,78 @@ void unorm10_11_11TargetTests() {
         return AgcDriver::Graphics::ValidateShaders(shaders, target, subgroup, false);
     };
     Require(validate(packed, state) == std::set<std::uint32_t>{0u}, "the packed export did not reach attachment 0");
-    expectFailure([&] { validate(unpacked, state); }, "uint4 words to its packed 10_11_11 unorm attachments");
+    expectFailure([&] { validate(unpacked, state); }, "uint4 words to its packed color attachments");
     auto plainState = state;
     plainState.colors[0].packing = ColorExportPacking::None;
     expectFailure([&] { validate(packed, plainState); }, "float4 colors");
     auto uintExport = request;
     uintExport.context.pixel->targetOutputMode[0] = 7;
-    expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(uintExport)); }, "fragment output 0 has no 10_11_11 unorm packing path");
+    expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(uintExport)); }, "fragment output 0 has no color export packing path");
+}
+
+void float11_11_10TargetTests() {
+    using ShaderRecompiler::ColorExportPacking;
+    auto queue = makeState();
+    queue.context[0x31c] = (queue.context.at(0x31c) & ~0x1f7cu) | (7u << 2u) | (7u << 8u) | (2u << 11u) | 0x40000u;
+    queue.context[0x1b3] = 2;
+    queue.context[0x1b4] = 2;
+    const auto state = AgcDriver::Graphics::DecodeState(queue);
+    Require(state.color.format == VK_FORMAT_R32_UINT && state.color.elementBytes == 4 && state.color.bytes == colorMemory.size() && state.color.componentMapping == 0xc6u && state.color.packing == ColorExportPacking::Float11_11_10, "an 11_11_10 float target did not decode as a packed R32_UINT attachment with blue in the low bits");
+    const auto packings = AgcDriver::Graphics::ExportPackings(state);
+    Require(packings[0] == ColorExportPacking::Float11_11_10 && std::all_of(packings.begin() + 1, packings.end(), [](ColorExportPacking packing) { return packing == ColorExportPacking::None; }), "export 0 did not carry the 11_11_10 float packing alone");
+    Require(AgcDriver::Graphics::ExportMappings(state)[0] == 0xc6u, "export 0 did not reverse its components into the 11_11_10 float target");
+    auto changed = queue;
+    changed.context[0x31c] &= ~0x40000u;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "rounding (ROUND_MODE 0) 11_11_10 float color targets");
+    for (const auto swap : {0u, 1u, 3u}) {
+        changed = queue;
+        changed.context[0x31c] = (changed.context[0x31c] & ~0x1800u) | (swap << 11u);
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "unsupported color format 7 number type 7 component swap " + std::to_string(swap));
+    }
+    for (const auto number : {0u, 4u}) {
+        changed = queue;
+        changed.context[0x31c] = (changed.context[0x31c] & ~0x700u) | (number << 8u) | 0x8000u;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "unsupported color format 7 number type " + std::to_string(number) + " component swap 2");
+    }
+    changed = queue;
+    changed.context[0x1e0] = 0x60010101u;
+    for (std::uint32_t i = 0; i < 4; ++i) changed.context[0x105 + i] = 0;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "blending into an 11_11_10 float color target");
+    changed = queue;
+    changed.context[0x8e] = 6;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "partial writes of an 11_11_10 float color target");
+    changed.context[0x8e] = 7;
+    Require(AgcDriver::Graphics::DecodeState(changed).color.packing == ColorExportPacking::Float11_11_10, "an RGB write of an 11_11_10 float target was refused");
+    for (const auto format : {5u, 6u}) {
+        changed = queue;
+        changed.context[0x1c5] = format;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "color export format " + std::to_string(format) + " into an 11_11_10 float target");
+    }
+    changed = queue;
+    changed.context[0x1c5] = 4;
+    Require(AgcDriver::Graphics::DecodeState(changed).color.packing == ColorExportPacking::Float11_11_10, "an FP16_ABGR export into an 11_11_10 float target was refused");
+    changed = queue;
+    changed.context[0x31c] |= 0x10000000u;
+    changed.context[0x325] = 0x1234;
+    expectFailure([&] { AgcDriver::Graphics::DecodeState(changed); }, "DCC-compressed 11_11_10 float color targets");
+
+    constexpr std::array<std::uint32_t, 3> code{0xf800180fu, 0x07060504u, 0xbf810000u};
+    const auto request = packedExportRequest(queue, state, code);
+    auto unorm = request;
+    unorm.context.pixel->targetExportPacking[0] = ColorExportPacking::Unorm10_11_11;
+    const ShaderRecompiler::RequestSerializer serializer;
+    Require(serializer.Deserialize(serializer.Serialize(request)).request.context.pixel->targetExportPacking == request.context.pixel->targetExportPacking, "the 11_11_10 float packing was lost in serialization");
+    const auto packed = ShaderRecompiler::Recompile(request);
+    const auto unormPacked = ShaderRecompiler::Recompile(unorm);
+    Require(packed.variantId == unormPacked.variantId && packed.PipelineVariantId() != unormPacked.PipelineVariantId(), "the 11_11_10 float packing did not key its own specialization of the shared artifact");
+    ShaderRecompiler::RecompileResult vertex;
+    vertex.spirv = makeModule({});
+    const VkPhysicalDeviceSubgroupProperties subgroup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    const std::array<AgcDriver::Graphics::CompiledShader, 2> shaders{{{ShaderRecompiler::ShaderStage::Vertex, &vertex, 0}, {ShaderRecompiler::ShaderStage::Fragment, &packed, 0}}};
+    Require(AgcDriver::Graphics::ValidateShaders(shaders, state, subgroup, false) == std::set<std::uint32_t>{0u}, "the packed float export did not reach attachment 0");
+    auto invalid = request;
+    invalid.context.pixel->targetExportPacking[0] = static_cast<ColorExportPacking>(3);
+    expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(invalid)); }, "invalid prepared fragment export packing");
 }
 
 AgcDriver::QueueState dualSourceQueue() {
@@ -8410,6 +8708,7 @@ int main(int argc, char** argv) {
         memoryValueFillTests();
         ZExportTests();
         unorm10_11_11TargetTests();
+        float11_11_10TargetTests();
         DepthBoundsBiasTests();
         conservativeZExportTests();
         earlyFragmentTestsTests();
@@ -8465,6 +8764,7 @@ int main(int argc, char** argv) {
         oversizedDescriptorTests();
         guestBufferViewBytesTests();
         descriptorSnapshotTests();
+        dispatchMoveTests();
         descriptorCacheTests();
         bufferBudgetPlacementTests();
         imageTableAllocationTests();

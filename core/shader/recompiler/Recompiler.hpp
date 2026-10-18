@@ -112,7 +112,8 @@ enum class ConservativeZExport : std::uint8_t {
 
 enum class ColorExportPacking : std::uint8_t {
     None,
-    Unorm10_11_11
+    Unorm10_11_11,
+    Float11_11_10
 };
 
 enum class RasterPrimitive : std::uint8_t {
@@ -268,6 +269,7 @@ struct SpirvTarget {
     bool vertexSubgroups = true;
     bool float16DenormPreserve = false;
     bool spannedWaves = false;
+    bool robustBufferAccess2 = false;
 };
 
 struct BindingLayout {
