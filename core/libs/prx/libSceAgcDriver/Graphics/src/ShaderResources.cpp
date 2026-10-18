@@ -1087,6 +1087,10 @@ bool SampledBudgetReportDue(std::uint64_t reported, std::uint64_t budget, std::c
     return change > reported / 10u && sinceReport >= std::chrono::seconds(10);
 }
 
+std::optional<std::uint32_t> LargestDeviceLocalHeap(const VkPhysicalDeviceMemoryProperties& memory) {
+    return largestDeviceLocalHeap(memory);
+}
+
 std::uint64_t StorageTextureCacheBudget(const Context& context) {
     return storageBudget(context);
 }
