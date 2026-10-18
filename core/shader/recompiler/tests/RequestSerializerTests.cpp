@@ -270,7 +270,7 @@ int main() {
             Require(replay.request.context.pixel->rasterPrimitive == ShaderRecompiler::RasterPrimitive::Rectangle);
             Require(replay.request.context.vertex->paClVsOutCntl == 0x00050a05u);
             Require(replay.request.target.float16DenormPreserve == preserve);
-            bytes[4] = 32u;
+            bytes[4] = 33u;
             bytes.insert(bytes.begin() + 259u, {0u, 0u});
             InsertPixelDefaultsAfterFrontFace(bytes);
             bytes.insert(bytes.end(), sizeof(std::uint64_t) + 1u + 13u, 0u);
@@ -394,7 +394,7 @@ int main() {
                 Require(request.graphics->draw.indexAddress == 0xabcdef3400u && request.graphics->draw.indexCount == 57u && request.graphics->draw.indexElementBytes == 4u && request.graphics->draw.instanceCount == 9u);
                 Require(request.target.float16DenormPreserve == preserve);
                 auto upgraded = bytes;
-                upgraded[4] = 32u;
+                upgraded[4] = 33u;
                 if (fixture.pixel) upgraded.insert(upgraded.begin() + 259u, {0u, 0u});
                 if (fixture.pixel) InsertPixelDefaultsAfterFrontFace(upgraded);
                 upgraded.insert(upgraded.end(), sizeof(std::uint64_t) + 1u + 13u, 0u);
@@ -407,12 +407,12 @@ int main() {
                     const auto replay25 = serializer.Deserialize(EncodeBase64(main25));
                     Require(!fixture.pixel || (replay25.request.context.pixel->layerExported == layer && replay25.request.context.pixel->ditheredAlphaToCoverage == dither && replay25.request.context.pixel->reversedBlend == 0u));
                     Require(replay25.request.target.float16DenormPreserve == preserve && (!fixture.tessellation || replay25.request.graphics->tessellation->primitiveGroupSize == 37u));
-                    main25[4] = 32u;
+                    main25[4] = 33u;
                     if (fixture.pixel) {
                         main25.insert(main25.begin() + 260u, 0u);
                         InsertPixelDefaultsAfterFrontFace(main25);
                     }
-                    main25.insert(main25.end(), sizeof(std::uint64_t) + 1u, 0u);
+                    main25.insert(main25.end(), sizeof(std::uint64_t) + 1u + 13u, 0u);
                     Require(serializer.Serialize(replay25.request) == EncodeBase64(main25));
                 }
             }
