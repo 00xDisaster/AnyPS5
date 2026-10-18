@@ -212,6 +212,7 @@ public:
         Require(storageFormat != VK_FORMAT_UNDEFINED, "the device cannot write the multisampled color target's format as a storage image at its sample count");
         Require(format == storageFormat, "a storage image access to a multisampled color target in another format than the target's storage form is not implemented");
         Require(cmask.Refusal().empty(), cmask.Refusal());
+        Require(htileRefusal.empty(), htileRefusal);
         Require(cmask.Keys() != DccKeys::Clear0000, "a storage image access to a multisampled color target whose CMASK fast clear no draw has applied is not implemented");
         auto* recording = Recorder::Active();
         Require(recording != nullptr, "a multisampled color target is only written by recorded dispatches");
