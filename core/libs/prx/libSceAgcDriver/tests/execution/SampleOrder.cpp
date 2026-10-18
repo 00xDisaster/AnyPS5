@@ -1302,14 +1302,12 @@ int RecipeDepthLocations(AgcDriver::VulkanDevice& device) {
     const auto first = PrintDepthLocations("the recorded draw", LocateDepth(recorded, locations));
     PrintDepthLocations("the recipe's replay as the first draw of a pass", LocateDepth(replayed, locations));
     Require(first.sloped != 0u, "the recorded draw left no sloped depth");
-    if (first.guest != first.sloped) {
-        std::printf("skipped, the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them\n");
-        return VulkanTestSkipped;
-    }
+    const bool readAtGuestLocations = first.guest == first.sloped;
+    if (!readAtGuestLocations) std::printf("the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them: the replay is compared with the recorded draw as the device reads both back\n");
     const auto differences = Differences(recorded, replayed, samples, "depth replayed from the recipe", true);
     std::printf("2x depth at custom sample locations, %ux%u: the recipe's replay differs from the recorded draw in %zu of %zu samples\n", ReferenceExtent.width, ReferenceExtent.height, differences, recorded.size());
-    Require(differences == 0u, "the recipe's replay did not leave the depth the recorded draw left at the guest's sample locations");
-    std::puts("a depth-only 2x draw replayed from its recipe as the first draw of a pass leaves the depth the recorded draw left, bit for bit");
+    Require(differences == 0u, readAtGuestLocations ? "the recipe's replay did not leave the depth the recorded draw left at the guest's sample locations" : "the recipe's replay did not leave the depth the recorded draw left, as the device reads both back");
+    std::puts(readAtGuestLocations ? "a depth-only 2x draw replayed from its recipe as the first draw of a pass leaves the depth the recorded draw left, bit for bit" : "a depth-only 2x draw replayed from its recipe as the first draw of a pass leaves the depth the recorded draw left as the device reads both back, bit for bit");
     return 0;
 }
 
