@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,9 +24,8 @@ struct ModuleFacts {
     std::set<std::uint32_t> pushDwordLoads;
 };
 
-ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
+ModuleFacts inspect(std::span<const std::uint32_t> words) {
     ModuleFacts facts;
-    const auto& words = result.spirv.Words();
     std::map<std::uint32_t, std::uint32_t> specIds;
     std::map<std::uint32_t, std::uint32_t> specValues;
     std::map<std::uint32_t, std::uint32_t> constants;
@@ -70,6 +70,10 @@ ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
     return facts;
 }
 
+ModuleFacts inspect(const ShaderRecompiler::RecompileResult& result) {
+    return inspect(result.spirv.Words());
+}
+
 constexpr std::array<std::uint32_t, 3> PositionExport{0xf80008cfu, 0u, 0xbf810000u};
 
 ShaderRecompiler::RecompileRequest baseRequest(bool remap) {
@@ -107,6 +111,8 @@ void preparedTransformTests() {
         require(invocation.has_value(), "the prepared vertex shader did not match a request of its own mode");
         return invocation->Materialize(*invocation->Capture(SrtRuntime{}));
     };
+    const auto prepared = inspect(GetPreparedCode(*handle));
+    require(prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase) && !prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 1u) && !prepared.specializationDefaults.contains(PipelineSpecialization::DepthRemapBase + 2u), "only the depth remap mode may be a specialization constant of the prepared module");
     const auto first = materialize(2u);
     require(materialize(2u)->PipelineVariantId() == first->PipelineVariantId(), "the same depth remap mode did not reuse its materialized vertex shader");
     auto other = request;
