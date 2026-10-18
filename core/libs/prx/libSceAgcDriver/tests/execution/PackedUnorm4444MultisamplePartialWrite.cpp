@@ -152,15 +152,47 @@ AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
     return color;
 }
 
-AgcDriver::Graphics::State TargetState(AgcDriver::Graphics::ColorTarget color, std::uint32_t exportedMask) {
+AgcDriver::QueueState Queue(const Block& block, std::uint32_t targetMask) {
+    AgcDriver::QueueState queue;
+    queue.userConfig[0x242] = 4;
+    queue.context = {
+        {0x2d5, 0x2000}, {0x1b6, 0}, {0x207, 0}, {0x200, 0}, {0x203, 0x800},
+        {0x2dc, 0xaa00}, {0x2f8, 0}, {0x292, 2}, {0x293, 0},
+        {0x80, 0}, {0x8d, 0}, {0x83, 0xffff}, {0x8c, 0xa},
+        {0x2f9, 0x2d}, {0x313, 0x6000}, {0x30e, 0xffffffff}, {0x30f, 0xffffffff},
+        {0x206, 0x43f}, {0x204, 0x80000}, {0x205, 0x240},
+        {0x8e, targetMask}, {0x8f, 0xf}, {0x202, 0xcc0010},
+        {0x1c4, 0}, {0x1c5, Float32Export}, {0x1c3, 4},
+        {0x318, static_cast<std::uint32_t>(block.Address() >> 8u)}, {0x390, static_cast<std::uint32_t>(block.Address() >> 40u)},
+        {0x31b, 0}, {0x31c, Unorm4_4_4_4Info}, {0x31d, MultisampledAttrib},
+        {0x3b0, ((Side - 1u) << 14u) | (Side - 1u)}, {0x3b8, TiledAttrib3}, {0x1e0, 0},
+        {0xc, 0}, {0xd, (Side << 16u) | Side},
+        {0x81, 0x80000000}, {0x82, (Side << 16u) | Side},
+        {0x90, 0x80000000}, {0x91, (Side << 16u) | Side},
+        {0x94, 0x80000000}, {0x95, (Side << 16u) | Side},
+        {0x10f, std::bit_cast<std::uint32_t>(static_cast<float>(Side) / 2.0f)}, {0x110, std::bit_cast<std::uint32_t>(static_cast<float>(Side) / 2.0f)},
+        {0x111, std::bit_cast<std::uint32_t>(-static_cast<float>(Side) / 2.0f)}, {0x112, std::bit_cast<std::uint32_t>(static_cast<float>(Side) / 2.0f)},
+        {0x113, std::bit_cast<std::uint32_t>(1.0f)}, {0x114, 0},
+        {0xb4, 0}, {0xb5, std::bit_cast<std::uint32_t>(1.0f)}
+    };
+    queue.shader[0x008] = 0x100;
+    queue.shader[0x009] = 0;
+    return queue;
+}
+
+AgcDriver::Graphics::State TargetState(const Block& block, std::uint32_t exportedMask) {
     const bool partial = exportedMask != 0xfu;
-    color.partialWriteMask = partial ? AgcDriver::Graphics::PackedWriteMask(color.componentMapping, exportedMask) : 0u;
-    VkPipelineColorBlendAttachmentState blend{};
-    blend.colorWriteMask = partial ? 0u : 0xfu;
+    const auto decoded = AgcDriver::Graphics::DecodeState(Queue(block, exportedMask));
+    const auto& color = decoded.colors.front();
+    char detail[256];
+    std::snprintf(detail, sizeof(detail), "CB_TARGET_MASK 0x%x of the 2-sample 4_4_4_4 target decoded %zu targets, %u samples, word mask 0x%04x, write mask 0x%x and %s shading", exportedMask, decoded.colors.size(), decoded.samples, color.partialWriteMask, decoded.blends.front().colorWriteMask, decoded.perSampleShading ? "per-sample" : "pixel-rate");
+    Require(decoded.colors.size() == 1u && decoded.samples == Samples && color.samples == Samples && color.partialWriteMask == (partial ? 0xf000u : 0u) && decoded.blends.size() == 1u && decoded.blends.front().colorWriteMask == (partial ? 0u : 0xfu) && decoded.blend.colorWriteMask == decoded.blends.front().colorWriteMask && decoded.perSampleShading == partial, detail);
+    const auto merge = AgcDriver::Graphics::ExportTargetMerge(decoded);
+    Require(merge.mask == color.partialWriteMask && merge.samples == (partial ? Samples : 1u) && !merge.depthStencilWrites && merge.descriptor == (partial ? AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color)) : std::array<std::uint32_t, 8>{}), "the decoded 2-sample target exported another merge than its own surface");
     AgcDriver::Graphics::State state{};
     state.stages = {AgcDriver::Graphics::ShaderPath::Vertex, 0u, 64u, 64u, std::nullopt, std::nullopt};
-    state.colors = {color};
-    state.color = color;
+    state.colors = decoded.colors;
+    state.color = decoded.color;
     state.hasColorTarget = true;
     state.renderExtent = {Side, Side};
     state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -169,11 +201,11 @@ AgcDriver::Graphics::State TargetState(AgcDriver::Graphics::ColorTarget color, s
     state.scissor = {{0, 0}, {Side, Side}};
     state.cullMode = VK_CULL_MODE_NONE;
     state.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    state.blends = {blend};
-    state.blend = blend;
+    state.blends = decoded.blends;
+    state.blend = decoded.blend;
     state.blendConstants = {};
-    state.samples = Samples;
-    state.perSampleShading = partial;
+    state.samples = decoded.samples;
+    state.perSampleShading = decoded.perSampleShading;
     return state;
 }
 
@@ -276,15 +308,16 @@ int main() {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
         const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(*device);
-        if (!context.storageImageMultisample || !context.sampleRateShading || !TargetHasCapability(device->Target(), spv::CapabilityFragmentShaderPixelInterlockEXT)) {
-            std::puts("skipped, the device lacks storage image multisampling, sample rate shading or fragmentShaderPixelInterlock");
+        for (const auto& [present, feature] : {std::pair{context.storageImageMultisample, "shaderStorageImageMultisample"}, std::pair{context.sampleRateShading, "sampleRateShading"}, std::pair{TargetHasCapability(device->Target(), spv::CapabilityFragmentShaderPixelInterlockEXT), "fragmentShaderPixelInterlock"}}) {
+            if (present) continue;
+            std::printf("skipped, the device lacks %s\n", feature);
             return VulkanTestSkipped;
         }
         Block block(4u * BlockBytes);
         const auto color = DecodeTarget(block);
-        const auto full = TargetState(color, 0xfu);
+        const auto full = TargetState(block, 0xfu);
         Draw(*device, full, Covering, Float32Program(First));
-        const auto merged = TargetState(color, 0x1u);
+        const auto merged = TargetState(block, 0x1u);
         Require(merged.colors.front().partialWriteMask == 0xf000u, "an X write of the 4_4_4_4 target did not merge bits 15..12");
         Draw(*device, merged, Cutting, Float32Program(Second));
         Draw(*device, full, Overlapping, Float32Program(Third));
