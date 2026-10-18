@@ -88,6 +88,7 @@ struct ImageResource {
     bool depthBitsCompatible = true;
     bool constantSwizzle = false;
     bool constantSwizzleCompatible = true;
+    bool cubeFaceCompatible = true;
     bool flatVolumeCompatible = true;
     bool singleMipPlaneBiasCompatible = false;
     bool flatLineCompatible = true;
@@ -139,7 +140,7 @@ inline bool FoldsTexelOffsets(const SamplerResource& sampler) {
 }
 
 inline bool SamplesBaseLevelIfUnnormalized(const SamplerResource& sampler) {
-    return (sampler.uses & (SamplerUseImplicitLod | SamplerUseGradient)) != 0u && (sampler.uses & ~static_cast<std::uint32_t>(SamplerUseExplicitLod | SamplerUseImplicitLod | SamplerUseGradient | SamplerUseNonZeroLod)) == 0u && !sampler.depthCompare;
+    return (sampler.uses & (SamplerUseImplicitLod | SamplerUseGradient)) != 0u && (sampler.uses & ~static_cast<std::uint32_t>(SamplerUseExplicitLod | SamplerUseImplicitLod | SamplerUseGradient | SamplerUseNonZeroLod | SamplerUseOffset)) == 0u && !sampler.depthCompare;
 }
 
 struct SampledResourcePair {
