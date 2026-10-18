@@ -84,7 +84,7 @@ def main():
                 prx.mkdir(parents=True)
                 provider = (case / standard) if standard else prx
                 provider.mkdir(exist_ok=True)
-                (provider / "provider.prx").write_bytes(module_with_symbol(True, symbolic=True))
+                (provider / "provider.prx").write_bytes(module_with_symbol(True, symbolic=not windows))
                 (prx / "consumer.prx").write_bytes(module_with_symbol(False))
                 (prx / "ignored.txt").write_text("not ELF")
                 (prx / "old.prx.guest.prx").write_bytes(guest_fixture(PLAIN_SITE))
