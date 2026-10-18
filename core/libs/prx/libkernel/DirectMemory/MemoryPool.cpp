@@ -87,6 +87,13 @@ struct PhysicalMemoryPool {
 
     bool CheckedFree(uint64_t start, size_t len) { return _release(start, len, true); }
 
+    bool Allocated(uint64_t start, size_t len) {
+        uint64_t lo, hi;
+        if (!PageSpan(start, len, lo, hi)) return false;
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _allUsed(static_cast<size_t>(lo / kPage), static_cast<size_t>((hi - lo) / kPage));
+    }
+
     bool Find(uint64_t offset, bool findNext, int64_t* start, int64_t* end, int* memoryType) {
         if (!start || !end || !memoryType || offset >= kPoolBytes) return false;
         std::lock_guard<std::mutex> lock(_mutex);
@@ -276,6 +283,10 @@ void DirectMemoryFree(int64_t start, size_t len) {
 
 bool DirectMemoryCheckedFree(int64_t start, size_t len) {
     return PhysicalMemoryPool::Instance().CheckedFree(static_cast<uint64_t>(start), len);
+}
+
+bool DirectMemoryAllocated(int64_t start, size_t len) {
+    return PhysicalMemoryPool::Instance().Allocated(static_cast<uint64_t>(start), len);
 }
 
 bool DirectMemoryFind(int64_t offset, bool findNext, int64_t* start, int64_t* end, int* memoryType) {
