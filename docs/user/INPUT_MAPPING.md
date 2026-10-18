@@ -67,7 +67,7 @@ The same file also accepts these settings, each at most once, in the form `Setti
 | `MouseCurve` | Number from 0.2 to 5, the response exponent. Above 1 gives finer control at low speed; below 1 reaches large tilts sooner. | `1` |
 | `MouseDeadzoneOffset` | Number from 0 to 0.9, the smallest tilt any movement produces as a fraction of full tilt. Set it just above the game's own deadzone: raise it if slow movement doesn't move the camera, lower it if small movements jump. | `0.2` |
 | `MouseMaxSpeed` | Number from 0.1 to 10, the highest tracked speed as a multiple of the full-tilt speed. Above 1, a fast flick keeps the stick at full tilt a little longer after the mouse stops. | `1` |
-| `MouseSmoothingMs` | Number from 0 to 500, the smoothing time constant in milliseconds. 0 follows every mouse report directly. | `10` |
+| `MouseSmoothingMs` | Number from 0 to 500, the smoothing time constant in milliseconds. A mouse that reports fewer than 300 times per second, such as a 125 or 250 Hz mouse, is smoothed over at least three of its report intervals, up to 30 ms; the report rate is measured from the movement itself. 0 follows every mouse report directly and turns this off too. | `10` |
 | `MouseDecayMs` | Number from 1 to 1000, the milliseconds without movement after which the stick is centered. | `30` |
 
 ```ini
