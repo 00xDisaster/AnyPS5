@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <span>
 #include <string>
 #include <vector>
@@ -48,6 +49,7 @@ constexpr std::uint32_t TiledAttrib3 = 0x4dc6c000u;
 constexpr std::uint32_t Float32Export = 9;
 constexpr std::uint32_t Float16Export = 4;
 constexpr std::uint32_t PositionInputs = 0x300u;
+constexpr std::uint32_t DepthInput = 0x400u;
 constexpr std::uint32_t LateKill = 0x40u;
 constexpr std::array<std::uint32_t, 5> CheckerboardKill{0x7e040f00u, 0x7e060f01u, 0x3a040702u, 0x36040481u, 0x7da40480u};
 
@@ -114,6 +116,34 @@ std::span<const std::uint32_t> Float32Program(std::array<float, 4> rgba, Kill ki
 std::span<const std::uint32_t> Float16Program(std::array<float, 4> rgba) {
     return Program({Half(rgba[0]) | (Half(rgba[1]) << 16u), Half(rgba[2]) | (Half(rgba[3]) << 16u), 0, 0}, true);
 }
+
+std::span<const std::uint32_t> DepthAsXProgram(std::array<float, 4> rgba) {
+    Require(programCount < Programs.size(), "too many test programs");
+    auto& code = Programs[programCount++];
+    std::size_t at = 0;
+    code[at++] = 0x7e080300u;
+    for (std::uint32_t vgpr = 1; vgpr < 4u; ++vgpr) {
+        code[at++] = 0x7e0002ffu | ((4u + vgpr) << 17u);
+        code[at++] = std::bit_cast<std::uint32_t>(rgba[vgpr]);
+    }
+    code[at++] = 0xf800180fu;
+    code[at++] = 0x07060504u;
+    code[at++] = 0xbf810000u;
+    return std::span<const std::uint32_t>(code.data(), at);
+}
+
+const std::array<std::array<float, 4>, 3>& TriangleAt(float z) {
+    static std::map<float, std::array<std::array<float, 4>, 3>> triangles;
+    return triangles.try_emplace(z, std::array<std::array<float, 4>, 3>{{{-1.0f, -1.0f, z, 1.0f}, {3.0f, -1.0f, z, 1.0f}, {-1.0f, 3.0f, z, 1.0f}}}).first->second;
+}
+
+struct DrawSetup {
+    std::uint32_t inputs = 0;
+    std::uint32_t shaderControl = 0;
+    std::span<const std::array<float, 4>> vertices = Triangle;
+    std::uint64_t depth = 0;
+    bool depthWrite = false;
+};
 
 struct Block {
     explicit Block(std::size_t bytes) : bytes(bytes), watched(AgcDriver::GuestMemory::WriteWatched()) {
@@ -187,12 +217,12 @@ AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
     return color;
 }
 
-std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTarget color, std::uint32_t exportedMask, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode, bool killing = false) {
+std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTarget color, std::uint32_t exportedMask, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode, const DrawSetup& setup = {}) {
     const auto target = device.Target();
     constexpr std::uint32_t waveSize = 64;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
-    const auto address = reinterpret_cast<std::uintptr_t>(Triangle.data());
-    const std::array<std::uint32_t, 4> vertexBuffer{static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu) | (16u << 16u), static_cast<std::uint32_t>(Triangle.size()), 0x01016facu};
+    const auto address = reinterpret_cast<std::uintptr_t>(setup.vertices.data());
+    const std::array<std::uint32_t, 4> vertexBuffer{static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu) | (16u << 16u), static_cast<std::uint32_t>(setup.vertices.size()), 0x01016facu};
     std::copy(vertexBuffer.begin(), vertexBuffer.end(), vertexUserData.begin());
     const std::array<ShaderRecompiler::MemoryRegion, 1> vertexMemory{{{reinterpret_cast<std::uintptr_t>(VertexCode.data()), std::as_bytes(std::span(VertexCode))}}};
     ShaderRecompiler::RecompileRequest vertex{
@@ -224,9 +254,15 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
     state.blends = {blend};
     state.blend = blend;
     state.blendConstants = {};
+    if (setup.depth != 0) {
+        state.depth = AgcDriver::Graphics::DepthTarget{setup.depth, 0, {Width, Height}, VK_FORMAT_D32_SFLOAT, 1.0f, 0, 0, false};
+        state.depthTest = true;
+        state.depthWrite = setup.depthWrite;
+        state.depthCompare = VK_COMPARE_OP_LESS;
+    }
 
     const auto codeAddress = reinterpret_cast<std::uintptr_t>(pixelCode.data());
-    const AgcDriver::Registers context{{0x1b6, 0x8000}, {0x1b3, killing ? PositionInputs : 0u}, {0x1b4, killing ? PositionInputs : 0u}, {0x203, killing ? LateKill : 0u}, {0x1c5, exportFormat}};
+    const AgcDriver::Registers context{{0x1b6, 0x8000}, {0x1b3, setup.inputs}, {0x1b4, setup.inputs}, {0x203, setup.shaderControl}, {0x1c5, exportFormat}};
     const std::array<ShaderRecompiler::MemoryRegion, 1> pixelMemory{{{codeAddress, std::as_bytes(pixelCode)}}};
     ShaderRecompiler::RecompileRequest fragment{
         {ShaderStage::Fragment, codeAddress, pixelCode, 0, {}},
@@ -241,7 +277,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
     fragment.context.pixel = AgcDriver::Graphics::DecodePixelStageInfo(context, AgcDriver::Graphics::ExportMappings(state));
     fragment.context.pixel->targetExportPacking = AgcDriver::Graphics::ExportPackings(state);
     fragment.context.pixel->targetMerge = AgcDriver::Graphics::ExportTargetMerge(state);
-    Require(fragment.context.pixel->pixelKillEnable == killing && !fragment.context.pixel->earlyZ && !fragment.context.pixel->targetMerge.depthStencilWrites, "the draw's pixel kill under late tests or its depth and stencil writes did not decode");
+    Require(fragment.context.pixel->pixelKillEnable == ((setup.shaderControl & LateKill) != 0u) && !fragment.context.pixel->earlyZ && fragment.context.pixel->targetMerge.depthStencilWrites == (partial && setup.depth != 0 && setup.depthWrite), "the draw's pixel kill under late tests or its depth and stencil writes did not decode");
     Require((fragment.context.pixel->targetMerge.mask != 0u) == partial && fragment.context.pixel->targetMerge.mask == color.partialWriteMask, "the draw's target merge disagrees with its write mask");
     const ShaderRecompiler::SrtRuntime runtime{};
     const auto invocation = AgcDriver::DriverDetail::InvocationFor(snapshot, 0, fragment);
@@ -252,7 +288,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
         {ShaderStage::Vertex, &vertexResult, 0},
         {ShaderStage::Fragment, pixelResult.get(), PixelPushOffset(vertexPush, target)}
     }};
-    const AgcDriver::Pm4::DrawParameters draw{0, static_cast<std::uint32_t>(Triangle.size()), 0, 1, 0, false};
+    const AgcDriver::Pm4::DrawParameters draw{0, static_cast<std::uint32_t>(setup.vertices.size()), 0, 1, 0, false};
     device.Draw(state, draw, shaders);
     return color.partialWriteMask;
 }
@@ -289,15 +325,36 @@ std::vector<std::uint16_t> Fill(Block& block, std::uint32_t seed) {
 
 struct Case {
     std::uint32_t mask;
+    std::uint32_t wordMask;
     std::array<float, 4> rgba;
 };
+
+std::uint32_t DrawCase(AgcDriver::VulkanDevice& device, const AgcDriver::Graphics::ColorTarget& color, std::uint32_t mask, std::uint32_t wordMask, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode, const DrawSetup& setup = {}) {
+    const auto drawn = Draw(device, color, mask, exportFormat, pixelCode, setup);
+    char detail[160];
+    std::snprintf(detail, sizeof(detail), "CB_TARGET_MASK 0x%x merged the word mask 0x%04x, not 0x%04x", mask, drawn, mask == 0xfu ? 0u : wordMask);
+    Require(drawn == (mask == 0xfu ? 0u : wordMask), detail);
+    return wordMask;
+}
+
+void ExpectWords(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint16_t>& expected, const std::vector<std::uint16_t>& before, const std::string& what) {
+    const auto stored = ReadBack(device, block);
+    for (std::uint32_t y = 0; y < Height; ++y) {
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            const auto index = layout.Offset(x, y) / 2u;
+            if (stored[index] == expected[index]) continue;
+            char detail[192];
+            std::snprintf(detail, sizeof(detail), ": pixel (%u, %u) holds 0x%04x, expected 0x%04x (it held 0x%04x)", x, y, stored[index], expected[index], before[index]);
+            throw std::runtime_error(what + detail);
+        }
+    }
+}
 
 void BackToBack(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color, std::span<const Case> draws, std::uint32_t seed, const std::string& what) {
     const auto before = Fill(block, seed);
     auto expected = before;
-    for (const auto& [mask, rgba] : draws) {
-        const auto drawn = Draw(device, color, mask, Float32Export, Float32Program(rgba));
-        const auto wordMask = mask == 0xfu ? 0xffffu : drawn;
+    for (const auto& [mask, wordMask, rgba] : draws) {
+        DrawCase(device, color, mask, wordMask, Float32Export, Float32Program(rgba));
         for (std::uint32_t y = 0; y < Height; ++y) {
             for (std::uint32_t x = 0; x < ScissorWidth; ++x) {
                 auto& word = expected[layout.Offset(x, y) / 2u];
@@ -305,16 +362,63 @@ void BackToBack(AgcDriver::VulkanDevice& device, Block& block, const ColorTarget
             }
         }
     }
-    const auto stored = ReadBack(device, block);
+    ExpectWords(device, block, layout, expected, before, what);
+}
+
+void SameDrawOverdraw(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color, float first, float last, std::uint32_t seed) {
+    constexpr std::uint32_t Layers = 16;
+    static std::map<float, std::vector<std::array<float, 4>>> stacks;
+    auto& vertices = stacks[last];
+    for (std::uint32_t layer = 0; layer < Layers; ++layer) {
+        const auto& triangle = TriangleAt(layer % 2u == Layers % 2u ? first : last);
+        vertices.insert(vertices.end(), triangle.begin(), triangle.end());
+    }
+    const auto before = Fill(block, seed);
+    auto expected = before;
+    const std::uint32_t nibble = static_cast<std::uint32_t>(std::nearbyint(static_cast<double>(last) * 15.0));
     for (std::uint32_t y = 0; y < Height; ++y) {
-        for (std::uint32_t x = 0; x < Width; ++x) {
-            const auto index = layout.Offset(x, y) / 2u;
-            if (stored[index] == expected[index]) continue;
-            char detail[160];
-            std::snprintf(detail, sizeof(detail), ": pixel (%u, %u) holds 0x%04x, expected 0x%04x (it held 0x%04x)", x, y, stored[index], expected[index], before[index]);
-            throw std::runtime_error(what + detail);
+        for (std::uint32_t x = 0; x < ScissorWidth; ++x) {
+            auto& word = expected[layout.Offset(x, y) / 2u];
+            word = static_cast<std::uint16_t>((word & 0x0fffu) | (nibble << 12u));
         }
     }
+    DrawCase(device, color, 0x1u, 0xf000u, Float32Export, DepthAsXProgram({0.0f, 0.4f, 0.6f, 1.0f}), {DepthInput, 0u, vertices});
+    char what[160];
+    std::snprintf(what, sizeof(what), "one draw of %u full-screen triangles alternating z %.2f and %.2f, merging z into X", Layers, first, last);
+    ExpectWords(device, block, layout, expected, before, what);
+}
+
+void DepthRejection(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color) {
+    Block depth(static_cast<std::size_t>(Width) * Height * 4u);
+    const std::vector<float> cleared(depth.bytes / 4u, 1.0f);
+    std::memcpy(depth.data, cleared.data(), depth.bytes);
+    const std::array<float, 4> nearer{0.6f, 0.2f, 0.8f, 0.4f};
+    const std::array<float, 4> behind{0.0f, 1.0f, 1.0f, 1.0f};
+    const std::array<float, 4> front{1.0f, 0.0f, 0.0f, 1.0f / 15.0f};
+    auto before = Fill(block, 301u);
+    auto expected = before;
+    const auto inside = [](std::uint32_t x) { return x < ScissorWidth; };
+    const auto survivor = [&](std::uint32_t x, std::uint32_t y) { return inside(x) && ((x ^ y) & 1u) == 0u; };
+    const auto expect = [&](const auto& select, std::uint32_t word, std::uint32_t wordMask) {
+        for (std::uint32_t y = 0; y < Height; ++y) {
+            for (std::uint32_t x = 0; x < Width; ++x) {
+                if (!select(x, y)) continue;
+                auto& stored = expected[layout.Offset(x, y) / 2u];
+                stored = static_cast<std::uint16_t>((stored & ~wordMask) | (word & wordMask));
+            }
+        }
+    };
+    DrawCase(device, color, 0xfu, 0xffffu, Float32Export, Float32Program(nearer, Kill::BeforeExport), {PositionInputs, LateKill, TriangleAt(0.5f), depth.Address(), true});
+    expect(survivor, Packed(nearer), 0xffffu);
+    ExpectWords(device, block, layout, expected, before, "a full write at z 0.5 that kills a checkerboard and writes depth");
+    before = expected;
+    DrawCase(device, color, 0x1u, 0xf000u, Float32Export, Float32Program(behind), {0u, 0u, TriangleAt(0.75f), depth.Address(), false});
+    expect([&](std::uint32_t x, std::uint32_t y) { return inside(x) && !survivor(x, y); }, Packed(behind), 0xf000u);
+    ExpectWords(device, block, layout, expected, before, "an X merge at z 0.75 behind the depth 0.5 the surviving pixels hold");
+    before = expected;
+    DrawCase(device, color, 0x1u, 0xf000u, Float32Export, Float32Program(front), {0u, 0u, TriangleAt(0.25f), depth.Address(), false});
+    expect([&](std::uint32_t x, std::uint32_t) { return inside(x); }, Packed(front), 0xf000u);
+    ExpectWords(device, block, layout, expected, before, "an X merge at z 0.25 in front of every stored depth");
 }
 
 void ExpectKilled(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint16_t>& before, std::uint32_t word, std::uint32_t wordMask, const std::string& what) {
@@ -353,43 +457,48 @@ int main() {
         const auto color = DecodeTarget(block);
         Require(AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 1u) == 0xf000u && AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 8u) == 0x000fu && AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 5u) == 0xf0f0u, "the export components did not map to the guest nibbles (X in 15..12, W in 3..0)");
         const std::array<Case, 9> cases{{
-            {0x1u, {1.0f, 0.0f, 0.0f, 0.0f}},
-            {0x1u, {7.0f / 15.0f, 1.0f, 1.0f, 1.0f}},
-            {0x5u, {0.2f, 0.4f, 0.6f, 0.8f}},
-            {0x2u, {0.0f, 2.0f / 15.0f, 1.0f, 1.0f}},
-            {0x8u, {1.0f, 1.0f, 1.0f, 11.0f / 15.0f}},
-            {0x6u, {0.0f, 0.0f, 0.0f, 0.0f}},
-            {0xeu, {0.0f, 1.0f, 0.5f, 0.25f}},
-            {0xfu, {0.1f, 0.7f, 0.9f, 0.3f}},
-            {0x1u, {0.0f, 0.0f, 0.0f, 0.0f}},
+            {0x1u, 0xf000u, {1.0f, 0.0f, 0.0f, 0.0f}},
+            {0x1u, 0xf000u, {7.0f / 15.0f, 1.0f, 1.0f, 1.0f}},
+            {0x5u, 0xf0f0u, {0.2f, 0.4f, 0.6f, 0.8f}},
+            {0x2u, 0x0f00u, {0.0f, 2.0f / 15.0f, 1.0f, 1.0f}},
+            {0x8u, 0x000fu, {1.0f, 1.0f, 1.0f, 11.0f / 15.0f}},
+            {0x6u, 0x0ff0u, {0.0f, 0.0f, 0.0f, 0.0f}},
+            {0xeu, 0x0fffu, {0.0f, 1.0f, 0.5f, 0.25f}},
+            {0xfu, 0xffffu, {0.1f, 0.7f, 0.9f, 0.3f}},
+            {0x1u, 0xf000u, {0.0f, 0.0f, 0.0f, 0.0f}},
         }};
+        const std::array<std::uint16_t, 9> goldens{0xf000u, 0x7fffu, 0x369cu, 0x02ffu, 0xfffbu, 0x0000u, 0x0f84u, 0x2ad5u, 0x0000u};
         auto before = Fill(block, 0);
-        for (const auto& [mask, rgba] : cases) {
-            const auto wordMask = Draw(*device, color, mask, Float32Export, Float32Program(rgba));
-            ExpectSurface(*device, block, layout, before, Packed(rgba), mask == 0xfu ? 0xffffu : wordMask, "a 32_ABGR " + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
+        for (std::size_t index = 0; index < cases.size(); ++index) {
+            const auto& [mask, wordMask, rgba] = cases[index];
+            DrawCase(*device, color, mask, wordMask, Float32Export, Float32Program(rgba));
+            ExpectSurface(*device, block, layout, before, goldens[index], wordMask, "a 32_ABGR " + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
             before = ReadBack(*device, block);
         }
         const std::array<float, 4> b{2.0f / 15.0f, 1.0f, 1.0f, 1.0f};
         const std::array<float, 4> c{0.6f, 0.2f, 0.8f, 0.4f};
         const std::array<float, 4> d{1.0f, 0.0f, 9.0f / 15.0f, 0.0f};
-        const std::array<Case, 2> mergeThenFull{{{0x1u, b}, {0xfu, c}}};
-        const std::array<Case, 2> fullThenMerge{{{0xfu, c}, {0x1u, b}}};
-        const std::array<Case, 3> mergeThenMerge{{{0x1u, b}, {0x4u, d}, {0x8u, c}}};
+        const std::array<Case, 2> mergeThenFull{{{0x1u, 0xf000u, b}, {0xfu, 0xffffu, c}}};
+        const std::array<Case, 2> fullThenMerge{{{0xfu, 0xffffu, c}, {0x1u, 0xf000u, b}}};
+        const std::array<Case, 3> mergeThenMerge{{{0x1u, 0xf000u, b}, {0x4u, 0x00f0u, d}, {0x8u, 0x000fu, c}}};
         BackToBack(*device, block, layout, color, mergeThenFull, 11, "a merged X write followed at once by a full write");
         BackToBack(*device, block, layout, color, fullThenMerge, 12, "a full write followed at once by a merged X write");
         BackToBack(*device, block, layout, color, mergeThenMerge, 13, "merged X, Z and W writes drawn back to back");
         before = Fill(block, 77);
         const std::array<float, 4> halves{0.5f, 0.75f, 0.125f, 0.25f};
-        const auto wordMask = Draw(*device, color, 0x9u, Float16Export, Float16Program(halves));
+        const auto wordMask = DrawCase(*device, color, 0x9u, 0xf00fu, Float16Export, Float16Program(halves));
         ExpectSurface(*device, block, layout, before, Packed(halves), wordMask, "an FP16_ABGR " + Describe(0x9u, halves) + " into a tiled 4_4_4_4 unorm target");
         for (const auto kill : {Kill::BeforeExport, Kill::AfterExport}) {
-            for (const auto& [mask, rgba] : {Case{0x1u, {0.6f, 0.2f, 0.8f, 0.4f}}, Case{0x6u, {1.0f, 2.0f / 15.0f, 13.0f / 15.0f, 0.0f}}}) {
+            for (const auto& [mask, wordMask, rgba] : {Case{0x1u, 0xf000u, {0.6f, 0.2f, 0.8f, 0.4f}}, Case{0x6u, 0x0ff0u, {1.0f, 2.0f / 15.0f, 13.0f / 15.0f, 0.0f}}}) {
                 before = Fill(block, 91u + mask);
-                const auto killedMask = Draw(*device, color, mask, Float32Export, Float32Program(rgba, kill), true);
+                const auto killedMask = DrawCase(*device, color, mask, wordMask, Float32Export, Float32Program(rgba, kill), {PositionInputs, LateKill});
                 ExpectKilled(*device, block, layout, before, Packed(rgba), killedMask, std::string(kill == Kill::BeforeExport ? "a late-test checkerboard kill before " : "a late-test checkerboard kill after ") + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
             }
         }
-        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences and 4 checkerboard-killing draws merged into a %ux%u tiled target, the killed pixels and those outside the scissor kept\n", cases.size() + 1u, Width, Height);
+        SameDrawOverdraw(*device, block, layout, color, 0.2f, 0.8f, 401u);
+        SameDrawOverdraw(*device, block, layout, color, 0.8f, 0.2f, 402u);
+        DepthRejection(*device, block, layout, color);
+        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences, 4 checkerboard-killing draws, 2 same-draw overdraws of 16 layers and a depth-rejected merge into a %ux%u tiled target, the killed, rejected and unscissored pixels kept\n", cases.size() + 1u, Width, Height);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
