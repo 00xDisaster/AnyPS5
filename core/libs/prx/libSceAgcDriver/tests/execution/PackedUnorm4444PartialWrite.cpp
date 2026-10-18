@@ -51,6 +51,8 @@ constexpr std::uint32_t PositionInputs = 0x300u;
 constexpr std::uint32_t LateKill = 0x40u;
 constexpr std::array<std::uint32_t, 5> CheckerboardKill{0x7e040f00u, 0x7e060f01u, 0x3a040702u, 0x36040481u, 0x7da40480u};
 
+enum class Kill { None, BeforeExport, AfterExport };
+
 alignas(256) constexpr std::array<std::uint32_t, 6> VertexCode{
     0xe0382000, 0x80000005, 0xbf8c3f70, 0xf80008cf, 0x03020100, 0xbf810000,
 };
@@ -80,25 +82,33 @@ std::uint32_t Half(float value) {
     return ((((bits >> 23u) & 0xffu) - 112u) << 10u) | ((bits >> 13u) & 0x3ffu);
 }
 
-std::span<const std::uint32_t> Program(const std::array<std::uint32_t, 4>& vgprs, bool compressed, bool killing = false) {
+std::span<const std::uint32_t> Program(const std::array<std::uint32_t, 4>& vgprs, bool compressed, Kill kill = Kill::None) {
     Require(programCount < Programs.size(), "too many test programs");
     auto& code = Programs[programCount++];
     std::size_t at = 0;
-    if (killing) {
+    if (kill == Kill::BeforeExport) {
         for (const auto word : CheckerboardKill) code[at++] = word;
     }
     for (std::uint32_t vgpr = 0; vgpr < (compressed ? 2u : 4u); ++vgpr) {
         code[at++] = 0x7e0002ffu | ((4u + vgpr) << 17u);
         code[at++] = vgprs[vgpr];
     }
-    code[at++] = compressed ? 0xf8001c0fu : 0xf800180fu;
-    code[at++] = compressed ? 0x00000504u : 0x07060504u;
+    if (kill == Kill::AfterExport) {
+        code[at++] = compressed ? 0xf800040fu : 0xf800000fu;
+        code[at++] = compressed ? 0x00000504u : 0x07060504u;
+        for (const auto word : CheckerboardKill) code[at++] = word;
+        code[at++] = 0xf8001890u;
+        code[at++] = 0u;
+    } else {
+        code[at++] = compressed ? 0xf8001c0fu : 0xf800180fu;
+        code[at++] = compressed ? 0x00000504u : 0x07060504u;
+    }
     code[at++] = 0xbf810000u;
     return std::span<const std::uint32_t>(code.data(), at);
 }
 
-std::span<const std::uint32_t> Float32Program(std::array<float, 4> rgba, bool killing = false) {
-    return Program({std::bit_cast<std::uint32_t>(rgba[0]), std::bit_cast<std::uint32_t>(rgba[1]), std::bit_cast<std::uint32_t>(rgba[2]), std::bit_cast<std::uint32_t>(rgba[3])}, false, killing);
+std::span<const std::uint32_t> Float32Program(std::array<float, 4> rgba, Kill kill = Kill::None) {
+    return Program({std::bit_cast<std::uint32_t>(rgba[0]), std::bit_cast<std::uint32_t>(rgba[1]), std::bit_cast<std::uint32_t>(rgba[2]), std::bit_cast<std::uint32_t>(rgba[3])}, false, kill);
 }
 
 std::span<const std::uint32_t> Float16Program(std::array<float, 4> rgba) {
@@ -372,12 +382,14 @@ int main() {
         const std::array<float, 4> halves{0.5f, 0.75f, 0.125f, 0.25f};
         const auto wordMask = Draw(*device, color, 0x9u, Float16Export, Float16Program(halves));
         ExpectSurface(*device, block, layout, before, Packed(halves), wordMask, "an FP16_ABGR " + Describe(0x9u, halves) + " into a tiled 4_4_4_4 unorm target");
-        for (const auto& [mask, rgba] : {Case{0x1u, {0.6f, 0.2f, 0.8f, 0.4f}}, Case{0x6u, {1.0f, 2.0f / 15.0f, 13.0f / 15.0f, 0.0f}}}) {
-            before = Fill(block, 91u + mask);
-            const auto killedMask = Draw(*device, color, mask, Float32Export, Float32Program(rgba, true), true);
-            ExpectKilled(*device, block, layout, before, Packed(rgba), killedMask, "a late-test checkerboard-killing " + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
+        for (const auto kill : {Kill::BeforeExport, Kill::AfterExport}) {
+            for (const auto& [mask, rgba] : {Case{0x1u, {0.6f, 0.2f, 0.8f, 0.4f}}, Case{0x6u, {1.0f, 2.0f / 15.0f, 13.0f / 15.0f, 0.0f}}}) {
+                before = Fill(block, 91u + mask);
+                const auto killedMask = Draw(*device, color, mask, Float32Export, Float32Program(rgba, kill), true);
+                ExpectKilled(*device, block, layout, before, Packed(rgba), killedMask, std::string(kill == Kill::BeforeExport ? "a late-test checkerboard kill before " : "a late-test checkerboard kill after ") + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
+            }
         }
-        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences and 2 checkerboard-killing draws merged into a %ux%u tiled target, the killed pixels and those outside the scissor kept\n", cases.size() + 1u, Width, Height);
+        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences and 4 checkerboard-killing draws merged into a %ux%u tiled target, the killed pixels and those outside the scissor kept\n", cases.size() + 1u, Width, Height);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
