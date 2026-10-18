@@ -60,13 +60,17 @@ std::uint64_t workgroupBytes(std::span<const std::uint32_t> words) {
 std::set<std::uint32_t> compareExchangeWidths(std::span<const std::uint32_t> words) {
     std::map<std::uint32_t, std::uint32_t> widths;
     std::set<std::uint32_t> found;
+    std::uint32_t faultFunction = 0;
+    bool inFaultFunction = false;
     for (std::size_t offset = 5; offset < words.size();) {
         const auto count = words[offset] >> 16u;
         require(count != 0u && count <= words.size() - offset, "malformed SPIR-V instruction");
         const auto instruction = words.subspan(offset, count);
         const auto opcode = static_cast<spv::Op>(instruction[0] & 0xffffu);
+        if (opcode == spv::OpName && std::string_view(reinterpret_cast<const char*>(instruction.data() + 2)) == "record_bda_fault") faultFunction = instruction[1];
+        if (opcode == spv::OpFunction) inFaultFunction = instruction[2] == faultFunction;
         if (opcode == spv::OpTypeInt) widths.emplace(instruction[1], instruction[2]);
-        if (opcode == spv::OpAtomicCompareExchange) found.insert(widths.at(instruction[1]));
+        if (opcode == spv::OpAtomicCompareExchange && !inFaultFunction) found.insert(widths.at(instruction[1]));
         offset += count;
     }
     return found;
@@ -110,6 +114,7 @@ void verify(std::uint32_t waveSize, std::uint32_t limit, bool int64Atomics) {
     const bool native = int64Atomics && limit < 68u;
     require(widths.contains(64u) == native, native ? "device-memory LDS did not use a 64-bit compare exchange" : "a 64-bit compare exchange appeared without device-memory LDS and shaderBufferInt64Atomics");
     require(widths.contains(32u) != native, native ? "device-memory LDS with shaderBufferInt64Atomics kept the workgroup lock" : "the 64-bit LDS atomic lost its workgroup lock");
+    require(result.bdaAbiVersion == (limit < 68u ? 1u : 0u), "the fault buffer for a misaligned 64-bit LDS atomic does not follow device-memory LDS at limit " + std::to_string(limit));
 }
 
 }
