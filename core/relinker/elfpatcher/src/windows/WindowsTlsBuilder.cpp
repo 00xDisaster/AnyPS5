@@ -149,7 +149,7 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
                 const bool wide = (info.RexPrefix & 8) != 0;
                 const bool isAlu = isAluReadOpcode(bytes[position]);
                 const auto address = supportedPrefixes && !loadValue && !aluRead && (bytes[position] == 0x8b || isAlu) && (wide || !hasOperandSizePrefix) ? registerAddress(bytes, position, info.Length, info.RexPrefix) : std::nullopt;
-                const auto addressRegister = static_cast<std::uint8_t>(((bytes[position + 1] >> 3) & 7) | ((info.RexPrefix & 4) << 1));
+                const auto addressRegister = address ? static_cast<std::uint8_t>(((bytes[position + 1] >> 3) & 7) | ((info.RexPrefix & 4) << 1)) : std::uint8_t{4};
                 if (address && addressRegister != 4) {
                     std::vector<MovedInstruction> moved;
                     auto length = info.Length;
@@ -158,8 +158,8 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
                             throw Domain::RelinkerException("Short guest TLS instruction ends its segment", header.Offset + offset);
                         const auto next = decoder.DecodeInstruction(bytes + length, header.FileSize - offset - length);
                         const bool relativeBranch =
-                            (next.FlowKind == Codegen::ControlFlowKind::ConditionalBranch && (next.IsTwoByteOpcode ? next.Opcode >= 0x80 && next.Opcode <= 0x8f : next.Opcode >= 0x70 && next.Opcode <= 0x7f)) ||
-                            (next.FlowKind == Codegen::ControlFlowKind::UnconditionalJump && !next.HasRipRelativeDisp && !next.IsTwoByteOpcode && (next.Opcode == 0xe9 || next.Opcode == 0xeb));
+                            (next.FlowKind == Codegen::ControlFlowKind::ConditionalBranch && !next.TruncatesBranchTarget && (next.IsTwoByteOpcode ? next.Opcode >= 0x80 && next.Opcode <= 0x8f : next.Opcode >= 0x70 && next.Opcode <= 0x7f)) ||
+                            (next.FlowKind == Codegen::ControlFlowKind::UnconditionalJump && !next.TruncatesBranchTarget && !next.HasRipRelativeDisp && !next.IsTwoByteOpcode && (next.Opcode == 0xe9 || next.Opcode == 0xeb));
                         if (!relativeBranch && (next.FlowKind != Codegen::ControlFlowKind::Sequential || next.HasBranchTarget || next.SegmentPrefix != 0))
                             throw Domain::RelinkerException("Short guest TLS instruction is followed by an instruction that cannot move", header.Offset + offset + length);
                         std::vector<std::uint8_t> movedBytes(bytes + length, bytes + length + next.Length);

@@ -104,6 +104,7 @@ public:
             function<PFN_vkGetPhysicalDeviceMemoryProperties>("vkGetPhysicalDeviceMemoryProperties")(context.physical, &context.memory);
             context.Function<PFN_vkGetDeviceQueue>("vkGetDeviceQueue")(context.device, family, 0u, &context.queue);
             VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+            pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             pool.queueFamilyIndex = family;
             Check(context.Function<PFN_vkCreateCommandPool>("vkCreateCommandPool")(context.device, &pool, nullptr, &context.pool), "vkCreateCommandPool");
         } catch (...) { release(); throw; }
@@ -194,7 +195,6 @@ void QueueTargetByteWrite(const Context& context, Recorder& recorder, std::uint6
 std::vector<std::uint32_t> FetchShader(std::uint32_t width, std::uint32_t height, std::uint32_t fragments, bool arrayed, bool floating) {
     ShaderRecompiler::SpirvModule module;
     module.EmitCapability(spv::CapabilityShader);
-    if (arrayed) module.EmitCapability(spv::CapabilityImageMSArray);
     module.AddMemoryModel(spv::AddressingModelLogical, spv::MemoryModelGLSL450);
     const auto u32 = module.Type(spv::OpTypeInt, 32u, 0u);
     const auto i32 = module.Type(spv::OpTypeInt, 32u, 1u);

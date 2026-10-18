@@ -44,7 +44,9 @@ def oracle():
     root = rocm_root()
     if root is not None:
         root = root.resolve()
-    configuration = repr((compiler, str(root))).encode("utf-8")
+    executable = shutil.which(compiler[0])
+    selected = str(Path(executable).resolve()) if executable is not None else None
+    configuration = repr((compiler, selected, str(root))).encode("utf-8")
     key = hashlib.sha256(source.read_bytes() + configuration).hexdigest()
     directory = CACHE / key
     binary = directory / "oracle"
@@ -65,12 +67,18 @@ def oracle():
 
 
 @cache
-def detected_target(binary):
-    return subprocess.run([binary, "--target"], capture_output=True, text=True, check=True).stdout.strip()
+def detected_target(binary, visible_devices):
+    environment = dict(os.environ)
+    if visible_devices is None:
+        environment.pop("ROCR_VISIBLE_DEVICES", None)
+    else:
+        environment["ROCR_VISIBLE_DEVICES"] = visible_devices
+    return subprocess.run([binary, "--target"], capture_output=True, text=True, check=True,
+                          env=environment).stdout.strip()
 
 
 def target():
-    return os.environ.get("HW_ORACLE_TARGET") or detected_target(oracle())
+    return os.environ.get("HW_ORACLE_TARGET") or detected_target(oracle(), os.environ.get("ROCR_VISIBLE_DEVICES"))
 
 
 def assemble(body, work, wave64, *, ieee, denorm32, denorm16, dx10_clamp, round32, round16, fp16_overflow, lds=DEFAULT_LDS):
@@ -120,8 +128,12 @@ def run(body, rows, extra=b"", wave64=False, coarse=False, *, ieee, denorm32, de
         for start in range(0, len(padded), rows_per_dispatch):
             chunk = padded[start:start + rows_per_dispatch]
             (work / "in.bin").write_bytes(b"".join(struct.pack("<4I", *r) for r in chunk) + extra)
+            (work / "out.bin").unlink(missing_ok=True)
             subprocess.run([oracle(), str(code), str(len(chunk)), str(work / "in.bin"), str(work / "out.bin"), "16"], check=True, env=env, stdout=sys.stderr)
             data = (work / "out.bin").read_bytes()
+            expected = len(chunk) * 64
+            if len(data) != expected:
+                raise ValueError(f"Oracle output size: expected {expected} bytes, got {len(data)}")
             out += [struct.unpack_from("<16I", data, lane * 64) for lane in range(len(chunk))]
     return out[:len(rows)]
 
