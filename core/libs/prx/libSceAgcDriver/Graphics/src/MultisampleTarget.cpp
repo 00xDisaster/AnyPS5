@@ -740,9 +740,11 @@ SampleOrderTarget MultisampleTargetOrderTarget(const Context& context, const Col
     return {found.image, found.OrderView(), found.orderFormat, target.extent, target.samples, SampleOrderMethod::Storage, nullptr};
 }
 
-VkImageView MultisampleTargetView(const Context& context, const ColorTarget& target) {
+VkImageView MultisampleTargetView(const Context& context, const ColorTarget& target, VkImage* image) {
     std::lock_guard lock(targetsMutex());
-    return acquire(context, target).view;
+    const auto& acquired = acquire(context, target);
+    if (image != nullptr) *image = acquired.image;
+    return acquired.view;
 }
 
 namespace {
