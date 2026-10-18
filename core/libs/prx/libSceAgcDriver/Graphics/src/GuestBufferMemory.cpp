@@ -1769,6 +1769,7 @@ const HostImport* importRunAt(const Context& context, HostImports& state, Import
     };
 #ifdef _WIN32
     // Drivers pin imported pages, so every page must be committed and accessible.
+    const GuestArena::HostWrite importWrite(reinterpret_cast<void*>(base), static_cast<std::size_t>(bytes));
     bool writable = true;
     bool readOnly = true;
     MEMORY_BASIC_INFORMATION refused{};
