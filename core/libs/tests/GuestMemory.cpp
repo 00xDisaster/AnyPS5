@@ -1567,7 +1567,7 @@ static void CheckSingleDirectMappingTracksWritesWithoutFaults() {
 #endif
 }
 
-static void CheckReleaseKeepsPhysicalUntilViewsUnmapped(int (*release)(std::int64_t, std::size_t)) {
+static void CheckReleaseKeepsPhysicalUntilViewsUnmapped(decltype(&sceKernelReleaseDirectMemory) release) {
     constexpr std::size_t page = 0x4000;
     std::int64_t phys = 0;
     Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 4, 0, 0, &phys) == 0);
