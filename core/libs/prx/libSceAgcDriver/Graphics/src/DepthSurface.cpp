@@ -297,7 +297,6 @@ public:
             RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
             if (batch) batch->SubmitAndWait();
             else Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
-            if (useSampleShadow && sampleable && this->sampling.refusal.empty()) createSampleShadow();
         } catch (...) {
             release();
             throw;
@@ -431,7 +430,10 @@ public:
                           static_cast<unsigned>(resource.tileMode), static_cast<int>(resource.dimension), resource.baseLevel, resource.lastLevel, resource.baseArray, key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7]);
             throw std::runtime_error(text);
         }
-        if (multisampled && useSampleShadow) refreshSampleShadow(drawn);
+        if (multisampled && useSampleShadow) {
+            if (sampleShadow == nullptr) createSampleShadow();
+            refreshSampleShadow(drawn);
+        }
         if (const auto found = textures.find(key); found != textures.end()) return found->second;
         const auto viewType = multisampled ? multisampleViewType : resource.dimension == TextureDimension::k2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
         const auto sampledImage = useSampleShadow ? sampleShadow : owned;
@@ -763,7 +765,7 @@ private:
         RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, accesses);
         if (batch) batch->SubmitAndWait();
         else Recorder::CountBarriers(Recorder::CommandClass::Draw, 2);
-        sampleShadowWritten = drawn ? 0u : written;
+        sampleShadowWritten = written;
     }
 
     std::shared_ptr<Texture> unormStencil(const std::array<std::uint32_t, 13>& key, VkComponentMapping components, VkImageViewType viewType, bool drawn) {
@@ -1280,7 +1282,7 @@ bool takeClearedHtile(const DepthTarget& target) {
     return true;
 }
 
-const DepthSurface* drawnDepth = nullptr;
+DepthSurface* drawnDepth = nullptr;
 
 std::atomic<std::uint64_t> surfacesSerial{0};
 
@@ -1499,7 +1501,8 @@ VkImageView DepthSurfaceView(const Context& context, const DepthTarget& target) 
     }
     surface->NoteHtileClear(htileCleared);
     surface->ApplyFastClear();
-    if (!created || inherits) surface->written = ++depthWrites;
+    if (drawnDepth != nullptr && drawnDepth != surface) drawnDepth->written = ++depthWrites;
+    surface->written = ++depthWrites;
     surface->NoteMemory();
     drawnDepth = surface;
     return surface->view;

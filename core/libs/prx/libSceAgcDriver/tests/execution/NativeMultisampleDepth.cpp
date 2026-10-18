@@ -662,6 +662,8 @@ void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
     target.pipeBankXor = one ? 0x8c00u : 0u;
     target.htileDepthOnly = depthOnly;
     target.iterate256 = target.htilePipeAligned = true;
+    TargetMemory otherMemory(static_cast<std::size_t>(DepthSliceBytes(extent, 4u)));
+    DepthTarget otherTarget{otherMemory.Address(), 0u, extent, VK_FORMAT_D32_SFLOAT, 0.0f, 0u, 0u, false, 1u};
     Recorder recorder(context);
     recorder.Activate();
     struct Cleanup {
@@ -733,6 +735,7 @@ void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
     {
         const DepthRaster raster(context, target, view);
         for (const auto offset : {0.0f, 0.25f}) {
+            Require(DepthSurfaceView(context, target) == view, "rebinding the native depth attachment replaced its image");
             Require(CachedSampledTexture(context, words) == texture && CachedSampledTexture(context, words, VK_IMAGE_VIEW_TYPE_2D_ARRAY) == arrayTexture, "native sampled view changed between raster writes");
             std::memset(output.Bytes().data(), 0xa5, output.Bytes().size());
             {
@@ -740,6 +743,7 @@ void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
                 raster.Run(batch.Handle(), offset);
                 batch.SubmitAndWait();
             }
+            if (offset == 0.0f) DepthSurfaceView(context, otherTarget);
             Require(CachedSampledTexture(context, words) == texture, "native depth shadow view changed after a raster write");
             recorder.Sync();
             CommandBatch batch(context);
