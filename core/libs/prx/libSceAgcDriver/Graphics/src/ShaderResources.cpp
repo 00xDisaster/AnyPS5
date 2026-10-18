@@ -3266,7 +3266,9 @@ bool ShaderResources::Revalidate(std::span<const CompiledShader> shaders, ProofR
             }
             for (std::uint32_t element = 0; element < images->count; ++element) {
                 if (table.elementTextures[element] == std::numeric_limits<std::size_t>::max()) continue;
-                const auto words = std::span<const std::uint32_t>(images->guestDescriptor).subspan(static_cast<std::size_t>(element) * 8u, 8u);
+                const auto raw = std::span<const std::uint32_t>(images->guestDescriptor).subspan(static_cast<std::size_t>(element) * 8u, 8u);
+                std::array<std::uint32_t, 8> narrowed{};
+                const auto words = firstLayerWords(raw, images->imageShapes.at(element), narrowed, false);
                 const auto resource = DecodeTextureResource(words);
                 const VkImageViewType multisampleViewType = images->imageShapes.at(element) == ShaderRecompiler::DescriptorImageShape::Image2DMultisampleArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
                 if (textureIndex >= textures.size() || table.elementTextures[element] != textureIndex || cachedTexture(context, words, resource, ViewComponents(resource), 0, images->imageDepthCompare.at(element), multisampleViewType) != textures[textureIndex]) return false;
