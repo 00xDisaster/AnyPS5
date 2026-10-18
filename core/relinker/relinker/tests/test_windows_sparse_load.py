@@ -11,14 +11,15 @@ from test_linux_load_alignment import PT_LOAD, fixture
 from test_windows_bss import LOAD_RVA, SECTION_ALIGNMENT, sections
 
 FAR_ADDRESS = 0x7FE00000
+RUNNABLE_FAR_ADDRESS = 0x4000000
 ENTRY = 0x10
 
 
-def sparse_fixture():
+def sparse_fixture(far_address=FAR_ADDRESS):
     image = fixture()
     struct.pack_into("<Q", image, 24, ENTRY)
     image[0x4000 + ENTRY:0x4000 + ENTRY + 6] = image[0x4000:0x4006]
-    struct.pack_into("<IIQQQQQQ", image, 64 + 2 * 56, PT_LOAD, 6, 0, FAR_ADDRESS, FAR_ADDRESS, 0, 0x1000, 0x1000)
+    struct.pack_into("<IIQQQQQQ", image, 64 + 2 * 56, PT_LOAD, 6, 0, far_address, far_address, 0, 0x1000, 0x1000)
     return image
 
 
@@ -42,7 +43,13 @@ def main():
         far = next(section for section in table if section[2] == LOAD_RVA + FAR_ADDRESS)
         assert far[1] == 0x1000, far
         if os.name == "nt":
-            executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
+            runnable = work / "runnable.elf"
+            runnable.write_bytes(sparse_fixture(RUNNABLE_FAR_ADDRESS))
+            runnable_output = work / "runnable.exe"
+            result = subprocess.run([str(relinker), "--skip-sce-module", "--windows", str(runnable), str(runnable_output)],
+                                    capture_output=True, text=True, timeout=20)
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            executed = subprocess.run([str(runnable_output)], capture_output=True, text=True, timeout=20)
             assert executed.returncode == 42, f"exit code {executed.returncode:#x}"
         macho = work / "output.macho"
         result = subprocess.run([str(relinker), "--skip-sce-module", "--macos", str(source), str(macho)],
