@@ -194,6 +194,16 @@ void noteUncached(const std::shared_ptr<StorageTexture>& image) {
     uncached.any.store(true, std::memory_order_release);
 }
 
+std::atomic<bool>& TexturesReleased() {
+    static std::atomic<bool> released{false};
+    return released;
+}
+
+void noteReleased(const std::shared_ptr<Texture>& texture) {
+    texture->MarkReleased();
+    TexturesReleased().store(true, std::memory_order_release);
+}
+
 bool SamplerCacheDisabled() {
     static const bool disabled = std::getenv("APS5_NO_SAMPLER_CACHE") != nullptr;
     return disabled;
@@ -225,6 +235,7 @@ void eraseTexture(TextureCache& cache, std::list<CachedTexture>::iterator it) {
             }
         }
     }
+    if (it->texture.use_count() > 1) noteReleased(it->texture);
     cache.index.erase(it->key);
     cache.entries.erase(it);
     ++cache.erasures;
@@ -421,7 +432,7 @@ void logLookup(const LookupRecord& record) {
 std::shared_ptr<StorageTexture> cachedStorageTexture(const Context& context, std::span<const std::uint32_t> words, const GuestTextureResource& resource, std::uint32_t mip, std::uint64_t guestBytes = 0, bool written = false);
 
 std::uint64_t heldBytes(const StorageTexture& image) {
-    return std::max<std::uint64_t>(image.AllocationBytes(), image.GuestBytes());
+    return image.BudgetBytes();
 }
 
 bool MetadataMoved(const StorageTexture& image, const GuestTextureResource& resource) {
@@ -636,10 +647,11 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     // the GPU supplies the texture by a view of it; anything else needs those results in guest
     // memory first.
     const bool depthCopy = depthCompare && guestBytes >= DepthCopyMinBytes() && Texture::DepthCopyFormat(ResolveTextureFormat(resource.format)) != VK_FORMAT_UNDEFINED && resource.dimension != TextureDimension::k3D;
+    const bool srgbExpand = !depthCompare && SrgbExpandsToRgba8(context, resource.format);
     auto source = StorageTexture::FindPending(address, guestBytes);
-    const bool blockCopy = source != nullptr && !depthCompare && Texture::CanBlockCopyFrom(*source, resource);
+    const bool blockCopy = source != nullptr && !depthCompare && !srgbExpand && Texture::CanBlockCopyFrom(*source, resource);
     const bool repackCopy = source != nullptr && !depthCompare && Texture::CanRepackCopyFrom(*source, resource);
-    if (source != nullptr && !blockCopy && !repackCopy && (depthCompare ? !depthCopy || !Texture::CanDepthCopyFrom(*source, resource) : !Texture::CanCopyFrom(*source, resource))) source.reset();
+    if (source != nullptr && !blockCopy && !repackCopy && (depthCompare ? !depthCopy || !Texture::CanDepthCopyFrom(*source, resource) : srgbExpand ? !Texture::CanSrgbExpandFrom(context, *source, resource) : !Texture::CanCopyFrom(*source, resource))) source.reset();
     if (source != nullptr && MetadataMoved(*source, resource)) source.reset();
     std::optional<DccKeys> keys;
     bool clearThroughKeys = false;
@@ -671,6 +683,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
         if (*keys == DccKeys::Uncompressed) {
             source = sampledStorageSource(context, resource, guestBytes);
             if (source != nullptr && depthCompare && !Texture::CanDepthCopyFrom(*source, resource)) source.reset();
+            if (source != nullptr && srgbExpand && !Texture::CanSrgbExpandFrom(context, *source, resource)) source.reset();
         } else if (!depthCompare && ClearedViewEnabled() && StorageClearAvailable(context, resource.format, *keys)) {
             // A fast-cleared surface is viewed as well, through its image cleared on the GPU (the
             // lookup's Refresh, see StorageTexture::upload), when the image's own descriptor names
@@ -728,6 +741,11 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
         }
         if (source != nullptr && IsRepackedTextureFormat(resource.format)) {
             auto texture = std::make_shared<Texture>(context, source, resource, components, Texture::RepackCopyTag{});
+            texture->RefreshDepthCopy();
+            return texture;
+        }
+        if (source != nullptr && srgbExpand) {
+            auto texture = std::make_shared<Texture>(context, source, resource, components, Texture::SrgbExpandTag{});
             texture->RefreshDepthCopy();
             return texture;
         }
@@ -813,6 +831,9 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
         } else if (IsRepackedTextureFormat(resource.format)) {
             entry.texture = std::make_shared<Texture>(context, source, resource, components, Texture::RepackCopyTag{});
             entry.texture->RefreshDepthCopy();
+        } else if (srgbExpand) {
+            entry.texture = std::make_shared<Texture>(context, source, resource, components, Texture::SrgbExpandTag{});
+            entry.texture->RefreshDepthCopy();
         } else {
             entry.texture = std::make_shared<Texture>(context, source, resource, components);
         }
@@ -837,6 +858,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     const auto budget = sampledBudget(context, cache);
     auto texture = entry.texture;
     if (!admitTexture(cache, key, entry.accounted, budget)) {
+        noteReleased(texture);
         logLookup({texture.get(), resource, guestBytes, *keys, generation, source.get()});
         reportCacheCounts(cache, budget);
         reportTextureCounters();
@@ -1033,7 +1055,11 @@ std::shared_ptr<StorageTexture> cachedStorageTexture(const Context& context, std
         std::vector<std::shared_ptr<ShaderResources>> resources;
         SharedResourceCache().RemoveImage(image.get(), &resources);
         if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->Recording()) {
-            for (auto& resource : resources) recorder->Keep(std::move(resource));
+            if (image.use_count() > 1) recorder->KeepBytes(image.get(), static_cast<std::size_t>(heldBytes(*image)));
+            for (auto& resource : resources) {
+                resource->KeepStorageImageBytes(*recorder);
+                recorder->Keep(std::move(resource));
+            }
         }
     }
     if (!evicted.empty()) {
@@ -1073,6 +1099,10 @@ std::uint64_t SampledTextureBudget(const VkPhysicalDeviceMemoryProperties& memor
 bool SampledBudgetReportDue(std::uint64_t reported, std::uint64_t budget, std::chrono::steady_clock::duration sinceReport) {
     const auto change = budget > reported ? budget - reported : reported - budget;
     return change > reported / 10u && sinceReport >= std::chrono::seconds(10);
+}
+
+std::optional<std::uint32_t> LargestDeviceLocalHeap(const VkPhysicalDeviceMemoryProperties& memory) {
+    return largestDeviceLocalHeap(memory);
 }
 
 std::uint64_t StorageTextureCacheBudget(const Context& context) {
@@ -1153,7 +1183,10 @@ void ClearCachedTextures(VkDevice device) {
         std::vector<std::shared_ptr<ShaderResources>> resources;
         SharedResourceCache().RemoveImage(image.get(), &resources);
         if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->Recording()) {
-            for (auto& resource : resources) recorder->Keep(std::move(resource));
+            for (auto& resource : resources) {
+                resource->KeepStorageImageBytes(*recorder);
+                recorder->Keep(std::move(resource));
+            }
         }
     }
 }
@@ -1329,6 +1362,16 @@ bool SameAsPreviousStorageElement(const ShaderRecompiler::DescriptorBinding& bin
 }
 
 ShaderResources::ShaderResources(const Context& context, const ShaderRecompiler::RecompileResult& vertex, const ShaderRecompiler::RecompileResult& fragment, const ColorTarget& target, std::uint64_t indexAddress, std::size_t indexBytes) : ShaderResources(context, std::array<CompiledShader, 2>{{{ShaderRecompiler::ShaderStage::Vertex, &vertex, 0}, {ShaderRecompiler::ShaderStage::Fragment, &fragment, static_cast<std::uint32_t>(vertex.pushConstants.size())}}}, target, 1, indexAddress, indexBytes) {}
+
+void ShaderResources::KeepStorageImageBytes(Recorder& recorder) const {
+    const auto keep = [&](const std::shared_ptr<StorageTexture>& image) {
+        if (image != nullptr && !image->Cached()) recorder.KeepBytes(image.get(), static_cast<std::size_t>(image->BudgetBytes()));
+    };
+    for (const auto& image : storageTextures) keep(image);
+    for (const auto& texture : textures) {
+        if (texture != nullptr) keep(texture->SharedStorageSource());
+    }
+}
 
 ShaderResources::ShaderResources(const Context& context, std::span<const CompiledShader> shaders, const ColorTarget& target, std::uint32_t colorAttachments, std::uint64_t indexAddress, std::size_t indexBytes, std::span<const GuestMemorySnapshot> snapshots) : context(context), guestMemory(context) {
     drawBuild = true;
@@ -3492,7 +3535,8 @@ void ResourceCache::noteMiss(const Key& key) {
 
 void ResourceCache::Insert(const Key& key, std::shared_ptr<ShaderResources> resources, std::vector<std::shared_ptr<ShaderResources>>* evicted) {
     std::lock_guard lock(mutex);
-    if (!resources->HasCachedStorageImages()) return;
+    dropReleasedTextures(evicted);
+    if (!resources->HasCachedStorageImages() || resources->HoldsReleasedTexture()) return;
     if (const auto found = index.find(key); found != index.end()) {
         if (evicted != nullptr) evicted->push_back(std::move(found->second->second));
         entries.erase(found->second);
@@ -3542,6 +3586,19 @@ void ResourceCache::RemoveImage(const StorageTexture* image, std::vector<std::sh
     std::lock_guard lock(mutex);
     for (auto it = entries.begin(); it != entries.end();) {
         if (!it->second->ReadsImage(image)) {
+            ++it;
+            continue;
+        }
+        if (evicted != nullptr) evicted->push_back(std::move(it->second));
+        index.erase(it->first);
+        it = entries.erase(it);
+    }
+}
+
+void ResourceCache::dropReleasedTextures(std::vector<std::shared_ptr<ShaderResources>>* evicted) {
+    if (!TexturesReleased().exchange(false, std::memory_order_acq_rel)) return;
+    for (auto it = entries.begin(); it != entries.end();) {
+        if (!it->second->HoldsReleasedTexture()) {
             ++it;
             continue;
         }
@@ -3800,7 +3857,7 @@ DescriptorCache::Stats DescriptorCache::Counters() const {
 }
 
 std::uint64_t ShaderResources::guestBufferBytes(std::span<const std::uint32_t> words) const {
-    const ShaderRecompiler::ShaderBufferResource descriptor{{words[0], words[1], words[2], words[3]}};
+    const ShaderRecompiler::ShaderBufferResource descriptor{{words[0], words[1] & ~0x40000000u, words[2], words[3]}};
     const auto address = descriptor.Base48();
     auto byteSize = descriptor.GetSize();
     if (byteSize > context.limits.maxStorageBufferRange) {
@@ -3823,8 +3880,7 @@ std::uint64_t ShaderResources::guestBufferBytes(std::span<const std::uint32_t> w
 
 std::size_t ShaderResources::addGuestBuffer(std::span<const std::uint32_t> words, const ColorTarget* target, std::uint64_t indexAddress, std::size_t indexBytes, bool written, bool atomic, bool read) {
     Require(words.size() == 4, "buffer descriptor must contain four DWORDs");
-    Require((words[1] & 0x40000000u) == 0, "buffer descriptor has reserved bits set");
-    const ShaderRecompiler::ShaderBufferResource descriptor{{words[0], words[1], words[2], words[3]}};
+    const ShaderRecompiler::ShaderBufferResource descriptor{{words[0], words[1] & ~0x40000000u, words[2], words[3]}};
     Require(descriptor.Type() == 0u, "buffer descriptor uses an unsupported type");
     const auto address = descriptor.Base48();
     const auto byteSize = guestBufferBytes(words);
@@ -5127,6 +5183,10 @@ std::vector<std::pair<VkImage, bool>> ShaderResources::StorageImages() const {
 bool ShaderResources::HasCachedStorageImages() const {
     if (std::any_of(storageTextures.begin(), storageTextures.end(), [](const auto& image) { return image != nullptr && !image->Cached(); })) return false;
     return std::none_of(textures.begin(), textures.end(), [](const auto& texture) { return texture != nullptr && texture->StorageSource() != nullptr && !texture->StorageSource()->Cached(); });
+}
+
+bool ShaderResources::HoldsReleasedTexture() const {
+    return std::any_of(textures.begin(), textures.end(), [](const auto& texture) { return texture != nullptr && texture->Released(); });
 }
 
 bool ShaderResources::ReadsImage(const StorageTexture* image) const {
