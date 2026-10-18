@@ -259,7 +259,7 @@ SettleBatch* forgetSettle(HostImports& state, std::uint64_t base) {
     SettleBatch* running = nullptr;
     if (const auto settle = state.settles.find(found->second.device); found->second.phase == SettlePhase::Submitted && settle != state.settles.end()) {
         auto& batch = settle->second.batches[found->second.batch];
-        if (settleBatchRunning(settle->second, settle->first, batch)) running = &batch;
+        if (batch.busy) running = &batch;
     }
     state.pendingSettles.erase(found);
     return running;
