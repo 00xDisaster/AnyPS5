@@ -270,6 +270,36 @@ std::vector<std::uint16_t> Fill(Block& block, std::uint32_t seed) {
     return words;
 }
 
+struct Case {
+    std::uint32_t mask;
+    std::array<float, 4> rgba;
+};
+
+void BackToBack(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color, std::span<const Case> draws, std::uint32_t seed, const std::string& what) {
+    const auto before = Fill(block, seed);
+    auto expected = before;
+    for (const auto& [mask, rgba] : draws) {
+        const auto drawn = Draw(device, color, mask, Float32Export, Float32Program(rgba));
+        const auto wordMask = mask == 0xfu ? 0xffffu : drawn;
+        for (std::uint32_t y = 0; y < Height; ++y) {
+            for (std::uint32_t x = 0; x < ScissorWidth; ++x) {
+                auto& word = expected[layout.Offset(x, y) / 2u];
+                word = static_cast<std::uint16_t>((word & ~wordMask) | (Packed(rgba) & wordMask));
+            }
+        }
+    }
+    const auto stored = ReadBack(device, block);
+    for (std::uint32_t y = 0; y < Height; ++y) {
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            const auto index = layout.Offset(x, y) / 2u;
+            if (stored[index] == expected[index]) continue;
+            char detail[160];
+            std::snprintf(detail, sizeof(detail), ": pixel (%u, %u) holds 0x%04x, expected 0x%04x (it held 0x%04x)", x, y, stored[index], expected[index], before[index]);
+            throw std::runtime_error(what + detail);
+        }
+    }
+}
+
 std::string Describe(std::uint32_t mask, std::array<float, 4> rgba) {
     char text[160];
     std::snprintf(text, sizeof(text), "CB_TARGET_MASK 0x%x write of (%.9g, %.9g, %.9g, %.9g)", mask, rgba[0], rgba[1], rgba[2], rgba[3]);
@@ -290,10 +320,6 @@ int main() {
         Block block(layout.Bytes());
         const auto color = DecodeTarget(block);
         Require(AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 1u) == 0xf000u && AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 8u) == 0x000fu && AgcDriver::Graphics::PackedWriteMask(color.componentMapping, 5u) == 0xf0f0u, "the export components did not map to the guest nibbles (X in 15..12, W in 3..0)");
-        struct Case {
-            std::uint32_t mask;
-            std::array<float, 4> rgba;
-        };
         const std::array<Case, 9> cases{{
             {0x1u, {1.0f, 0.0f, 0.0f, 0.0f}},
             {0x1u, {7.0f / 15.0f, 1.0f, 1.0f, 1.0f}},
@@ -311,11 +337,20 @@ int main() {
             ExpectSurface(*device, block, layout, before, Packed(rgba), mask == 0xfu ? 0xffffu : wordMask, "a 32_ABGR " + Describe(mask, rgba) + " into a tiled 4_4_4_4 unorm target");
             before = ReadBack(*device, block);
         }
+        const std::array<float, 4> b{2.0f / 15.0f, 1.0f, 1.0f, 1.0f};
+        const std::array<float, 4> c{0.6f, 0.2f, 0.8f, 0.4f};
+        const std::array<float, 4> d{1.0f, 0.0f, 9.0f / 15.0f, 0.0f};
+        const std::array<Case, 2> mergeThenFull{{{0x1u, b}, {0xfu, c}}};
+        const std::array<Case, 2> fullThenMerge{{{0xfu, c}, {0x1u, b}}};
+        const std::array<Case, 3> mergeThenMerge{{{0x1u, b}, {0x4u, d}, {0x8u, c}}};
+        BackToBack(*device, block, layout, color, mergeThenFull, 11, "a merged X write followed at once by a full write");
+        BackToBack(*device, block, layout, color, fullThenMerge, 12, "a full write followed at once by a merged X write");
+        BackToBack(*device, block, layout, color, mergeThenMerge, 13, "merged X, Z and W writes drawn back to back");
         before = Fill(block, 77);
         const std::array<float, 4> halves{0.5f, 0.75f, 0.125f, 0.25f};
         const auto wordMask = Draw(*device, color, 0x9u, Float16Export, Float16Program(halves));
         ExpectSurface(*device, block, layout, before, Packed(halves), wordMask, "an FP16_ABGR " + Describe(0x9u, halves) + " into a tiled 4_4_4_4 unorm target");
-        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws merged into a %ux%u tiled target, the pixels outside the scissor kept\n", cases.size() + 1u, Width, Height);
+        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws and 3 back-to-back sequences merged into a %ux%u tiled target, the pixels outside the scissor kept\n", cases.size() + 1u, Width, Height);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
