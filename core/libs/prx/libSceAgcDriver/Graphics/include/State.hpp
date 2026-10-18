@@ -172,6 +172,7 @@ VkExtent2D SampleLocationGrid(const State& state);
 std::array<std::uint8_t, 8> ExportMappings(const State& state);
 std::array<ShaderRecompiler::ColorExportPacking, 8> ExportPackings(const State& state);
 std::uint16_t PackedWriteMask(std::uint8_t componentMapping, std::uint32_t exportedMask);
+GuestTextureResource TargetMergeSurface(const ColorTarget& color);
 bool DepthStencilWrites(const State& state);
 bool DepthStencilTests(const State& state);
 ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state);

@@ -1470,11 +1470,11 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
             const std::uint32_t packedMask = nibbles ? 0xfu : 7u;
             Require(nibbles || (exportedMask & packedMask) == packedMask, "partial writes of " + packed + " color target are unsupported");
             if ((exportedMask & packedMask) != packedMask) {
-                Require(color.samples == 1u, "partial writes of a multisampled " + std::string(PackedColorTargetName(color.packing)) + " color target are not implemented");
                 Require(color.mipCount == 1u && color.depth == 1u && color.layers == 1u && color.arrayLastSlice == 0u, "partial writes of a mipmapped, volume or array " + std::string(PackedColorTargetName(color.packing)) + " color target are not implemented");
                 Require(std::ranges::none_of(result.colors, [](const ColorTarget& other) { return other.partialWriteMask != 0; }), "partial writes of more than one packed color target are not implemented");
                 color.partialWriteMask = PackedWriteMask(mapping, exportedMask);
                 state.colorWriteMask = 0;
+                if (color.samples > 1u) result.perSampleShading = true;
             }
         }
         if (state.blendEnable && !reversed && (secondSource(state.srcColorBlendFactor) || secondSource(state.dstColorBlendFactor) || secondSource(state.srcAlphaBlendFactor) || secondSource(state.dstAlphaBlendFactor))) {
@@ -1531,6 +1531,16 @@ std::uint16_t PackedWriteMask(std::uint8_t componentMapping, std::uint32_t expor
     return mask;
 }
 
+GuestTextureResource TargetMergeSurface(const ColorTarget& color) {
+    auto surface = SurfaceForTarget(color);
+    if (color.samples > 1u) {
+        Require(surface.baseAddress == color.surfaceAddress, "a merged multisampled color target does not start at its surface");
+        surface.dimension = TextureDimension::k2DMsaa;
+        surface.samples = color.samples;
+    }
+    return surface;
+}
+
 bool DepthStencilWrites(const State& state) {
     if (!state.depth) return false;
     const auto writes = [](const VkStencilOpState& face) { return (face.writeMask & 0xffu) != 0 && (face.failOp != VK_STENCIL_OP_KEEP || face.passOp != VK_STENCIL_OP_KEEP || face.depthFailOp != VK_STENCIL_OP_KEEP); };
@@ -1545,11 +1555,12 @@ ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
     ShaderRecompiler::TargetMerge merge;
     for (const auto& color : state.colors) {
         if (color.partialWriteMask == 0) continue;
-        Require(merge.mask == 0 && color.exportIndex < 8u && color.samples == 1u, "a draw merges into one single-sample packed color target at most");
+        Require(merge.mask == 0 && color.exportIndex < 8u && color.samples <= 8u, "a draw merges into one packed color target at most");
+        Require(color.samples == 1u || state.perSampleShading, "a merged multisampled color target needs per-sample shading");
         merge.target = static_cast<std::uint8_t>(color.exportIndex);
         merge.mask = color.partialWriteMask;
         merge.samples = static_cast<std::uint8_t>(color.samples);
-        merge.descriptor = EncodeTextureResource(SurfaceForTarget(color));
+        merge.descriptor = EncodeTextureResource(TargetMergeSurface(color));
         merge.depthStencilWrites = DepthStencilWrites(state);
         merge.depthStencilTests = DepthStencilTests(state);
     }

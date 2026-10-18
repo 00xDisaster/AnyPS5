@@ -2212,6 +2212,10 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
         if (color.samples > 1) {
             binding.multisampled = true;
             timer.phase(PhaseSetup);
+            if (color.partialWriteMask != 0) {
+                static_cast<void>(MultisampleTargetView(context, color));
+                static_cast<void>(MultisampleTargetStorageView(context, TargetMergeSurface(color)));
+            }
             targetViews.push_back(MultisampleTargetView(context, color, binding.multisampleOwner, &binding.multisampleImage));
             timer.phase(PhaseReadTarget);
             continue;
@@ -2438,10 +2442,14 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
     const bool multisampled = std::any_of(targets.begin(), targets.end(), [](const TargetBinding& binding) { return binding.multisampled; });
     Require(lean || !multisampled, "multisampled draws are only rendered as recorded draws");
     for (const auto& binding : targets) {
-        if (binding.multisampled) Require(std::find(resources->MultisampleSources().begin(), resources->MultisampleSources().end(), binding.color.surfaceAddress) == resources->MultisampleSources().end(), "sampling a multisampled color target the draw renders to is not implemented");
+        if (!binding.multisampled) continue;
+        const auto& sources = resources->MultisampleSources();
+        const auto reads = std::count(sources.begin(), sources.end(), binding.color.surfaceAddress);
+        Require(reads == 0 || (reads == 1 && binding.color.partialWriteMask != 0), "sampling a multisampled color target the draw renders to is not implemented");
+        Require(binding.color.partialWriteMask == 0 || (reads == 1 && MultisampleTargetStorable(context, binding.color)), "the partial write of a multisampled packed color target does not store into the target's image");
     }
     for (const auto& binding : targets) {
-        if (binding.color.partialWriteMask == 0) continue;
+        if (binding.color.partialWriteMask == 0 || binding.multisampled) continue;
         Require(lean && binding.resident != nullptr && !binding.proxied, "a partial write of a packed color target is merged into its resident image by a recorded draw only");
         const auto images = resources->StorageImages();
         Require(std::ranges::any_of(images, [&](const std::pair<VkImage, bool>& image) { return image.first == binding.resident->Image() && image.second; }), "the partial write of a packed color target does not store into the target's resident image");

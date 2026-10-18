@@ -417,27 +417,29 @@ std::uint32_t SelectExportPacking(SpirvEmitterState& state, std::uint32_t target
 struct MergeTexel {
     std::uint32_t resource;
     std::uint32_t coord;
+    std::uint32_t sample;
 };
 
 MergeTexel MergeTargetTexel(SpirvEmitterState& state) {
+    const auto& pixel = PixelInfo(state);
     const auto& images = state.program.Info().images;
     const auto image = std::ranges::find_if(images, [](const ImageResource& candidate) { return candidate.targetMerge; });
     if (image == images.end()) FailEmit("the color target merge image was not collected");
-    if (InputVariableForKind(state, StageInputKind::FragCoord) == 0u) FailEmit("the color target merge inputs were not declared");
+    if (InputVariableForKind(state, StageInputKind::FragCoord) == 0u || (pixel.mergeSamples > 1u && InputVariableForKind(state, StageInputKind::SampleId) == 0u)) FailEmit("the color target merge inputs were not declared");
     if (state.mergeWordVariable == 0u || state.mergePendingVariable == 0u) FailEmit("the color target merge variables were not declared");
     const auto position = [&](std::uint32_t component) { return Unary(state, spv::OpConvertFToU, TypeU32(state), Unary(state, spv::OpBitcast, TypeF32(state), EmitBuiltinU32(state, StageInputKind::FragCoord, component))); };
     const auto x = position(0u);
     const auto y = position(1u);
     const auto coord = state.module.AllocateId();
     state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 2u), coord, x, y);
-    return {static_cast<std::uint32_t>(image - images.begin()), coord};
+    return {static_cast<std::uint32_t>(image - images.begin()), coord, pixel.mergeSamples > 1u ? EmitBuiltinU32(state, StageInputKind::SampleId, 0u) : 0u};
 }
 
 void MergeColorTarget(SpirvEmitterState& state, std::uint32_t color) {
     const auto& pixel = PixelInfo(state);
-    const auto [resource, coord] = MergeTargetTexel(state);
+    const auto [resource, coord, sample] = MergeTargetTexel(state);
     const auto stored = state.module.AllocateId();
-    state.module.AddFunction(spv::OpCompositeExtract, TypeU32(state), stored, EmitStorageImageRead(state, resource, coord), 0u);
+    state.module.AddFunction(spv::OpCompositeExtract, TypeU32(state), stored, EmitStorageImageRead(state, resource, coord, sample), 0u);
     const auto word = PackExport(state, IrBufferFormat::Format4_4_4_4UNorm, color);
     const auto kept = EmitBinaryU32(state, spv::OpBitwiseAnd, stored, ConstantU32(state, ~static_cast<std::uint32_t>(pixel.mergeMask)));
     const auto merged = EmitOrU32(state, kept, EmitBinaryU32(state, spv::OpBitwiseAnd, word, ConstantU32(state, pixel.mergeMask)));
@@ -759,12 +761,12 @@ void FlushColorTargetMerge(SpirvEmitterState& state) {
         write = Binary(state, spv::OpLogicalAnd, TypeBool(state), write, Binary(state, spv::OpINotEqual, TypeBool(state), valid, ConstantU32(state, 0u)));
     }
     EmitIfCondition(state, write, [&] {
-        const auto [resource, coord] = MergeTargetTexel(state);
+        const auto [resource, coord, sample] = MergeTargetTexel(state);
         const auto merged = state.module.AllocateId();
         state.module.AddFunction(spv::OpLoad, TypeU32(state), merged, state.mergeWordVariable);
         const auto texel = state.module.AllocateId();
         state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 4u), texel, merged, ConstantU32(state, 0u), ConstantU32(state, 0u), ConstantU32(state, 0u));
-        EmitStorageImageWrite(state, resource, 0u, coord, texel, 0u);
+        EmitStorageImageWrite(state, resource, 0u, coord, texel, sample);
     });
 }
 
