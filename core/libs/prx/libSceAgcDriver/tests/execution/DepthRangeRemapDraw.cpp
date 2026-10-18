@@ -48,7 +48,14 @@ alignas(4096) std::array<std::array<float, Harness::Width * Harness::Height>, 32
 alignas(256) std::array<std::array<std::array<float, 4>, 3>, 128> VertexSets{};
 std::size_t vertexSets = 0;
 
-std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const Transform& transform, bool remap, float z, bool write) {
+// A vertex shader that reads no user data: the fullscreen triangle comes from the vertex index (v5), and the
+// clip z is the literal at index 9. Its program carries no push data of its own.
+alignas(256) std::array<std::uint32_t, 14> FetchlessCode{
+    0x36020a81u, 0x34020282u, 0x4a0202c1u, 0x7e020b01u, 0x2c040a81u, 0x34040482u, 0x4a0404c1u, 0x7e040b02u,
+    0x7e0602ffu, 0u, 0x7e0802f2u, 0xf80008cfu, 0x04030201u, 0xbf810000u,
+};
+
+std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const Transform& transform, bool remap, float z, bool write, bool fetchless = false) {
     Require(vertexSets < VertexSets.size(), "the test ran out of vertex sets");
     auto& vertices = VertexSets[vertexSets++];
     vertices = {{{-1.0f, -1.0f, z, 1.0f}, {3.0f, -1.0f, z, 1.0f}, {-1.0f, 3.0f, z, 1.0f}}};
@@ -89,11 +96,16 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const T
     ShaderRecompiler::ShaderVertexStageInfo vertexInfo{};
     vertexInfo.depthRemapMode = state.depthRemap.mode;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
-    const auto vertexBuffer = Harness::BufferDescriptor(vertices.data(), 16u, static_cast<std::uint32_t>(vertices.size()));
-    std::copy(vertexBuffer.begin(), vertexBuffer.end(), vertexUserData.begin());
-    const std::array<ShaderRecompiler::MemoryRegion, 1> vertexMemory{{{reinterpret_cast<std::uintptr_t>(Harness::VertexCode.data()), std::as_bytes(std::span(Harness::VertexCode))}}};
+    if (fetchless) {
+        FetchlessCode[9] = std::bit_cast<std::uint32_t>(z);
+    } else {
+        const auto vertexBuffer = Harness::BufferDescriptor(vertices.data(), 16u, static_cast<std::uint32_t>(vertices.size()));
+        std::copy(vertexBuffer.begin(), vertexBuffer.end(), vertexUserData.begin());
+    }
+    const std::span<const std::uint32_t> vertexCode = fetchless ? std::span<const std::uint32_t>(FetchlessCode) : std::span<const std::uint32_t>(Harness::VertexCode);
+    const std::array<ShaderRecompiler::MemoryRegion, 1> vertexMemory{{{reinterpret_cast<std::uintptr_t>(vertexCode.data()), std::as_bytes(vertexCode)}}};
     ShaderRecompiler::RecompileRequest vertex{
-        {ShaderStage::Vertex, reinterpret_cast<std::uintptr_t>(Harness::VertexCode.data()), Harness::VertexCode, 0, {}},
+        {ShaderStage::Vertex, reinterpret_cast<std::uintptr_t>(vertexCode.data()), vertexCode, 0, {}},
         {32, 0, vertexUserData, std::nullopt, std::nullopt, vertexInfo, vertexMemory},
         target,
         {0, 0, 0, 64}
@@ -101,6 +113,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, std::uint64_t depth, const T
     vertex.useCache = false;
     const auto vertexResult = ShaderRecompiler::Recompile(vertex);
     const auto vertexPush = static_cast<std::uint32_t>(vertexResult.pushConstants.size());
+    if (fetchless) Require(vertexPush == 0u, "the fetchless vertex shader carries push data of its own");
 
     ShaderRecompiler::ShaderPixelStageInfo pixel{};
     pixel.wave32 = true;
@@ -200,6 +213,18 @@ int main() {
                 Require(Draw(*device, depth, Plain, false, 0.5f, false) == Harness::Covered, "a depth remapped by a shared pipeline was stored below 0.5 + 1/64");
                 Require(Draw(*device, depth, Plain, false, 0.5f + 2.0f * Step, false) == 0u, "a depth remapped by a shared pipeline was stored above 0.5 + 1/64");
             }
+            ++ran;
+        }
+        // A remapped vertex shader with no push data of its own, and a fragment shader with none: the pipeline's
+        // push stages must still include the vertex stage (a non-GPL layout names them), or the scale and offset
+        // reach no one.
+        {
+            Require(surfaces < Depths.size(), "the test ran out of depth surfaces");
+            const auto depth = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(Depths[surfaces++].data()));
+            const auto drawn = Draw(*device, depth, widened, true, 0.5f + Step / 2.0f, true, true);
+            Require(drawn == Harness::Covered, "a fetchless remapped vertex shader did not cover the target");
+            Require(Draw(*device, depth, Plain, false, 0.5f, false) == Harness::Covered, "a fetchless remapped vertex shader stored a depth below 0.5 + 1/64, so its scale and offset did not arrive");
+            Require(Draw(*device, depth, Plain, false, 0.5f + 2.0f * Step, false) == 0u, "a fetchless remapped vertex shader stored a depth above 0.5 + 1/64");
             ++ran;
         }
         std::printf("depth range remap draw tests passed (%zu cases, unrestricted path %s)\n", ran, context.depthRangeUnrestricted ? "compared" : "absent");
