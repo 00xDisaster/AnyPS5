@@ -204,6 +204,7 @@ std::uint64_t MinMaxReference(std::uint64_t lhs, std::uint64_t rhs, bool maximum
 }
 
 void CheckMinMaxDenormals(AgcDriver::VulkanDevice& device) {
+    const bool canPreserveDenormals = device.Target().float64DenormPreserve;
     constexpr std::array<std::array<std::uint64_t, 2>, Threads> rows{{
         {0x0000000000000001ull, 0x0000000000000000ull}, {0x0000000000000000ull, 0x0000000000000001ull},
         {0x8000000000000001ull, 0x0000000000000000ull}, {0x0000000000000000ull, 0x8000000000000001ull},
@@ -241,6 +242,8 @@ void CheckMinMaxDenormals(AgcDriver::VulkanDevice& device) {
                 std::optional<ShaderRecompiler::ShaderFloatMode> mode;
                 if (denormals >= 0) mode = ShaderRecompiler::ShaderFloatMode{0x30u | (static_cast<std::uint32_t>(denormals) << 6u), true, ieee, false};
                 Run(device, code, mode);
+                const bool keepsDenormals = denormals < 0 || (denormals & 1) != 0;
+                std::uint32_t skippedWords = 0u;
                 for (std::uint32_t tid = 0; tid < Threads; ++tid) {
                     auto pair = rows[tid];
                     for (std::uint32_t source = 0; source < 2u; ++source) {
@@ -253,14 +256,19 @@ void CheckMinMaxDenormals(AgcDriver::VulkanDevice& device) {
                         for (std::uint32_t word = 0; word < 2u; ++word) {
                             const auto actual = Output[tid * Results + 8u + operation * 2u + word];
                             const auto expectedWord = static_cast<std::uint32_t>(expected >> (word * 32u));
+                            if (actual != expectedWord && keepsDenormals && !canPreserveDenormals) {
+                                ++skippedWords;
+                                continue;
+                            }
                             Require(actual == expectedWord, "f64 min/max denormal mode " + std::to_string(denormals) + " IEEE " + std::to_string(ieee) + " abs " + std::to_string(modifier[0]) + " neg " + std::to_string(modifier[1]) + " lane " + std::to_string(tid) + " " + Names[8u + operation * 2u + word] + " is " + Hex(actual) + ", expected " + Hex(expectedWord));
                         }
                     }
                 }
+                if (skippedWords != 0u) std::printf("skipped %u f64 min/max result words in denormal mode %d IEEE %u abs %u neg %u: device has no f64 DenormPreserve\n", skippedWords, denormals, ieee ? 1u : 0u, modifier[0], modifier[1]);
             }
         }
     }
-    std::puts("f64 min/max denormal input cases passed");
+    std::puts("f64 min/max denormal input checks completed");
 }
 
 }
