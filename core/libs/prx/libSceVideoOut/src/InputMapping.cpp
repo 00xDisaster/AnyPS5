@@ -134,7 +134,8 @@ enum class InputSetting {
     MouseMaxSpeed,
     MouseSmoothingMs,
     MouseDecayMs,
-    StickModifierScale
+    StickModifierScale,
+    KeyboardRampMs
 };
 
 struct InputSettingName {
@@ -152,7 +153,8 @@ constexpr auto settingNames = std::array{
     InputSettingName{"MouseMaxSpeed", InputSetting::MouseMaxSpeed},
     InputSettingName{"MouseSmoothingMs", InputSetting::MouseSmoothingMs},
     InputSettingName{"MouseDecayMs", InputSetting::MouseDecayMs},
-    InputSettingName{"StickModifierScale", InputSetting::StickModifierScale}
+    InputSettingName{"StickModifierScale", InputSetting::StickModifierScale},
+    InputSettingName{"KeyboardRampMs", InputSetting::KeyboardRampMs}
 };
 
 const InputSettingName* findSetting(std::string_view name) {
@@ -211,6 +213,7 @@ void applySetting(Pad::InputSettings& settings, InputSetting setting, std::strin
         case InputSetting::MouseSmoothingMs: settings.mouseSmoothingMs = parseNumber(value, "mouse smoothing", 0.0, 500.0); break;
         case InputSetting::MouseDecayMs: settings.mouseDecayMs = parseNumber(value, "mouse decay", 1.0, 1000.0); break;
         case InputSetting::StickModifierScale: settings.stickModifierScale = parseNumber(value, "stick modifier scale", 0.05, 1.0); break;
+        case InputSetting::KeyboardRampMs: settings.keyboardRampMs = parseNumber(value, "keyboard ramp", 0.0, 2000.0); break;
     }
 }
 
