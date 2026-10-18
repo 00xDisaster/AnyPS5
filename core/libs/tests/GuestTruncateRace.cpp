@@ -115,7 +115,7 @@ static bool CheckRace(const std::filesystem::path& file, bool duplicate) {
 }
 
 int main() {
-    const auto root = std::filesystem::absolute("anyps5-truncate-race-" +
+    const std::filesystem::path root("anyps5-truncate-race-" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Require(std::filesystem::create_directory(root));
     const bool direct = CheckRace(root / "direct.bin", false);
