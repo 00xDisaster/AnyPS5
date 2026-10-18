@@ -1233,14 +1233,16 @@ int GridReference(AgcDriver::VulkanDevice& device) {
     const auto referenceDepth = ReportDepthLocations("the composite of uniform renders", reference);
     ReportDepthLocations("the exact path", exact);
     ReportDepthLocations("pixel (0,0)'s locations alone", approximate);
-    if (native) ReportDepthLocations("the device's 2x2 grid", *native);
+    const auto nativeDepth = native ? std::optional<DepthLocations>(ReportDepthLocations("the device's 2x2 grid", *native)) : std::nullopt;
+    const bool gridDepthCompared = nativeDepth && nativeDepth->guest == nativeDepth->sloped;
     if (referenceDepth.guest != referenceDepth.sloped) {
         std::printf("skipped, the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them: the composite of uniform renders holds the guest's depth in %zu of %zu sloped samples, so no path can be compared with it bit for bit\n", referenceDepth.guest, referenceDepth.sloped);
         return VulkanTestSkipped;
     }
     std::size_t gridDifferences = 0;
     if (native) {
-        gridDifferences = Differences(reference.color, native->color, samples, "color through the device's 2x2 grid", true) + Differences(reference.depth, native->depth, samples, "depth through the device's 2x2 grid", true);
+        gridDifferences = Differences(reference.color, native->color, samples, "color through the device's 2x2 grid", true) + (gridDepthCompared ? Differences(reference.depth, native->depth, samples, "depth through the device's 2x2 grid", true) : 0u);
+        if (!gridDepthCompared) std::printf("the device's 2x2 grid holds the guest's depth in %zu of %zu sloped samples as the device reads it back, so only its color is compared with the composite\n", nativeDepth->guest, nativeDepth->sloped);
         const auto exactGridDifferences = Differences(native->color, exact.color, samples, "color", false) + Differences(native->depth, exact.depth, samples, "depth", false);
         std::printf("2x checkerboard at %ux%u: the device's 2x2 grid differs from the composite of four uniform renders in %zu samples and from the exact path in %zu samples\n", ReferenceExtent.width, ReferenceExtent.height, gridDifferences, exactGridDifferences);
     } else {
@@ -1253,7 +1255,7 @@ int GridReference(AgcDriver::VulkanDevice& device) {
     Require(approximateDifferences != 0u, "pixel (0,0)'s locations alone rendered the checkerboard like the reference: the scene does not tell the paths apart");
     Require(gridDifferences == 0u, "the composite of four uniform renders does not render the checkerboard like the device's 2x2 grid");
     Require(colorDifferences == 0u && depthDifferences == 0u, "the exact path did not render the checkerboard bit for bit like the reference");
-    std::puts(grid ? "the exact path renders Village's 2x checkerboard like the device's 2x2 sample location grid, bit for bit" : "the exact path renders Village's 2x checkerboard like four uniform renders composed by pixel parity, bit for bit");
+    std::puts(grid && gridDepthCompared ? "the exact path renders Village's 2x checkerboard like the device's 2x2 sample location grid, bit for bit" : "the exact path renders Village's 2x checkerboard like four uniform renders composed by pixel parity, bit for bit");
     return 0;
 }
 
