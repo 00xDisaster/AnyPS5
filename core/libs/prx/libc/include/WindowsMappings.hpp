@@ -798,6 +798,11 @@ private:
         forgetClean(address, end);
         breakRun(address);
         breakRun(end);
+        if (const auto run = residentRuns.find(address); run != residentRuns.end() && run->second.end == end) {
+            evict(run);
+            if (!VirtualFree(reinterpret_cast<void*>(address), bytes, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER)) fail("release private guest memory");
+            return;
+        }
         for (auto cursor = address; cursor < end;) {
             const auto memory = query(cursor);
             if (memory.State == MEM_RESERVE) {
