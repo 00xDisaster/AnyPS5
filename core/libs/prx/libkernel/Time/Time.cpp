@@ -350,19 +350,22 @@ static bool CpuTimeNanos(bool callingThread, bool countKernel, std::uint64_t* na
     return true;
 }
 
-static std::uint64_t CpuTimeResolutionNanos() {
+static bool CpuTimeResolutionNanos(std::uint64_t* nanos) {
     DWORD adjustment = 0;
     DWORD increment = 0;
     BOOL adjustmentDisabled = FALSE;
-    if (!GetSystemTimeAdjustment(&adjustment, &increment, &adjustmentDisabled))
-        throw std::system_error(GetLastError(), std::system_category(), "clock_getres: GetSystemTimeAdjustment failed");
+    if (!GetSystemTimeAdjustment(&adjustment, &increment, &adjustmentDisabled)) {
+        *__error_nid_postfix() = ClockTimeWin32ErrorToGuestErrno_nid_no_patch(GetLastError());
+        return false;
+    }
     if (increment == 0)
         throw std::runtime_error("clock_getres: GetSystemTimeAdjustment reported no clock interrupt period");
-    return static_cast<std::uint64_t>(increment) * 100ULL;
+    *nanos = static_cast<std::uint64_t>(increment) * 100ULL;
+    return true;
 }
 
-static std::uint64_t ProcessCpuResolutionNanos() {
-    return CpuTimeResolutionNanos();
+static bool ProcessCpuResolutionNanos(std::uint64_t* nanos) {
+    return CpuTimeResolutionNanos(nanos);
 }
 #else
 static std::uint64_t ClockTicksPerSecond() {
@@ -382,9 +385,10 @@ static std::uint64_t ProcessCpuNanos(bool countSystem) {
     return ticks / rate * 1000000000ULL + ticks % rate * 1000000000ULL / rate;
 }
 
-static std::uint64_t ProcessCpuResolutionNanos() {
+static bool ProcessCpuResolutionNanos(std::uint64_t* nanos) {
     const std::uint64_t rate = ClockTicksPerSecond();
-    return (1000000000ULL + rate - 1ULL) / rate;
+    *nanos = (1000000000ULL + rate - 1ULL) / rate;
+    return true;
 }
 #endif
 
@@ -530,7 +534,8 @@ int APS5_VABI clock_getres_nid_postfix(int clockId, KernelTimespec* res) {
     if (IsCpuClock(clockId))
         return clock_getres_nid_postfix(GUEST_CLOCK_THREAD_CPUTIME_ID, res);
     if (clockId == 1 || clockId == 2) {
-        const std::uint64_t nanos = ProcessCpuResolutionNanos();
+        std::uint64_t nanos = 0;
+        if (!ProcessCpuResolutionNanos(&nanos)) return -1;
         res->tv_sec = static_cast<std::int64_t>(nanos / 1000000000ULL);
         res->tv_nsec = static_cast<std::int64_t>(nanos % 1000000000ULL);
         return 0;
@@ -558,7 +563,8 @@ int APS5_VABI clock_getres_nid_postfix(int clockId, KernelTimespec* res) {
         return 0;
     }
     if (clockId == 14 || clockId == 15) {
-        const std::uint64_t nanos = CpuTimeResolutionNanos();
+        std::uint64_t nanos = 0;
+        if (!CpuTimeResolutionNanos(&nanos)) return -1;
         res->tv_sec = static_cast<std::int64_t>(nanos / 1000000000ULL);
         res->tv_nsec = static_cast<std::int64_t>(nanos % 1000000000ULL);
         return 0;
