@@ -257,8 +257,9 @@ void recordCmaskClear(const Context& context, Recorder& recorder, const HostImpo
     if (AnyShadowedOverlaps(address, bytes)) PublishShadow(address, bytes, PublishScope::Whole, PublishReason::Keys);
     recorder.FlushKeyStoresOverlapping(address, bytes);
     const auto commands = recorder.Commands();
+    if (resident != nullptr && !resident->Cached()) recorder.KeepBytes(resident.get(), static_cast<std::size_t>(resident->BudgetBytes()));
     recorder.Keep(resident);
-    context.detiler->DispatchCmaskClear(commands, import.buffer, address - import.base, bytes, view, color.extent.width, color.extent.height, color.elementBytes, color.clearWords, color.dccAddress == 0);
+    context.detiler->DispatchCmaskClear(commands, import.buffer, HostImportOffset(import, address), bytes, view, color.extent.width, color.extent.height, color.elementBytes, color.clearWords, color.dccAddress == 0);
     recorder.NotePendingWrite(address, bytes);
     proveCmask(address, bytes, GuestMemory::MarkWritten(address, bytes));
 }
@@ -289,7 +290,7 @@ bool materializeCmaskClear(const Context& context, const ColorTarget& color, con
     Require(color.dccAddress == 0, "CMASK fast clear of a DCC color target, whose clear belongs in its DCC keys");
     const auto texel = clearTexel(color, DccKeys::ClearRegister);
     const char* refusal = nullptr;
-    const bool filled = state == CmaskState::Cleared && resident != nullptr && clearToTexel(*resident, texel, color.elementBytes, refusal);
+    const bool filled = state == CmaskState::Cleared && color.mipCount == 1 && resident != nullptr && clearToTexel(*resident, texel, color.elementBytes, refusal);
     if (!filled) {
         storeCmaskClearTexels(color, layout, state == CmaskState::Cleared ? nullptr : &cleared, texel);
         if (resident != nullptr) resident->Refresh();
@@ -811,7 +812,7 @@ std::array<std::uint32_t, 4> MeshIndexBufferDescriptor(const Pm4::DrawParameters
 MeshArgumentRules MeshArgumentRulesFor(const Context& context, const ShaderRecompiler::MeshConfiguration& mesh, std::uint32_t indexCount) {
     const auto inputSize = mesh.inputPrimitive == 1 ? 1u : mesh.inputPrimitive == 2 ? 2u : 3u;
     const auto step = mesh.inputPrimitive == 5 || mesh.inputPrimitive == 6 ? 1u : inputSize;
-    Require(mesh.primitivesPerGroup != 0, "mesh draw contains no complete primitive");
+    Require(mesh.primitivesPerGroup != 0, "mesh pipeline groups no primitive (zero primitives per group)");
     return {indexCount, inputSize, step, mesh.primitivesPerGroup, context.meshLimits.maxMeshWorkGroupCount[0], context.meshLimits.maxMeshWorkGroupCount[1], context.meshLimits.maxMeshWorkGroupTotalCount};
 }
 
@@ -968,7 +969,7 @@ const HostImport* InPlaceDrawInput(const Context& context, std::uint64_t address
     const auto drawWriters = DrawCopiedWriters();
     if (std::any_of(drawWriters->begin(), drawWriters->end(), overlaps)) return nullptr;
     const auto* import = HostImportFor(context, address, bytes);
-    if (import == nullptr || (address - import->base) % alignment != 0) return nullptr;
+    if (import == nullptr || HostImportOffset(*import, address) % alignment != 0) return nullptr;
     recorder->NotePendingRead(address, bytes, Recorder::ReadKind::DrawInput);
     if (behindGpuWrite != nullptr && behind) *behindGpuWrite = true;
     return import;
@@ -1082,8 +1083,12 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
         Require(context.meshShader, "device does not support mesh shaders");
         const auto& mesh = *state.stages.mesh;
         const auto inputSize = mesh.inputPrimitive == 1 ? 1u : mesh.inputPrimitive == 2 ? 2u : 3u;
-        Require(draw.indexCount >= inputSize && mesh.primitivesPerGroup != 0, "mesh draw contains no complete primitive");
+        Require(mesh.primitivesPerGroup != 0, "mesh pipeline groups no primitive (zero primitives per group)");
         Require(((state.stages.registerValue >> 19u) & 3u) == 0 || !draw.indexed, "indexed fast-launch draws are unsupported");
+        if (args == nullptr && draw.indexCount < inputSize) {
+            inputs.nothing = true;
+            return inputs;
+        }
         if (args == nullptr) {
             const auto step = mesh.inputPrimitive == 5 || mesh.inputPrimitive == 6 ? 1u : inputSize;
             const auto primitives = (draw.indexCount - inputSize) / step + 1u;
@@ -1150,7 +1155,7 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
         }
         if (import != nullptr) {
             inputs.indexHandle = import->buffer;
-            inputs.indexOffset = draw.indexAddress - import->base;
+            inputs.indexOffset = HostImportOffset(*import, draw.indexAddress);
             inputs.inPlaceReads.emplace_back(draw.indexAddress, draw.indexAddress + indexBytes);
         } else {
             inputs.indices = std::move(copy.buffer);
@@ -1219,7 +1224,7 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
         RequireNoMultisampleTarget(begin, bytes, "a vertex buffer read");
         if (const auto* import = InPlaceDrawInput(context, begin, bytes, plan.alignments[range], &inputs.vertexInputBehindGpuWrite)) {
             rangeHandles.push_back(import->buffer);
-            rangeOffsets.push_back(begin - import->base);
+            rangeOffsets.push_back(HostImportOffset(*import, begin));
             inputs.inPlaceReads.emplace_back(begin, end);
             continue;
         }
@@ -1385,8 +1390,8 @@ void recordDrawCommands(const Context& context, VkCommandBuffer commands, const 
         else context.Resolved(&DeviceFunctions::cmdDraw, "vkCmdDraw")(commands, draw.indexCount, draw.instanceCount, draw.firstVertex, draw.firstInstance);
     } else if (indirect->path == IndirectDrawPath::Gpu) {
         if (args->countIndirect) {
-            if (draw.indexed) context.Function<PFN_vkCmdDrawIndexedIndirectCountKHR>("vkCmdDrawIndexedIndirectCountKHR")(commands, argumentBuffer, argumentOffset, indirect->countImport->buffer, args->countAddress - indirect->countImport->base, args->count, args->stride);
-            else context.Function<PFN_vkCmdDrawIndirectCountKHR>("vkCmdDrawIndirectCountKHR")(commands, argumentBuffer, argumentOffset, indirect->countImport->buffer, args->countAddress - indirect->countImport->base, args->count, args->stride);
+            if (draw.indexed) context.Function<PFN_vkCmdDrawIndexedIndirectCountKHR>("vkCmdDrawIndexedIndirectCountKHR")(commands, argumentBuffer, argumentOffset, indirect->countImport->buffer, HostImportOffset(*indirect->countImport, args->countAddress), args->count, args->stride);
+            else context.Function<PFN_vkCmdDrawIndirectCountKHR>("vkCmdDrawIndirectCountKHR")(commands, argumentBuffer, argumentOffset, indirect->countImport->buffer, HostImportOffset(*indirect->countImport, args->countAddress), args->count, args->stride);
         } else if (args->count <= 1 || context.multiDrawIndirect) {
             if (draw.indexed) context.Resolved(&DeviceFunctions::cmdDrawIndexedIndirect, "vkCmdDrawIndexedIndirect")(commands, argumentBuffer, argumentOffset, args->count, args->stride);
             else context.Resolved(&DeviceFunctions::cmdDrawIndirect, "vkCmdDrawIndirect")(commands, argumentBuffer, argumentOffset, args->count, args->stride);
@@ -1434,7 +1439,7 @@ bool recordIndirectArguments(const Context& context, VkCommandBuffer commands, R
         if (args->countIndirect) recorder->NotePendingRead(args->countAddress, 4, Recorder::ReadKind::Indirect);
     }
     argumentBuffer = indirect.argumentImport->buffer;
-    argumentOffset = args->arguments - indirect.argumentImport->base;
+    argumentOffset = HostImportOffset(*indirect.argumentImport, args->arguments);
     const bool rewritten = args->vertexRule == Rule::Constant || args->instanceRule == Rule::Constant;
     if (!rewritten) return false;
     const auto bytes = static_cast<std::size_t>(args->RangeBytes());
@@ -1544,6 +1549,10 @@ void keepRecordedDraw(Recorder& recorder, const std::shared_ptr<ShaderResources>
     kept->scratch = std::move(scratch);
     kept->targets = std::move(targets);
     const auto& residents = kept->targets;
+    resources->KeepStorageImageBytes(recorder);
+    for (const auto& target : residents) {
+        if (target != nullptr && !target->Cached()) recorder.KeepBytes(target.get(), static_cast<std::size_t>(target->BudgetBytes()));
+    }
     recorder.Keep(kept);
     if (resources != nullptr) recorder.KeepBytes(resources.get(), resources->CopiedBytes());
     if (checkRecords) recorder.OnComplete(std::move(checkRecords));
@@ -1713,22 +1722,22 @@ void captureInputs(const Context& context, Recorder& recorder, VkCommandBuffer c
     };
     if (bindings != nullptr) {
         for (const auto& snapshot : bindings->snapshots) {
-            const auto bytes = snapshot.buffer->Bytes();
-            addSample(snapshot.address, bytes.size(), snapshot.buffer->Handle(), 0, bytes.data());
+            const auto bytes = snapshot.Bytes();
+            addSample(snapshot.address, bytes.size(), snapshot.buffer->Handle(), snapshot.offset, bytes.data());
         }
     }
     for (const auto& [begin, end] : resources.InPlaceReads()) {
         Require(end >= begin, "invalid capture input range");
         const auto bytes = static_cast<std::size_t>(end - begin);
         if (bytes == 0 || bytes > 512) continue;
-        if (bindings != nullptr && std::any_of(bindings->snapshots.begin(), bindings->snapshots.end(), [&](const auto& snapshot) { return snapshot.address < end && begin < snapshot.address + snapshot.buffer->Bytes().size(); })) continue;
+        if (bindings != nullptr && std::any_of(bindings->snapshots.begin(), bindings->snapshots.end(), [&](const auto& snapshot) { return snapshot.address < end && begin < snapshot.address + snapshot.bytes; })) continue;
         if (resources.WritesOverlap(begin, bytes) || recorder.PendingWriteOverlaps(begin, bytes)) {
             CaptureTrace::Log("input-skip draw=%llu batch=%llu address=%llx bytes=%zu reason=gpu-writer", draw, batch, static_cast<unsigned long long>(begin), bytes);
             continue;
         }
         const auto* imported = HostImportFor(context, begin, bytes);
         Require(imported != nullptr, "capture input has no host import");
-        addSample(begin, bytes, imported->buffer, begin - imported->base, reinterpret_cast<const std::byte*>(begin));
+        addSample(begin, bytes, imported->buffer, HostImportOffset(*imported, begin), reinterpret_cast<const std::byte*>(begin));
     }
     CaptureTrace::Log("input-capture draw=%llu batch=%llu target=%llx ranges=%zu bytes=%zu", draw, batch, static_cast<unsigned long long>(target), samples.size(), total);
     if (samples.empty()) return;
@@ -2146,6 +2155,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
                     if (binding.role != ShaderRecompiler::DescriptorRole::GuestImages && binding.role != ShaderRecompiler::DescriptorRole::ImageTable) continue;
                     for (std::size_t offset = 0; offset + 8u <= binding.guestDescriptor.size(); offset += 8u) {
                         const auto words = std::span<const std::uint32_t>(binding.guestDescriptor).subspan(offset, 8u);
+                        if (words[0] == 0u && (words[1] & 0xffu) == 0u) continue;
                         const auto texture = DecodeTextureResource(words);
                         Require(!DepthSurfaceAt(context, words, texture), "stencil replay refuses sampled depth-surface feedback");
                     }
@@ -2688,6 +2698,7 @@ DrawRecipeOutcome DrawWithRecipe(const Context& context, const State& state, con
     if (!proved) {
         SharedResourceCache().Remove(recipe.key, resources.get());
         countCache(&DrawProfile::cacheInvalidated);
+        resources->KeepStorageImageBytes(*recorder);
         recorder->Keep(std::move(resources));
         timer.phase(PhaseLookup);
         return miss(DrawRecipeMiss::Proof);

@@ -18,6 +18,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace AgcDriver { class VulkanDevice; }
@@ -33,6 +34,7 @@ std::uint64_t TextureCacheBudget(const VkPhysicalDeviceMemoryProperties& memory)
 std::uint64_t StorageTextureBudget(const VkPhysicalDeviceMemoryProperties& memory, const VkPhysicalDeviceMemoryBudgetPropertiesEXT* reported, std::uint64_t sampledBytes, std::uint64_t storageBytes);
 std::uint64_t SampledTextureBudget(const VkPhysicalDeviceMemoryProperties& memory, const VkPhysicalDeviceMemoryBudgetPropertiesEXT* reported, std::uint64_t textureBytes);
 bool SampledBudgetReportDue(std::uint64_t reported, std::uint64_t budget, std::chrono::steady_clock::duration sinceReport);
+std::optional<std::uint32_t> LargestDeviceLocalHeap(const VkPhysicalDeviceMemoryProperties& memory);
 std::uint64_t StorageTextureCacheBudget(const Context& context);
 struct TextureCacheUse {
     std::size_t sampledEntries = 0;
@@ -41,7 +43,7 @@ struct TextureCacheUse {
 };
 TextureCacheUse TextureCacheUsage();
 std::uint64_t SampledTextureCacheBudget(const Context& context);
-std::shared_ptr<Texture> CachedSampledTexture(const Context& context, std::span<const std::uint32_t> words);
+std::shared_ptr<Texture> CachedSampledTexture(const Context& context, std::span<const std::uint32_t> words, VkImageViewType multisampleViewType = VK_IMAGE_VIEW_TYPE_2D);
 bool SampledTexturesShareEntry(std::span<const std::uint32_t> first, std::span<const std::uint32_t> second);
 bool CompletePendingCpuWrites(const Context& context, std::uint64_t address, std::size_t bytes);
 bool SpirvStoresThroughAddresses(std::span<const std::uint32_t> words);
@@ -163,6 +165,9 @@ public:
         struct Snapshot {
             std::uint64_t address;
             std::shared_ptr<Buffer> buffer;
+            VkDeviceSize offset = 0;
+            std::size_t bytes = 0;
+            std::span<std::byte> Bytes() const { return buffer->Bytes().subspan(static_cast<std::size_t>(offset), bytes); }
         };
         DescriptorCache* cache = nullptr;
         VkDescriptorSetLayout layout = VK_NULL_HANDLE;
@@ -189,6 +194,7 @@ public:
     static const char* MoveRefusalName(MoveRefusal refusal);
     std::optional<std::vector<MovedBuffer>> MovedDispatchBuffers(const CompiledShader& shader, Recorder* recorder, std::size_t maxBytes, MoveProof& proof) const;
     static std::size_t MaxDrawSnapshotBytes();
+    static std::size_t DrawUploadLimit();
     void WriteBack();
     // Deferred completion: MarkGpuWrites registers the results the recorded work leaves on the GPU
     // (storage images stay there; buffer ranges are noted so CPU reads wait); WriteBackBuffers runs
@@ -215,6 +221,7 @@ public:
     std::vector<std::pair<std::uint64_t, std::uint64_t>> DeviceReads() const { return guestMemory.DeviceReads(); }
     bool ReadsImage(const StorageTexture* image) const;
     bool HasCachedStorageImages() const;
+    bool HoldsReleasedTexture() const;
     std::uint32_t TableElements() const { return tableElements[0] + tableElements[1]; }
     const std::vector<std::uint32_t>& LayoutKey() const { return layoutKey; }
     const std::vector<std::uint32_t>& FragmentLayoutKey() const { return fragmentLayoutKey; }
@@ -243,6 +250,7 @@ public:
     // ranges are fixed by the build), so a Revalidate's collects on the same worker are memo hits.
     void PrecollectSurfaces() const;
     bool Reusable() const { return reusable; }
+    void KeepStorageImageBytes(Recorder& recorder) const;
     const std::vector<std::uint64_t>& MultisampleSources() const { return multisampleSources; }
     static bool NeverReusable(std::span<const CompiledShader> shaders);
     static std::uint64_t DepthGuardRefusals();
@@ -434,6 +442,7 @@ private:
     struct PreviousSampled {
         std::array<std::uint32_t, 8> words{};
         bool depthCompare = false;
+        VkImageViewType multisampleViewType = VK_IMAGE_VIEW_TYPE_2D;
         std::shared_ptr<Texture> texture;
     };
     PreviousSampled previousSampled;
@@ -654,12 +663,20 @@ public:
     static std::uint64_t Touches();
     void Clear();
     std::size_t Size() const;
+    std::size_t Capacity() const;
+    void SetBase(std::size_t entries, std::size_t shrinkWindow);
     std::uint64_t TableElements() const;
     static std::uint64_t TableElementBudget();
+    static constexpr std::size_t InitialEntries = 1024;
+    static constexpr std::size_t MaximumEntries = 16384;
 
 private:
     void erase(const Key& key);
     void noteMiss(const Key& key);
+    void dropReleasedTextures(std::vector<std::shared_ptr<ShaderResources>>* evicted);
+    void noteEvicted(const Key& key);
+    void noteReturn(const Key& key);
+    void noteUse(const Key& key);
     struct KeyHash {
         std::size_t operator()(const Key& key) const noexcept {
             std::uint64_t hash = 14695981039346656037ull;
@@ -670,6 +687,20 @@ private:
     mutable std::mutex mutex;
     std::list<std::pair<Key, std::shared_ptr<ShaderResources>>> entries;
     std::unordered_map<Key, decltype(entries)::iterator, KeyHash> index;
+    std::size_t capacity = 0;
+    bool fixedCapacity = false;
+    std::list<std::size_t> evictedOrder;
+    std::unordered_map<std::size_t, decltype(evictedOrder)::iterator> evictedKeys;
+    std::size_t evictionsSinceCheck = 0;
+    std::size_t returnsSinceCheck = 0;
+    std::unordered_set<std::size_t> usedKeys;
+    std::size_t usesSinceCheck = 0;
+    static constexpr std::size_t InitialShrinkWindow = 8;
+    static constexpr std::size_t MaximumShrinkWindow = 1024;
+    std::size_t baseEntries = InitialEntries;
+    std::size_t baseShrinkWindow = InitialShrinkWindow;
+    std::size_t shrinkWindow = InitialShrinkWindow;
+    bool shrankLast = false;
 };
 
 // The process-wide cache the device and the draw path share (keys name the device; a device clears
