@@ -130,13 +130,19 @@ def digest(trace, summary=None, stacks=None, worst=5, top=10):
     waits = []
     for tid in sorted(trace.slices.keys() | trace.folded.keys()):
         slices = trace.slices.get(tid, [])
-        traced = sum(dur for _, dur, _, depth, _ in slices if depth == 0)
-        waited = sum(dur for _, dur, name, _, nested in slices if is_wait(name) and not nested)
+        traced = 0.0
+        waited = 0.0
         leaders = collections.Counter()
         for ts, dur, name, depth, nested in slices:
-            totals[name] += dur
-            if depth == 0 and not is_wait(name):
-                leaders[name] += dur
+            overlap = max(min(ts + dur, frames[-1][2]) - max(ts, frames[0][1]), 0.0) if frames else dur
+            if overlap > 0:
+                totals[name] += overlap
+                if depth == 0:
+                    traced += overlap
+                    if not is_wait(name):
+                        leaders[name] += overlap
+                if is_wait(name) and not nested:
+                    waited += overlap
             if is_wait(name) and not nested:
                 waits.append((dur, name, trace.name(tid), ts))
         threads.append({"thread": trace.name(tid), "busy_ms_per_frame": (traced - waited) / 1000.0 / count,
