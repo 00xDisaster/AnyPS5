@@ -38,7 +38,7 @@ Without an `anyps5-input.ini`, or for actions the file does not mention, these b
 | `LeftStickLeft`, `LeftStickRight`, `LeftStickUp`, `LeftStickDown` | A, D, W, S |
 | `RightStickLeft`, `RightStickRight`, `RightStickUp`, `RightStickDown` | F, H, T, G |
 | `TouchLeft`, `TouchRight` | Backspace, Tab |
-| `ToggleMouse` | Middle mouse button |
+| `ToggleMouse` | Middle mouse button, F7 |
 | `ToggleFullscreen` | F11 |
 
 `L2` has no built-in keyboard or mouse binding.
@@ -78,7 +78,7 @@ MouseSensitivity = 2.5
 
 ## Mouse as the right stick
 
-`ToggleMouse` (the middle mouse button by default) captures the mouse and drives the right stick from how fast the mouse moves. Capture uses raw relative input, so the pointer speed and acceleration set in the operating system don't apply. Press it again to release the mouse. Capture also ends, and every held key is let go, when the window loses focus.
+`ToggleMouse` (the middle mouse button or F7 by default; a mouse without a middle button can use F7) captures the mouse and drives the right stick from how fast the mouse moves. Capture uses raw relative input, so the pointer speed and acceleration set in the operating system don't apply. Press it again to release the mouse. Capture also ends, and every held key is let go, when the window loses focus.
 
 The stick tilts in the direction the mouse moves, and further the faster it moves. Speed is measured in counts per second over the time between updates, so the same hand speed gives the same tilt at any frame rate. Any movement tilts the stick at least `MouseDeadzoneOffset`, so slow movement isn't lost inside the game's own deadzone. When the mouse stops, the stick eases back and is centered `MouseDecayMs` after the last movement.
 
