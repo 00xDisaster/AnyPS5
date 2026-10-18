@@ -4,9 +4,9 @@
 
 - [sceSysmoduleIsLoaded, sceSysmoduleLoadModule, sceSysmoduleUnloadModule](../../../core/libs/prx/libSceSysmodule/Export.cpp) (libSceSysmodule) accept a module id missing from the module table: they log it and return 0 without loading anything, so `sceSysmoduleIsLoaded` reports an unknown module as loaded and unloading it succeeds, because titles that load or unload such an id aborted otherwise. The internal variants (`sceSysmoduleLoadModuleInternal`, `sceSysmoduleUnloadModuleInternal`, `sceSysmoduleLoadModuleInternalWithArg`, `sceSysmoduleGetModuleHandleInternal`) throw for an unknown id. What the console returns for an id it does not know is not verified.
 
-### Known modules
+### Unknown function info
 
-- [kModuleTable](../../../core/libs/prx/libSceSysmodule/ModuleTable.hpp) (libSceSysmodule) - module ID 0x00000132 maps to `libSceProprietaryVoiceChatHelperPrx` as verified in [#5017](https://github.com/boykopovar/AnyPS5/pull/5017) and reported in Discussion [#6344](https://github.com/boykopovar/AnyPS5/discussions/6344) for EA SPORTS FC 27 (PPSA34015).
+- [kModuleTable](../../../core/libs/prx/libSceSysmodule/ModuleTable.hpp) (libSceSysmodule) - module id 0x00000132 is named `libSceProprietaryVoiceChatHelperPrx`, the name of the built module, because `sceSysmoduleGetModuleHandleInternal` opens `libs/<table name>.prx`. The name the console's table uses for this id is not verified
 
 ### Functional
 
