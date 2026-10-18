@@ -10,6 +10,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/GuestBufferMemory.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
+#include "ShaderDiskCache.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/MultisampleTarget.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DccMetadata.hpp"
@@ -4551,6 +4552,16 @@ void pushConstantTests() {
     fragment.pushConstants.clear();
     shaders[1].pushConstantOffset = 999;
     Require(AgcDriver::Graphics::PushConstantStages(shaders) == VK_SHADER_STAGE_VERTEX_BIT, "empty push constants contributed a stage");
+    {
+        ShaderRecompiler::RecompileResult reading;
+        reading.readsDepthRemapPush = true;
+        std::vector<std::byte> encoded;
+        ShaderRecompiler::ShaderDiskCache::EncodeResult(reading, encoded);
+        ShaderRecompiler::RecompileResult replayed;
+        Require(ShaderRecompiler::ShaderDiskCache::DecodeResult(encoded, replayed), "a result that reads the depth remap push words does not decode");
+        const std::array<AgcDriver::Graphics::CompiledShader, 1> remapped{{{ShaderRecompiler::ShaderStage::Vertex, &replayed, 0}}};
+        Require(replayed.pushConstants.empty() && AgcDriver::Graphics::PushConstantStages(remapped) == VK_SHADER_STAGE_VERTEX_BIT, "a journalled vertex shader that reads the depth remap push words lost its push stage");
+    }
     Require(AgcDriver::Graphics::AssemblePushConstants(shaders)[8] == std::byte{0}, "empty push constants were copied");
     shaders[1].program = nullptr;
     expectFailure([&] { AgcDriver::Graphics::AssemblePushConstants(shaders); }, "missing compiled shader");
