@@ -37,6 +37,7 @@
 #include <map>
 #include <future>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <span>
 #include <atomic>
@@ -59,6 +60,26 @@
 #else
 #include <sys/mman.h>
 #endif
+
+namespace {
+
+thread_local std::uint64_t allocationCount = 0;
+
+}
+
+void* operator new(std::size_t bytes) {
+    allocationCount++;
+    if (auto* allocation = std::malloc(bytes == 0 ? 1 : bytes)) return allocation;
+    throw std::bad_alloc();
+}
+
+void operator delete(void* allocation) noexcept {
+    std::free(allocation);
+}
+
+void operator delete(void* allocation, std::size_t) noexcept {
+    std::free(allocation);
+}
 
 namespace {
 
@@ -2088,6 +2109,65 @@ void verifyTableEdgeStore() {
     across("a driver store", [&](std::span<const std::byte> bytes) { AgcDriver::GuestMemory::Write(last, bytes, 4); });
     across("a GPU result stored by the driver", [&](std::span<const std::byte> bytes) { AgcDriver::GuestMemory::StoreOwnBytes(last, bytes); });
     std::cout << "table edge store passed\n";
+}
+
+void verifyImageTableScratchReuse() {
+    using namespace ShaderRecompiler;
+    namespace Abi = ImageTableAbi;
+    constexpr std::uint32_t Entries = 3000;
+    static TableTexture textures[4];
+    alignas(4096) static TableGuest guest;
+    alignas(4096) static std::array<std::array<std::uint32_t, 8>, Entries> heap{};
+    const auto place = [&](std::uint32_t shift) {
+        for (std::uint32_t entry = 0; entry < Entries; entry++) heap[entry] = TableT(textures[entry % 4u].bytes.data(), TableFormat8888UNorm, TableType2D, 1u + (entry + shift) % Entries);
+    };
+    FillTableSrt(guest, heap.data(), 32u, Entries);
+    const auto userData = TableUserData(guest);
+    const auto request = TableRequest(TableWholeCode, userData);
+    auto staticRequest = request;
+    const std::array<std::uint32_t, 2> absentResources{};
+    staticRequest.context.userData = absentResources;
+    staticRequest.context.memory = {};
+    auto staticProgram = PrepareResourceProgram(staticRequest);
+    ResourceMaterializer{}.ApplyStaticInterface(staticProgram);
+    const auto& info = staticProgram.Resources().info;
+    struct Resolved {
+        ImageTableSnapshot snapshot;
+        ResolvedImageTables tables;
+        std::uint64_t allocations = 0;
+    };
+    const auto resolve = [&] {
+        CountingMemory memory;
+        SrtRuntime runtime;
+        runtime.userData = request.context.userData;
+        runtime.shaderBase = request.shader.codeAddress;
+        runtime.userContext = &memory;
+        runtime.readMemory = &CountingRead;
+        runtime.readSpecializationMemory = &CountingRead;
+        runtime.accessible = &CountingAccessible;
+        runtime.readWords = &CountingReadWords;
+        Resolved out;
+        const auto before = allocationCount;
+        const auto capture = CaptureResources(request, runtime);
+        auto tables = ResourceMaterializer::ResolveImageTables(info, capture->snapshot);
+        out.allocations = allocationCount - before;
+        out.snapshot = capture->snapshot.tables;
+        out.tables = std::move(tables);
+        return out;
+    };
+    place(0u);
+    static_cast<void>(resolve());
+    place(7u);
+    const auto warm = resolve();
+    const auto fresh = std::async(std::launch::async, resolve).get();
+    require(warm.snapshot == fresh.snapshot && warm.tables.map == fresh.tables.map && warm.tables.faults == fresh.tables.faults && warm.tables.poison.size() == fresh.tables.poison.size(), "image table scratch: a snapshot resolved after another one on the same thread differs from one resolved on a new thread");
+    require(warm.snapshot.tables.at(0).words.size() == Entries && warm.tables.elements.size() == Entries && warm.tables.map[Abi::HeaderElementCount] == Entries, "image table scratch: the distinct records were not all indexed");
+    const auto codes = TableCodes(warm.tables.map, 0);
+    for (std::uint32_t entry = 0; entry < Entries; entry++) {
+        const auto element = warm.tables.map.at(codes.at(entry) + Abi::ImageRecordElement);
+        require(warm.tables.elements.at(element).words == fresh.tables.elements.at(element).words && warm.tables.elements[element].words[2] == heap[entry][2], "image table scratch: a record resolved to another entry's element");
+    }
+    require(warm.allocations < Entries / 4u, "image table scratch: snapshotting and resolving a table allocated per record");
 }
 
 void verifyImageTableBulkKeyScan() {
@@ -6404,6 +6484,7 @@ int main(int argc, char** argv) {
             verifyImageTableKeys();
             verifyImageTables();
             verifyImageTableBulkReads();
+            verifyImageTableScratchReuse();
             verifyImageTableBulkKeyScan();
             verifyImageTableSrtKey();
             verifyImageTableMaskedOffset();
