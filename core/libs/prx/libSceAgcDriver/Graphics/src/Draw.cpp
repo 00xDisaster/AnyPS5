@@ -50,6 +50,9 @@ std::uint64_t DrawRenderPassKey(const Context& context, const State& state, std:
         mix(state.blends.size());
         for (const auto& color : state.colors) mix(color.exportIndex);
     }
+    for (const auto& color : state.colors) {
+        if (color.partialWriteMask != 0u) mix(0x6d65726765000000ull | color.exportIndex);
+    }
     mix(state.renderExtent.width);
     mix(state.renderExtent.height);
     mix(state.samples);
