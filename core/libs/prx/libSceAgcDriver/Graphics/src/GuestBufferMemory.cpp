@@ -444,6 +444,10 @@ void retireOrTrim(VkDevice device, HostImports& state, std::map<std::uint64_t, H
     } else if (begin > entry.base && begin < entryEnd && end >= entryEnd) {
         first = entry.base;
         last = begin;
+    } else if (begin > entry.base && begin < end && end < entryEnd) {
+        const bool tail = entryEnd - end >= begin - entry.base;
+        first = tail ? end : entry.base;
+        last = tail ? entryEnd : begin;
     }
     const bool plain = entry.alias == nullptr && !entry.dmaBuf && entry.chunk == nullptr && !entry.joined && entry.ranges.size() == 1 && entry.backingSerial != 0 && entry.memoryType != std::numeric_limits<std::uint32_t>::max() && entry.base == entry.range->address && entry.bytes == entry.range->bytes;
 #ifdef _WIN32
