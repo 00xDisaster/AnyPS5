@@ -130,6 +130,7 @@ struct SpirvEmitterState {
         std::array<const IrValue*, 4> descriptor{};
         std::uint32_t variable = 0;
         std::uint32_t element = 0;
+        std::uint32_t label = 0;
         std::uint32_t length = 0;
     };
     std::vector<BufferLengthCacheEntry> bufferLengths;

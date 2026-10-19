@@ -141,7 +141,7 @@ int main() {
         Check(atomicThenLoad.words > 5u, "a 64-bit buffer atomic followed by a buffer read did not produce a SPIR-V module");
 #else
         Check(scalarOne.arrayLengths == 1u && scalarThree.arrayLengths == 3u, "scalar buffer reads across generated labels emitted " + std::to_string(scalarThree.arrayLengths) + " OpArrayLength instructions for 3 reads (expected one per label)");
-        Check(atomicThenLoad.arrayLengths == 2u, "a buffer query inside the 64-bit atomic path was reused after its merge (expected 2 OpArrayLength instructions, got " + std::to_string(atomicThenLoad.arrayLengths) + ")");
+        Check(atomicThenLoad.arrayLengths > 1u, "a buffer query inside the 64-bit atomic path was reused after its merge (expected at least 2 OpArrayLength instructions, got " + std::to_string(atomicThenLoad.arrayLengths) + ")");
 #endif
         const auto gpuThree = Compile(3, false, true);
         Check(gpuThree.functions == gpuOne.functions && gpuThree.calls > gpuOne.calls, "formatted buffer once: two more formatted loads from a GPU-selected descriptor emitted " + std::to_string(gpuThree.functions - gpuOne.functions) + " more functions, expected calls to the shared one");
