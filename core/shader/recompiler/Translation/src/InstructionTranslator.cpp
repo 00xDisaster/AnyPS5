@@ -367,7 +367,7 @@ void emitEntryPrologue(IrProgram& program, IrBlock& entryBlock, const TranslateO
         program.Metadata().pixelIteratesSamples = iterated;
         const bool offsets = options.interpolationFunctions && options.fragmentShaderBarycentricEnabled;
         const bool centers = iterated && offsets;
-        if (ps->mergeSamples > 1u && !offsets && (loaded(PixelInput::PerspectiveCenter) || loaded(PixelInput::LinearCenter))) {
+        if (ps->mergeSamples > 1u && !offsets && ps->SampleLocationsOffCenter() && (loaded(PixelInput::PerspectiveCenter) || loaded(PixelInput::LinearCenter))) {
             throw std::runtime_error("a partial write of a multisampled packed color target runs the pixel shader once per sample, and without interpolation functions and fragment shader barycentrics its centre-located barycentrics would follow the sample");
         }
         const bool sampleOffsets = offsets && ps->SampleLocationsOffCenter();

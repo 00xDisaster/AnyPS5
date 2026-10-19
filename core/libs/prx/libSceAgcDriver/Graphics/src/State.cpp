@@ -974,7 +974,8 @@ std::array<std::uint8_t, 32> PixelSampleLocations(const State& state, const Shad
     std::array<std::uint8_t, 32> locations{};
     const bool sampleBarycentrics = (pixel.inputAddr & (PixelInputBit(PixelInput::PerspectiveSample) | PixelInputBit(PixelInput::LinearSample))) != 0u;
     const bool samplePosition = !state.perSampleShading && (pixel.posX || pixel.posY) && pixel.positionLocation == ShaderRecompiler::PixelPositionLocation::Sample;
-    if (!sampleBarycentrics && !samplePosition) return locations;
+    const bool mergedCentres = pixel.targetMerge.samples > 1u && (pixel.inputAddr & (PixelInputBit(PixelInput::PerspectiveCenter) | PixelInputBit(PixelInput::LinearCenter))) != 0u;
+    if (!sampleBarycentrics && !samplePosition && !mergedCentres) return locations;
     const auto samples = state.perSampleShading ? state.samples : 1u;
     for (std::uint32_t pixelIndex = 0; pixelIndex < 4u; ++pixelIndex) {
         for (std::uint32_t sample = 0; sample < samples; ++sample) {
