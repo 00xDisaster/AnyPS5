@@ -1,4 +1,4 @@
-﻿# libSceLoginDialog technical debt
+# libSceLoginDialog technical debt
 
 ### Silent stubs
 
