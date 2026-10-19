@@ -999,6 +999,32 @@ GuestTextureResource StorageSurface(const Context& context, const GuestTextureRe
     return surface;
 }
 
+struct WrittenStorage {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> bytes;
+    std::vector<WrittenStorageExtent> extents;
+};
+
+static WrittenStorage WrittenStorageBytes(const GuestTextureResource& viewed, std::uint32_t mip) {
+    WrittenStorage written;
+    const auto geometry = DescribeSurface(viewed);
+    if (geometry.thick || mip >= geometry.mips.size()) return written;
+    const auto& level = geometry.mips[mip];
+    const auto bytesPerElement = BytesPerElement(viewed.format);
+    const auto covered = CoveredMipBytes(viewed.tileMode, bytesPerElement, level);
+    const bool blocks = viewed.tileMode != TextureTileMode::kLinear && !level.tail;
+    const auto first = geometry.layers > 1u && geometry.imageDepth <= 1u ? std::min(viewed.baseArray, geometry.layers) : 0u;
+    for (auto layer = first; layer < geometry.layers; ++layer) {
+        if (!geometry.HasLayer(mip, layer)) continue;
+        const auto begin = viewed.baseAddress + geometry.GuestLayerOffset(layer) + level.tiledOffset;
+        for (const auto& [rangeBegin, rangeEnd] : covered) {
+            if (!written.bytes.empty() && written.bytes.back().second == begin + rangeBegin) written.bytes.back().second = begin + rangeEnd;
+            else written.bytes.emplace_back(begin + rangeBegin, begin + rangeEnd);
+        }
+        if (blocks) written.extents.push_back({begin, level.width, level.height, bytesPerElement, ThinBlockLayout(viewed.tileMode, bytesPerElement), level.blocksPerRow});
+    }
+    return written;
+}
+
 // `guestBytes` is the surface size when the caller described the surface already (0: described here).
 std::shared_ptr<StorageTexture> cachedStorageTexture(const Context& context, std::span<const std::uint32_t> words, const GuestTextureResource& viewed, std::uint32_t mip, std::uint64_t guestBytes, bool written) {
     Require(viewed.dimension != TextureDimension::k2DMsaa, "storage image access to a multisampled texture is not implemented");
@@ -1007,7 +1033,10 @@ std::shared_ptr<StorageTexture> cachedStorageTexture(const Context& context, std
     if (DepthPlanesStale() || written) {
         const auto viewedBytes = guestBytes != 0 ? guestBytes : DescribeSurface(viewed).guestBytes;
         static_cast<void>(FlushDepthPlanes(viewed.baseAddress, static_cast<std::size_t>(viewedBytes)));
-        if (written) RetireDepthSurfaces(context.device, viewed.baseAddress, viewedBytes);
+        if (written && DepthSurfaceOverlaps(context.device, viewed.baseAddress, viewedBytes)) {
+            const auto storage = WrittenStorageBytes(viewed, mip);
+            RetireCoveredDepthSurfaces(context.device, storage.bytes, storage.extents);
+        }
     }
     static const bool disabled = std::getenv("APS5_NO_TEXTURE_CACHE") != nullptr;
     if (disabled) return StorageTexture::Create(context, *context.detiler, viewed, mip);
@@ -1837,7 +1866,8 @@ void ShaderResources::buildPrepare(std::span<const CompiledShader> shaders, cons
                         const bool written = element >= binding.bufferWritten.size() || binding.bufferWritten[element];
                         const bool atomic = element < binding.bufferAtomic.size() && binding.bufferAtomic[element];
                         const bool read = element < binding.bufferRead.size() && binding.bufferRead[element];
-                        const auto index = addGuestBuffer(std::span<const std::uint32_t>(binding.guestDescriptor).subspan(static_cast<std::size_t>(element) * 4, 4), target, indexAddress, indexBytes, written, atomic, read);
+                        const std::uint32_t extent = element < binding.bufferExtent.size() ? binding.bufferExtent[element] : 0u;
+                        const auto index = addGuestBuffer(std::span<const std::uint32_t>(binding.guestDescriptor).subspan(static_cast<std::size_t>(element) * 4, 4), target, indexAddress, indexBytes, written, atomic, read, extent);
                         const auto& push = shader.program->pushConstants;
                         if (!push.empty()) {
                             const auto position = shader.program->memoryOffsetDword * 4u + element;
@@ -3972,7 +4002,7 @@ std::uint64_t ShaderResources::guestBufferBytes(std::span<const std::uint32_t> w
     return byteSize;
 }
 
-std::size_t ShaderResources::addGuestBuffer(std::span<const std::uint32_t> words, const ColorTarget* target, std::uint64_t indexAddress, std::size_t indexBytes, bool written, bool atomic, bool read) {
+std::size_t ShaderResources::addGuestBuffer(std::span<const std::uint32_t> words, const ColorTarget* target, std::uint64_t indexAddress, std::size_t indexBytes, bool written, bool atomic, bool read, std::uint32_t extent) {
     Require(words.size() == 4, "buffer descriptor must contain four DWORDs");
     const ShaderRecompiler::ShaderBufferResource descriptor{{words[0], words[1] & ~0x40000000u, words[2], words[3]}};
     Require(descriptor.Type() == 0u, "buffer descriptor uses an unsupported type");
@@ -3990,7 +4020,8 @@ std::size_t ShaderResources::addGuestBuffer(std::span<const std::uint32_t> words
     static const bool allWritten = std::getenv("APS5_ALL_BUFFERS_WRITTEN") != nullptr;
     Require(!written || !overlap(address, size, indexAddress, indexBytes), "writable shader buffer aliases the index buffer");
     written = written || allWritten;
-    const bool swept = read && dispatchThreads != 0 && descriptor.Stride() != 0 && dispatchThreads * descriptor.Stride() * 2u >= byteSize;
+    const std::uint64_t recordBytes = descriptor.Stride() != 0 ? descriptor.Stride() : extent;
+    const bool swept = read && dispatchThreads != 0 && recordBytes != 0 && dispatchThreads * recordBytes * 2u >= byteSize;
     if (written) guestMemory.AddWritable(address, size, atomic, swept);
     else {
         guestMemory.AddReadable(address, size);
