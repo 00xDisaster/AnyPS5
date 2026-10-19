@@ -1,7 +1,5 @@
 # Game testing
 
-> **Draft.** Discussed in [Q&A #6622](https://github.com/boykopovar/AnyPS5/discussions/6622). Testers' notes from that thread are folded in; where this page belongs and which switches it should list are still open for the maintainers.
-
 Running a game is a big effort for the community: a legally dumped title, a suitable machine, hours of setup, often a PR build, and time spent watching it run. Many runs end early with a crash or a stall. Every run is still useful, so this page asks for as much information as possible from each one. A failed run with a complete log helps as much as a successful one.
 
 For user options see [USAGE](../user/USAGE.md); for internals see [ARCHITECTURE](ARCHITECTURE.md).
