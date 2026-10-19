@@ -495,7 +495,7 @@ void ForgetInaccessiblePages(std::uintptr_t address, std::size_t bytes) {
     Pages().forgetInaccessible(address, bytes);
 }
 
-#ifndef _WIN32
+#ifdef __linux__
 int mainImageExtent(dl_phdr_info* info, std::size_t, void* data) {
     constexpr auto mask = static_cast<std::uintptr_t>(PageBytes - 1);
     auto& span = *static_cast<PageSpan*>(data);
@@ -537,7 +537,7 @@ void PageStates::initialize() {
             image.size = cursor - start;
             imageCached = image.allocate();
         }
-#else
+#elif defined(__linux__)
         static const bool noImageCache = std::getenv("APS5_NO_IMAGE_PAGE_CACHE") != nullptr;
         if (!noImageCache) {
             dl_iterate_phdr(mainImageExtent, &image);
