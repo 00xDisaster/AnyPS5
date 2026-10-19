@@ -23,6 +23,7 @@
 #include <cstring>
 #include <iostream>
 #include <span>
+#include <string>
 
 namespace {
 
@@ -211,6 +212,23 @@ int main() {
         DrawBlendKeepingMemory(*device, shaders, underBlend.depth);
         Draw(*device, Compile(*device, blended), depth, {.depthTest = false});
         Require(Holding(blendedBlock, 0.5f) == static_cast<std::size_t>(Width) * Height, "a color target blending over a depth plane did not load the depth drawn into the plane");
+        Htile.fill(0xffffffffu);
+        auto* reused = static_cast<float*>(AllocateWatched(Block));
+        const std::span<float> reusedPlane(reused, planeBytes / sizeof(float));
+        const auto reusedReader = Compile(*device, reused);
+        const Surface recleared{reinterpret_cast<std::uintptr_t>(reused), 0, reinterpret_cast<std::uintptr_t>(Htile.data()), false, VK_FORMAT_D32_SFLOAT, 0, 0, depth.swizzle};
+        Require(Draw(*device, shaders, recleared, {.depthWrite = true, .depthCompare = VK_COMPARE_OP_ALWAYS}) == Covered, "the draw writing depth 0.5 into a plane that is cleared each frame did not cover the target");
+        Draw(*device, reusedReader, depth, {.depthTest = false});
+        Require(Holding(reusedPlane, 0.5f) == static_cast<std::size_t>(Width) * Height, "a vertex fetch did not see the depth 0.5 drawn into a plane that is cleared each frame");
+        std::fill(reusedPlane.begin(), reusedPlane.end(), 0.25f);
+        AgcDriver::GuestMemory::BumpCollectEpoch();
+        for (int frame = 0; frame < 2; ++frame) {
+            const float value = 0.75f - 0.125f * static_cast<float>(frame);
+            AgcDriver::Graphics::NoteDepthMetadataFill(recleared.htile, HtileBytes, 0u);
+            Require(Draw(*device, shaders, recleared, {.depthWrite = true, .depthCompare = VK_COMPARE_OP_ALWAYS, .minDepth = value, .maxDepth = value}) == Covered, "the draw after the HTILE clear did not cover the target");
+            Draw(*device, reusedReader, depth, {.depthTest = false});
+            Require(Holding(reusedPlane, value) == static_cast<std::size_t>(Width) * Height, "after a guest write into a stored depth plane, the depth drawn behind an HTILE clear did not reach memory (frame " + std::to_string(frame) + ")");
+        }
         std::puts("depth plane buffer memory tests passed");
         return 0;
     } catch (const std::exception& error) {

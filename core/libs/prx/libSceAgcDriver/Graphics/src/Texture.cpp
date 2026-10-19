@@ -4744,6 +4744,11 @@ bool StorageTexture::CopyFrom(StorageTexture& source, const char*& refusal) {
     copied.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     context.Function<PFN_vkCmdPipelineBarrier>("vkCmdPipelineBarrier")(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &copied);
     recorder->EndGpuTiming(timing, guestBytes);
+    MarkWholeWritten();
+    return true;
+}
+
+void StorageTexture::MarkWholeWritten() {
     // As after a clear: the image holds the surface, guest memory follows at the write-back (which
     // keeps the 64 KiB blocks the CPU writes from now on; the collect is uncached for the reason
     // given in FillClear).
@@ -4758,7 +4763,6 @@ bool StorageTexture::CopyFrom(StorageTexture& source, const char*& refusal) {
     refreshGeneration();
     forgetBorrowed(0, trackedLayers);
     MarkDirty();
-    return true;
 }
 
 // See AdjacentGenerationEnabled above.

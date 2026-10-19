@@ -1723,7 +1723,7 @@ std::vector<std::pair<std::uint64_t, std::uint64_t>> FlushDepthPlanes(std::uint6
         planes.ranges = std::move(remaining);
         publishStaleHull(planes);
     }
-    for (const auto& entry : stored) entry.second->MarkDirty();
+    for (const auto& entry : stored) entry.second->MarkWholeWritten();
     for (const auto& [plane, planeBytes] : ranges) StorageTexture::FlushPending(plane, static_cast<std::size_t>(planeBytes), nullptr, "depth plane store");
     const auto generation = GuestMemory::TrackerGeneration();
     std::lock_guard lock(surfacesMutex());
