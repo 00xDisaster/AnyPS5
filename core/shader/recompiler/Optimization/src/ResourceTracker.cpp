@@ -1022,16 +1022,19 @@ private:
             }
             conditions.push_back(&EdgeSelector(*block, edges));
         }
-        ReplaceWithArmCopies(inst, handles, split, handleCount, conditions, [&](std::uint32_t arm, std::uint32_t slot, std::size_t dword) {
+        ReplaceWithArmCopies(inst, handles, split, handleCount, conditions, false, [&](std::uint32_t arm, std::uint32_t slot, std::size_t dword) {
             return SubstituteEdge(handles[slot]->Argument(dword), arms[arm], inst, true, phiSearchDepth);
         });
         return true;
     }
 
     template <typename Dword>
-    void ReplaceWithArmCopies(IrValue& inst, const std::array<IrValue*, 2>& handles, const std::array<bool, 2>& split, std::uint32_t handleCount, std::span<IrValue* const> conditions, Dword&& dword) {
+    void ReplaceWithArmCopies(IrValue& inst, const std::array<IrValue*, 2>& handles, const std::array<bool, 2>& split, std::uint32_t handleCount, std::span<IrValue* const> conditions, bool optionalArms, Dword&& dword) {
         std::vector<IrValue*> copies;
         const auto flags = inst.Flags<MemoryFlags>();
+        if (optionalArms && !conditions.empty() && split[0]) {
+            m_program.Resources().memoryInfo.at(flags.index).descriptorWebArm = true;
+        }
         const auto memory = m_program.Resources().memoryInfo.at(flags.index);
         for (std::uint32_t arm = 0; arm <= conditions.size(); arm++) {
             std::vector<IrValue*> arguments(inst.Arguments().begin(), inst.Arguments().end());
@@ -1393,7 +1396,7 @@ private:
             const std::array<IrValue*, 2> compare {selector, &m_builder.Constant(arm)};
             conditions.push_back(EmitBefore(inst, IrOpcode::IEqual32, IrType::Bool, compare));
         }
-        ReplaceWithArmCopies(inst, handles, split, handleCount, conditions, [&](std::uint32_t arm, std::uint32_t slot, std::size_t dword) {
+        ReplaceWithArmCopies(inst, handles, split, handleCount, conditions, true, [&](std::uint32_t arm, std::uint32_t slot, std::size_t dword) {
             return Rematerialize(web.arms[arm][offsets[slot] + dword], inst, true, phiSearchDepth);
         });
     }
@@ -1873,12 +1876,14 @@ private:
         image.singleMipPlaneBiasCompatible = m_program.Resources().stage == IrShaderStage::Pixel;
         image.volumeArraySampleCompatible = true;
         image.firstUsePc = pc;
+        image.optionalDescriptor = memory.descriptorWebArm;
         Merge(image, memory, op, pc);
         m_info.images.push_back(image);
         return static_cast<std::uint32_t>(m_info.images.size() - 1);
     }
 
     static void Merge(ImageResource& image, const MemoryInfo& memory, IrOpcode op, std::uint32_t pc) {
+        image.optionalDescriptor = image.optionalDescriptor && memory.descriptorWebArm;
         const auto access = ImageOpcodeInfoOf(op).access;
         const bool atomic = access == ImageAccess::Atomic;
         const bool write = access == ImageAccess::Write || atomic;
