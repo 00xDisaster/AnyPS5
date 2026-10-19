@@ -2510,6 +2510,123 @@ int reimportBench(const Device& device) {
     std::printf("re-import bench: every cut at the head, at the tail and inside the range kept the larger side by trimming the first import\n");
     return 0;
 }
+
+int trimmedImportTests(const Device& device) {
+    const auto& context = device.GetContext();
+    if (context.hostImportAlignment == 0 || context.settleQueue == VK_NULL_HANDLE || !AgcDriver::GuestMemory::WriteWatched()) {
+        std::cout << "skipped, the trimmed import tests require host imports, a settle queue and write watching\n";
+        return 77;
+    }
+    constexpr std::size_t bytes = 32ull << 20u;
+    constexpr std::size_t run = 2ull << 20u;
+    constexpr std::size_t guard = 16ull << 10u;
+    constexpr std::size_t page = 4096;
+    constexpr std::size_t inside = 6ull << 20u;
+    struct Case {
+        const char* name;
+        std::size_t offset;
+        std::size_t length;
+        bool unmap;
+        std::size_t kept;
+        std::size_t keptEnd;
+        std::size_t smaller;
+        std::size_t smallerEnd;
+        bool trimmed;
+    };
+    constexpr std::array<Case, 5> cases{{
+        {"a page made inaccessible inside the import, nearer its start", inside + guard, guard, false, inside + 2 * guard, bytes, 0, inside + guard, true},
+        {"a page made inaccessible inside the import, nearer its end", bytes - inside - 2 * guard, guard, false, 0, bytes - inside - 2 * guard, bytes - inside - guard, bytes, true},
+        {"an unmap of a 2 MiB run inside the import", inside, run, true, inside + run, bytes, 0, inside, true},
+        {"an unmap of the import's first 2 MiB run", 0, run, true, run, bytes, 0, 0, true},
+        {"an unmap of 1440 KiB at the start of the import's first 2 MiB run", 0, 1440ull << 10u, true, 1440ull << 10u, bytes, 0, 0, false},
+    }};
+    struct Backing {
+        void* mapping = nullptr;
+        std::int64_t physical = -1;
+        std::size_t hole = 0;
+        std::size_t holeBytes = 0;
+        ~Backing() {
+            auto* memory = static_cast<std::byte*>(mapping);
+            if (memory != nullptr && hole != 0) sceKernelMunmap(memory, hole);
+            if (memory != nullptr && hole + holeBytes < bytes) sceKernelMunmap(memory + hole + holeBytes, bytes - hole - holeBytes);
+            if (physical >= 0) sceKernelReleaseDirectMemory(physical, bytes);
+        }
+    };
+    std::unique_lock gpu(GpuMutex());
+    PrepareImportWatch(context);
+    Recorder recorder(context);
+    recorder.Activate();
+    const auto cleanup = [&] {
+        if (!gpu.owns_lock()) gpu.lock();
+        recorder.Sync();
+        recorder.FlushDeferredReleases();
+        ClearHostImports(context.device);
+    };
+    std::uint32_t salt = 0;
+    const auto check = [&](const Case& test) {
+        const std::string name = test.name;
+        Backing backing;
+        Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, bytes, run, 0, &backing.physical) == 0, "allocate the trimmed import test backing");
+        Require(sceKernelMapDirectMemory(&backing.mapping, bytes, 0x33, 0, backing.physical, run) == 0, "map the trimmed import test backing");
+        const auto address = reinterpret_cast<std::uint64_t>(backing.mapping);
+        auto* memory = static_cast<std::byte*>(backing.mapping);
+        for (std::size_t offset = 0; offset < bytes; offset += page) std::memset(memory + offset, static_cast<int>(0x40u + (offset / page) % 64u), 64);
+        gpu.lock();
+        const auto* whole = HostImportFor(context, address, bytes);
+        Require(whole != nullptr && whole->base == address && whole->bytes == bytes && whole->alias == nullptr && !whole->unwatched, name + ": the range was not imported whole, settled and watched");
+        const auto original = whole->memory;
+        auto* cut = memory + test.offset;
+        gpu.unlock();
+        if (test.unmap) {
+            Require(sceKernelMunmap(cut, test.length) == 0, name + ": the unmap failed");
+            backing.hole = test.offset;
+            backing.holeBytes = test.length;
+        } else {
+            Require(sceKernelMprotect(cut, test.length, 0) == 0, name + ": the protection failed");
+        }
+        gpu.lock();
+        const auto begin = address + test.kept;
+        const auto end = address + test.keptEnd;
+        const auto* kept = HostImportFor(context, begin, static_cast<std::size_t>(end - begin));
+        Require(kept != nullptr && kept->base == begin && kept->base + kept->bytes == end, name + ": the larger side is not imported whole");
+        if (test.trimmed) Require(kept->memory == original, "the larger side of " + name + " was imported again instead of kept");
+        else Require(kept->memory != original, "the side of " + name + " whose 2 MiB run the unmap replaced is served from the import that pinned the run's old pages");
+        requireImportServesGuest(context, recorder, *kept, begin, end, ++salt, "the larger side of " + name);
+        if (test.smallerEnd != test.smaller) {
+            const auto* smaller = HostImportFor(context, address + test.smaller, test.smallerEnd - test.smaller);
+            Require(smaller != nullptr && smaller->base == address + test.smaller && smaller->bytes == test.smallerEnd - test.smaller && smaller->memory != original, "the smaller side of " + name + " is not imported apart from the larger one");
+            requireImportServesGuest(context, recorder, *smaller, address + test.smaller, address + test.smallerEnd, ++salt, "the smaller side of " + name);
+            Require(HostImportFor(context, begin, static_cast<std::size_t>(end - begin)) == kept && kept->memory == original, "importing the smaller side of " + name + " dropped the larger one");
+        }
+        if (test.unmap) {
+            gpu.unlock();
+            void* again = cut;
+            Require(sceKernelMapDirectMemory(&again, test.length, 0x33, 0x10, backing.physical + static_cast<std::int64_t>(test.offset), guard) == 0 && again == cut, name + ": the pages could not be mapped again");
+            backing.hole = 0;
+            backing.holeBytes = 0;
+            gpu.lock();
+            const auto from = reinterpret_cast<std::uint64_t>(cut);
+            const auto* remapped = HostImportFor(context, address, bytes);
+            Require(remapped != nullptr && remapped->base == address && remapped->bytes == bytes, name + ": the range mapped again is not imported whole");
+            Require(remapped->memory != original, "after " + name + " the pages mapped again are served from the import that pinned the old ones");
+            requireImportServesGuest(context, recorder, *remapped, from, from + test.length, ++salt, "the pages mapped again after " + name);
+            requireImportServesGuest(context, recorder, *remapped, begin, end, ++salt, "the larger side after " + name + " and a new mapping");
+        }
+        cleanup();
+        gpu.unlock();
+        std::cout << "trimmed import: " << name << ": the larger side was " << (test.trimmed ? "kept" : "imported again") << " and the GPU and the write watch see the guest's bytes" << (test.unmap ? ", also after the pages were mapped again" : "") << '\n';
+    };
+    gpu.unlock();
+    try {
+        for (const auto& test : cases) check(test);
+    } catch (...) {
+        cleanup();
+        throw;
+    }
+    gpu.lock();
+    std::cout << "Trimmed host import tests passed\n";
+    return 0;
+}
 #endif
 
 void movedMetadataTests(const Device& device, Recorder& recorder) {
@@ -9195,6 +9312,7 @@ int main(int argc, char** argv) {
         if (argc == 2 && std::string_view(argv[1]) == "--settle-retire-only") return settleRetireTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--settle-storage-image-only") return settleStorageImageTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--reimport-bench") return reimportBench(device);
+        if (argc == 2 && std::string_view(argv[1]) == "--trimmed-import-only") return trimmedImportTests(device);
 #endif
         if (argc == 2 && std::string_view(argv[1]) == "--host-import-retirement-only") {
             const auto alignment = device.GetContext().hostImportAlignment;
