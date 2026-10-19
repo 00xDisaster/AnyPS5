@@ -31,9 +31,9 @@ class Fixture:
         compiler = root / ('compiler.cmd' if os.name == 'nt' else 'compiler')
         self.compiler = compiler
         if os.name == 'nt':
-            compiler.write_text('@echo off\nif "%*"=="-print-sysroot" exit /b 0\nif "%*"=="--version" exit /b 0\nif "%*"=="-v --help" exit /b 0\n>>"%~dp0compiler-invoked" echo %*\nexit /b 99\n', encoding='utf-8')
+            compiler.write_text('@echo off\nif "%*"=="-print-sysroot" exit /b 0\nif "%*"=="--version" exit /b 0\nif "%*"=="-v --help" exit /b 0\nif "%*"=="-Wl,--help" exit /b 0\nif "%*"=="-Wl,--version" exit /b 0\n>>"%~dp0compiler-invoked" echo %*\nexit /b 99\n', encoding='utf-8')
         else:
-            compiler.write_text('#!/bin/sh\nif [ "$#" -eq 1 ]; then case "$1" in -print-sysroot|--version) exit 0;; esac; fi\nif [ "$#" -eq 2 ] && [ "$1" = "-v" ] && [ "$2" = "--help" ]; then exit 0; fi\nprintf "%s\\n" "$*" >> "$(dirname "$0")/compiler-invoked"\nexit 99\n', encoding='utf-8')
+            compiler.write_text('#!/bin/sh\nif [ "$#" -eq 1 ]; then case "$1" in -print-sysroot|--version|-Wl,--help|-Wl,--version) exit 0;; esac; fi\nif [ "$#" -eq 2 ] && [ "$1" = "-v" ] && [ "$2" = "--help" ]; then exit 0; fi\nprintf "%s\\n" "$*" >> "$(dirname "$0")/compiler-invoked"\nexit 99\n', encoding='utf-8')
             compiler.chmod(0o755)
         mode = 'ON' if spirv_tools else 'OFF'
         (root / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.20)
@@ -111,11 +111,11 @@ class ShaderCacheRuntimeSourceTests(unittest.TestCase):
 
     def test_compiler_metadata_queries_and_compilation_guard(self):
         fixture = self.fixture()
-        allowed = [('-print-sysroot',), ('--version',), ('-v', '--help')]
+        allowed = [('-print-sysroot',), ('--version',), ('-v', '--help'), ('-Wl,--help',), ('-Wl,--version',)]
         rejected = [('-v', '--help', 'fixture.cpp'), ('-v', '--help', '-c', 'fixture.cpp'),
                     ('--help', '-v'), ('-v',), ('--help',), ('-c', 'fixture.cpp'),
                     ('fixture.cpp', '-o', 'fixture.exe'), ('--version', 'fixture.cpp'),
-                    ('-print-sysroot', 'fixture.cpp')]
+                    ('-print-sysroot', 'fixture.cpp'), ('-Wl,--help', 'fixture.cpp'), ('-Wl,--version', '-c', 'fixture.cpp')]
         script = fixture.root / 'metadata.cmake'
         lines = ['cmake_minimum_required(VERSION 3.20)',
                  f'set(CMAKE_CXX_COMPILER "{fixture.compiler.as_posix()}")',
