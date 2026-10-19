@@ -505,6 +505,25 @@ bool sampleCoverageSupported(const QueueState& queue, std::uint32_t samples, boo
     return (inputs & PixelSampleCoverageInput) == 0u || (!perSampleShading && (inputs & PixelSampleRateInputs) == 0u);
 }
 
+bool pixelRateInputsKept(const QueueState& queue, const State& state) {
+    using ShaderRecompiler::PixelInput;
+    using ShaderRecompiler::PixelInputBit;
+    constexpr std::uint32_t numbered = PixelInputBit(PixelInput::Ancillary) | PixelInputBit(PixelInput::SampleCoverage);
+    constexpr std::uint32_t located = PixelInputBit(PixelInput::PerspectiveSample) | PixelInputBit(PixelInput::PerspectiveCentroid) | PixelInputBit(PixelInput::PerspectivePullModel) | PixelInputBit(PixelInput::LinearSample) | PixelInputBit(PixelInput::LinearCentroid) | PixelInputBit(PixelInput::PositionZ) | PixelInputBit(PixelInput::PositionW);
+    const bool centred = state.customSampleLocations && std::ranges::all_of(state.sampleLocations, [](std::uint8_t location) { return location == 0u; });
+    const auto moving = numbered | (centred ? 0u : located);
+    if (PixelProgramSkipped(queue)) return true;
+    const auto ena = find(queue.context, 0x1b3);
+    const auto addr = find(queue.context, 0x1b4);
+    if (ena == queue.context.end() || addr == queue.context.end()) return true;
+    const auto inputs = ena->second & addr->second;
+    if ((inputs & moving) != 0u) return false;
+    if (centred || (inputs & (PixelInputBit(PixelInput::PositionX) | PixelInputBit(PixelInput::PositionY))) == 0u) return true;
+    const auto position = find(queue.context, 0x1b8);
+    const auto control = position == queue.context.end() ? 0u : position->second;
+    return (control & 0x100000u) != 0u || ((control >> 16u) & 3u) == 0u;
+}
+
 bool coveredCentroidSupported(const QueueState& queue) {
     const auto config = find(queue.context, 0x2f8);
     if (config == queue.context.end() || (config->second & CoveredCentroidIsCenter) == 0 || PixelProgramSkipped(queue)) return true;
@@ -1476,6 +1495,12 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
                 state.colorWriteMask = 0;
                 if (color.samples > 1u) {
                     Require(sampleCoverageSupported(queue, result.samples, true), "SAMPLE_COVERAGE in a multisampled pixel shader that runs per sample, or reads sample-rate or ancillary inputs, is unsupported (the input holds the whole pixel's coverage, gl_SampleMaskIn only the invocation's samples)");
+                    if (!result.perSampleShading && !pixelRateInputsKept(queue, result)) {
+                        const auto value = [&](std::uint32_t offset) { const auto it = queue.context.find(offset); return it == queue.context.end() ? 0u : it->second; };
+                        char detail[160];
+                        std::snprintf(detail, sizeof(detail), " (SPI_PS_INPUT_ENA 0x%x, SPI_PS_INPUT_ADDR 0x%x, SPI_BARYC_CNTL 0x%x, sample 1 location 0x%02x)", value(0x1b3), value(0x1b4), value(0x1b8), result.sampleLocations[1]);
+                        Require(false, std::string("partial writes of a multisampled 4_4_4_4 unorm color target run the pixel shader once per sample, so a shader the guest runs once per pixel cannot read the ancillary word or, unless every sample sits at the pixel centre, centroid, sample-located or pull-model barycentrics, Z, 1/W or a position at the centroid or a sample: they would follow the invocation's sample") + detail);
+                    }
                     result.perSampleShading = true;
                 }
             }

@@ -9007,6 +9007,36 @@ void unorm4_4_4_4TargetTests() {
         expectFailure([&] { AgcDriver::Graphics::DecodeState(coverage); }, "SAMPLE_COVERAGE in a multisampled pixel shader that runs per sample");
         coverage.context[0x8e] = 0xfu;
         Require(!AgcDriver::Graphics::DecodeState(coverage).perSampleShading, "a full write of a 2-sample 4_4_4_4 unorm target with a SAMPLE_COVERAGE input was refused or ran per sample");
+        struct InputCase {
+            std::uint32_t inputs;
+            std::uint32_t position;
+            const char* what;
+        };
+        auto rasterized = changed;
+        rasterized.context[0x2f8] = 0x00100001u;
+        rasterized.context[0x292] = 3;
+        rasterized.context[0x3b8] = 0x0dc00000u;
+        for (std::uint32_t pixel = 0; pixel < 4; ++pixel) rasterized.context[0x2fe + pixel * 4u] = 0xcc44;
+        const auto inputState = [](AgcDriver::QueueState queue, std::uint32_t inputs, std::uint32_t position) {
+            queue.context[0x1b3] = inputs;
+            queue.context[0x1b4] = inputs;
+            queue.context[0x1b8] = position;
+            return queue;
+        };
+        for (const auto& [inputs, position, what] : {InputCase{0x0004u, 0u, "PERSP_CENTROID"}, InputCase{0x0040u, 0u, "LINEAR_CENTROID"}, InputCase{0x0001u, 0u, "PERSP_SAMPLE"}, InputCase{0x0008u, 0u, "PERSP_PULL_MODEL"}, InputCase{0x2002u, 0u, "ANCILLARY"}, InputCase{0x0402u, 0u, "POS_Z_FLOAT"}, InputCase{0x0802u, 0u, "POS_W_FLOAT"}, InputCase{0x0302u, 0x20000u, "POS_X_FLOAT and POS_Y_FLOAT at a sample"}, InputCase{0x0102u, 0x10000u, "POS_X_FLOAT at the centroid"}}) {
+            auto moved = inputState(rasterized, inputs, position);
+            expectFailure([&] { AgcDriver::Graphics::DecodeState(moved); }, "cannot read the ancillary word or, unless every sample sits at the pixel centre");
+            moved.context[0x293] = moved.context.at(0x293) | 0x10000u;
+            Require(AgcDriver::Graphics::DecodeState(moved).perSampleShading, std::string("a partial write of a 2-sample 4_4_4_4 unorm target whose shader the guest runs per sample was refused for reading ") + what);
+            if (inputs == 0x2002u) {
+                expectFailure([&] { AgcDriver::Graphics::DecodeState(inputState(changed, inputs, position)); }, "cannot read the ancillary word");
+                continue;
+            }
+            Require(AgcDriver::Graphics::DecodeState(inputState(changed, inputs, position)).perSampleShading, std::string("a partial write of a 2-sample 4_4_4_4 unorm target raised from a one-sample rasterizer, every sample at the pixel centre, was refused for reading ") + what);
+        }
+        for (const auto& [inputs, position, what] : {InputCase{0x0302u, 0u, "POS_X_FLOAT and POS_Y_FLOAT at the centre"}, InputCase{0x0302u, 0x100000u, "POS_X_FLOAT and POS_Y_FLOAT at the upper-left corner"}, InputCase{0x9022u, 0u, "PERSP_CENTER, LINEAR_CENTER, FRONT_FACE and POS_FIXED_PT"}}) {
+            Require(AgcDriver::Graphics::DecodeState(inputState(rasterized, inputs, position)).perSampleShading, std::string("a partial write of a 2-sample 4_4_4_4 unorm target whose pixel-rate shader reads ") + what + " was refused");
+        }
         const auto merge = AgcDriver::Graphics::ExportTargetMerge(multisampled);
         const auto surface = AgcDriver::Graphics::DecodeTextureResource(merge.descriptor);
         Require(merge.samples == 2u && merge.mask == 0xf000u && surface.dimension == AgcDriver::Graphics::TextureDimension::k2DMsaa && surface.samples == 2u && surface.baseAddress == multisampled.color.surfaceAddress && surface.width == multisampled.color.extent.width && surface.height == multisampled.color.extent.height && surface.format == AgcDriver::Graphics::TargetMergeSurface(multisampled.color).format, "the merge descriptor of a 2-sample 4_4_4_4 unorm target does not decode to its multisampled surface");
@@ -9016,8 +9046,9 @@ void unorm4_4_4_4TargetTests() {
         constexpr std::array<std::uint32_t, 3> mergeCode{0xf800180fu, 0x07060504u, 0xbf810000u};
         auto merging = packedExportRequest(changed, multisampled, mergeCode);
         merging.context.pixel->targetMerge = merge;
-        const std::array<std::uint32_t, 4> capabilities{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat, spv::CapabilityStorageImageMultisample};
+        const std::array<std::uint32_t, 5> capabilities{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat, spv::CapabilityStorageImageMultisample, spv::CapabilityInterpolationFunction};
         merging.target.supportedCapabilities = capabilities;
+        merging.target.fragmentShaderBarycentricEnabled = true;
         const auto words = ShaderRecompiler::Recompile(merging).spirv.Copy();
         std::size_t sampled = 0;
         bool sampleRate = false;
@@ -9029,9 +9060,12 @@ void unorm4_4_4_4TargetTests() {
         }
         Require(sampleRate && sampled == 2u && interlockShape(words) == "capability extension ordered begin end ", "a 2-sample 4_4_4_4 merge module does not read and write the shaded sample inside a pixel interlock");
         auto single = merging;
-        const std::array<std::uint32_t, 3> noMultisampleStorage{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat};
+        const std::array<std::uint32_t, 4> noMultisampleStorage{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat, spv::CapabilityInterpolationFunction};
         single.target.supportedCapabilities = noMultisampleStorage;
         expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(single)); }, "storage image multisampling");
+        auto offCentre = merging;
+        offCentre.target.fragmentShaderBarycentricEnabled = false;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(offCentre)); }, "its centre-located barycentrics would follow the sample");
     }
     for (const auto& [number, swap] : {std::pair{1u, 2u}, std::pair{4u, 2u}, std::pair{0u, 0u}, std::pair{0u, 1u}, std::pair{0u, 3u}}) {
         changed = queue;
