@@ -74,7 +74,7 @@ template <typename Operation>
 static int FailWrite(const std::filesystem::path& path, [[maybe_unused]] std::size_t sizeLimit,
                      Operation&& operation) {
 #ifdef _WIN32
-    const auto locked = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    const auto locked = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     Require(locked != INVALID_HANDLE_VALUE);
     const int result = operation();

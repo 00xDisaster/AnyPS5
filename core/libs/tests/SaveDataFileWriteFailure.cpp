@@ -89,7 +89,13 @@ int main() {
     std::filesystem::remove(temporary);
 
     std::error_code symlinkError;
+#ifdef _WIN32
+    if (!CreateSymbolicLinkW(temporary.c_str(), unrelated.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) {
+        symlinkError = std::error_code(GetLastError(), std::system_category());
+    }
+#else
     std::filesystem::create_symlink(unrelated, temporary, symlinkError);
+#endif
 #ifdef _WIN32
     if (symlinkError == std::errc::permission_denied ||
         symlinkError == std::error_code(ERROR_PRIVILEGE_NOT_HELD, std::system_category())) {
@@ -100,8 +106,15 @@ int main() {
         Require(!symlinkError);
         Require(savedata::replace_file(savePath, replacement.data(), replacement.size()));
         Require(ReadFile(unrelated) == oldData);
+#ifdef _WIN32
+        const auto linkAttributes = GetFileAttributesW(temporary.c_str());
+        const auto saveAttributes = GetFileAttributesW(savePath.c_str());
+        Require(linkAttributes != INVALID_FILE_ATTRIBUTES && (linkAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
+        Require(saveAttributes != INVALID_FILE_ATTRIBUTES && (saveAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
+#else
         Require(std::filesystem::is_symlink(temporary));
         Require(!std::filesystem::is_symlink(savePath));
+#endif
         Require(ReadFile(savePath) == replacement);
         std::filesystem::remove(temporary);
     }
