@@ -32,6 +32,26 @@ class CheckCompileTests(unittest.TestCase):
         self.assertFalse((self.build / "unit.o.d").exists())
         self.assertFalse((self.build / "unit.o.rsp").exists())
 
+    def test_ninja_commands_in_a_non_ascii_build_directory_are_found(self):
+        compiler = shutil.which("clang") or shutil.which("gcc")
+        if compiler is None or shutil.which("ninja") is None:
+            self.skipTest("needs Ninja and a C compiler")
+        name = "ação"
+        if os.name == "nt":
+            try:
+                name.encode("mbcs", "strict")
+            except UnicodeEncodeError:
+                self.skipTest("the ANSI code page cannot represent the build directory name")
+        build = self.root / name
+        build.mkdir()
+        self.source("unit.c")
+        command = subprocess.list2cmdline([compiler]) if os.name == "nt" else '"' + compiler + '"'
+        (build / "build.ninja").write_text(
+            "rule cc\n  command = " + command + " -c $in -o $out\nbuild unit.o: cc ../unit.c\n", encoding="utf-8")
+        result = self.tool("--build", name, "unit.c")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 translation units compile", result.stdout)
+
     def test_syntax_check_preserves_existing_clang_compilation_fragment(self):
         compiler = shutil.which("clang")
         if compiler is None:
@@ -327,14 +347,17 @@ class CheckCompileTests(unittest.TestCase):
         bin = self.root / "bin"
         bin.mkdir()
         stub = bin / "ninja_stub.py"
-        stub.write_text("import json\nprint(json.dumps(%r))\n" % [entry], encoding="utf-8")
+        stub.write_text("import json\nimport sys\n"
+                        "if sys.argv[1:] == ['-t', 'wincodepage']:\n    print('Build file encoding: UTF-8')\n"
+                        "else:\n    print(json.dumps(%r))\n" % [entry], encoding="utf-8")
         if os.name == "nt":
-            (bin / "ninja.cmd").write_text(f'@"{sys.executable}" "{stub}"\n', encoding="utf-8")
+            (bin / "ninja.cmd").write_text('@"%NINJA_STUB_PYTHON%" "%~dp0ninja_stub.py" %*\n', encoding="ascii")
         else:
             ninja = bin / "ninja"
             ninja.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{stub}"\n', encoding="utf-8")
             ninja.chmod(0o755)
-        result = self.tool("unit.cpp", env={"PATH": f"{bin}{os.pathsep}{os.environ['PATH']}"})
+        result = self.tool("unit.cpp", env={"PATH": f"{bin}{os.pathsep}{os.environ['PATH']}",
+                                            "NINJA_STUB_PYTHON": sys.executable})
         self.assertEqual(result.returncode, 0)
         self.assertIn("1 translation units compile", result.stdout)
 
