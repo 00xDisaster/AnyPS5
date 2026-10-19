@@ -119,9 +119,9 @@ int APS5_VABI sceNpWebApi2PushEventCreateHandle(int lib_ctx_id) {
 }
 
 int APS5_VABI sceNpWebApi2PushEventAbortHandle(int libCtxId, int handleId) {
-    (void)libCtxId;
     (void)handleId;
-    NotImplemented_nid_no_patch(__func__);
+    std::lock_guard lock(g_poolsMutex);
+    if (!g_pools.contains(libCtxId)) throw std::invalid_argument("sceNpWebApi2PushEventAbortHandle: unknown context");
     return 0;
 }
 
@@ -198,8 +198,9 @@ int APS5_VABI sceNpWebApi2PushEventUnregisterPushContextCallback() {
     return 0;
 }
 
-int APS5_VABI sceNpWebApi2SetRequestTimeout() {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceNpWebApi2SetRequestTimeout(int64_t request_id, uint32_t timeout) {
+    (void)request_id;
+    (void)timeout;
     return 0;
 }
 

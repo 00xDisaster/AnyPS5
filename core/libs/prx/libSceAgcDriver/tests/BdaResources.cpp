@@ -1,4 +1,6 @@
 #include "BdaTests.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/BdaResources.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Recorder.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderResources.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/GuestHeap.hpp"
@@ -19,8 +21,11 @@
 #include <initializer_list>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <new>
 #include <string>
+#include <vector>
 
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -38,6 +43,118 @@ void reject(TAction action, const char* reason) {
         return;
     }
     throw std::runtime_error(std::string("expected BDA rejection: ") + reason);
+}
+
+void addressTableKeyTests() {
+    using ShaderRecompiler::BdaAbi::Range;
+    const std::array<std::pair<std::uint64_t, std::uint64_t>, 1> written{{{0x1000, 0x1040}}};
+    const std::array<std::pair<std::uint64_t, std::uint64_t>, 1> otherWritten{{{0x1000, 0x1080}}};
+    const std::array<Range, 1> own{{{0x2000, 0x2100, 0x70000000, ShaderRecompiler::BdaAbi::Read, 0}}};
+    const std::array<Range, 1> moved{{{0x2000, 0x2100, 0x70010000, ShaderRecompiler::BdaAbi::Read, 0}}};
+    const std::array<std::pair<std::uint64_t, std::uint64_t>, 2> ownAsWrites{{{0x2000, 0x2100}, {0x70000000, ShaderRecompiler::BdaAbi::Read}}};
+    const auto plain = AddressTableKey({}, own);
+    Require(AddressTableKey({}, own) == plain, "one build's BDA table key is not stable");
+    Require(AddressTableKey(written, own) != plain && AddressTableKey(written, own) != AddressTableKey(otherWritten, own), "BDA table keys of builds that differ only in their written ranges are equal");
+    Require(AddressTableKey({}, moved) != plain, "BDA table keys of builds whose own region moved are equal");
+    Require(AddressTableKey(ownAsWrites, {}) != plain, "written ranges and own regions with the same words give one BDA table key");
+}
+
+void snapshotTableTests(const Context& context, const BdaTestAccess& access) {
+    constexpr std::size_t piece = 65536;
+    void* block = ::operator new(piece, std::align_val_t{piece});
+    std::memset(block, 0x3c, piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    const auto change = [&](bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, block, piece, true, true, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, block);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    change(true);
+    alignas(256) static std::array<std::byte, 512> source{};
+    const auto snapshotAddress = reinterpret_cast<std::uint64_t>(source.data());
+    std::array<std::byte, 512> first{};
+    std::array<std::byte, 512> second{};
+    first.fill(std::byte{0x11});
+    second.fill(std::byte{0x22});
+    struct Build {
+        std::unique_ptr<GuestBufferMemory> memory;
+        std::unique_ptr<BdaResources> bda;
+        std::uint64_t snapshot = 0;
+        VkBuffer table = VK_NULL_HANDLE;
+        VkBuffer view = VK_NULL_HANDLE;
+    };
+    const auto build = [&](std::span<const std::byte> bytes, bool written, bool addressable, std::uint64_t address) {
+        Build result;
+        result.memory = std::make_unique<GuestBufferMemory>(importing);
+        auto& memory = *result.memory;
+        if (addressable) memory.AcquireRegistered();
+        if (written) memory.AddWritable(reinterpret_cast<std::uint64_t>(block) + 256, 64);
+        memory.AddSnapshot({address, bytes});
+        memory.Upload(addressable);
+        std::uint32_t adjustment = 0;
+        result.view = memory.Descriptor(address, bytes.size(), adjustment).buffer;
+        if (!addressable) return result;
+        const auto ranges = memory.AddressRanges();
+        const auto found = std::find_if(ranges.begin(), ranges.end(), [&](const auto& range) { return range.begin == address; });
+        Require(found != ranges.end() && found->end == address + bytes.size(), "the snapshot has no BDA table entry of its own");
+        result.snapshot = found->deviceAddress;
+        const auto held = access.addressBytes(result.snapshot);
+        Require(held.size() >= bytes.size() && std::memcmp(held.data(), bytes.data(), bytes.size()) == 0, "the snapshot's device copy does not hold its bytes");
+        if (const auto cached = memory.CachedAddressTable()) {
+            Require(cached->ranges->size() == ranges.size() && std::memcmp(cached->ranges->data(), ranges.data(), ranges.size() * sizeof(ranges.front())) == 0, "a cached BDA table differs from the build's ranges");
+        }
+        result.bda = std::make_unique<BdaResources>(importing, memory);
+        result.table = result.bda->Table().buffer;
+        return result;
+    };
+    const bool spaces = AddressSpaceCounters().enabled;
+    {
+        auto a = build(first, false, true, snapshotAddress);
+        auto plain = build(first, false, false, snapshotAddress);
+        auto d = build(first, true, true, snapshotAddress);
+        auto b = build(first, false, true, snapshotAddress);
+        auto c = build(second, false, true, snapshotAddress);
+        Require(a.snapshot == b.snapshot && a.view == b.view, "two builds of one snapshot with the same bytes do not share its device copy");
+        Require(c.snapshot != a.snapshot, "a snapshot with other bytes took the device copy of the first");
+        Require(plain.view != a.view && d.snapshot == a.snapshot, "a snapshot copy made for BDA serves a build bound by descriptor, or a build with written ranges did not share the snapshot copy");
+        if (spaces) {
+            Require(a.memory->CachedAddressTable().has_value() && c.memory->CachedAddressTable().has_value() && d.memory->CachedAddressTable().has_value(), "a build with its own regions over the address space has no cached BDA table");
+            Require(a.table == b.table, "two builds of the same space and snapshot do not share their BDA table");
+            Require(c.table != a.table, "a build with other snapshot bytes took another build's BDA table");
+            Require(a.memory->CachedAddressTable()->serial == b.memory->CachedAddressTable()->serial && c.memory->CachedAddressTable()->serial != a.memory->CachedAddressTable()->serial, "cached BDA table serials do not follow the build's ranges");
+        }
+        ClearSnapshotCopies(importing.device);
+        auto e = build(first, false, true, snapshotAddress);
+        Require(e.snapshot != a.snapshot, "a snapshot copy outlived the teardown of its device's copies");
+        for (auto* item : {&a, &b, &c, &d, &e, &plain}) item->memory->WriteBack();
+    }
+    if (spaces) {
+        std::vector<std::array<std::byte, 512>> variants(66);
+        for (std::size_t index = 0; index < variants.size(); ++index) {
+            variants[index].fill(std::byte{0x40});
+            variants[index][0] = static_cast<std::byte>(index);
+            variants[index][1] = static_cast<std::byte>(index >> 8u);
+        }
+        alignas(256) static std::array<std::byte, 66 * 512> sources{};
+        std::vector<Build> builds;
+        const auto serial = [&](std::size_t index) {
+            builds.push_back(build(variants[index], false, true, reinterpret_cast<std::uint64_t>(sources.data()) + index * 512));
+            return builds.back().memory->CachedAddressTable()->serial;
+        };
+        const auto kept = serial(0);
+        const auto evicted = serial(1);
+        for (std::size_t index = 2; index < 64; ++index) serial(index);
+        Require(serial(0) == kept, "a BDA table was dropped before 64 newer tables of its space");
+        serial(64);
+        Require(serial(0) == kept, "the most recently used BDA table of a space was evicted");
+        Require(serial(1) != evicted, "the least recently used BDA table of a space was kept past 64 tables");
+        for (auto& item : builds) item.memory->WriteBack();
+    }
+    ClearSnapshotCopies(importing.device);
+    change(false);
+    ::operator delete(block, std::align_val_t{piece});
 }
 
 void importCrossingTests(const Context& context, const BdaTestAccess& access) {
@@ -119,6 +236,59 @@ void importSpanTests(const Context& context) {
     ::operator delete(block, std::align_val_t{piece});
 }
 
+void spaceWritableWritesTests(const Context& context) {
+    if (!AddressSpaceCounters().enabled) return;
+    constexpr std::size_t piece = 65536;
+    auto* writable = static_cast<std::uint8_t*>(::operator new(piece, std::align_val_t{piece}));
+    auto* readOnly = static_cast<std::uint8_t*>(::operator new(piece, std::align_val_t{piece}));
+    std::memset(writable, 0x11, piece);
+    std::memset(readOnly, 0x22, piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    const auto change = [&](std::uint8_t* range, bool add, bool canWrite) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, canWrite, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    change(writable, true, true);
+    change(readOnly, true, false);
+    const auto same = [](const std::vector<ShaderRecompiler::BdaAbi::Range>& left, const std::vector<ShaderRecompiler::BdaAbi::Range>& right) {
+        return left.size() == right.size() && (left.empty() || std::memcmp(left.data(), right.data(), left.size() * sizeof(left.front())) == 0);
+    };
+    struct Built {
+        std::uint64_t serial;
+        std::vector<ShaderRecompiler::BdaAbi::Range> ranges;
+    };
+    const auto build = [&](std::initializer_list<std::pair<std::size_t, std::size_t>> written, const char* step) {
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        for (const auto& [offset, bytes] : written) leased.AddWritable(reinterpret_cast<std::uintptr_t>(writable) + offset, bytes);
+        leased.Upload(true);
+        const auto cached = leased.CachedAddressTable();
+        Require(cached.has_value() && cached->ranges != nullptr, std::string("a build of the space alone has no cached table: ") + step);
+        Built result{cached->serial, leased.AddressRanges()};
+        Require(same(*cached->ranges, result.ranges), std::string("the cached table differs from AddressRanges(): ") + step);
+        leased.WriteBack();
+        return result;
+    };
+    const auto plain = build({}, "no writes");
+    const auto once = build({{256, 512}}, "one write in a writable import");
+    const auto twice = build({{4096, 64}, {8192, 128}}, "two writes in a writable import");
+    Require(once.serial == plain.serial && twice.serial == plain.serial, "writes in a writable import did not bind the space's table");
+    Require(same(once.ranges, plain.ranges) && same(twice.ranges, plain.ranges), "writes in a writable import changed the BDA table");
+    const auto writableBegin = reinterpret_cast<std::uint64_t>(writable);
+    const auto readOnlyBegin = reinterpret_cast<std::uint64_t>(readOnly);
+    for (const auto& range : once.ranges) {
+        if (range.begin == writableBegin) Require((range.permissions & ShaderRecompiler::BdaAbi::Write) != 0u, "the writable import lost its write permission");
+        if (range.begin == readOnlyBegin) Require((range.permissions & ShaderRecompiler::BdaAbi::Write) == 0u, "the read-only import gained write permission");
+    }
+    change(writable, false, true);
+    change(readOnly, false, false);
+    ::operator delete(writable, std::align_val_t{piece});
+    ::operator delete(readOnly, std::align_val_t{piece});
+}
+
 void failedImportRemapTests(const Context& context, const BdaTestAccess& access) {
     constexpr std::size_t piece = 65536;
     auto* block = static_cast<std::byte*>(::operator new(4 * piece, std::align_val_t{piece}));
@@ -175,6 +345,98 @@ void failedImportRemapTests(const Context& context, const BdaTestAccess& access)
     ::operator delete(block, std::align_val_t{piece});
 }
 
+void spaceImportRunTests(const Context& context) {
+    constexpr std::size_t piece = 65536;
+    void* block = ::operator new(2 * piece, std::align_val_t{piece});
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    std::memset(block, 0x3c, 2 * piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    auto* guest = static_cast<std::uint8_t*>(block);
+    change(guest, true);
+    change(guest + piece, true);
+    for (int build = 0; build < 2; ++build) {
+        const auto before = AddressSpaceCounters();
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(first + piece - 256, 512);
+        leased.Upload(true);
+        std::uint32_t adjustment = 0;
+        const auto view = leased.Descriptor(first + piece - 256, 512, adjustment);
+        Require(view.buffer != VK_NULL_HANDLE && view.range == 512 + adjustment, "a V# across one import's ranges has no descriptor");
+        const auto ranges = leased.AddressRanges();
+        Require(std::any_of(ranges.begin(), ranges.end(), [&](const auto& range) { return range.begin <= first && first + 2 * piece <= range.end; }), "one import's adjacent ranges are not one BDA table entry");
+        leased.WriteBack();
+        const auto after = AddressSpaceCounters();
+        if (after.enabled && build == 1) Require(after.hits == before.hits + 1 && after.dissolvedOverlap == before.dissolvedOverlap, "a V# across one import's ranges dissolved the cached address space");
+    }
+    change(guest, false);
+    change(guest + piece, false);
+    ::operator delete(block, std::align_val_t{piece});
+}
+
+void spaceReadListTests(const Context& context) {
+    if (!AddressSpaceCounters().enabled) return;
+    constexpr std::size_t piece = 65536;
+    void* block = ::operator new(3 * piece, std::align_val_t{piece});
+    std::memset(block, 0x5c, 3 * piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, true, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    const auto build = [&](const char* step) {
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.Upload(true);
+        const auto split = leased.SplitInPlaceReads();
+        Require(split.has_value() && split->space != nullptr, std::string("an address-based build that took the space whole has no split reads: ") + step);
+        auto joined = *split->space;
+        joined.insert(joined.end(), split->own.begin(), split->own.end());
+        Require(joined == leased.InPlaceReads(), std::string("the split reads differ from InPlaceReads: ") + step);
+        Require(Recorder::ValidReadList(*split->space), std::string("the space's read list is not sorted and disjoint: ") + step);
+        leased.WriteBack();
+        Require(!leased.SplitInPlaceReads().has_value(), "a committed build still offers split reads");
+        return split->space;
+    };
+    const auto lists = [&](const std::shared_ptr<const Recorder::ReadList>& list, const std::uint8_t* range) {
+        const auto begin = reinterpret_cast<std::uintptr_t>(range);
+        return std::any_of(list->begin(), list->end(), [&](const auto& read) { return read.first <= begin && begin + piece <= read.second; });
+    };
+    change(guest, true);
+    change(guest + piece, true);
+    const auto first = build("first build");
+    Require(lists(first, guest) && lists(first, guest + piece) && !lists(first, guest + 2 * piece), "the space's read list does not hold exactly the registered pieces");
+    const auto again = build("unchanged registry");
+    Require(again == first, "a build in an unchanged registry did not share the space's read list");
+    change(guest + 2 * piece, true);
+    const auto added = build("range added");
+    Require(added != first && lists(added, guest + 2 * piece), "a registered range is missing from the read list after the registry changed");
+    change(guest + piece, false);
+    const auto removed = build("range removed");
+    Require(removed != added && !lists(removed, guest + piece) && lists(removed, guest), "a removed range is still in the read list");
+    {
+        GuestBufferMemory plain(importing);
+        plain.AddReadable(reinterpret_cast<std::uintptr_t>(guest), 256);
+        plain.Upload(false);
+        Require(!plain.SplitInPlaceReads().has_value(), "a build without the address space offers split reads");
+        plain.WriteBack();
+    }
+    change(guest, false);
+    change(guest + 2 * piece, false);
+    ::operator delete(block, std::align_val_t{piece});
+}
+
 void importWindowTests(const Context& context) {
     constexpr std::size_t piece = 65536;
     constexpr std::size_t window = 2 * piece;
@@ -203,6 +465,741 @@ void importWindowTests(const Context& context) {
     const auto* kept = HostImportFor(importing, first, 16);
     Require(kept != nullptr && kept->buffer == lowBuffer, "growth in one window re-imported another");
     for (std::size_t index = 0; index < 4; ++index) change(guest + index * piece, false);
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+void importJoinTests(const Context& context) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    constexpr std::size_t large = 3 * piece;
+    void* block = ::operator new(3 * large + 5 * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    std::memset(guest, 0x11, 3 * large);
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    const auto second = first + large;
+    const auto third = second + large;
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, std::size_t bytes, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, bytes, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    const auto bind = [&](std::uintptr_t address, std::size_t bytes = 32) {
+        GuestBufferMemory plain(importing);
+        plain.AddReadable(address, bytes);
+        plain.Upload(false);
+        std::uint32_t adjustment = 0;
+        const auto view = plain.Descriptor(address, bytes, adjustment);
+        const auto copied = plain.CopiedBytes();
+        plain.WriteBack();
+        return std::pair{view.buffer, copied};
+    };
+    change(guest, large, true);
+    change(guest + large, large, true);
+    const auto* low = HostImportFor(importing, first, 16);
+    Require(low != nullptr && low->base == first && low->bytes == large, "a range larger than the import window was not imported alone");
+    const auto* high = HostImportFor(importing, second, 16);
+    Require(high != nullptr && high->base == second && high->bytes == large, "the next range larger than the import window was not imported alone");
+    Require(HostImportFor(importing, second - 16, 32) == nullptr, "a view across two imported ranges was imported before it was bound");
+    {
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(second - 16, 32);
+        leased.Upload(true);
+        const auto* joined = HostImportFor(importing, second - 16, 32);
+        Require(joined != nullptr && joined->base == first && joined->bytes == 2 * large, "a buffer bound across two adjacent ranges larger than the import window was not imported as one");
+        std::uint32_t adjustment = 0;
+        const auto crossing = leased.Descriptor(second - 16, 32, adjustment);
+        Require(crossing.buffer == joined->buffer && crossing.offset + adjustment == second - 16 - first, "a buffer bound across the joined ranges is not bound in place");
+        leased.WriteBack();
+    }
+    const auto joinedBuffer = HostImportFor(importing, first, 16)->buffer;
+    const auto [again, copied] = bind(second - 16);
+    Require(again == joinedBuffer && copied == 0, "a later bind across the joined ranges did not use the joined import");
+    auto* heap = guest + 3 * large + 2 * piece;
+    change(heap, piece, true);
+    change(heap + piece, piece, true);
+    Require(bind(reinterpret_cast<std::uintptr_t>(heap + piece) - 16).second != 0 && HostImportFor(importing, reinterpret_cast<std::uintptr_t>(heap + piece) - 16, 32) == nullptr, "two pieces no larger than the import window were joined");
+    const auto heapBase = reinterpret_cast<std::uintptr_t>(heap);
+    const auto [piecesBuffer, piecesCopied] = bind(heapBase, 2 * piece);
+    const auto* pieces = HostImportFor(importing, heapBase, 2 * piece);
+    Require(pieces != nullptr && pieces->base == heapBase && pieces->bytes == 2 * piece && piecesBuffer == pieces->buffer && piecesCopied == 0, "a buffer bound exactly over two pieces no larger than the import window was not imported as one");
+    change(heap + 2 * piece, piece, true);
+    static_cast<void>(bind(heapBase + 2 * piece - 16));
+    const auto* kept = HostImportFor(importing, first, 16);
+    Require(kept != nullptr && kept->buffer == joinedBuffer && kept->bytes == 2 * large, "a registry change elsewhere re-imported the joined ranges");
+    change(guest + 2 * large, large, true);
+    Require(HostImportFor(importing, first, 16)->buffer == joinedBuffer, "a range registered next to the joined ranges re-imported them");
+    const auto [grownBuffer, grownCopied] = bind(third - 16);
+    const auto* grown = HostImportFor(importing, third - 16, 32);
+    Require(grown != nullptr && grown->base == first && grown->bytes == 3 * large && grownBuffer == grown->buffer && grownCopied == 0, "a bind across the next range did not grow the joined import");
+    Require(bind(second - 16).first == grownBuffer && HostImportFor(importing, first, 16)->buffer == grownBuffer, "two joins sharing a range retired each other");
+    change(heap, piece, false);
+    change(heap + piece, piece, false);
+    change(heap + 2 * piece, piece, false);
+    change(guest + large, large, false);
+    const auto* alone = HostImportFor(importing, first, 16);
+    Require(alone != nullptr && alone->base == first && alone->bytes == large, "the joined import outlived one of its ranges");
+    change(guest, large, false);
+    change(guest + 2 * large, large, false);
+    Require(HostImportFor(importing, first, 16) == nullptr && HostImportFor(importing, third, 16) == nullptr, "the host imports outlived their ranges");
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+class ImportBudgetRanges {
+public:
+    static constexpr std::size_t piece = 65536;
+    static constexpr std::size_t bytes = 3 * piece;
+
+    explicit ImportBudgetRanges(const Context& context) : importing(context) {
+        block = static_cast<std::byte*>(::operator new(4 * bytes, std::align_val_t{piece}));
+        importing.hostImportAlignment = piece;
+        ClearHostImports(importing.device);
+        SetHostImportWindow(2 * piece);
+        SetHostImportRangeWindow(0);
+        SetHostImportBudget(2 * bytes);
+        GuestAllocations::Mutation mutation;
+        for (std::size_t index = 0; index < 4; ++index) {
+            std::memset(block + index * bytes, static_cast<int>(0x31 + index), bytes);
+            mutation.Add(block + index * bytes, bytes, true, false, true);
+        }
+    }
+
+    ~ImportBudgetRanges() {
+        ClearHostImports(importing.device);
+        {
+            GuestAllocations::Mutation mutation;
+            for (std::size_t index = 0; index < 4; ++index) mutation.Remove(block + index * bytes);
+        }
+        SetHostImportBudget(0);
+        SetHostImportRangeWindow(std::uint64_t{64} << 20u);
+        SetHostImportWindow(0);
+        ::operator delete(block, std::align_val_t{piece});
+    }
+
+    ImportBudgetRanges(const ImportBudgetRanges&) = delete;
+    ImportBudgetRanges& operator=(const ImportBudgetRanges&) = delete;
+
+    std::uintptr_t Address(std::size_t index) const { return reinterpret_cast<std::uintptr_t>(block + index * bytes); }
+
+    void CheckUnchanged() const {
+        for (std::size_t index = 0; index < 4; ++index) {
+            const auto expected = static_cast<std::byte>(0x31 + index);
+            Require(std::all_of(block + index * bytes, block + (index + 1) * bytes, [expected](std::byte value) { return value == expected; }), "import budget probes changed guest bytes");
+        }
+    }
+
+    Context importing;
+
+private:
+    std::byte* block = nullptr;
+};
+
+void importCoverageHintBudgetTests(const Context& context, const BdaTestAccess& access) {
+    for (const bool acquired : {true, false}) {
+        ImportBudgetRanges ranges(context);
+        const auto a = ranges.Address(0);
+        const auto c = ranges.Address(2);
+        const auto d = ranges.Address(3);
+        const auto* first = HostImportFor(ranges.importing, a, 16);
+        Require(first != nullptr && first->base == a && first->bytes == ranges.bytes, "coverage budget fixture did not import its first range");
+        const auto firstBuffer = first->buffer;
+        const auto firstSerial = HostImportSerial(ranges.importing, a, 16, false);
+        for (int use = 0; use < 300; ++use) Require(HostImportFor(ranges.importing, d, 16) != nullptr, "coverage budget fixture did not import its hot range");
+        const auto hotSerial = HostImportSerial(ranges.importing, d, 16, false);
+        Require(firstSerial != 0 && hotSerial != 0 && HostImportLiveBytes() == 2 * ranges.bytes, "coverage budget fixture has unexpected import ownership or usage");
+        {
+            GuestBufferMemory memory(ranges.importing);
+            memory.AddReadable(c, 32);
+            memory.UploadPrepare(false);
+            if (acquired) {
+                const auto* held = HostImportFor(ranges.importing, a, 16);
+                Require(held != nullptr && held->buffer == firstBuffer, "a genuine import acquisition replaced the retained range");
+            } else {
+                Require(HostImportCovers(ranges.importing, a, 16), "a coverage hint missed the existing range");
+            }
+            memory.UploadFinish(false);
+            std::uint32_t adjustment = 0;
+            const auto view = memory.Descriptor(c, 32, adjustment);
+            Require(view.range == 32 + adjustment, "a disjoint descriptor has an incorrect extent");
+            Require(HostImportSerial(ranges.importing, d, 16, false) == hotSerial && HostImportLiveBytes() == 2 * ranges.bytes, "a coverage probe displaced the hot import or changed the budget");
+            if (acquired) {
+                Require(view.buffer != firstBuffer, "a disjoint descriptor uses the retained range's import");
+                Require(HostImportSerial(ranges.importing, a, 16, false) == firstSerial && HostImportSerial(ranges.importing, c, 16, false) == 0, "a genuine import acquisition did not protect its buffer from eviction");
+                Require(memory.CopiedBytes() == 32, "a disjoint descriptor at the budget was not copied while an import was held");
+                const auto copied = access.bytes(view.buffer);
+                const auto offset = static_cast<std::size_t>(view.offset + adjustment);
+                Require(offset + 32 <= copied.size() && std::memcmp(copied.data() + offset, reinterpret_cast<const void*>(c), 32) == 0, "the descriptor copied behind a held import lost its guest bytes");
+            } else {
+                const auto importedSerial = HostImportSerial(ranges.importing, c, 16, false);
+                Require(HostImportSerial(ranges.importing, a, 16, false) == 0 && importedSerial != 0 && importedSerial != firstSerial, "a coverage hint prevented eviction of an unused import");
+                const auto* imported = ExistingHostImportFor(ranges.importing, c, 32);
+                Require(imported != nullptr && imported->base == c && imported->bytes == ranges.bytes && view.buffer == imported->buffer && view.offset + adjustment == c - imported->base, "a descriptor does not bind the import obtained after a coverage hint");
+                Require(memory.CopiedBytes() == 0, "a coverage hint forced the disjoint imported descriptor to copy");
+            }
+            memory.WriteBack();
+        }
+        ranges.CheckUnchanged();
+    }
+}
+
+void failedImportJoinProbeBudgetTests(const Context& context, const BdaTestAccess& access) {
+    ImportBudgetRanges ranges(context);
+    const auto a = ranges.Address(0);
+    const auto crossing = ranges.Address(1) - 16;
+    const auto c = ranges.Address(2);
+    const auto d = ranges.Address(3);
+    const auto* first = HostImportFor(ranges.importing, a, 16);
+    Require(first != nullptr && first->base == a && first->bytes == ranges.bytes, "failed join budget fixture did not import its first range");
+    const auto firstSerial = HostImportSerial(ranges.importing, a, 16, false);
+    for (int use = 0; use < 300; ++use) Require(HostImportFor(ranges.importing, d, 16) != nullptr, "failed join budget fixture did not import its hot range");
+    const auto hotSerial = HostImportSerial(ranges.importing, d, 16, false);
+    Require(firstSerial != 0 && hotSerial != 0 && HostImportLiveBytes() == 2 * ranges.bytes, "failed join budget fixture has unexpected import ownership or usage");
+    {
+        GuestBufferMemory memory(ranges.importing);
+        memory.AddReadable(crossing, 32);
+        memory.AddReadable(c, 32);
+        memory.Upload(false);
+        std::uint32_t adjustment = 0;
+        const auto copiedView = memory.Descriptor(crossing, 32, adjustment);
+        const auto copied = access.bytes(copiedView.buffer);
+        const auto offset = static_cast<std::size_t>(copiedView.offset + adjustment);
+        Require(copiedView.range == 32 + adjustment && offset + 32 <= copied.size() && std::memcmp(copied.data() + offset, reinterpret_cast<const void*>(crossing), 32) == 0, "the refused joined descriptor lost either side's guest bytes");
+        Require(HostImportSerial(ranges.importing, crossing, 32, false) == 0, "a join over the available budget unexpectedly produced an import");
+        const auto importedSerial = HostImportSerial(ranges.importing, c, 16, false);
+        Require(HostImportSerial(ranges.importing, a, 16, false) == 0 && importedSerial != 0 && importedSerial != firstSerial, "a failed join endpoint probe prevented eviction of an unused import");
+        const auto* imported = ExistingHostImportFor(ranges.importing, c, 32);
+        const auto view = memory.Descriptor(c, 32, adjustment);
+        Require(imported != nullptr && imported->base == c && imported->bytes == ranges.bytes && view.buffer == imported->buffer && view.offset + adjustment == c - imported->base && view.range == 32 + adjustment, "the descriptor after a failed join does not bind its complete import");
+        Require(memory.CopiedBytes() == 32 && HostImportLiveBytes() == 2 * ranges.bytes && HostImportSerial(ranges.importing, d, 16, false) == hotSerial, "a failed join forced a second copy or displaced the hot import");
+        memory.WriteBack();
+    }
+    ranges.CheckUnchanged();
+}
+
+// One registered range of `cells` import windows of `window` bytes, with the window and the import budget set for the
+// test and reset after it.
+class WindowedRange {
+public:
+    WindowedRange(const Context& context, std::size_t window, std::size_t cells, std::uint64_t budget = 0) : window(window), bytes(window * cells), importing(context) {
+        block = ::operator new(bytes, std::align_val_t{piece});
+        std::memset(block, 0x33, bytes);
+        importing.hostImportAlignment = piece;
+        SetHostImportRangeWindow(window);
+        SetHostImportBudget(budget);
+        change(true);
+    }
+    ~WindowedRange() {
+        change(false);
+        SetHostImportBudget(0);
+        SetHostImportRangeWindow(std::uint64_t{64} << 20u);
+        ::operator delete(block, std::align_val_t{piece});
+    }
+    WindowedRange(const WindowedRange&) = delete;
+    WindowedRange& operator=(const WindowedRange&) = delete;
+
+    std::uintptr_t First() const { return reinterpret_cast<std::uintptr_t>(block); }
+
+    static constexpr std::size_t piece = 65536;
+    const std::size_t window;
+    const std::size_t bytes;
+    Context importing;
+
+private:
+    void change(bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, block, bytes, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, block);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    }
+
+    void* block = nullptr;
+};
+
+// A registered range larger than the import window, its first window imported by an earlier access: an address-based
+// build (AcquireRegistered) must import the whole range, so a view in its last window binds (Demon's Souls threw
+// "guest buffer view ... exceeds its GPU owner" with the 64 MiB windows).
+void importWholeRangeOverWindowTests(const Context& context) {
+    WindowedRange range(context, 2 * WindowedRange::piece, 2);
+    const auto first = range.First();
+    const auto* windowed = HostImportFor(range.importing, first + 16, 32);
+    Require(windowed != nullptr && windowed->base == first && windowed->bytes == range.window, "an access to the first window of a large range was not imported as that window");
+    GuestBufferMemory leased(range.importing);
+    leased.AcquireRegistered();
+    leased.Upload(true);
+    std::uint32_t adjustment = 0;
+    const auto view = leased.Descriptor(first + range.bytes - WindowedRange::piece + 16, 32, adjustment);
+    Require(view.range == 32 + adjustment, "a view in the last window of a large registered range has no descriptor");
+    const auto* whole = HostImportFor(range.importing, first, range.bytes);
+    Require(whole != nullptr && whole->base == first && whole->bytes == range.bytes && view.buffer == whole->buffer, "an address-based build was served by the range's first window, not an import of the whole range");
+    leased.WriteBack();
+}
+
+struct ObservedHostImport {
+    const void* pointer;
+    VkDeviceSize bytes;
+};
+
+class ImportAllocationProbe {
+public:
+    explicit ImportAllocationProbe(Context& context) : context(context), original(context.deviceProc) {
+        Require(active == nullptr && original != nullptr, "invalid import allocation probe scope");
+        active = this;
+        context.deviceProc = Resolve;
+    }
+    ~ImportAllocationProbe() {
+        context.deviceProc = original;
+        active = nullptr;
+    }
+    ImportAllocationProbe(const ImportAllocationProbe&) = delete;
+    ImportAllocationProbe& operator=(const ImportAllocationProbe&) = delete;
+
+    std::vector<ObservedHostImport> calls;
+
+private:
+    static PFN_vkVoidFunction VKAPI_CALL Resolve(VkDevice device, const char* name) {
+        Require(active != nullptr, "import allocation probe escaped its scope");
+        if (std::strcmp(name, "vkAllocateMemory") == 0) return reinterpret_cast<PFN_vkVoidFunction>(Allocate);
+        return active->original(device, name);
+    }
+    static VkResult VKAPI_CALL Allocate(VkDevice device, const VkMemoryAllocateInfo* info, const VkAllocationCallbacks* allocator, VkDeviceMemory* memory) {
+        Require(active != nullptr, "import allocation callback escaped its scope");
+        for (const auto* next = static_cast<const VkBaseInStructure*>(info->pNext); next != nullptr; next = next->pNext) {
+            if (next->sType != VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT) continue;
+            const auto* imported = reinterpret_cast<const VkImportMemoryHostPointerInfoEXT*>(next);
+            active->calls.push_back({imported->pHostPointer, info->allocationSize});
+        }
+        const auto allocate = reinterpret_cast<PFN_vkAllocateMemory>(active->original(device, "vkAllocateMemory"));
+        Require(allocate != nullptr, "import allocation probe has no original allocator");
+        return allocate(device, info, allocator, memory);
+    }
+
+    Context& context;
+    PFN_vkGetDeviceProcAddr original;
+    inline static thread_local ImportAllocationProbe* active = nullptr;
+};
+
+class UnrelatedImportProbeRange {
+public:
+    UnrelatedImportProbeRange() {
+        GuestAllocations::Mutation().Add(storage.data(), storage.size(), true, false, false);
+    }
+    ~UnrelatedImportProbeRange() {
+        GuestAllocations::Mutation().Remove(storage.data());
+    }
+    UnrelatedImportProbeRange(const UnrelatedImportProbeRange&) = delete;
+    UnrelatedImportProbeRange& operator=(const UnrelatedImportProbeRange&) = delete;
+
+private:
+    std::array<std::byte, 64> storage{};
+};
+
+void importStaleProbeTests(const Context& context, const BdaTestAccess& access) {
+    for (const auto scenario : {0u, 1u, 2u}) {
+        const bool held = scenario == 1u;
+        const bool exactWhole = scenario == 2u;
+        WindowedRange range(context, 2 * WindowedRange::piece, 2);
+        ImportAllocationProbe probe(range.importing);
+        const auto first = range.First();
+        auto* guest = reinterpret_cast<std::byte*>(first);
+        for (std::size_t offset = 17u; offset < range.bytes; offset += 4096u) guest[offset] = static_cast<std::byte>((offset / 4096u) & 0xffu);
+        const std::vector<std::byte> originalGuest(guest, guest + range.bytes);
+        const auto* window = HostImportFor(range.importing, first, exactWhole ? range.bytes : 32u);
+        Require(window != nullptr && !window->joined && window->base == first && window->bytes == (exactWhole ? range.bytes : range.window), "the stale-probe fixture did not create its ordinary import extent");
+        const auto originalBuffer = window->buffer;
+        const auto originalUse = window->lastUse;
+        const auto originalSerial = HostImportSerial(range.importing, first, 32u, false);
+        auto mockContents = access.bytes(window->buffer);
+        Require(mockContents.size() == window->bytes, "the mock import buffer has an incorrect extent");
+        std::copy_n(originalGuest.begin(), window->bytes, mockContents.begin());
+        std::uint32_t scratch = 0x12345678u;
+        {
+            GuestBufferMemory copied(range.importing);
+            copied.AddReadable(reinterpret_cast<std::uintptr_t>(&scratch), sizeof(scratch));
+            copied.Upload(false);
+            copied.WriteBack();
+        }
+        Require(window->lastUse == originalUse && HostImportSerial(range.importing, first, 32u, false) == originalSerial, "an unrelated copied build touched or replaced the prefix window");
+        GuestBufferMemory reader(range.importing);
+        VkDescriptorBufferInfo heldView{};
+        std::uint32_t heldAdjustment = 0u;
+        if (held) {
+            reader.AddReadable(first + 16u, 32u);
+            reader.Upload(false);
+            heldView = reader.Descriptor(first + 16u, 32u, heldAdjustment);
+            Require(heldView.buffer == originalBuffer, "the held control did not bind the prefix window");
+        }
+        GuestAllocations::Mapped mapped;
+        {
+            const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+            for (const auto& owner : lease) if (owner->address == first && owner->bytes == range.bytes) mapped.push_back(owner);
+        }
+        Require(mapped.size() == 1u, "the stale-probe fixture lost its registered range");
+        const auto originalOwner = mapped.front().lock();
+        const auto generation = GuestAllocations::GuestAllocationsGeneration_nid_postfix();
+        UnrelatedImportProbeRange unrelated;
+        Require(GuestAllocations::GuestAllocationsGeneration_nid_postfix() != generation && HostImportsIdentity(range.importing).device == VK_NULL_HANDLE,
+            "the unrelated registry change did not make imports stale");
+        const auto attempts = access.allocationAttempts();
+        probe.calls.clear();
+        {
+            std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
+            Require(ImportMappedRanges(range.importing, mapped, GuestAllocations::GuestAllocationsGeneration_nid_postfix(), false), "the current device did not admit the map-time import pass");
+        }
+        Require(mapped.front().lock() == originalOwner, "an unrelated registry change replaced the import's memory owner");
+        if (held) {
+            Require(access.allocationAttempts() == attempts && probe.calls.empty(), "a stale probe retired an import held by an actual descriptor");
+            const auto* kept = HostImportFor(range.importing, first + 16u, 32u);
+            Require(kept != nullptr && kept->buffer == originalBuffer && kept->bytes == range.window && HostImportSerial(range.importing, first, 32u, false) == originalSerial,
+                "the actual held import lost its buffer, extent or serial");
+            std::uint32_t adjustment = 0u;
+            const auto view = reader.Descriptor(first + 16u, 32u, adjustment);
+            Require(view.buffer == heldView.buffer && view.offset == heldView.offset && view.range == heldView.range && adjustment == heldAdjustment,
+                "a map-time stale probe invalidated a descriptor that still uses its import");
+            const auto contents = access.bytes(view.buffer);
+            Require(view.offset + adjustment + 32u <= contents.size() && std::memcmp(contents.data() + view.offset + adjustment, reinterpret_cast<const void*>(first + 16u), 32u) == 0,
+                "the protected descriptor no longer reads the registered bytes");
+            reader.WriteBack();
+        } else if (exactWhole) {
+            Require(access.allocationAttempts() == attempts && probe.calls.empty() && window->lastUse > originalUse,
+                "accepting the stale exact whole import reallocated it or did not protect its returned pointer");
+            const auto* kept = HostImportFor(range.importing, first, range.bytes);
+            Require(kept != nullptr && kept->buffer == originalBuffer && kept->ranges.size() == 1u && kept->ranges.front() == originalOwner && HostImportSerial(range.importing, first, range.bytes, false) == originalSerial,
+                "accepting the exact whole import changed its native or registered identity");
+        } else {
+            Require(access.allocationAttempts() == attempts + 1u, "a discarded stale probe made an unheld prefix window block the whole import");
+            const auto* whole = HostImportFor(range.importing, first, range.bytes);
+            Require(whole != nullptr && whole->base == first && whole->bytes == range.bytes && whole->ranges.size() == 1u && whole->ranges.front() == originalOwner,
+                "the stale-probe repair did not retain the exact registered owner over the whole import");
+            Require(HostImportSerial(range.importing, first, range.bytes, false) != originalSerial, "replacing the unheld window reused its old import identity");
+            Require(probe.calls.size() == 1u && probe.calls.front().pointer == reinterpret_cast<const void*>(first) && probe.calls.front().bytes == range.bytes,
+                "the replacement native import did not reference the exact whole registered memory");
+            Require(access.bytes(whole->buffer).size() == range.bytes, "the replacement import buffer does not cover its registered extent");
+        }
+        Require(scratch == 0x12345678u && std::equal(originalGuest.begin(), originalGuest.end(), guest), "the import probe changed guest bytes or unrelated copied data");
+    }
+}
+
+// An address-based build whose whole-range import does not fit the budget leaves the range's window alone: before,
+// every such build retired the window and the next access imported it again.
+void importRefusedWholeRangeTests(const Context& context) {
+    WindowedRange range(context, 2 * WindowedRange::piece, 4, 3 * 2 * WindowedRange::piece);
+    const auto first = range.First();
+    const auto* windowed = HostImportFor(range.importing, first + 16, 32);
+    Require(windowed != nullptr && windowed->bytes == range.window, "the first window of a range over the budget was not imported");
+    const auto buffer = windowed->buffer;
+    for (int build = 0; build < 3; ++build) {
+        GuestBufferMemory leased(range.importing);
+        leased.AcquireRegistered();
+        leased.Upload(true);
+        leased.WriteBack();
+        Require(HostImportCovers(range.importing, first + 16, 32), "an address-based build refused its whole-range import and retired the range's window (build " + std::to_string(build) + ")");
+    }
+    const auto* kept = HostImportFor(range.importing, first + 16, 32);
+    Require(kept != nullptr && kept->buffer == buffer, "the range's window was imported again after a refused whole-range import");
+}
+
+// Two uses across neighbouring cell edges of one range, each in a build of its own, share one import: the second grows
+// the first's window to their union, and later rounds of both keep it. Before, each replaced the other's window at
+// every use.
+void importNeighbouringEdgesTests(const Context& context) {
+    WindowedRange range(context, 2 * WindowedRange::piece, 3);
+    const auto first = range.First();
+    const auto use = [&](std::uintptr_t address) {
+        GuestBufferMemory leased(range.importing);
+        leased.AddReadable(address, 32);
+        leased.Upload(false);
+        leased.WriteBack();
+    };
+    const auto acrossFirst = first + range.window - 16;
+    const auto acrossSecond = first + 2 * range.window - 16;
+    use(acrossFirst);
+    Require(HostImportCovers(range.importing, acrossFirst, 32), "a use across the first cell edge was not imported");
+    use(acrossSecond);
+    Require(HostImportCovers(range.importing, first, range.bytes), "a use across the second cell edge did not grow the first use's window to their union");
+    const auto serial = HostImportSerial(range.importing, first, range.bytes, false);
+    for (int round = 0; round < 10; ++round) {
+        use(acrossFirst);
+        use(acrossSecond);
+        Require(HostImportSerial(range.importing, first, range.bytes, false) == serial, "a use across a cell edge replaced the shared window (round " + std::to_string(round) + ")");
+    }
+}
+
+// A range mapped while the imports are at the budget is refused at map time without retiring an import: the map
+// observer holds no GPU lock, so it must not evict (before, it evicted the least recently used import to fit).
+void importAtMapOverBudgetTests(const Context& context) {
+    constexpr std::size_t bytes = 65536;
+    auto importing = context;
+    importing.hostImportAlignment = bytes;
+    void* kept = ::operator new(bytes, std::align_val_t{bytes});
+    void* used = ::operator new(bytes, std::align_val_t{bytes});
+    void* mapped = ::operator new(bytes, std::align_val_t{bytes});
+    const auto change = [&](void* block, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, block, bytes, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, block);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    change(kept, true);
+    change(used, true);
+    const auto keptAddress = reinterpret_cast<std::uintptr_t>(kept);
+    const auto usedAddress = reinterpret_cast<std::uintptr_t>(used);
+    Require(HostImportFor(importing, keptAddress, 16) != nullptr, "the import to keep was not made");
+    for (int use = 0; use < 300; ++use) Require(HostImportFor(importing, usedAddress, 16) != nullptr, "the import in use was not made");
+    {
+        GuestBufferMemory leased(importing);
+        leased.AddReadable(usedAddress, 16);
+        leased.Upload(false);
+        leased.WriteBack();
+    }
+    const auto live = HostImportLiveBytes();
+    SetHostImportBudget(live + bytes - 1);
+    change(mapped, true);
+    GuestAllocations::Mapped ranges;
+    {
+        const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+        for (const auto& range : lease) {
+            if (range->address == reinterpret_cast<std::uintptr_t>(mapped)) ranges.push_back(range);
+        }
+    }
+    Require(ranges.size() == 1, "the mapped range is not registered");
+    static_cast<void>(ImportMappedRanges(importing, ranges, GuestAllocations::GuestAllocationsGeneration_nid_postfix(), true));
+    SetHostImportBudget(0);
+    Require(HostImportLiveBytes() == live, "a range mapped at the budget retired an import at map time (an eviction without the GPU lock)");
+    Require(HostImportCovers(importing, keptAddress, 16) && !HostImportCovers(importing, reinterpret_cast<std::uintptr_t>(mapped), 16), "a range mapped at the budget was imported, or the import to keep was retired");
+    for (auto* block : {kept, used, mapped}) change(block, false);
+    for (auto* block : {kept, used, mapped}) ::operator delete(block, std::align_val_t{bytes});
+}
+
+void spaceReadAcrossImportsTests(const Context& context, const BdaTestAccess& access) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    void* block = ::operator new(3 * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    const auto boundary = first + window;
+    std::memset(guest, 0x5a, window);
+    std::memset(guest + window, 0x6b, piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, true);
+    for (int build = 0; build < 2; ++build) {
+        const auto before = AddressSpaceCounters();
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(boundary - 256, 512);
+        leased.Upload(true);
+        std::uint32_t adjustment = 0;
+        const auto view = leased.Descriptor(boundary - 256, 512, adjustment);
+        Require(view.buffer != VK_NULL_HANDLE && view.range == 512 + adjustment, "a read-only V# across two imports has no descriptor");
+        const auto bytes = access.bytes(view.buffer);
+        Require(view.offset + adjustment + 512 <= bytes.size() && bytes[view.offset + adjustment] == std::byte{0x5a} && bytes[view.offset + adjustment + 256] == std::byte{0x6b}, "a read-only V# across two imports misses the bytes of either range");
+        const auto ranges = leased.AddressRanges();
+        Require(std::any_of(ranges.begin(), ranges.end(), [&](const auto& range) { return range.begin <= first && boundary <= range.end; }) && std::any_of(ranges.begin(), ranges.end(), [&](const auto& range) { return range.begin <= boundary && boundary + piece <= range.end; }), "an import is missing from the BDA table of a build with a read-only V# across it");
+        leased.WriteBack();
+        const auto after = AddressSpaceCounters();
+        if (after.enabled && build == 1) Require(after.hits == before.hits + 1 && after.dissolvedOverlap == before.dissolvedOverlap, "a read-only V# across two imports dissolved the cached address space");
+    }
+    for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, false);
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+void spaceReadAcrossImportsWrittenTests(const Context& context) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    void* block = ::operator new(3 * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto boundary = reinterpret_cast<std::uintptr_t>(block) + window;
+    std::memset(guest, 0x5a, window);
+    std::memset(guest + window, 0x6b, piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (const bool writtenFirst : {false, true}) {
+        for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, true);
+        for (int build = 0; build < 2; ++build) {
+            const auto before = AddressSpaceCounters();
+            GuestBufferMemory leased(importing);
+            leased.AcquireRegistered();
+            if (writtenFirst) leased.AddWritable(boundary - 384, 256);
+            leased.AddReadable(boundary - 256, 512);
+            if (!writtenFirst) leased.AddWritable(boundary - 384, 256);
+            leased.Upload(true);
+            std::uint32_t readAdjustment = 0;
+            std::uint32_t writeAdjustment = 0;
+            const auto read = leased.Descriptor(boundary - 256, 512, readAdjustment);
+            const auto written = leased.Descriptor(boundary - 384, 256, writeAdjustment);
+            Require(read.buffer != VK_NULL_HANDLE && read.buffer == written.buffer && written.offset + writeAdjustment + 128 == read.offset + readAdjustment, "a written V# inside a read-only V# across two imports maps other bytes than it");
+            leased.WriteBack();
+            const auto after = AddressSpaceCounters();
+            if (after.enabled && build == 0) Require(after.dissolvedOverlap == before.dissolvedOverlap + 1, "a written V# inside a read-only V# across two imports kept the cached address space");
+        }
+        for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, false);
+    }
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+void spaceReadsAcrossImportsMergedTests(const Context& context, const BdaTestAccess& access) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    constexpr std::size_t pieces = 6;
+    void* block = ::operator new(pieces * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    for (std::size_t index = 0; index < pieces; ++index) std::memset(guest + index * piece, static_cast<int>(0x10 + index), piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, range == guest + 3 * piece, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (std::size_t index = 0; index < pieces; ++index) change(guest + index * piece, true);
+    const auto second = first + window;
+    const auto third = first + 2 * window;
+    const std::uint64_t lower = second - 256;
+    const std::uint64_t lowerBytes = 512;
+    const std::uint64_t upper = second + 128;
+    const std::uint64_t upperBytes = third + 256 - upper;
+    for (int build = 0; build < 3; ++build) {
+        const auto before = AddressSpaceCounters();
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(lower, lowerBytes);
+        leased.AddReadable(upper, upperBytes);
+        leased.UploadPrepare(true);
+        if (build == 2) ClearHostImports(importing.device);
+        leased.UploadFinish(true);
+        for (const auto& [address, bytes] : {std::pair{lower, lowerBytes}, std::pair{upper, upperBytes}}) {
+            std::uint32_t adjustment = 0;
+            const auto view = leased.Descriptor(address, bytes, adjustment);
+            Require(view.buffer != VK_NULL_HANDLE && view.range == bytes + adjustment, "a read-only V# over imports, merged with another one, has no descriptor of its size");
+            const auto mapped = access.bytes(view.buffer);
+            const auto at = static_cast<std::size_t>(view.offset + adjustment);
+            const auto expected = [&](std::uint64_t guestAddress) { return std::byte{static_cast<unsigned char>(0x10 + (guestAddress - first) / piece)}; };
+            Require(at + bytes <= mapped.size() && mapped[at] == expected(address) && mapped[at + bytes - 1] == expected(address + bytes - 1), "a read-only V# over imports, merged with another one, maps other bytes than its own");
+        }
+        leased.WriteBack();
+        const auto after = AddressSpaceCounters();
+        if (after.enabled && build > 0) Require(after.hits == before.hits + 1 && after.dissolvedOverlap == before.dissolvedOverlap && after.dissolvedImports == before.dissolvedImports + (build == 2 ? 1u : 0u), "read-only V#s over imports, merged with each other, left the cached address space other than by the import change");
+    }
+    for (std::size_t index = 0; index < pieces; ++index) change(guest + index * piece, false);
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+void spaceWriteMergedPastImportTests(const Context& context, const BdaTestAccess& access) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    constexpr std::size_t pieces = 5;
+    void* block = ::operator new(pieces * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    const auto second = first + window;
+    const auto outside = first + 2 * window;
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, range == guest + 3 * piece, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (std::size_t index = 0; index + 1 < pieces; ++index) change(guest + index * piece, true);
+    const std::uint64_t written = outside + 512;
+    for (int build = 0; build < 2; ++build) {
+        std::memset(guest, 0x21, pieces * piece);
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(second - 256, window + 512);
+        leased.AddReadable(outside + 128, 640);
+        leased.AddWritable(written, 256);
+        leased.Upload(true);
+        std::uint32_t adjustment = 0;
+        const auto view = leased.Descriptor(written, 256, adjustment);
+        Require(view.buffer != VK_NULL_HANDLE && view.range == 256 + adjustment, "a written V# merged with a read-only V# past an import has no descriptor");
+        auto mapped = access.bytes(view.buffer);
+        const auto at = static_cast<std::size_t>(view.offset + adjustment);
+        Require(at + 256 <= mapped.size() && mapped[at] == std::byte{0x21} && mapped[at + 255] == std::byte{0x21}, "a written V# merged with a read-only V# past an import maps other bytes than its own");
+        std::memset(mapped.data() + at, 0x7c, 256);
+        Require(leased.HasCopiedWrites(), "a written V# merged with a read-only V# past an import is not stored back");
+        leased.WriteBack();
+        const auto offset = static_cast<std::size_t>(written - first);
+        Require(guest[offset] == 0x7c && guest[offset + 255] == 0x7c && guest[offset - 1] == 0x21 && guest[offset + 256] == 0x21, "a write through a V# merged with a read-only V# past an import did not land on its own bytes");
+    }
+    for (std::size_t index = 0; index + 1 < pieces; ++index) change(guest + index * piece, false);
+    SetHostImportWindow(0);
+    ::operator delete(block, std::align_val_t{window});
+}
+
+void spaceReadOverWritableImportTableTests(const Context& context) {
+    constexpr std::size_t piece = 65536;
+    constexpr std::size_t window = 2 * piece;
+    void* block = ::operator new(3 * piece, std::align_val_t{window});
+    auto* guest = static_cast<std::uint8_t*>(block);
+    const auto first = reinterpret_cast<std::uintptr_t>(block);
+    const auto boundary = first + window;
+    std::memset(guest, 0x5a, 3 * piece);
+    auto importing = context;
+    importing.hostImportAlignment = piece;
+    SetHostImportWindow(window);
+    const auto change = [&](std::uint8_t* range, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, range, piece, true, range != guest + 2 * piece, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, range);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, true);
+    const auto lookup = [](const std::vector<ShaderRecompiler::BdaAbi::Range>& ranges, std::uint64_t address) {
+        const auto found = std::upper_bound(ranges.begin(), ranges.end(), address, [](std::uint64_t value, const auto& range) { return value < range.begin; });
+        return found == ranges.begin() ? ranges.end() : std::prev(found);
+    };
+    for (int build = 0; build < 3; ++build) {
+        GuestBufferMemory leased(importing);
+        leased.AcquireRegistered();
+        leased.AddReadable(boundary - 256, 512);
+        leased.UploadPrepare(true);
+        if (build == 2) ClearHostImports(importing.device);
+        leased.UploadFinish(true);
+        std::uint32_t adjustment = 0;
+        const auto view = leased.Descriptor(boundary - 256, 512, adjustment);
+        Require(view.buffer != VK_NULL_HANDLE && view.range == 512 + adjustment, "a read-only V# across a writable and a read-only import has no descriptor");
+        const auto ranges = leased.AddressRanges();
+        Require(std::adjacent_find(ranges.begin(), ranges.end(), [](const auto& left, const auto& right) { return right.begin < left.end; }) == ranges.end(), "the BDA table of a build with a read-only V# across imports has overlapping ranges");
+        for (const auto address : {first + 16, boundary - 256, boundary - 128, boundary - 16}) {
+            const auto found = lookup(ranges, address);
+            Require(found != ranges.end() && address + 16 <= found->end && (found->permissions & ShaderRecompiler::BdaAbi::Write) != 0u, "a BDA store into a writable import resolves to the read-only copy of a V# across it");
+        }
+        for (const auto address : {boundary, boundary + 64, boundary + piece - 32}) {
+            const auto found = lookup(ranges, address);
+            Require(found != ranges.end() && address + 16 <= found->end && (found->permissions & ShaderRecompiler::BdaAbi::Read) != 0u, "a BDA read past a read-only V# across imports finds no range");
+        }
+        leased.WriteBack();
+    }
+    for (std::size_t index = 0; index < 3; ++index) change(guest + index * piece, false);
     SetHostImportWindow(0);
     ::operator delete(block, std::align_val_t{window});
 }
@@ -1200,9 +2197,27 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
         if (dropped.enabled) Require(dropped.waiterDrops == after.waiterDrops + 1 && LeaseCounters().cacheDrops == dropped.waiterDrops, "the free did not drop the cached address space");
     }
     importCrossingTests(context, access);
+    addressTableKeyTests();
+    snapshotTableTests(context, access);
     importSpanTests(context);
     failedImportRemapTests(context, access);
+    spaceImportRunTests(context);
+    spaceWritableWritesTests(context);
+    spaceReadListTests(context);
     importWindowTests(context);
+    spaceReadAcrossImportsTests(context, access);
+    spaceReadAcrossImportsWrittenTests(context);
+    spaceReadsAcrossImportsMergedTests(context, access);
+    spaceWriteMergedPastImportTests(context, access);
+    spaceReadOverWritableImportTableTests(context);
+    importJoinTests(context);
+    importCoverageHintBudgetTests(context, access);
+    failedImportJoinProbeBudgetTests(context, access);
+    importWholeRangeOverWindowTests(context);
+    importStaleProbeTests(context, access);
+    importRefusedWholeRangeTests(context);
+    importNeighbouringEdgesTests(context);
+    importAtMapOverBudgetTests(context);
     heapMirrorTests(context, access);
     importedHeapMirrorTests(context, access);
     importWatchTests();
@@ -1215,4 +2230,5 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     Require(AddressCopyOverflow({{0x1000, 0x3000, 0x2000, "uncommitted pages"}}, 0x2000).empty(), "copies within the limit were refused");
     const auto copies = AddressCopyOverflow({{0x1000, 0x2000, 0x1000, "not mirrored"}, {0x10000, 0x30000, 0x18000, "uncommitted pages"}}, 0x2000);
     Require(!copies.empty() && copies.find("0x10000+0x20000 (0.1 MiB committed, uncommitted pages)") < copies.find("0x1000+0x1000"), "the copy limit does not name the largest copy first");
+    ClearSnapshotCopies(context.device);
 }

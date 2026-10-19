@@ -1,6 +1,7 @@
 #include <relinker/analysis/CodeInstructionCollector.hpp>
 #include <relinker/analysis/UnusedNidFilter/IControlFlowGraph.hpp>
 #include <relinker/analysis/UnusedNidFilter/EhFrameReader.hpp>
+#include <relinker/analysis/SceCodeExtent.hpp>
 #include <codegen/x86/X64InstructionDecoder.hpp>
 #include <codegen/CodegenException.hpp>
 #include <io/BufferUtils.hpp>
@@ -11,7 +12,9 @@
 #include <map>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
+#include <utility>
 
 namespace Relinker {
 
@@ -34,7 +37,7 @@ public:
 
 }
 
-std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::vector<std::uint8_t>& bytes, const std::vector<Domain::ProgramHeader>& headers, const std::function<void(std::uint64_t, std::uint64_t)>& progress) const {
+std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::vector<std::uint8_t>& bytes, const std::vector<Domain::ProgramHeader>& headers, const std::function<void(std::uint64_t, std::uint64_t)>& progress, std::set<Domain::VirtualAddress>* entryRoots) const {
     std::uint64_t lastProgress = 0;
     const auto report = [&](std::uint64_t completed) {
         if (completed <= lastProgress) return;
@@ -53,8 +56,9 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
         }
         throw Domain::RelinkerException("Code analysis: unmapped address", address);
     };
+    auto codeHeaders = headers;
     const auto isCode = [&](std::uint64_t address) {
-        for (const auto& header : headers) if (header.Type == 1 && (header.Flags & 1) != 0 && address >= header.MappedAddress && address - header.MappedAddress < header.FileSize) return true;
+        for (const auto& header : codeHeaders) if (header.Type == 1 && (header.Flags & 1) != 0 && address >= header.MappedAddress && address - header.MappedAddress < header.FileSize) return true;
         return false;
     };
     std::map<std::uint64_t, std::uint64_t> tags;
@@ -91,6 +95,23 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
         range(offset, size);
         return offset;
     };
+    if (sceBase) {
+        const auto unwindFunctions = UnusedNidFilter::ReadExceptionFunctions(bytes, headers, {}, {});
+        for (auto& header : codeHeaders) {
+            if (header.Type != 1 || (header.Flags & 1) == 0) continue;
+            range(header.Offset, header.FileSize);
+            const std::span<const std::uint8_t> segment(bytes.data() + header.Offset, header.FileSize);
+            const auto end = FindSceCodeEnd(segment, header.MappedAddress, unwindFunctions, value(3, 0x61000027).value_or(0), value(2, 0x6100002d).value_or(0)).value_or(header.MappedAddress + header.FileSize);
+            auto begin = header.MappedAddress;
+            for (const auto& interpreter : headers)
+                if (interpreter.Type == 3 && interpreter.MappedAddress >= begin && interpreter.MappedAddress < end) begin = interpreter.MappedAddress + std::min(interpreter.FileSize, end - interpreter.MappedAddress);
+            const std::string_view loaderPath("/libexec/ld-elf.so.1", 21);
+            if (begin == header.MappedAddress && end - begin > loaderPath.size() && std::equal(loaderPath.begin(), loaderPath.end(), segment.begin())) begin += loaderPath.size();
+            header.Offset += begin - header.MappedAddress;
+            header.MappedAddress = begin;
+            header.FileSize = end - begin;
+        }
+    }
     std::set<std::uint64_t> roots;
     std::map<std::uint64_t, std::uint64_t> functions;
     const auto addRoot = [&](std::uint64_t address) { if (isCode(address)) roots.insert(address); };
@@ -187,8 +208,13 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
             const auto index = info >> 32;
             const auto addend = Io::ReadU64(bytes, offset + 16);
             if (type == 8) {
-                const auto zeroSectionSymbol = index != 0 && index < symbolCount && (bytes[symbols + index * 24 + 4] & 15) == 3 && Io::ReadU64(bytes, symbols + index * 24 + 8) == 0;
-                if ((index != 0 && !zeroSectionSymbol) || !pointers.Values.emplace(slot, addend).second) throw Domain::RelinkerException("Code analysis: invalid relative relocation", slot);
+                const auto hasSymbol = index != 0 && index < symbolCount;
+                const auto symbol = hasSymbol ? symbols + index * 24 : 0;
+                const auto zeroSectionSymbol = hasSymbol && (bytes[symbol + 4] & 15) == 3 && Io::ReadU64(bytes, symbol + 8) == 0;
+                const auto matchingDefinedSymbol = hasSymbol && Io::ReadU16(bytes, symbol + 6) != 0
+                    && addend <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+                    && Io::ReadU64(bytes, symbol + 8) == addend;
+                if ((index != 0 && !zeroSectionSymbol && !matchingDefinedSymbol) || !pointers.Values.emplace(slot, addend).second) throw Domain::RelinkerException("Code analysis: invalid relative relocation", slot);
                 addRoot(addend);
             } else if (type == 1 || type == 6 || type == 7) {
                 if (index == 0 || index >= symbolCount) throw Domain::RelinkerException("Code analysis: invalid relocation symbol", slot);
@@ -344,11 +370,11 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
     }
     std::size_t previousRoots = 0;
     std::unordered_set<Domain::VirtualAddress> decodedInstructions;
-    std::vector<std::unordered_set<Domain::VirtualAddress>> sectionReachable(headers.size());
+    std::vector<std::unordered_set<Domain::VirtualAddress>> sectionReachable(codeHeaders.size());
     do {
         previousRoots = roots.size();
-        for (std::size_t i = 0; i < headers.size(); ++i) {
-            const auto& header = headers[i];
+        for (std::size_t i = 0; i < codeHeaders.size(); ++i) {
+            const auto& header = codeHeaders[i];
             if (header.Type != 1 || (header.Flags & 1) == 0 || header.FileSize == 0) continue;
             range(header.Offset, header.FileSize);
             std::vector<std::uint64_t> entries;
@@ -421,6 +447,7 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
         }
     }
     report(10000);
+    if (entryRoots) *entryRoots = std::move(roots);
     return instructions;
 }
 

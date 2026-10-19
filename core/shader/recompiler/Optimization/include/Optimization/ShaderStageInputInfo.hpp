@@ -3,6 +3,7 @@
 
 #include "IntermediateRepresentation/IrMetadata.hpp"
 #include "Recompiler.hpp"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -91,6 +92,7 @@ struct ShaderMeshInputInfo: ShaderWorkgroupInputInfo {
     std::uint32_t maxPrimitives = 0;
     std::uint32_t provokingVertex = 0;
     std::uint32_t esgsItemSize = 0;
+    std::uint32_t outputPrimitiveSize = 3;
 
     [[nodiscard]] std::uint32_t InputPrimitiveSize() const {
         return inputPrimitive == 1u ? 1u : inputPrimitive == 2u ? 2u : 3u;
@@ -112,6 +114,11 @@ struct ShaderTessellationInputInfo {
     std::uint32_t domain = 0;
     std::uint32_t partitioning = 0;
     std::uint32_t outputTopology = 0;
+    std::uint32_t patchesPerGroup = 256;
+    std::uint32_t primitiveGroupSize = 0;
+    bool breakAtInstance = false;
+    std::uint32_t instancePatches = 0;
+    bool drawParameters = false;
 };
 
 struct ShaderVertexInputInfo {
@@ -162,6 +169,7 @@ struct ShaderPixelInputInfo {
     bool psPosZ = false;
     bool psPosW = false;
     bool psFrontFace = false;
+    bool psFrontFaceAllBits = false;
     bool psAncillary = false;
     bool psNoPerspective = false;
     bool psPixelKillEnable = false;
@@ -174,10 +182,35 @@ struct ShaderPixelInputInfo {
     ConservativeZExport psConservativeZExport = ConservativeZExport::AnyZ;
     bool psOrderedPixelShader = false;
     bool psAlphaToCoverage = false;
+    bool psDitheredAlphaToCoverage = false;
+    std::uint8_t quadPixelMask = 0xf;
+    std::array<std::uint16_t, 4> quadSampleMask{0xffffu, 0xffffu, 0xffffu, 0xffffu};
+    bool psIteratesSamples = false;
+    PixelPositionLocation psPositionLocation = PixelPositionLocation::Center;
+    std::array<std::uint8_t, 32> sampleLocations{};
     ShaderStageRuntime stage;
 
     bool HasPositionInput() const {
         return psPosX || psPosY || psPosZ || psPosW;
+    }
+
+    [[nodiscard]] bool SampleLocationsOffCenter() const {
+        return std::ranges::any_of(sampleLocations, [](std::uint8_t location) { return location != 0u; });
+    }
+
+    [[nodiscard]] bool SampleLocationsVary() const {
+        for (std::size_t index = 8; index < sampleLocations.size(); ++index) {
+            if (sampleLocations[index] != sampleLocations[index % 8u]) return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool QuadSampleMaskPartial() const {
+        return std::ranges::any_of(quadSampleMask, [](std::uint16_t mask) { return mask != 0xffffu; });
+    }
+
+    [[nodiscard]] bool QuadMasked() const {
+        return quadPixelMask != 0xf || QuadSampleMaskPartial();
     }
 
     [[nodiscard]] bool InputIsDefault(std::uint32_t input) const {

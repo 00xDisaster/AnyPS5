@@ -3,6 +3,7 @@
 #include "prx/libScePad/include/InputCommandFile.hpp"
 #include "prx/libkernel/Time/include/Time.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
@@ -14,6 +15,7 @@ namespace {
     std::mutex stateMutex;
     PadInputState state;
     PadOutputState output;
+    std::chrono::steady_clock::time_point audioHapticEnd;
     std::uint64_t timestamp = 0;
 
     struct QueuedInput {
@@ -110,6 +112,11 @@ void Pad::Initialize() {
     initialized = true;
 }
 
+bool Pad::IsInitialized() {
+    std::lock_guard lock(stateMutex);
+    return initialized;
+}
+
 namespace {
 PadData BuildData(const PadInputState& state, std::uint64_t changeTime, std::uint64_t now, const Pad::InputCommandFile::Input& injected) {
     PadData data{};
@@ -172,10 +179,10 @@ PadData BuildData(const PadInputState& state, std::uint64_t changeTime, std::uin
         }
         ++touchNum;
     }
-    if (touchNum == 0 && (state.touchLeft || state.touchRight)) {
+    if (touchNum == 0 && (state.touchLeft || state.touchRight || injected.touchLeft || injected.touchRight)) {
         data.buttons |= 0x100000;
         touchNum = 1;
-        data.touch_data_touch0_x = state.touchRight ? 1440 : 480;
+        data.touch_data_touch0_x = state.touchRight || injected.touchRight ? 1440 : 480;
         data.touch_data_touch0_y = 471;
         data.touch_data_touch0_id = 0;
     }
@@ -184,7 +191,14 @@ PadData BuildData(const PadInputState& state, std::uint64_t changeTime, std::uin
 }
 
 Pad::InputCommandFile::Input InjectedInput(std::uint64_t now) {
-    static Pad::InputCommandFile commands(std::getenv("APS5_PAD_INPUT_FILE"));
+    static Pad::InputCommandFile commands([] {
+#ifdef _WIN32
+        const auto* path = _wgetenv(L"APS5_PAD_INPUT_FILE");
+#else
+        const auto* path = std::getenv("APS5_PAD_INPUT_FILE");
+#endif
+        return path ? std::filesystem::path(path) : std::filesystem::path{};
+    }());
     static Pad::InputCommandFile::Input lastInjected;
     const auto injected = commands.Poll(now);
     if (injected != lastInjected) {
@@ -357,8 +371,23 @@ extern "C" void PadReportInputFailure_nid_postfix(std::exception_ptr error) {
 
 extern "C" bool PadFetchOutput_nid_postfix(std::uint32_t* seenSequence, PadOutputState* out) {
     std::lock_guard lock(stateMutex);
+    if ((output.audioVibrationLarge || output.audioVibrationSmall) && std::chrono::steady_clock::now() >= audioHapticEnd) {
+        output.audioVibrationLarge = output.audioVibrationSmall = 0;
+        ++output.sequence;
+    }
     if (seenSequence == nullptr || out == nullptr || *seenSequence == output.sequence) return false;
     *seenSequence = output.sequence;
     *out = output;
     return true;
+}
+
+extern "C" void PadSubmitAudioHaptics_nid_postfix(std::uint8_t large, std::uint8_t small) {
+    std::lock_guard lock(stateMutex);
+    if (large == 0 && small == 0) return;
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= audioHapticEnd) output.audioVibrationLarge = output.audioVibrationSmall = 0;
+    output.audioVibrationLarge = std::max(output.audioVibrationLarge, large);
+    output.audioVibrationSmall = std::max(output.audioVibrationSmall, small);
+    audioHapticEnd = now + std::chrono::milliseconds(80);
+    ++output.sequence;
 }

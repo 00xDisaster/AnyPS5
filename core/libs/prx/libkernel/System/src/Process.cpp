@@ -9,6 +9,10 @@
 #include <sched.h>
 #include <unistd.h>
 #endif
+#if defined(__linux__) && defined(__x86_64__)
+#include <asm/prctl.h>
+#include <sys/syscall.h>
+#endif
 
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
@@ -31,6 +35,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -40,6 +45,7 @@
 #endif
 
 extern "C" int* APS5_VABI __error_nid_postfix();
+extern "C" int APS5_VABI stat_nid_postfix(const char* path, FileStat* sb);
 
 namespace {
 
@@ -80,6 +86,13 @@ public:
             throw std::system_error(GetLastError(), std::system_category(), "Reading process arguments");
         for (int index = 0; index < count; ++index)
             arguments.push_back(toUtf8(values.get()[index]));
+        wchar_t skip[2]{};
+        if (GetEnvironmentVariableW(L"ANYPS5_LOADEXEC_ARGV_SKIP", skip, 2) == 1 && skip[0] == L'1') {
+            if (arguments.size() < 2) throw std::runtime_error("LoadExec: missing guest process arguments");
+            arguments.erase(arguments.begin());
+            if (_wputenv_s(L"ANYPS5_LOADEXEC_ARGV_SKIP", L"") != 0 || !SetEnvironmentVariableW(L"ANYPS5_LOADEXEC_ARGV_SKIP", nullptr))
+                throw std::runtime_error("LoadExec: cannot clear the argument marker");
+        }
 #else
         std::ifstream stream("/proc/self/cmdline", std::ios::binary);
         if (!stream)
@@ -117,12 +130,20 @@ bool hasPriorityRange(int policy) {
     return policy == 1 || policy == 3;
 }
 
+constexpr int guestNoProcess = 3;
 constexpr int guestFault = 14;
 constexpr int guestInvalid = 22;
 constexpr int guestRlimitCpu = 0;
 constexpr int guestRlimitFsize = 1;
+constexpr int guestPriorityProcess = 0;
+constexpr int guestPriorityGroup = 1;
+constexpr int guestPriorityUser = 2;
+std::atomic<int> guestNice{0};
+constexpr int guestNiceMin = -20;
+constexpr int guestNiceMax = 20;
 constexpr int guestRlimitData = 2;
 constexpr int guestRlimitCore = 4;
+constexpr int guestRlimitNofile = 8;
 constexpr int guestRlimitSbsize = 9;
 constexpr int guestRlimitVmem = 10;
 constexpr int guestRlimitNpts = 11;
@@ -162,6 +183,11 @@ struct GuestResourceLimit {
     std::int64_t rlim_cur;
     std::int64_t rlim_max;
 };
+
+namespace {
+std::mutex openFileLimitMutex;
+std::optional<GuestResourceLimit> guestOpenFileLimit;
+}
 
 struct GuestResourceUsage {
     KernelTimeval ru_utime;
@@ -324,6 +350,13 @@ int APS5_VABI setrlimit_nid_postfix(int resource, const GuestResourceLimit* limi
 
     GuestResourceLimit current{};
     getrlimit_nid_postfix(resource, &current);
+    if (resource == guestRlimitNofile) {
+        if (requested.rlim_max <= current.rlim_max && requested.rlim_cur <= requested.rlim_max) {
+            std::lock_guard lock(openFileLimitMutex);
+            guestOpenFileLimit = requested;
+            return 0;
+        }
+    }
     if (requested.rlim_cur != current.rlim_cur || requested.rlim_max != current.rlim_max)
         throw std::runtime_error("setrlimit: changing the limit of resource " + std::to_string(resource) + " is not supported");
     return 0;
@@ -344,6 +377,14 @@ int APS5_VABI execv_nid_postfix(const char* path, char* const* arguments) {
     (void)path;
     (void)arguments;
     NotImplemented_nid_no_patch("execv: executable replacement");
+    return -1;
+}
+
+int APS5_VABI execve_nid_postfix(const char* path, char* const* arguments, char* const* environment) {
+    (void)path;
+    (void)arguments;
+    (void)environment;
+    NotImplemented_nid_no_patch("execve: executable replacement");
     return -1;
 }
 
@@ -428,15 +469,52 @@ int APS5_VABI sched_get_priority_min_nid_postfix(int policy) {
     return 256;
 }
 
+int APS5_VABI sysarch(int operation, void* parameters) {
+    constexpr int getFsBase = 128;
+    constexpr int getGsBase = 130;
+    constexpr int setGsBase = 131;
+    constexpr std::uint64_t userAddressEnd = 0x0000800000000000ull;
+    if (operation != getFsBase && operation != getGsBase && operation != setGsBase)
+        NotImplemented_nid_no_patch(("sysarch: operation " + std::to_string(operation)).c_str());
+#if defined(__linux__) && defined(__x86_64__)
+    if (parameters == nullptr) {
+        *__error_nid_postfix() = guestFault;
+        return -1;
+    }
+    std::uint64_t base = 0;
+    if (operation == setGsBase) {
+        std::memcpy(&base, parameters, sizeof(base));
+        if (base >= userAddressEnd) {
+            *__error_nid_postfix() = guestInvalid;
+            return -1;
+        }
+        if (::syscall(SYS_arch_prctl, ARCH_SET_GS, base) != 0) throw std::system_error(errno, std::generic_category(), "sysarch: setting the GS base");
+        return 0;
+    }
+    if (::syscall(SYS_arch_prctl, operation == getFsBase ? ARCH_GET_FS : ARCH_GET_GS, &base) != 0)
+        throw std::system_error(errno, std::generic_category(), "sysarch: reading a segment base");
+    std::memcpy(parameters, &base, sizeof(base));
+    return 0;
+#else
+    static_cast<void>(parameters);
+    NotImplemented_nid_no_patch("sysarch: segment bases on this host");
+    return 0;
+#endif
+}
+
 int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
-    if (usage == nullptr)
-        throw std::invalid_argument("getrusage: usage is null");
+    if (who != -1 && who != 0 && who != 1) {
+        *__error_nid_postfix() = guestInvalid;
+        return -1;
+    }
+    if (usage == nullptr) {
+        *__error_nid_postfix() = guestFault;
+        return -1;
+    }
     if (who == -1) {
         *usage = {};
         return 0;
     }
-    if (who != 0 && who != 1)
-        throw std::invalid_argument("getrusage: unsupported who");
 #ifdef _WIN32
     FILETIME creation{};
     FILETIME exitTime{};
@@ -522,6 +600,22 @@ int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
 #endif
         return 0;
     }
+    case guestRlimitNofile: {
+        std::lock_guard lock(openFileLimitMutex);
+        if (!guestOpenFileLimit) {
+#ifdef _WIN32
+            constexpr std::int64_t crtDescriptors = 8192;
+            guestOpenFileLimit = GuestResourceLimit{crtDescriptors, crtDescriptors};
+#else
+            rlimit native{};
+            if (::getrlimit(RLIMIT_NOFILE, &native) != 0)
+                throw std::system_error(errno, std::generic_category(), "getrlimit: getrlimit failed");
+            guestOpenFileLimit = GuestResourceLimit{toGuestLimit(native.rlim_cur), toGuestLimit(native.rlim_max)};
+#endif
+        }
+        *limit = *guestOpenFileLimit;
+        return 0;
+    }
     case guestRlimitCpu:
     case guestRlimitFsize:
     case guestRlimitCore:
@@ -537,6 +631,48 @@ int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
     default:
         throw std::runtime_error("getrlimit: unsupported resource " + std::to_string(resource));
     }
+}
+
+int APS5_VABI getpriority_nid_postfix(int which, int who) {
+    if (which != guestPriorityProcess && which != guestPriorityGroup && which != guestPriorityUser) {
+        *__error_nid_postfix() = guestInvalid;
+        return -1;
+    }
+    const bool found = which == guestPriorityUser ? (who == 0 ? getuid_nid_postfix() : who) == getuid_nid_postfix()
+                                                  : who == 0 || who == getpid_nid_postfix();
+    if (!found) {
+        *__error_nid_postfix() = guestNoProcess;
+        return -1;
+    }
+    return guestNice.load(std::memory_order_relaxed);
+}
+
+int APS5_VABI setpriority_nid_postfix(int which, int who, int niceval) {
+    if (which != guestPriorityProcess && which != guestPriorityGroup && which != guestPriorityUser) {
+        *__error_nid_postfix() = guestInvalid;
+        return -1;
+    }
+    const bool found = which == guestPriorityUser ? (who == 0 ? getuid_nid_postfix() : who) == getuid_nid_postfix()
+                                                  : who == 0 || who == getpid_nid_postfix();
+    if (!found) {
+        *__error_nid_postfix() = guestNoProcess;
+        return -1;
+    }
+    const int clamped = niceval < guestNiceMin ? guestNiceMin : (niceval > guestNiceMax ? guestNiceMax : niceval);
+    guestNice.store(clamped, std::memory_order_relaxed);
+    return 0;
+}
+
+int APS5_VABI getdtablesize_nid_postfix(void) {
+    GuestResourceLimit limit{};
+    getrlimit_nid_postfix(guestRlimitNofile, &limit);
+    std::int64_t tableSize = limit.rlim_cur;
+#ifndef _WIN32
+    tableSize = std::min(tableSize, static_cast<std::int64_t>(::getdtablesize()));
+#endif
+    if (tableSize > std::numeric_limits<int>::max())
+        return std::numeric_limits<int>::max();
+    return static_cast<int>(tableSize);
 }
 
 int APS5_VABI sceKernelIsTrinityMode(void) {
