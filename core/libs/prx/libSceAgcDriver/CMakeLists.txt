@@ -1271,6 +1271,13 @@ if(BUILD_TESTING)
         set_tests_properties(agc_import_watch agc_import_watch_other_family agc_import_settle_deferred agc_import_settle_deferred_other_family agc_import_settle_first_use agc_import_settle_earlier_import agc_import_settle_retire agc_import_settle_storage_image PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
+    if(WIN32)
+        add_test(NAME agc_reimport_bench COMMAND agc_driver_recorder_tests --reimport-bench)
+        add_test(NAME agc_trimmed_import COMMAND agc_driver_recorder_tests --trimmed-import-only)
+        set_tests_properties(agc_reimport_bench agc_trimmed_import PROPERTIES SKIP_RETURN_CODE 77)
+        set_tests_properties(agc_reimport_bench agc_trimmed_import PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
     add_test(NAME agc_unchanged_cpu_stamps COMMAND agc_driver_recorder_tests --unchanged-cpu-stamps-only)
     set_tests_properties(agc_unchanged_cpu_stamps PROPERTIES SKIP_RETURN_CODE 77)
     if(WIN32)
