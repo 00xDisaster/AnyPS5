@@ -5157,10 +5157,12 @@ void descriptorSnapshotTests() {
             const auto original = findWrite(0).buffers;
             const auto originalThird = findWrite(4).buffers;
             std::vector<ShaderResources::MovedBuffer> moved;
+            std::array<std::vector<std::uint32_t>, 2> words;
             for (std::size_t index = 0; index < 2; ++index) {
                 if ((selected & (1u << index)) == 0) continue;
                 const std::size_t bytes = index == 0 ? 24 : 12;
-                moved.push_back({index, 0, bytes, std::vector<std::uint32_t>(bytes / 4, static_cast<std::uint32_t>(0x12340000u + index))});
+                words[index].assign(bytes / 4, static_cast<std::uint32_t>(0x12340000u + index));
+                moved.push_back({index, 0, bytes, words[index]});
             }
             mock.writes.clear();
             const auto snapshots = resources.PrepareDrawBindings(recorder, moved);
@@ -5579,19 +5581,27 @@ void descriptorCacheTests() {
         Require(mock.poolSizes.size() == 2 && mock.poolSizes[0].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && mock.poolSizes[0].descriptorCount == 4097 && mock.poolSizes[1].type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE && mock.poolSizes[1].descriptorCount == 3, "the dedicated pool is not sized to its set");
         Require(cache.Counters().pools == 0 && cache.Counters().sets == 1, "an oversized set was counted in the chain pools");
         cache.Free(dedicated);
-        Require(mock.live == live, "freeing an oversized set did not destroy its pool");
+        Require(mock.live == live + 1 && cache.Counters().keptSets == 1, "freeing an oversized set did not keep its set and pool");
+        const auto again = cache.Allocate(large, oversized);
+        Require(again.set == dedicated.set && again.pool == dedicated.pool && mock.live == live + 1 && cache.Counters().reusedSets == 1 && cache.Counters().dedicatedPools == 1, "an oversized set of the kept set's layout and sizes did not take the kept set");
+        cache.Free(again);
+        const std::array<VkDescriptorPoolSize, 2> otherSizes{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4098}, {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3}}};
+        const auto other = cache.Allocate(large, otherSizes);
+        Require(other.pool != dedicated.pool && mock.live == live + 2 && cache.Counters().dedicatedPools == 2, "an oversized set of other sizes took a kept set");
+        cache.Free(other);
+        Require(mock.live == live + 2 && cache.Counters().keptSets == 3, "freeing a second oversized set did not keep it");
         const std::array<VkDescriptorPoolSize, 1> fitting{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096}}};
         const auto chained = cache.Allocate(layout(4096), fitting);
         Require(chained.set != VK_NULL_HANDLE && mock.poolMaxSets == 1024 && mock.poolFlags == 0 && cache.Counters().pools == 1, "a set the chain pool holds left the chain");
         cache.Free(chained);
-        Require(mock.descriptorPools.at(chained.pool).resets == 1 && mock.live == live + 2, "a chain pool was not reset after its last set");
+        Require(mock.descriptorPools.at(chained.pool).resets == 1 && mock.live == live + 4, "a chain pool was not reset after its last set");
         const std::array<VkDescriptorPoolSize, 1> regular{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096}}};
         const auto first = cache.Allocate(layout(4096), regular);
         const auto oversizedMixed = cache.Allocate(large, oversized);
         const auto second = cache.Allocate(layout(4096), regular);
         Require(first.pool == chained.pool && second.pool == chained.pool && oversizedMixed.pool != chained.pool && mock.descriptorPools.at(chained.pool).resets == 1, "an oversized set disturbed the chain pool");
         cache.Free(oversizedMixed);
-        Require(mock.live == live + 2 && mock.descriptorPools.count(oversizedMixed.pool) == 0 && mock.descriptorPools.at(chained.pool).resets == 1, "freeing an oversized set between chain sets touched the chain pool");
+        Require(oversizedMixed.pool == dedicated.pool && mock.live == live + 4 && mock.descriptorPools.count(oversizedMixed.pool) == 1 && mock.descriptorPools.at(chained.pool).resets == 1, "freeing an oversized set between chain sets touched the chain pool");
         cache.Free(first);
         Require(mock.descriptorPools.at(chained.pool).resets == 1, "a chain pool reset while a set was live");
         cache.Free(second);
@@ -5602,6 +5612,15 @@ void descriptorCacheTests() {
         expectFailure([&] { cache.Allocate(large, storageImages); }, "descriptor set exceeds the device's per-set descriptor limit");
         const std::array<VkDescriptorPoolSize, 1> uniformBuffers{{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}}};
         expectFailure([&] { cache.Allocate(large, uniformBuffers); }, "descriptor set uses an unsupported descriptor type 6");
+        const auto keptBefore = mock.live;
+        std::vector<AgcDriver::Graphics::DescriptorCache::SetAllocation> spread;
+        for (std::uint32_t index = 0; index < 10; ++index) {
+            const std::array<VkDescriptorPoolSize, 1> sized{{{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4100 + index}}};
+            spread.push_back(cache.Allocate(large, sized));
+        }
+        Require(mock.live == keptBefore + 10, "ten oversized sets of new sizes did not get ten pools");
+        for (const auto& set : spread) cache.Free(set);
+        Require(mock.live == keptBefore - 2 + 8, "freeing more oversized sets than the cache keeps did not destroy the oldest pools");
     }
     Require(mock.live == 0, "the descriptor cache leaked a pool or layout");
     mock = MockVulkan{};
@@ -5735,7 +5754,8 @@ void imageTableSnapshotAllocationTests() {
         const auto state = DecodeState(makeState());
         ShaderResources resources(context, vertex, fragment, state.color, 0, 0);
         const auto originalMap = findWrite(map.binding).buffers.at(0);
-        const std::array<ShaderResources::MovedBuffer, 1> moved{{{0, 0, 16, {11, 22, 33, 44}}}};
+        const std::array<std::uint32_t, 4> movedWords{11, 22, 33, 44};
+        const std::array<ShaderResources::MovedBuffer, 1> moved{{{0, 0, 16, movedWords}}};
         const auto sets = cache.Counters().sets;
         mock.writes.clear();
         mock.variableDescriptorCount.reset();
