@@ -473,6 +473,9 @@ int main() {
         Require(serializer.Deserialize(serializer.Serialize(request)).request.target.spannedWaves == spanned);
         request.target.float32FlushToZero = true;
         auto version35 = DecodeBase64(serializer.Serialize(request));
+        const auto stencilOperationValue = std::search(version35.begin(), version35.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
+        Require(stencilOperationValue < version35.end() && *stencilOperationValue == 0u);
+        version35.erase(stencilOperationValue);
         version35[4] = 35u;
         version35.pop_back();
         const auto replay35 = serializer.Deserialize(EncodeBase64(version35));
