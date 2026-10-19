@@ -774,6 +774,8 @@ void Draw(AgcDriver::VulkanDevice& device, const Context& context, const Pass& p
     const AgcDriver::Registers registers{{0x1b3, inputs}, {0x1b4, inputs}, {0x1b6, 0u}, {0x1c5, pass.colorFormat}, {0x203, pass.shaderControl}};
     auto pixel = AgcDriver::Graphics::DecodePixelStageInfo(registers, AgcDriver::Graphics::ExportMappings(state));
     Require(pixel.sampleShading == pass.perSample, "the pixel inputs did not select the requested shading rate");
+    pixel.iteratesSamples = state.perSampleShading;
+    pixel.sampleLocations = AgcDriver::Graphics::PixelSampleLocations(state, pixel);
     const auto order = pass.order ? *pass.order : state.sampleLocationGrid ? AgcDriver::Graphics::HostSampleLocationsFor(context, state).order : SampleOrder{};
     pixel.sampleOrder = order;
     pixel.quadPixelMask = AgcDriver::Graphics::QuadPixelMask(state);
