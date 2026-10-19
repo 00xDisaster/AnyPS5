@@ -1197,7 +1197,7 @@ public:
     }
 
     void Close() {
-        std::vector<pthread_t> joined;
+        std::vector<Worker> joined;
         {
             std::unique_lock lock(mutex);
             closed = true;
@@ -1205,21 +1205,39 @@ public:
             joined.swap(workers);
         }
         ready.notify_all();
-        for (const auto worker : joined) {
-            if (!pthread_equal(worker, pthread_self())) pthread_join(worker, nullptr);
-        }
+        for (const auto& worker : joined) Join(worker);
     }
 
 private:
     static constexpr std::size_t StackBytes = 64u << 20u;
 
+#ifdef _WIN32
+    struct Worker {
+        HANDLE handle;
+        unsigned id;
+    };
+
+    static void Join(const Worker& worker) {
+        if (worker.id != GetCurrentThreadId()) WaitForSingleObject(worker.handle, INFINITE);
+        CloseHandle(worker.handle);
+    }
+#else
+    using Worker = pthread_t;
+
+    static void Join(Worker worker) {
+        if (!pthread_equal(worker, pthread_self())) pthread_join(worker, nullptr);
+    }
+#endif
+
     explicit RegistrationPreparePool(unsigned count) {
 #ifdef _WIN32
         for (unsigned index = 0; index < count; ++index) {
-            const auto thread = _beginthreadex(nullptr, static_cast<unsigned>(StackBytes), &RegistrationPreparePool::WindowsMain, this, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+            unsigned id = 0;
+            const auto thread = _beginthreadex(nullptr, static_cast<unsigned>(StackBytes), &RegistrationPreparePool::WindowsMain, this, STACK_SIZE_PARAM_IS_A_RESERVATION, &id);
             if (thread != 0) {
-                CloseHandle(reinterpret_cast<HANDLE>(thread));
+                workers.push_back({reinterpret_cast<HANDLE>(thread), id});
                 ++threads;
+                liveWorkers.fetch_add(1, std::memory_order_acq_rel);
             }
         }
 #else
@@ -1289,7 +1307,7 @@ private:
     std::condition_variable ready;
     std::condition_variable idle;
     std::deque<Task> tasks;
-    std::vector<pthread_t> workers;
+    std::vector<Worker> workers;
     unsigned threads = 0;
     inline static std::atomic<unsigned> liveWorkers{0};
     unsigned running = 0;
