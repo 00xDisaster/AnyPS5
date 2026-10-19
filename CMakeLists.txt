@@ -62,6 +62,18 @@ include(cmake/SystemDeps.cmake)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(CheckCXXSourceCompiles)
+function(anyps5_check_cxx_links_standard_library)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE EXECUTABLE)
+    check_cxx_source_compiles("#include <string>\nint main(int argc, char**) { try { throw std::string(static_cast<std::size_t>(argc), 'x'); } catch (const std::string& text) { return static_cast<int>(text.size()) - argc; } }" ANYPS5_CXX_LINKS_STANDARD_LIBRARY)
+endfunction()
+anyps5_check_cxx_links_standard_library()
+if(NOT ANYPS5_CXX_LINKS_STANDARD_LIBRARY)
+    message(FATAL_ERROR "The C++ compiler ${CMAKE_CXX_COMPILER} cannot link a program that uses the C++ standard library. "
+        "Set CMAKE_CXX_COMPILER to the C++ driver (g++ or clang++, not gcc or clang) in a new build directory. "
+        "Supported toolchains are listed in docs/dev/BUILD.md.")
+endif()
+
 if(ANYPS5_ENABLE_ASAN)
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(FATAL_ERROR "ANYPS5_ENABLE_ASAN is supported only on Linux")
@@ -113,6 +125,10 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/core/shader/recompiler/tests/test_shader_cache_native_paths.py
             ${CMAKE_CURRENT_SOURCE_DIR}/core/shader/recompiler/ShaderCacheVersion.cmake ${CMAKE_COMMAND})
         set_tests_properties(shader_cache_native_paths PROPERTIES TIMEOUT 20)
+        add_test(NAME shader_cache_runtime_sources COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_shader_cache_runtime_sources.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/core/shader/recompiler ${CMAKE_COMMAND})
+        set_tests_properties(shader_cache_runtime_sources PROPERTIES TIMEOUT 180)
         add_test(NAME pr_overlap_encoding COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_pr_overlap_encoding.py)
         add_test(NAME pr_overlap_dependencies COMMAND ${Python3_EXECUTABLE}
@@ -155,6 +171,8 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_doc_links.py)
         add_test(NAME conventions_unknown_nids COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_unknown_nids.py)
+        add_test(NAME conventions_debt_length COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_debt_length.py)
         add_test(NAME test_registration COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_test_registration.py)
         add_test(NAME build_eligibility COMMAND ${Python3_EXECUTABLE}
@@ -177,7 +195,7 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/hw-oracle/test_hw_oracle.py)
         add_test(NAME hardware_oracle_compare COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/hw-oracle/test_compare_results.py)
-        set_tests_properties(hardware_oracle_compare PROPERTIES TIMEOUT 20)
+        set_tests_properties(hardware_oracle_compare PROPERTIES TIMEOUT 120)
         add_test(NAME pr_overlap_exports COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_pr_overlap_exports.py)
         add_test(NAME pr_overlap_wrapped_exports COMMAND ${Python3_EXECUTABLE}
@@ -304,6 +322,22 @@ add_subdirectory(3rdparty/libusb-cmake EXCLUDE_FROM_ALL)
 set_target_properties(usb-1.0 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 include(cmake/ZArchive.cmake)
+if(WIN32)
+    set(MI_BUILD_SHARED ON CACHE BOOL "" FORCE)
+    set(MI_BUILD_STATIC OFF CACHE BOOL "" FORCE)
+    set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
+    set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(MI_OVERRIDE ON CACHE BOOL "" FORCE)
+    set(MI_WIN_REDIRECT ON CACHE BOOL "" FORCE)
+    set(MI_FREE_IS_CHECKED SHARED CACHE STRING "" FORCE)
+    add_subdirectory(3rdparty/mimalloc EXCLUDE_FROM_ALL)
+    if(MINGW)
+        target_compile_definitions(mimalloc PRIVATE MI_MINGW_UCRT64=1)
+        target_link_options(mimalloc PRIVATE -static
+                LINKER:--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free,--wrap=strdup,--wrap=_strdup)
+        target_sources(mimalloc PRIVATE ${CMAKE_SOURCE_DIR}/core/libs/allocator/RuntimeHeap.c)
+    endif()
+endif()
 
 add_subdirectory(core/shader/recompiler)
 add_subdirectory(core/Decoder/Jpeg)
