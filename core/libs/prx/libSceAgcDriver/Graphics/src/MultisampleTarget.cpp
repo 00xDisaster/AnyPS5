@@ -767,7 +767,7 @@ bool TakeMultisampledClear(MultisampledCmask& cmask, MultisampledColorFill& colo
 SampleOrderTarget MultisampleTargetOrderTarget(const Context& context, const ColorTarget& target) {
     std::lock_guard lock(targetsMutex());
     auto& found = acquire(context, target);
-    return {found.image, found.OrderView(), found.orderFormat, target.extent, target.samples, SampleOrderMethod::Storage, nullptr};
+    return {found.image, found.OrderView(), found.orderFormat, target.extent, target.samples, SampleOrderMethod::Storage, found.shared_from_this()};
 }
 
 VkImageView MultisampleTargetView(const Context& context, const ColorTarget& target, VkImage* image) {
