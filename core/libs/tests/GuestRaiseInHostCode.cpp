@@ -16,7 +16,7 @@ int APS5_VABI sceKernelRaiseException(Pthread, int);
 }
 
 static constexpr int SigUsr1 = 30;
-static constexpr int Raises = 20;
+static constexpr int Raises = 100;
 static void Require(bool value) { if (!value) std::abort(); }
 
 static std::FILE* shared = nullptr;

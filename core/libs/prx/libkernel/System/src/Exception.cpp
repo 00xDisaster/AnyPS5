@@ -252,15 +252,59 @@ bool InWinpthread(DWORD64 rip) {
     return winpthread != nullptr && VirtualQuery(reinterpret_cast<const void*>(rip), &info, sizeof(info)) == sizeof(info) && info.AllocationBase == winpthread;
 }
 
-bool InHostModule(DWORD64 rip) {
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(rip), &module) || module == nullptr) return false;
-    if (module == GetModuleHandleW(nullptr)) return false;
-    wchar_t path[MAX_PATH]{};
-    const auto length = GetModuleFileNameW(module, path, MAX_PATH);
-    const std::wstring_view name(path, length);
-    constexpr std::wstring_view guestSuffix = L".guest.prx";
-    return !(name.size() >= guestSuffix.size() && name.substr(name.size() - guestSuffix.size()) == guestSuffix);
+enum class CodeKind : std::uint8_t { Unknown, Guest, Host };
+
+struct ImageKinds {
+    static constexpr std::size_t Capacity = 256;
+    std::array<std::atomic<DWORD64>, Capacity> bases{};
+    std::array<std::atomic<std::uint8_t>, Capacity> kinds{};
+    std::atomic<std::size_t> count{0};
+};
+
+ImageKinds& Images() {
+    static ImageKinds images;
+    return images;
+}
+
+DWORD64 ImageBase(DWORD64 rip) {
+    MEMORY_BASIC_INFORMATION info{};
+    if (VirtualQuery(reinterpret_cast<const void*>(rip), &info, sizeof(info)) != sizeof(info) || info.Type != MEM_IMAGE) return 0;
+    return reinterpret_cast<DWORD64>(info.AllocationBase);
+}
+
+CodeKind CachedKind(DWORD64 base) {
+    if (base == 0) return CodeKind::Guest;
+    auto& images = Images();
+    const auto count = std::min(images.count.load(std::memory_order_acquire), ImageKinds::Capacity);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (images.bases[index].load(std::memory_order_acquire) == base) return static_cast<CodeKind>(images.kinds[index].load(std::memory_order_acquire));
+    }
+    return CodeKind::Unknown;
+}
+
+DWORD64 ExecutableBase() {
+    static const auto executable = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
+    return executable;
+}
+
+CodeKind ClassifyImage(DWORD64 base) {
+    if (const auto known = CachedKind(base); known != CodeKind::Unknown) return known;
+    auto kind = CodeKind::Host;
+    if (base == ExecutableBase()) {
+        kind = CodeKind::Guest;
+    } else {
+        wchar_t path[MAX_PATH]{};
+        const auto length = GetModuleFileNameW(reinterpret_cast<HMODULE>(base), path, MAX_PATH);
+        const std::wstring_view name(path, length);
+        constexpr std::wstring_view guestSuffix = L".guest.prx";
+        if (name.size() >= guestSuffix.size() && name.substr(name.size() - guestSuffix.size()) == guestSuffix) kind = CodeKind::Guest;
+    }
+    auto& images = Images();
+    if (const auto slot = images.count.fetch_add(1, std::memory_order_acq_rel); slot < ImageKinds::Capacity) {
+        images.kinds[slot].store(static_cast<std::uint8_t>(kind), std::memory_order_release);
+        images.bases[slot].store(base, std::memory_order_release);
+    }
+    return kind;
 }
 
 bool BlockedInWait(DWORD64 rip) {
@@ -278,8 +322,11 @@ bool BlockedInWait(DWORD64 rip) {
     return std::any_of(waits.begin(), waits.end(), [rip](DWORD64 stub) { return rip - stub < 0x20; });
 }
 
-bool RunningHostCode(DWORD64 rip) {
-    return InHostModule(rip) && !BlockedInWait(rip);
+CodeKind RunningCode(DWORD64 rip, DWORD64& base) {
+    base = ImageBase(rip);
+    auto kind = CachedKind(base);
+    if (kind == CodeKind::Unknown && Images().count.load(std::memory_order_acquire) >= ImageKinds::Capacity) kind = CodeKind::Host;
+    return kind == CodeKind::Host && BlockedInWait(rip) ? CodeKind::Guest : kind;
 }
 
 bool RaiseOn(Pthread thread, GuestExceptionHandler handler, int signum) {
@@ -293,6 +340,11 @@ bool RaiseOn(Pthread thread, GuestExceptionHandler handler, int signum) {
     auto queued = std::make_unique<Delivery>(Delivery{handler, signum, {}, {}, 0});
     alignas(16) Delivery delivery{handler, signum, {}, {}, SaveVectors ? 1u : 0u};
     const auto retryDeadline = std::chrono::steady_clock::now() + RetryLimit;
+    static_cast<void>(RestoringContext(0));
+    static_cast<void>(InWinpthread(0));
+    static_cast<void>(BlockedInWait(0));
+    static_cast<void>(ExecutableBase());
+    static_cast<void>(Images());
     for (;;) {
         if (SuspendThread(native) == static_cast<DWORD>(-1)) {
             if (Exited(native)) return false;
@@ -315,8 +367,14 @@ bool RaiseOn(Pthread thread, GuestExceptionHandler handler, int signum) {
             return true;
         }
         const bool restoring = RestoringContext(delivery.context.Rip) || InWinpthread(delivery.context.Rip);
-        if (!restoring && (!RunningHostCode(delivery.context.Rip) || std::chrono::steady_clock::now() >= retryDeadline)) break;
+        DWORD64 image = 0;
+        const auto running = restoring ? CodeKind::Guest : RunningCode(delivery.context.Rip, image);
+        if (!restoring && (running == CodeKind::Guest || (running == CodeKind::Host && std::chrono::steady_clock::now() >= retryDeadline))) break;
         ResumeThread(native);
+        if (running == CodeKind::Unknown) {
+            static_cast<void>(ClassifyImage(image));
+            continue;
+        }
         if (restoring && std::chrono::steady_clock::now() >= retryDeadline) throw std::runtime_error("sceKernelRaiseException: the target thread stayed inside NtContinue or winpthreads for 1 s");
         SwitchToThread();
     }
