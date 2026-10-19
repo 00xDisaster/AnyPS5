@@ -112,6 +112,7 @@ static void CheckReadOnlyDestination() {
     Require(sceKernelGetdirentries(directory, static_cast<char*>(mapping), 4096, &base) > 0);
     Require(sceKernelMprotect(mapping, page, 1) == 0);
     Require(sceKernelGetdirentries(directory, static_cast<char*>(mapping), 4096, &base) == SCE_KERNEL_ERROR_EFAULT);
+    Require(sceKernelGetdirentries(12345, static_cast<char*>(mapping), 4096, &base) == SCE_KERNEL_ERROR_EBADF);
     std::array<char, 512> buffer{};
     Require(sceKernelGetdirentries(directory, buffer.data(), static_cast<int>(buffer.size()),
         static_cast<std::int64_t*>(mapping)) == SCE_KERNEL_ERROR_EFAULT);
