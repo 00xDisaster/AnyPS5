@@ -30,10 +30,11 @@ Windows PowerShell:
 ```powershell
 $env:APS5_PROFILE_DRAW = '1'
 $env:APS5_PAD_INPUT_FILE = "$PWD\pad.txt"
-.\app.exe *> run.log
+cmd /c '.\app.exe > run.log 2>&1'
 "exit=$LASTEXITCODE"
 ```
 
+- On Windows PowerShell 5.1, `*>` writes the log as UTF-16 and wraps the first stderr line in an error record, so `grep` can't read it; let `cmd` do the redirection, as above. `$LASTEXITCODE` still carries the exit code.
 - `APS5_PROFILE_DRAW=1` prints `[present]` lines every 10 s. Without it a working title looks frozen.
 - `APS5_NO_PAD_INPUT=1` ignores keyboard and mouse, so a stray press doesn't move a measurement run.
 - `setarch x86_64 -R` (Linux only) turns off address randomisation so addresses match between runs.
@@ -47,14 +48,14 @@ $env:APS5_PAD_INPUT_FILE = "$PWD\pad.txt"
   - AnyPS5's `shader_cache/` beside the executable, or `ANYPS5_SHADER_CACHE_DIR`. `ANYPS5_NO_SHADER_CACHE=1` disables it.
   - The driver's own: Mesa (`MESA_SHADER_CACHE_DIR`, or `MESA_SHADER_CACHE_DISABLE=true`), AMD on Windows (`%LOCALAPPDATA%\AMD\VkCache`). Back a driver cache up instead of deleting it; it isn't AnyPS5's.
 
-  Say in the report whether the caches were empty or warm.
+  Say in the report whether the caches were empty or warm. A first run that ends in device lost (`VK_ERROR_DEVICE_LOST`) or a GPU wait timeout while large pipelines are still being built, seen on AMD, often is the cache and not a regression: run again with the caches warm and report both runs.
 - **Power and display:** on a laptop, run on AC power; a run on battery can make a neutral change look like a regression. Note the display's refresh rate: a title that asks for 120 Hz output can stop at start on a 60 Hz display.
 
 ## What to read
 
 | Check | Where | Meaning |
 |---|---|---|
-| Exit code | shell | Linux: 124 time cap, 134 uncaught exception, 139 segfault, 137 killed. Windows: the exception code, `0xc0000005` access violation, `0xc0000409` uncaught exception (PowerShell shows it signed, -1073740791) |
+| Exit code | shell | Linux: 124 time cap, 134 uncaught exception, 139 segfault, 137 killed. Windows: the exception code, `0xc0000005` access violation, `0xc0000409` uncaught exception or `abort()` (the log ends with `FATAL: abort() (SIGABRT) on thread N`) (PowerShell shows it signed, -1073740791) |
 | Last lines | `run.log` or `anyps5.log` | `terminate called`, `what()`, `presentation failed`, `ASSERT`, `FATAL:` crash report |
 | Frames | `[present] N presents over 10 s` | Steady N above 0 means frames are moving |
 | Memory | `[texture] N storage images (X MiB)` | Growth before a `vkAllocateMemory ... -2` error |
