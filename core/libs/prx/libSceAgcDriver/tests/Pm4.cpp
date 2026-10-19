@@ -1708,6 +1708,13 @@ void testWaitRegMemMasking() {
     }
 }
 
+void waitDrawPipelineIdle() {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() != 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
 void testWaitRegMemPipelineDrain() {
     alignas(8) static std::uint32_t satisfiedTarget = 42;
     alignas(8) static std::uint32_t pendingTarget = 0;
@@ -1734,10 +1741,7 @@ void testWaitRegMemPipelineDrain() {
 
     blockerHold.store(false);
     AgcDriverWaitIdle_nid_postfix();
-    const auto idleDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() != 0 && std::chrono::steady_clock::now() < idleDeadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    waitDrawPipelineIdle();
     check(AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() == 0, "draw pipeline should be idle");
 
     std::atomic<bool> blocker2Hold{true};
@@ -1759,6 +1763,7 @@ void testWaitRegMemPipelineDrain() {
     blocker2Hold.store(false);
 
     AgcDriverWaitIdle_nid_postfix();
+    waitDrawPipelineIdle();
     check(AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() == 0, "pipeline should be idle after overlapping wait drain");
 }
 
