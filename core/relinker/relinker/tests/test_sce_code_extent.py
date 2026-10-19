@@ -22,10 +22,11 @@ POINTER = 0xB00
 INTERPRETER = b"/libexec/ld-elf.so.1\0"
 OVERLAPPING = bytes.fromhex("b8 64 c3 90 90 72 fa c3")
 UNSUPPORTED_TLS = bytes.fromhex("64 2d 65 6c 66 2e c3")
+INVALID = bytes.fromhex("41 41 41 41 41 41 66 66 66 66 2e 0f 1f 84 00 00 00 00 00")
 
 
 def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False, data_pointer=False, gap_entry=False,
-            plt_at=None, early_function=False, function_tls=False):
+            plt_at=None, early_function=False, function_tls=False, pointer_target=None, gap_bytes=None):
     plt = FUNCTION + FUNCTION_SIZE + gap if plt_at is None else plt_at
     entry = FUNCTION + FUNCTION_SIZE if gap_entry else FUNCTION
     data = plt + 0x20 if plt > FUNCTION else FUNCTION + FUNCTION_SIZE
@@ -40,7 +41,7 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
         (1, 1),
         (0x61000035, 0x600), (0x61000037, 16),
         (0x61000039, 0x620), (0x6100003B, 24), (0x6100003F, 48),
-        (0x6100002F, 0x700), (0x61000031, 24 if interpreter_pointer else 0), (0x61000033, 24),
+        (0x6100002F, 0x700), (0x61000031, 24 if interpreter_pointer or pointer_target is not None else 0), (0x61000033, 24),
         (0x61000027, GOT), (0x61000029, 0x720), (0x6100002B, 7), (0x6100002D, 24),
         (0, 0),
     ]
@@ -82,6 +83,10 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
         image[FUNCTION:FUNCTION + 3] = b"\x48\x8d\x05"
         struct.pack_into("<iB", image, FUNCTION + 3, data + 0x30 - (FUNCTION + 7), 0xC3)
         image[data + 0x30:data + 0x30 + len(OVERLAPPING)] = OVERLAPPING
+    if pointer_target is not None:
+        struct.pack_into("<QQq", image, 0x700, POINTER, 8, pointer_target)
+    if gap_bytes is not None:
+        image[gap_bytes[0]:gap_bytes[0] + len(gap_bytes[1])] = gap_bytes[1]
     if gap_entry:
         image[entry:entry + len(UNSUPPORTED_TLS)] = UNSUPPORTED_TLS
     if function_tls:
@@ -138,6 +143,9 @@ def main():
             run(relinker, work, "sce-interpreter-pointer-" + target, fixture(gap=0x60, interpreter_pointer=True),
                 target=target)
             run(relinker, work, "sce-data-pointer-after-plt-" + target, fixture(data_pointer=True), target=target)
+            for name, address in (("unaligned", 0x1A4), ("aligned", 0x1B0)):
+                run(relinker, work, "sce-pointer-to-" + name + "-gap-data-" + target,
+                    fixture(early_function=True, pointer_target=address, gap_bytes=(address, INVALID)), target=target)
             run(relinker, work, "sce-code-before-plt-" + target, fixture(gap=0x40, gap_entry=True),
                 "Unsupported " + ("Windows" if target == "windows" else "macOS") + " guest TLS instruction", target)
             run(relinker, work, "sce-plt-before-code-" + target, fixture(plt_at=PLT_BEFORE_CODE), target=target)
