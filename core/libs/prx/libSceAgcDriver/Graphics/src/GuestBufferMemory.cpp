@@ -422,7 +422,7 @@ void releaseTrimmed(HostImports& state, ImportNode node) {
     state.liveBytes -= node.mapped().pinnedBytes;
     auto holder = std::make_shared<RetiredImport>(state.device, state.destroyBuffer, state.freeMemory, std::move(node));
     auto* recorder = Recorder::Active();
-    if (recorder != nullptr && GuestMemory::GpuMutex().HeldByThisThread()) recorder->KeepThroughHold(std::move(holder));
+    if (recorder != nullptr) recorder->KeepThroughHold(std::move(holder));
 }
 
 void dropTrimmed(HostImports& state, std::uint64_t begin, std::uint64_t end) {
