@@ -1474,7 +1474,10 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
                 Require(std::ranges::none_of(result.colors, [](const ColorTarget& other) { return other.partialWriteMask != 0; }), "partial writes of more than one packed color target are not implemented");
                 color.partialWriteMask = PackedWriteMask(mapping, exportedMask);
                 state.colorWriteMask = 0;
-                if (color.samples > 1u) result.perSampleShading = true;
+                if (color.samples > 1u) {
+                    Require(sampleCoverageSupported(queue, result.samples, true), "SAMPLE_COVERAGE in a multisampled pixel shader that runs per sample, or reads sample-rate or ancillary inputs, is unsupported (the input holds the whole pixel's coverage, gl_SampleMaskIn only the invocation's samples)");
+                    result.perSampleShading = true;
+                }
             }
         }
         if (state.blendEnable && !reversed && (secondSource(state.srcColorBlendFactor) || secondSource(state.dstColorBlendFactor) || secondSource(state.srcAlphaBlendFactor) || secondSource(state.dstAlphaBlendFactor))) {

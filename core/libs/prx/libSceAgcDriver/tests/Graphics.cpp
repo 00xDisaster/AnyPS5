@@ -9001,6 +9001,12 @@ void unorm4_4_4_4TargetTests() {
     {
         const auto multisampled = AgcDriver::Graphics::DecodeState(changed);
         Require(multisampled.samples == 2u && multisampled.color.samples == 2u && multisampled.color.partialWriteMask == 0xf000u && multisampled.blends[0].colorWriteMask == 0u && multisampled.perSampleShading, "a partial write of a 2-sample 4_4_4_4 unorm target did not merge per sample behind a closed write mask");
+        auto coverage = changed;
+        coverage.context[0x1b3] = 0x4002u;
+        coverage.context[0x1b4] = 0x4002u;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(coverage); }, "SAMPLE_COVERAGE in a multisampled pixel shader that runs per sample");
+        coverage.context[0x8e] = 0xfu;
+        Require(!AgcDriver::Graphics::DecodeState(coverage).perSampleShading, "a full write of a 2-sample 4_4_4_4 unorm target with a SAMPLE_COVERAGE input was refused or ran per sample");
         const auto merge = AgcDriver::Graphics::ExportTargetMerge(multisampled);
         const auto surface = AgcDriver::Graphics::DecodeTextureResource(merge.descriptor);
         Require(merge.samples == 2u && merge.mask == 0xf000u && surface.dimension == AgcDriver::Graphics::TextureDimension::k2DMsaa && surface.samples == 2u && surface.baseAddress == multisampled.color.surfaceAddress && surface.width == multisampled.color.extent.width && surface.height == multisampled.color.extent.height && surface.format == AgcDriver::Graphics::TargetMergeSurface(multisampled.color).format, "the merge descriptor of a 2-sample 4_4_4_4 unorm target does not decode to its multisampled surface");
