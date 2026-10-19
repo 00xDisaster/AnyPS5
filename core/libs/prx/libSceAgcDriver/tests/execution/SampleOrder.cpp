@@ -1238,7 +1238,7 @@ int GridReference(AgcDriver::VulkanDevice& device) {
     const auto nativeDepth = native ? std::optional<DepthLocations>(ReportDepthLocations("the device's 2x2 grid", *native)) : std::nullopt;
     const bool gridDepthCompared = nativeDepth && nativeDepth->guest == nativeDepth->sloped;
     if (referenceDepth.guest != referenceDepth.sloped) {
-        std::printf("skipped, the device reads depth drawn at custom sample locations back at other locations, even after a transition that names them: the composite of uniform renders holds the guest's depth in %zu of %zu sloped samples, so no path can be compared with it bit for bit\n", referenceDepth.guest, referenceDepth.sloped);
+        std::printf("skipped, the device does not keep depth drawn at custom sample locations at those locations, even after a transition that names them: the composite of uniform renders holds the guest's depth in %zu of %zu sloped samples, so no path can be compared with it bit for bit\n", referenceDepth.guest, referenceDepth.sloped);
         return VulkanTestSkipped;
     }
     std::size_t gridDifferences = 0;
