@@ -2616,9 +2616,42 @@ int trimmedImportTests(const Device& device) {
         gpu.unlock();
         std::cout << "trimmed import: " << name << ": the larger side was " << (test.trimmed ? "kept" : "imported again") << " and the GPU and the write watch see the guest's bytes" << (test.unmap ? ", also after the pages were mapped again" : "") << '\n';
     };
+    const auto remapWhileTrimmed = [&] {
+        const std::string name = "an unmap and a new mapping of the kept side while the import waits trimmed";
+        Backing backing;
+        Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, bytes, run, 0, &backing.physical) == 0, "allocate the trimmed import test backing");
+        Require(sceKernelMapDirectMemory(&backing.mapping, bytes, 0x33, 0, backing.physical, run) == 0, "map the trimmed import test backing");
+        const auto address = reinterpret_cast<std::uint64_t>(backing.mapping);
+        auto* memory = static_cast<std::byte*>(backing.mapping);
+        for (std::size_t offset = 0; offset < bytes; offset += page) std::memset(memory + offset, static_cast<int>(0x40u + (offset / page) % 64u), 64);
+        gpu.lock();
+        const auto* whole = HostImportFor(context, address, bytes);
+        Require(whole != nullptr && whole->base == address && whole->bytes == bytes && whole->alias == nullptr && !whole->unwatched, name + ": the range was not imported whole, settled and watched");
+        const auto original = whole->memory;
+        gpu.unlock();
+        Require(sceKernelMprotect(memory, run, 0x03) == 0, name + ": the protection of the head failed");
+        Require(sceKernelMunmap(memory + run, bytes - run) == 0, name + ": the unmap of the kept side failed");
+        backing.hole = run;
+        backing.holeBytes = bytes - run;
+        void* again = memory + run;
+        Require(sceKernelMapDirectMemory(&again, bytes - run, 0x33, 0x10, backing.physical + static_cast<std::int64_t>(run), guard) == 0 && again == memory + run, name + ": the kept side could not be mapped again");
+        backing.hole = 0;
+        backing.holeBytes = 0;
+        gpu.lock();
+        const auto begin = address + run;
+        const auto end = address + bytes;
+        const auto* remapped = HostImportFor(context, begin, static_cast<std::size_t>(end - begin));
+        Require(remapped != nullptr && remapped->base == begin && remapped->base + remapped->bytes == end, name + ": the pages mapped again are not imported whole");
+        requireImportServesGuest(context, recorder, *remapped, begin, end, ++salt, "the pages mapped again after " + name);
+        Require(remapped->memory != original, "after " + name + " the pages mapped again are served from the import that pinned the old ones");
+        cleanup();
+        gpu.unlock();
+        std::cout << "trimmed import: " << name << ": the pages mapped again were imported again and the GPU and the write watch see the guest's bytes\n";
+    };
     gpu.unlock();
     try {
         for (const auto& test : cases) check(test);
+        remapWhileTrimmed();
     } catch (...) {
         cleanup();
         throw;
