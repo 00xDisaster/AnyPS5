@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -11,8 +12,6 @@
 #endif
 #include <windows.h>
 #else
-#include <cstdio>
-#include <cstring>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
