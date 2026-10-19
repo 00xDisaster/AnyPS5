@@ -265,6 +265,7 @@ struct HostImports {
     std::uint64_t useCounter = 0;
     std::uint64_t buildFloor = 0;
     std::array<HostImportRequesterCounts, ImportRequesterCount> counts{};
+    std::map<std::uint64_t, std::uint64_t> spaceUses;
 };
 
 HostImports& Imports() {
@@ -1419,14 +1420,20 @@ bool sameRange(const HostImport& entry, const GuestAllocations::Lease& lease, st
     return sameRun(entry, entry.joined ? joinedRun(lease, entry.base, entry.base + entry.bytes) : importRun(lease, entry.base, std::numeric_limits<std::uint64_t>::max(), budget));
 }
 
+std::uint64_t effectiveUse(const HostImports& state, const HostImport& entry) {
+    if (entry.spaceSerial == 0) return entry.lastUse;
+    const auto found = state.spaceUses.find(entry.spaceSerial);
+    return found == state.spaceUses.end() ? entry.lastUse : std::max(entry.lastUse, found->second);
+}
+
 bool pointerHeld(const HostImports& state, const HostImport& entry) {
-    return entry.lastUse >= state.buildFloor;
+    return effectiveUse(state, entry) >= state.buildFloor;
 }
 
 constexpr std::uint64_t ProtectedUses = 256;
 
 bool evictable(const HostImports& state, const HostImport& entry) {
-    return !pointerHeld(state, entry) && entry.lastUse + ProtectedUses < state.useCounter;
+    return !pointerHeld(state, entry) && effectiveUse(state, entry) + ProtectedUses < state.useCounter;
 }
 
 bool evictingRefusalCurrent(const HostImports& state, const EvictingRefusal& refusal, std::uint64_t budget) {
@@ -1438,7 +1445,7 @@ std::uint64_t retireLeastRecent(const Context& context, HostImports& state, cons
     while (freed < wanted) {
         auto oldest = state.imports.end();
         for (auto it = state.imports.begin(); it != state.imports.end(); ++it) {
-            if (evictable(state, it->second) && (oldest == state.imports.end() || it->second.lastUse < oldest->second.lastUse)) oldest = it;
+            if (evictable(state, it->second) && (oldest == state.imports.end() || effectiveUse(state, it->second) < effectiveUse(state, oldest->second))) oldest = it;
         }
         if (oldest == state.imports.end()) break;
         freed += oldest->second.pinnedBytes;
@@ -1522,7 +1529,7 @@ std::uint64_t evictableBytes(const HostImports& state, std::uint64_t begin, std:
             continue;
         }
         auto& horizon = pointerHeld(state, entry) ? readyHeld : ready;
-        horizon = std::min(horizon, entry.lastUse + ProtectedUses + 1);
+        horizon = std::min(horizon, effectiveUse(state, entry) + ProtectedUses + 1);
     }
     return bytes;
 }
@@ -3542,8 +3549,24 @@ void GuestBufferMemory::AcquireRegistered() {
             importFloor = state.useCounter + 1;
             if (hit) {
                 const auto stamp = ++state.useCounter;
-                for (const auto& region : current->base) {
-                    if (region.direct != nullptr) region.direct->lastUse = stamp;
+                static const bool stampOnce = std::getenv("APS5_NO_SPACE_STAMP_ONCE") == nullptr;
+                auto& spaceUse = state.spaceUses[current->serial];
+                if (!stampOnce || spaceUse == 0) {
+                    for (const auto& region : current->base) {
+                        if (region.direct == nullptr) continue;
+                        region.direct->lastUse = stamp;
+                        if (stampOnce) region.direct->spaceSerial = current->serial;
+                    }
+                }
+                spaceUse = stamp;
+                if (state.spaceUses.size() > 64) {
+                    const auto oldest = std::min_element(state.spaceUses.begin(), state.spaceUses.end(), [](const auto& left, const auto& right) { return left.second < right.second; });
+                    for (auto& [base, entry] : state.imports) {
+                        if (entry.spaceSerial != oldest->first) continue;
+                        entry.lastUse = std::max(entry.lastUse, oldest->second);
+                        entry.spaceSerial = 0;
+                    }
+                    state.spaceUses.erase(oldest);
                 }
             }
         }
