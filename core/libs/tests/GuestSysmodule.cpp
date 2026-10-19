@@ -320,15 +320,15 @@ int main() {
     int unloadArgResult = -1;
     Require(sceSysmoduleUnloadModuleInternalWithArg(0, 0, nullptr, 0, &unloadArgResult) == kInvalidValue);
     Require(unloadArgResult == -1);
-    Require(sceSysmoduleUnloadModuleInternalWithArg(kAgcInternalId, 0, nullptr, 0, &unloadArgResult) == kModuleUnloaded);
+    Require(sceSysmoduleUnloadModuleInternalWithArg(kAgcDriverModuleId, 0, nullptr, 0, &unloadArgResult) == kModuleUnloaded);
     Require(unloadArgResult == -1);
     int loadArgResult = -1;
-    Require(sceSysmoduleLoadModuleInternalWithArg(kAgcInternalId, 0, nullptr, 0, &loadArgResult) == 0);
+    Require(sceSysmoduleLoadModuleInternalWithArg(kAgcDriverModuleId, 0, nullptr, 0, &loadArgResult) == 0);
     Require(loadArgResult == 0);
-    Require(sceSysmoduleIsLoadedInternal(kAgcInternalId) == 0);
-    Require(sceSysmoduleUnloadModuleInternalWithArg(kAgcInternalId, 0, nullptr, 0, &unloadArgResult) == 0);
+    Require(sceSysmoduleIsLoadedInternal(kAgcDriverModuleId) == 0);
+    Require(sceSysmoduleUnloadModuleInternalWithArg(kAgcDriverModuleId, 0, nullptr, 0, &unloadArgResult) == 0);
     Require(unloadArgResult == 0);
-    Require(sceSysmoduleIsLoadedInternal(kAgcInternalId) == kModuleUnloaded);
+    Require(sceSysmoduleIsLoadedInternal(kAgcDriverModuleId) == kModuleUnloaded);
 
     Require(sceSysmoduleIsLoadedInternal(kAgcModuleId) == kModuleUnloaded);
     Require(sceSysmoduleUnloadModuleInternal(kAgcModuleId) == kModuleUnloaded);
