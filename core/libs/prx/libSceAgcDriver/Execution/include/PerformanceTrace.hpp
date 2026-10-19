@@ -10,6 +10,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <condition_variable>
+#include <exception>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -19,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -308,9 +312,19 @@ struct TraceBenchInterval {
     std::vector<std::uint32_t> frameUs;
 };
 
+using TraceBenchIntervals = std::vector<std::shared_ptr<const TraceBenchInterval>>;
+
 class TraceBench {
 public:
     static constexpr std::size_t MaximumIntervals = 240;
+
+    static void Keep(TraceBenchIntervals& kept, std::shared_ptr<const TraceBenchInterval> interval, std::uint64_t& dropped) {
+        kept.push_back(std::move(interval));
+        if (kept.size() <= MaximumIntervals) return;
+        const auto excess = kept.size() - MaximumIntervals;
+        kept.erase(kept.begin(), kept.begin() + static_cast<std::ptrdiff_t>(excess));
+        dropped += excess;
+    }
 
     static bool Parse(const char* bench, bool summaryEvery) {
         if (bench == nullptr) return false;
@@ -318,6 +332,101 @@ public:
         if (!summaryEvery) throw std::invalid_argument("APS5_TRACE_BENCH=1 needs APS5_TRACE_SUMMARY_EVERY");
         return true;
     }
+};
+
+struct TraceBenchSnapshot {
+    TraceSummary summary;
+    TraceBenchIntervals intervals;
+    std::uint64_t dropped = 0;
+};
+
+class TraceBenchWriter {
+public:
+    explicit TraceBenchWriter(std::function<void(const TraceBenchSnapshot&)> writer) : writer(std::move(writer)) {
+        if (!this->writer) throw std::invalid_argument("invalid benchmark writer");
+        worker = std::thread([this] { run(); });
+    }
+
+    TraceBenchWriter(const TraceBenchWriter&) = delete;
+    TraceBenchWriter& operator=(const TraceBenchWriter&) = delete;
+
+    ~TraceBenchWriter() {
+        Stop();
+    }
+
+    void Stop() {
+        std::lock_guard stopLock(stopMutex);
+        {
+            std::lock_guard lock(mutex);
+            stopping = true;
+        }
+        changed.notify_one();
+        if (worker.joinable()) worker.join();
+    }
+
+    void Write(TraceBenchSnapshot snapshot) {
+        {
+            std::lock_guard lock(mutex);
+            if (failure) std::rethrow_exception(failure);
+            if (stopping) throw std::runtime_error("benchmark writer is stopping");
+            if (pending) ++superseded;
+            pending = std::move(snapshot);
+        }
+        changed.notify_one();
+    }
+
+    void Flush() {
+        std::unique_lock lock(mutex);
+        idle.wait(lock, [&] { return failure || (!pending && !writing); });
+        if (failure) std::rethrow_exception(failure);
+    }
+
+    std::uint64_t Superseded() {
+        std::lock_guard lock(mutex);
+        return superseded;
+    }
+
+private:
+    void run() noexcept {
+        try {
+            for (;;) {
+                TraceBenchSnapshot snapshot;
+                {
+                    std::unique_lock lock(mutex);
+                    changed.wait(lock, [&] { return stopping || pending.has_value(); });
+                    if (!pending) return;
+                    snapshot = std::move(*pending);
+                    pending.reset();
+                    writing = true;
+                }
+                writer(snapshot);
+                {
+                    std::lock_guard lock(mutex);
+                    writing = false;
+                }
+                idle.notify_all();
+            }
+        } catch (...) {
+            {
+                std::lock_guard lock(mutex);
+                failure = std::current_exception();
+                writing = false;
+            }
+            idle.notify_all();
+        }
+    }
+
+    std::function<void(const TraceBenchSnapshot&)> writer;
+    std::mutex stopMutex;
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::condition_variable idle;
+    std::optional<TraceBenchSnapshot> pending;
+    std::uint64_t superseded = 0;
+    bool writing = false;
+    bool stopping = false;
+    std::exception_ptr failure;
+    std::thread worker;
 };
 
 struct TraceGpuRange {
@@ -549,7 +658,7 @@ public:
         return frames;
     }
 
-    static std::string Bench(const TraceSummary& summary, std::span<const TraceBenchInterval> intervals, std::uint64_t intervalsDropped) {
+    static std::string Bench(const TraceSummary& summary, std::span<const std::shared_ptr<const TraceBenchInterval>> intervals, std::uint64_t intervalsDropped) {
         std::string output = "{\"format\":\"aps5-bench/1\",\"commit\":";
         AppendString(output, summary.commit);
         output += ",\"dirty\":";
@@ -570,7 +679,7 @@ public:
         AppendMachine(output, summary);
         output += ",\"intervals_dropped\":" + std::to_string(intervalsDropped) + ",\"intervals\":[";
         for (std::size_t index = 0; index < intervals.size(); ++index) {
-            const auto& interval = intervals[index];
+            const auto& interval = *intervals[index];
             if (index != 0) output += ',';
             output += "\n{\"start_s\":" + number(interval.startS) + ",\"end_s\":" + number(interval.endS);
             output += ",\"first_present\":" + std::to_string(interval.firstPresent);

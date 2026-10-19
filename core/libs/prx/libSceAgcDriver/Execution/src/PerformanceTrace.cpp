@@ -56,7 +56,7 @@ struct Session {
     std::optional<TraceClockSample> gpuClock;
     std::vector<Clock::time_point> presents;
     bool bench = false;
-    std::vector<TraceBenchInterval> benchIntervals;
+    TraceBenchIntervals benchIntervals;
     std::uint64_t benchDropped = 0;
 };
 
@@ -75,8 +75,8 @@ std::unique_ptr<ProfileOutput>& summaryWriter() {
     return output;
 }
 
-std::unique_ptr<ProfileOutput>& benchWriter() {
-    static std::unique_ptr<ProfileOutput> output;
+std::unique_ptr<TraceBenchWriter>& benchWriter() {
+    static std::unique_ptr<TraceBenchWriter> output;
     return output;
 }
 
@@ -108,18 +108,18 @@ std::string operatingSystem() {
 #endif
 }
 
-std::string processorName() {
+std::optional<std::string> processorName() {
     std::array<std::uint32_t, 12> words{};
 #if defined(_MSC_VER) && !defined(__clang__)
     int registers[4]{};
     __cpuid(registers, static_cast<int>(0x80000000u));
-    if (static_cast<std::uint32_t>(registers[0]) < 0x80000004u) throw std::runtime_error("the CPU reports no brand string");
+    if (static_cast<std::uint32_t>(registers[0]) < 0x80000004u) return std::nullopt;
     for (unsigned leaf = 0; leaf < 3; ++leaf) {
         __cpuid(registers, static_cast<int>(0x80000002u + leaf));
         std::memcpy(words.data() + leaf * 4, registers, sizeof registers);
     }
 #elif defined(__x86_64__) || defined(__i386__)
-    if (__get_cpuid_max(0x80000000u, nullptr) < 0x80000004u) throw std::runtime_error("the CPU reports no brand string");
+    if (__get_cpuid_max(0x80000000u, nullptr) < 0x80000004u) return std::nullopt;
     for (unsigned leaf = 0; leaf < 3; ++leaf) {
         unsigned eax = 0, ebx = 0, ecx = 0, edx = 0;
         if (__get_cpuid(0x80000002u + leaf, &eax, &ebx, &ecx, &edx) == 0) throw std::runtime_error("cpuid brand string leaf failed");
@@ -129,12 +129,12 @@ std::string processorName() {
         words[leaf * 4 + 3] = edx;
     }
 #else
-    throw std::runtime_error("reading the CPU name needs an x86 host");
+    return std::nullopt;
 #endif
     std::string name(reinterpret_cast<const char*>(words.data()), sizeof words);
     name.resize(std::strlen(name.c_str()));
     const auto first = name.find_first_not_of(' ');
-    if (first == std::string::npos) throw std::runtime_error("the CPU brand string is empty");
+    if (first == std::string::npos) return std::nullopt;
     return name.substr(first, name.find_last_not_of(' ') - first + 1);
 }
 
@@ -152,8 +152,12 @@ std::uint64_t memoryMiB() {
 #endif
 }
 
-const TraceHost& host() {
-    static const TraceHost value{processorName(), std::thread::hardware_concurrency(), memoryMiB()};
+const std::optional<TraceHost>& host() {
+    static const auto value = []() -> std::optional<TraceHost> {
+        auto cpu = processorName();
+        if (!cpu) return std::nullopt;
+        return TraceHost{std::move(*cpu), std::thread::hardware_concurrency(), memoryMiB()};
+    }();
     return value;
 }
 
@@ -260,26 +264,22 @@ void PerformanceTrace::FlushInterval(Clock::time_point now, std::uint32_t width,
     summary.interval = std::make_pair(seconds(state.intervalPresents.front() - state.first), seconds(now - state.first));
     summaryWriter()->Write(TraceFormat::Summary(summary, snapshots, state.intervalPresents));
     if (!state.bench) return;
-    state.benchIntervals.push_back({summary.interval->first, summary.interval->second, summary.firstPresent, width, height, summary.gpuBusyMs, TraceFormat::FrameMicroseconds(state.intervalPresents)});
-    if (state.benchIntervals.size() > TraceBench::MaximumIntervals) {
-        state.benchIntervals.erase(state.benchIntervals.begin());
-        ++state.benchDropped;
-    }
+    TraceBench::Keep(state.benchIntervals, std::make_shared<const TraceBenchInterval>(TraceBenchInterval{summary.interval->first, summary.interval->second, summary.firstPresent, width, height, summary.gpuBusyMs, TraceFormat::FrameMicroseconds(state.intervalPresents)}), state.benchDropped);
     if (!benchWriter()) {
         const auto name = "aps5-bench-" + summary.commit + "-" + std::to_string(processId()) + ".json.gz";
-        benchWriter() = std::make_unique<ProfileOutput>([directory = traceDirectory(), name](std::string_view text) {
+        benchWriter() = std::make_unique<TraceBenchWriter>([directory = traceDirectory(), name](const TraceBenchSnapshot& snapshot) {
             try {
                 std::filesystem::create_directories(directory);
-                TraceFile::WriteGzip(directory / name, text);
+                TraceFile::ReplaceGzip(directory / name, TraceFormat::Bench(snapshot.summary, snapshot.intervals, snapshot.dropped));
             } catch (const std::exception& error) {
                 std::fprintf(stderr, "[trace] writing %s failed: %s\n", name.c_str(), error.what());
                 std::fflush(stderr);
                 throw;
             }
-        }, std::numeric_limits<std::size_t>::max());
+        });
         ProfilePrint_nid_no_patch("[trace] benchmark frames go to %s, rewritten every interval\n", name.c_str());
     }
-    benchWriter()->Write(TraceFormat::Bench(summary, state.benchIntervals, state.benchDropped));
+    benchWriter()->Write(TraceBenchSnapshot{std::move(summary), state.benchIntervals, state.benchDropped});
 }
 
 void PerformanceTrace::Present(std::uint32_t width, std::uint32_t height, const VulkanDevice* device) {

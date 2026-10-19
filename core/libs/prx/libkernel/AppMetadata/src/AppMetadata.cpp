@@ -48,7 +48,7 @@ void ensureTitleLoaded() {
     const auto parsed = parseParams(ResolvePath_nid_no_patch(AppMetadataParamJsonGuestPath), ResolvePath_nid_no_patch(AppMetadataParamSfoGuestPath));
     copyToFixedBuffer(g_title, sizeof(g_title), parsed.title);
     copyToFixedBuffer(g_titleId, sizeof(g_titleId), parsed.titleId);
-    if (!parsed.contentVersion.empty()) copyToFixedBuffer(g_contentVersion, sizeof(g_contentVersion), parsed.contentVersion);
+    if (!parsed.contentVersion.empty() && parsed.contentVersion.size() < sizeof(g_contentVersion)) copyToFixedBuffer(g_contentVersion, sizeof(g_contentVersion), parsed.contentVersion);
     g_downloadDataSizeMiB = parsed.downloadDataSizeMiB;
     g_attribute3 = parsed.attribute3;
     std::memcpy(g_userDefinedParams, parsed.userDefinedParams, sizeof(g_userDefinedParams));

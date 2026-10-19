@@ -84,9 +84,7 @@ static void CheckUserDefinedParams(const std::filesystem::path& path) {
 static void CheckContentVersion(const std::filesystem::path& path) {
     Require(ParseText(path, R"({"titleId":"PPSA00000","contentVersion":"01.002.000","localizedParameters":{"en-US":{"titleName":"Example"}}})").contentVersion == "01.002.000", "Incorrect content version");
     Require(ParseText(path, R"({"titleId":"PPSA00000","localizedParameters":{"en-US":{"titleName":"Example"}}})").contentVersion.empty(), "A missing content version was not empty");
-    bool rejected = false;
-    try { ParseText(path, R"({"titleId":"PPSA00000","contentVersion":1,"localizedParameters":{"en-US":{"titleName":"Example"}}})"); } catch (const std::exception&) { rejected = true; }
-    Require(rejected, "Accepted a content version that is not a string");
+    Require(ParseText(path, R"({"titleId":"PPSA00000","contentVersion":1,"localizedParameters":{"en-US":{"titleName":"Example"}}})").contentVersion.empty(), "A content version that is not a string was kept");
 }
 
 static void CheckNesting(const std::filesystem::path& path) {
