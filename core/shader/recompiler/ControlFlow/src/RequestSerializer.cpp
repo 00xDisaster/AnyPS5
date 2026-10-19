@@ -422,7 +422,7 @@ ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
         info.positionLocation = readPixelPositionLocation(reader);
         for (std::uint8_t& location : info.sampleLocations) location = reader.ReadU8();
     }
-    if (version >= 36u) {
+    if (version >= 37u) {
         for (std::uint32_t& order : info.sampleOrder) order = reader.ReadU32();
     }
     if (version < 5u) {
@@ -798,7 +798,7 @@ std::string RequestSerializer::Serialize(const RecompileRequest& request) const 
     std::string buffer;
     Writer writer(buffer);
     writer.WriteU32(0x41505335u);
-    writer.WriteU32(36u);
+    writer.WriteU32(37u);
     writeShaderBinary(writer, request.shader);
     writeGuestContext(writer, request.context);
     writeSpirvTarget(writer, request.target);
@@ -828,6 +828,7 @@ std::string RequestSerializer::Serialize(const RecompileRequest& request) const 
     if (request.context.vertex.has_value()) {
         writer.WriteU32(request.context.vertex->depthRemapMode);
     }
+    writer.WriteBool(request.target.float32FlushToZero);
     return base64Encode(buffer);
 }
 
@@ -836,7 +837,7 @@ DeserializedRequest RequestSerializer::Deserialize(std::string_view text) const 
     Reader reader(decoded);
     if (reader.ReadU32() != 0x41505335u) throw std::runtime_error("invalid recompile request signature");
     const auto version = reader.ReadU32();
-    if (version < 1u || version > 36u) throw std::runtime_error("unsupported recompile request serialization version");
+    if (version < 1u || version > 37u) throw std::runtime_error("unsupported recompile request serialization version");
     DeserializedRequest result{};
     result.request.shader = readShaderBinary(reader, result.shaderCode, result.shaderHeader);
     result.request.context = readGuestContext(reader, result, version);
@@ -880,6 +881,7 @@ DeserializedRequest RequestSerializer::Deserialize(std::string_view text) const 
             result.request.context.vertex = result.vertex;
         }
     }
+    if (version >= 36u) result.request.target.float32FlushToZero = reader.ReadBool();
     if (version >= 21u && reader.Remaining() != 0u) throw std::runtime_error("RequestSerializer: unexpected trailing data");
     return result;
 }
