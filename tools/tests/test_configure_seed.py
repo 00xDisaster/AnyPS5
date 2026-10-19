@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,86 @@ check_c_source_compiles("int main(void) { return 0; }" MINI_COMPILES)
 check_c_source_compiles("int main(void) { return undefined_name; }" MINI_FAILS)
 set(MINI_OPTION "value" CACHE STRING "An option, not a check result")
 """
+
+
+class ConfigureSeedPathTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.cache = self.root / "CMakeCache.txt"
+        self.original = b"//Path to a program.\nCMAKE_AR:FILEPATH=/usr/bin/ar\n//Test HAVE_FEATURE\nHAVE_FEATURE:INTERNAL=1\n"
+        self.cache.write_bytes(self.original)
+
+    def run_seed(self, seed, *options):
+        return subprocess.run([sys.executable, str(TOOL), str(self.cache), str(seed), *options],
+                              capture_output=True, text=True)
+
+    def assert_rejected(self, seed, *options):
+        result = self.run_seed(seed, *options)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("seed output would overwrite the input cache", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(self.cache.read_bytes(), self.original)
+        self.assertEqual(Path(seed).read_bytes(), self.original)
+
+    def test_same_path_preserves_cache(self):
+        self.assert_rejected(self.cache)
+
+    def test_normalized_path_preserves_cache(self):
+        (self.root / "nested").mkdir()
+        self.assert_rejected(self.root / "nested" / ".." / self.cache.name)
+
+    def test_hard_link_preserves_cache(self):
+        seed = self.root / "seed.cmake"
+        os.link(self.cache, seed)
+        self.assert_rejected(seed)
+
+    def test_symbolic_link_preserves_cache(self):
+        seed = self.root / "seed.cmake"
+        try:
+            seed.symlink_to(self.cache)
+        except OSError as error:
+            self.skipTest(f"symbolic links unavailable: {error}")
+        self.assert_rejected(seed)
+
+    def test_distinct_output_preserves_cache(self):
+        seed = self.root / "seed.cmake"
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                if existing:
+                    seed.write_text("old seed", encoding="utf-8")
+                result = self.run_seed(seed)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "1 check results\n")
+                self.assertEqual(seed.read_text(encoding="utf-8"),
+                                 'set("HAVE_FEATURE" "1" CACHE INTERNAL "Test HAVE_FEATURE")\n')
+                self.assertEqual(self.cache.read_bytes(), self.original)
+
+    def test_filters_do_not_allow_overwriting_cache(self):
+        for options in (("--include", "HAVE_*"), ("--include", "NO_MATCH_*"), ("--exclude", "HAVE_*")):
+            with self.subTest(options=options):
+                self.assert_rejected(self.cache, *options)
+
+    def test_filters_preserve_cache_with_distinct_output(self):
+        self.original += b"//Test OTHER_CHECK\nOTHER_CHECK:INTERNAL=0\n"
+        self.cache.write_bytes(self.original)
+        seed = self.root / "seed.cmake"
+        feature = 'set("HAVE_FEATURE" "1" CACHE INTERNAL "Test HAVE_FEATURE")\n'
+        other = 'set("OTHER_CHECK" "0" CACHE INTERNAL "Test OTHER_CHECK")\n'
+        cases = (
+            (("--include", "HAVE_*", "--include", "OTHER_*"), feature + other, 2),
+            (("--include", "*", "--exclude", "OTHER_*"), feature, 1),
+            (("--include", "have_*"), "", 0),
+        )
+        for options, expected, count in cases:
+            with self.subTest(options=options):
+                result = self.run_seed(seed, *options)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, f"{count} check results\n")
+                self.assertEqual(seed.read_text(encoding="utf-8"), expected)
+                self.assertEqual(self.cache.read_bytes(), self.original)
 
 
 @unittest.skipUnless(shutil.which("ninja") and (shutil.which("gcc") or shutil.which("cc")), "needs ninja and a C compiler")
