@@ -72,7 +72,7 @@ struct TableDescriptors {
     std::uint32_t binding = 0;
     std::vector<std::pair<std::uint32_t, std::uint32_t>> runs;
     std::vector<VkDescriptorImageInfo> images;
-    std::shared_ptr<const std::vector<std::shared_ptr<Texture>>> textures;
+    std::shared_ptr<const std::vector<std::weak_ptr<Texture>>> textures;
 };
 
 class DescriptorCache {
@@ -570,7 +570,7 @@ private:
         std::vector<std::pair<std::uint32_t, std::uint32_t>> runs;
     };
     std::array<TableWrites, 2> tableWrites;
-    std::shared_ptr<const TableDescriptors> keptTable(std::size_t set, std::shared_ptr<const std::vector<std::shared_ptr<Texture>>>& held) noexcept;
+    std::shared_ptr<const TableDescriptors> keptTable(std::size_t set, std::shared_ptr<const std::vector<std::weak_ptr<Texture>>>& held) noexcept;
     std::uint32_t setOf(const Binding& binding) const;
     std::vector<Allocation> allocations;
     std::vector<VkDescriptorBufferInfo> descriptorBuffers;
