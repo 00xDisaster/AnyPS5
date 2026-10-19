@@ -326,10 +326,12 @@ int APS5_VABI scePadVrControllerGetTriggerEffectStates(void) {
     return 0;
 }
 
-APS5_EXPORT("zBsgF0q8DIM", scePadUnknown_zBsgF0q8DIM);
-int APS5_VABI scePadUnknown_zBsgF0q8DIM() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI scePadGetAccessibilityControllerState(int handle, std::uint32_t* state) {
+    if (!Pad::IsInitialized()) return PAD_ERROR_NOT_INITIALIZED;
+    if (state == nullptr) return PAD_ERROR_INVALID_ARG;
+    if (handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
+    *state = 0;
+    return PAD_OK;
 }
 
 int APS5_VABI scePadSetTriggerEffectExt(void) {

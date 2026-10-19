@@ -28,6 +28,7 @@ int APS5_VABI scePadResetOrientation(int);
 int APS5_VABI scePadSetAngularVelocityDeadbandState(int, bool);
 int APS5_VABI scePadSetAngularVelocityBiasCorrectionState(int, bool);
 int APS5_VABI scePadIsRemoteController(int, bool*);
+int APS5_VABI scePadGetAccessibilityControllerState(int, std::uint32_t*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -217,6 +218,15 @@ static void CheckRemoteController(int handle) {
     Require(!remote);
 }
 
+static void CheckAccessibilityControllerState(int handle) {
+    std::uint32_t state = 7;
+    Require(scePadGetAccessibilityControllerState(handle + 1, nullptr) == PAD_ERROR_INVALID_ARG);
+    Require(scePadGetAccessibilityControllerState(handle + 1, &state) == PAD_ERROR_INVALID_HANDLE);
+    Require(state == 7);
+    Require(scePadGetAccessibilityControllerState(handle, &state) == PAD_OK);
+    Require(state == 0);
+}
+
 static void CheckInjectedState(const std::filesystem::path& path) {
     PadInputState physical;
     physical.buttons = 0x2000;
@@ -277,6 +287,10 @@ static void CheckInjectedState(const std::filesystem::path& path) {
 
 int main() {
     CheckInputCommands();
+    std::uint32_t accessibilityState = 7;
+    Require(scePadGetAccessibilityControllerState(PAD_HANDLE, nullptr) == PAD_ERROR_NOT_INITIALIZED);
+    Require(scePadGetAccessibilityControllerState(PAD_HANDLE, &accessibilityState) == PAD_ERROR_NOT_INITIALIZED);
+    Require(accessibilityState == 7);
     Require(scePadUnknown_n3kSX62fgNo() == static_cast<int>(0x80920005));
     const auto path = std::filesystem::temp_directory_path() / ("anyps5-pad-state-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     struct Cleanup {
@@ -342,6 +356,7 @@ int main() {
     CheckReadQueue(handle);
     CheckReadStateHandle(handle);
     CheckRemoteController(handle);
+    CheckAccessibilityControllerState(handle);
     CheckInjectedState(commandPath);
     Require(scePadSetVibrationMode(handle, 1) == 0);
     Require(scePadSetVibrationMode(handle, 2) == 0);
