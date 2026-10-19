@@ -145,8 +145,10 @@ static int RunAbortChild() {
 static void testGuestAbortReport() {
     DWORD exitCode = 0;
     const std::string output = RunChild(L"\" guest-abort", exitCode);
-    RequireHandle(exitCode == 0xC0000005);
-    if (output.find("guest abort() (int 0x45)") == std::string::npos) throw std::runtime_error("crash report did not name the guest abort");
+    char code[16];
+    std::snprintf(code, sizeof(code), "0x%08lx", static_cast<unsigned long>(exitCode));
+    if (exitCode != 0xC0000005 || output.find("guest abort() (int 0x45)") == std::string::npos)
+        throw std::runtime_error(std::string("guest abort child exited with ") + code + " and printed:\n" + output);
 }
 
 static int destroyed;
