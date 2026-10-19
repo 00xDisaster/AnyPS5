@@ -162,6 +162,7 @@ ShaderStages DecodeShaderStages(const QueueState& queue, bool vertexWorkgroup = 
 State DecodeState(const QueueState& queue, bool vertexWorkgroup = false);
 void ApplyDepthRemap(const Context& context, State& state);
 std::array<VkSampleLocationEXT, 32> SampleLocations(const State& state);
+std::array<std::uint8_t, 32> PixelSampleLocations(const State& state, const ShaderRecompiler::ShaderPixelStageInfo& pixel);
 VkExtent2D SampleLocationGrid(const State& state);
 std::array<std::uint8_t, 8> ExportMappings(const State& state);
 std::array<ShaderRecompiler::ColorExportPacking, 8> ExportPackings(const State& state);
