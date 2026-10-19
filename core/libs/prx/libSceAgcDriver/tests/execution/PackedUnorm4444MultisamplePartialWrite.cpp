@@ -56,6 +56,7 @@ constexpr double EdgeMargin = 1.0 / 32.0;
 constexpr std::array<float, 4> First{0.2f, 0.4f, 0.6f, 0.8f};
 constexpr std::array<float, 4> Second{13.0f / 15.0f, 0.0f, 1.0f, 0.0f};
 constexpr std::array<float, 4> Third{1.0f / 15.0f, 1.0f, 0.0f, 4.0f / 15.0f};
+constexpr std::array<float, 4> Fourth{0.0f, 7.0f / 15.0f, 0.0f, 11.0f / 15.0f};
 
 alignas(256) constexpr std::array<std::uint32_t, 6> VertexCode{
     0xe0382000, 0x80000005, 0xbf8c3f70, 0xf80008cf, 0x03020100, 0xbf810000,
@@ -76,11 +77,15 @@ constexpr std::array<std::array<float, 4>, 3> Cutting{{
     {-0.93f, -1.0f, 0.5f, 1.0f}, {0.37f, -1.0f, 0.5f, 1.0f}, {-0.21f, 0.94f, 0.5f, 1.0f}
 }};
 
+constexpr std::array<std::array<float, 4>, 3> Crossing{{
+    {-0.6f, -0.2f, 0.5f, 1.0f}, {0.9f, -0.85f, 0.5f, 1.0f}, {0.5f, 0.9f, 0.5f, 1.0f}
+}};
+
 constexpr std::array<std::array<float, 4>, 3> Overlapping{{
     {-0.08f, -0.47f, 0.5f, 1.0f}, {1.0f, -0.13f, 0.5f, 1.0f}, {0.29f, 1.0f, 0.5f, 1.0f}
 }};
 
-alignas(256) std::array<std::array<std::uint32_t, 16>, 4> Programs{};
+alignas(256) std::array<std::array<std::uint32_t, 16>, 8> Programs{};
 std::size_t programCount = 0;
 alignas(256) std::array<std::uint32_t, Threads * Words> Buffer{};
 
@@ -186,7 +191,7 @@ AgcDriver::Graphics::State TargetState(const Block& block, std::uint32_t exporte
     const auto& color = decoded.colors.front();
     char detail[256];
     std::snprintf(detail, sizeof(detail), "CB_TARGET_MASK 0x%x of the 2-sample 4_4_4_4 target decoded %zu targets, %u samples, word mask 0x%04x, write mask 0x%x and %s shading", exportedMask, decoded.colors.size(), decoded.samples, color.partialWriteMask, decoded.blends.front().colorWriteMask, decoded.perSampleShading ? "per-sample" : "pixel-rate");
-    Require(decoded.colors.size() == 1u && decoded.samples == Samples && color.samples == Samples && color.partialWriteMask == (partial ? 0xf000u : 0u) && decoded.blends.size() == 1u && decoded.blends.front().colorWriteMask == (partial ? 0u : 0xfu) && decoded.blend.colorWriteMask == decoded.blends.front().colorWriteMask && decoded.perSampleShading == partial, detail);
+    Require(decoded.colors.size() == 1u && decoded.samples == Samples && color.samples == Samples && color.partialWriteMask == (partial ? AgcDriver::Graphics::PackedWriteMask(color.componentMapping, exportedMask) : 0u) && decoded.blends.size() == 1u && decoded.blends.front().colorWriteMask == (partial ? 0u : 0xfu) && decoded.blend.colorWriteMask == decoded.blends.front().colorWriteMask && decoded.perSampleShading == partial, detail);
     const auto merge = AgcDriver::Graphics::ExportTargetMerge(decoded);
     Require(merge.mask == color.partialWriteMask && merge.samples == (partial ? Samples : 1u) && !merge.depthStencilWrites && merge.descriptor == (partial ? AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color)) : std::array<std::uint32_t, 8>{}), "the decoded 2-sample target exported another merge than its own surface");
     AgcDriver::Graphics::State state{};
@@ -358,7 +363,36 @@ int main() {
         Require(checked >= Side * Side * Samples * 8u / 10u, "fewer than eight in ten samples are clear of the triangles' edges");
         Require(pixelsByCoverage[0] != 0 && pixelsByCoverage[Samples] != 0 && pixelsByCoverage[1] != 0, "the merged samples do not leave pixels unmerged, merged and partly merged");
         Require(overdrawn != 0 && mergedAfterOverdraw != 0, "the last full write does not cover some merged samples and leave others");
-        std::printf("4_4_4_4 unorm 2-sample partial write tests passed: %u partly merged pixels kept bits 15..12 merged into their covered samples only, and a full write drawn right after covered %u merged samples\n", pixelsByCoverage[1], overdrawn);
+        Draw(*device, full, Covering, Float32Program(First));
+        const auto lowMerged = TargetState(block, 0x8u);
+        Require(lowMerged.colors.front().partialWriteMask == 0x000fu, "a W write of the 4_4_4_4 target did not merge bits 3..0");
+        Draw(*device, merged, Cutting, Float32Program(Second));
+        Draw(*device, lowMerged, Crossing, Float32Program(Fourth));
+        const auto twice = LoadSamples(*device, texture);
+        std::uint32_t checkedTwice = 0;
+        std::uint32_t mergedTwice = 0;
+        for (std::uint32_t y = 0; y < Side; ++y) {
+            for (std::uint32_t x = 0; x < Side; ++x) {
+                for (std::uint32_t sample = 0; sample < Samples; ++sample) {
+                    const auto px = x + static_cast<double>(locations[sample].x);
+                    const auto py = y + static_cast<double>(locations[sample].y);
+                    const auto high = Inside(Cutting, px, py);
+                    const auto low = Inside(Crossing, px, py);
+                    if (std::fabs(high) < EdgeMargin || std::fabs(low) < EdgeMargin) continue;
+                    ++checkedTwice;
+                    mergedTwice += high > 0 && low > 0 ? 1u : 0u;
+                    auto expected = background;
+                    if (high > 0) expected = (expected & 0x0fffu) | (Packed(Second) & 0xf000u);
+                    if (low > 0) expected = (expected & 0xfff0u) | (Packed(Fourth) & 0x000fu);
+                    const auto word = twice[(y * Side + x) * Samples + sample];
+                    char where[192];
+                    std::snprintf(where, sizeof(where), "after an X merge and a W merge drawn back to back, sample %u of pixel (%u, %u) holds 0x%04x, expected 0x%04x", sample, x, y, word, expected);
+                    Require(word == expected, where);
+                }
+            }
+        }
+        Require(checkedTwice >= Side * Side * Samples * 8u / 10u && mergedTwice != 0, "the back-to-back merges leave fewer than eight in ten samples clear of their edges, or no sample inside both");
+        std::printf("4_4_4_4 unorm 2-sample partial write tests passed: %u partly merged pixels kept bits 15..12 merged into their covered samples only, a full write drawn right after covered %u merged samples, and %u samples kept both of two merges drawn back to back\n", pixelsByCoverage[1], overdrawn, mergedTwice);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
