@@ -54,6 +54,21 @@ const ShaderWorkgroupInputInfo* ShaderWorkgroupInput(const SpirvEmitterState& st
     }
 }
 
+std::array<std::uint32_t, 3> WorkgroupLocalSize(const SpirvEmitterState& state, const ShaderWorkgroupInputInfo& workgroup) {
+    const std::uint32_t derivativeDefault = state.requirements.computeDerivatives ? 2u : 1u;
+    std::array<std::uint32_t, 3> size {
+        workgroup.threadsNum[0] != 0u ? workgroup.threadsNum[0] : derivativeDefault,
+        workgroup.threadsNum[1] != 0u ? workgroup.threadsNum[1] : derivativeDefault,
+        workgroup.threadsNum[2] != 0u ? workgroup.threadsNum[2] : 1u};
+    if (state.spannedWave) {
+        size = {64u, 1u, 1u};
+    }
+    if (state.laneCount == 2) {
+        size = {((size[0] * size[1] * size[2] + 63u) / 64u) * 32u, 1u, 1u};
+    }
+    return size;
+}
+
 namespace {
 
 constexpr std::uint32_t NoBuiltIn = std::numeric_limits<std::uint32_t>::max();
@@ -180,6 +195,11 @@ void DefineInputs(SpirvEmitterState& state) {
         })) {
             addBuiltin(StageInputKind::WorkgroupId, 3u, "gl_WorkGroupID");
         }
+    }
+    if (state.requirements.ldsLock && std::none_of(state.inputs.begin(), state.inputs.end(), [](const SpirvInputBinding& input) {
+        return input.kind == StageInputKind::LocalInvocationIndex;
+    })) {
+        state.inputs.push_back(SpirvInputBinding {{StageInputKind::LocalInvocationIndex, 0u, 1u, "gl_LocalInvocationIndex", false}});
     }
     if (LdsInDeviceMemory(state)) {
         if (std::none_of(state.inputs.begin(), state.inputs.end(), [](const SpirvInputBinding& input) {
@@ -391,7 +411,7 @@ void DefineOutputs(SpirvEmitterState& state) {
             break;
         case StageOutputKind::StencilRef:
             if (std::ranges::find(state.supportedCapabilities, static_cast<std::uint32_t>(spv::CapabilityStencilExportEXT)) == state.supportedCapabilities.end()) {
-                const auto values = StencilReferenceValues(state.program);
+                const auto values = StencilReferenceValues(state.program, PixelInfo(state).psStencilOperationValueExport ? 8u : 0u);
                 if (values.empty()) throw std::runtime_error("stencil reference export emulation requires a proven set of at most 16 values");
                 if (!StencilReferenceDefinedForKeptInvocations(state.program)) throw std::runtime_error("stencil reference export emulation requires a stencil export on every kept path");
                 if (PixelInfo(state).psEarlyZ || PixelInfo(state).psOrderedPixelShader || !StencilReplaySafe(state.program)) throw std::runtime_error("stencil reference export emulation requires a replay-safe pixel shader with late tests");
@@ -465,6 +485,7 @@ void DefineDescriptors(SpirvEmitterState& state) {
             break;
         case DescriptorBindingKind::BdaPagetable:
             state.bdaPagetableVariable = Define(StorageBufferBlockType(state), "bda_pagetable");
+            state.module.AddAnnotation(spv::OpDecorate, state.bdaPagetableVariable, spv::DecorationNonWritable);
             break;
         case DescriptorBindingKind::FaultBuffer:
             state.faultBufferVariable = Define(StorageBufferBlockType(state), "fault_buffer");
@@ -474,6 +495,7 @@ void DefineDescriptors(SpirvEmitterState& state) {
             break;
         case DescriptorBindingKind::FlattenedSrt:
             state.flattenedSrtVariable = Define(StorageBufferBlockType(state), "flattened_srt");
+            state.module.AddAnnotation(spv::OpDecorate, state.flattenedSrtVariable, spv::DecorationNonWritable);
             break;
         case DescriptorBindingKind::Samplers:
             state.samplerVariable = Define(ArrayType(state.module.Type(spv::OpTypeSampler)), "samplers", spv::StorageClassUniformConstant);
@@ -506,6 +528,7 @@ void DefineDescriptors(SpirvEmitterState& state) {
             break;
         case DescriptorBindingKind::ImageTableMap:
             state.tableMapVariable = Define(StorageBufferBlockType(state), "table_map");
+            state.module.AddAnnotation(spv::OpDecorate, state.tableMapVariable, spv::DecorationNonWritable);
             break;
         default: {
             if (ImageBindingResourceClass(binding.kind) == ImageResourceClass::None) {

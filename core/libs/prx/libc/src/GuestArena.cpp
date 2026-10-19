@@ -108,6 +108,16 @@ public:
         return 0;
     }
 
+    bool NextUsed(std::uintptr_t address, std::uintptr_t* start, std::uintptr_t* end) {
+        std::lock_guard lock(_lock);
+        auto it = _used.upper_bound(address);
+        if (it != _used.begin() && std::prev(it)->second > address) --it;
+        if (it == _used.end()) return false;
+        *start = it->first;
+        *end = it->second;
+        return true;
+    }
+
     bool MarkUsedForCommit(const void* pointer, std::size_t bytes) {
         std::lock_guard lock(_lock);
         const auto start = reinterpret_cast<std::uintptr_t>(pointer);
@@ -364,6 +374,10 @@ std::uintptr_t GuestArenaHighestFree_nid_no_patch(std::size_t bytes, std::size_t
     return Arena::Get().HighestFree(bytes, alignment);
 }
 
+bool GuestArenaNextUsed_nid_no_patch(std::uintptr_t address, std::uintptr_t* start, std::uintptr_t* end) {
+    return Arena::Get().NextUsed(address, start, end);
+}
+
 void GuestArenaMarkUsed_nid_postfix(const void* pointer, std::size_t bytes) {
     Arena::Get().MarkUsed(pointer, bytes);
 }
@@ -464,6 +478,11 @@ void GuestArenaMapDirect_nid_postfix(void* pointer, std::size_t bytes, void* sec
     if (!Arena::Get().Contains(pointer, bytes)) throw OutsideArena("direct memory mapping", pointer, bytes);
     WindowsMappings::Get().Map(pointer, bytes, section, offset, protection, Arena::Get().WriteWatched(), true);
     noteAccess(pointer, bytes);
+}
+
+void GuestArenaMapFile_nid_postfix(void* pointer, std::size_t bytes, void* section, std::uint64_t offset, std::uint32_t protection, std::uint32_t viewProtection, std::size_t sectionBytes) {
+    if (!Arena::Get().Contains(pointer, bytes)) throw OutsideArena("file mapping", pointer, bytes);
+    WindowsMappings::Get().Map(pointer, bytes, section, offset, protection, Arena::Get().WriteWatched(), false, viewProtection, sectionBytes);
 }
 
 void* GuestArenaMapAlias_nid_postfix(std::uintptr_t address, std::size_t bytes) {
