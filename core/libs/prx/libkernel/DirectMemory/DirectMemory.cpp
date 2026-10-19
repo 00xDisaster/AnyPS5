@@ -1025,7 +1025,7 @@ int DoMapAnon(void** addr, size_t len, int prot, int flags, size_t alignment, bo
             std::lock_guard lock(g_protectionLock);
             auto replacement = g_protections;
             EraseProtections(start, start + len, replacement);
-            const auto recorded = replacement.emplace(start, ProtectedRange{start + len, prot}).first;
+            const auto recorded = replacement.emplace(start, ProtectedRange{start + len, ReportedProtection(prot)}).first;
             result = SCE_KERNEL_ERROR_ENOMEM;
             if (!VirtualFree(*addr, len, MEM_DECOMMIT)) return false;
             if (VirtualAlloc(*addr, len, MEM_COMMIT, WinProtFromPosix(LinuxProtFromSce(prot))) != *addr) {
