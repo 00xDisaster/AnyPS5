@@ -585,6 +585,26 @@ class ImportAuditTests(unittest.TestCase):
         self.assertEqual(records[("AAAAAAAAAAA", "provider.data")]["providers"], ["libSceA.prx"])
         self.assertEqual(records[("BBBBBBBBBBB", "consumer.prx")]["providers"], ["provider.data"])
 
+    def test_module_matches_imports_that_name_another_module_suffix(self):
+        work = self.work
+        (work.libs / "libc.prx").write_bytes(exporting())
+        (work.modules / "shipping.prx").write_bytes(exporting("AAAAAAAAAAA"))
+        registry, result = work.root / "game.json", work.root / "audit.json"
+        write_registry(registry, [("AAAAAAAAAAA", "shipping.debug_prx")])
+        code, _, err = work.run(registry, "--json", str(result))
+        self.assertEqual((code, err), (0, ""))
+        data = json.loads(result.read_text())
+        self.assertEqual(data["missing_libraries"], {})
+        record = next(record for record in data["imports"] if record["library"] == "shipping.debug_prx")
+        self.assertEqual(record["class"], "module")
+
+    def test_module_names_ignore_case_for_windows_output_only(self):
+        imports = [("AAAAAAAAAAA", "SDK-Shipping.debug_prx", False)]
+        records, missing = import_audit.audit(imports, {}, {}, set(), import_audit.ModuleNames({"sdk-shipping.prx"}, fold=True))
+        self.assertEqual((records[0]["class"], missing), ("module", {}))
+        records, missing = import_audit.audit(imports, {}, {}, set(), import_audit.ModuleNames({"sdk-shipping.prx"}))
+        self.assertEqual((records[0]["class"], missing), ("absent", {"SDK-Shipping.debug_prx": 1}))
+
     def test_converted_module_matches_imports_of_its_base_name(self):
         work = self.work
         (work.libs / "libc.prx").write_bytes(exporting())
