@@ -32,6 +32,7 @@ namespace AgcDriver::Graphics {
 namespace {
 
 std::uint64_t depthWrites = 0;
+std::uint64_t mirrorEpoch = 0;
 
 Recorder* RecorderFor(const Context& context) {
     auto* recorder = Recorder::Active();
@@ -656,7 +657,10 @@ public:
 
     std::shared_ptr<StorageTexture> StoreDepthPlane(const GuestTextureResource& resource) {
         ApplyFastClear();
-        if (mirrorPlane.storage == nullptr) mirrorPlane.storage = StorageTexture::Create(context, *context.detiler, resource, 0);
+        if (mirrorPlane.storage == nullptr) {
+            mirrorPlane.storage = StorageTexture::Create(context, *context.detiler, resource, 0);
+            ++mirrorEpoch;
+        }
         copyPlane(mirrorPlane, mirrorPlane.storage, false, true, true);
         return mirrorPlane.storage;
     }
@@ -669,7 +673,10 @@ public:
             return false;
         }
         memoryStale = false;
-        if (mirrorPlane.storage == nullptr) mirrorPlane.storage = StorageTexture::Create(context, *context.detiler, resource, 0);
+        if (mirrorPlane.storage == nullptr) {
+            mirrorPlane.storage = StorageTexture::Create(context, *context.detiler, resource, 0);
+            ++mirrorEpoch;
+        }
         else static_cast<void>(mirrorPlane.storage->Refresh());
         syncedGeneration = GuestMemory::TrackerGeneration();
         copyPlane(mirrorPlane, mirrorPlane.storage, false, false, true);
@@ -677,7 +684,12 @@ public:
         return true;
     }
 
+    void DropMirror() {
+        mirrorPlane = {};
+    }
+
     bool memoryStale = false;
+    std::uint64_t scannedEpoch = 0;
     std::uint64_t syncedGeneration = 0;
 
     const Context context;
@@ -1525,6 +1537,7 @@ VkImageView DepthSurfaceView(const Context& context, const DepthTarget& target, 
         releaseRetired(context);
         surfacesSerial.fetch_add(1, std::memory_order_release);
         surfaces().push_back(std::make_unique<DepthSurface>(context, target, std::move(sampling)));
+        ++mirrorEpoch;
         auto& fresh = *surfaces().back();
         if (target.samples != 1u && fresh.sampleable && fresh.sampling.refusal.empty()) {
             std::unique_lock guardLock(depthGuardMutex());
@@ -1551,6 +1564,17 @@ VkImageView DepthSurfaceView(const Context& context, const DepthTarget& target, 
     surface->ApplyFastClear();
     if (!created || inherits) surface->written = ++depthWrites;
     surface->NoteMemory();
+    if (mirrorable(target) && surface->scannedEpoch != mirrorEpoch) {
+        surface->scannedEpoch = mirrorEpoch;
+        const auto plane = stalePlaneRange(*surface);
+        for (const auto& other : surfaces()) {
+            if (other.get() == surface || other->context.device != context.device || other->written >= surface->written || !mirrorable(other->target)) continue;
+            const auto otherPlane = stalePlaneRange(*other);
+            if (otherPlane == plane || otherPlane.first >= plane.second || plane.first >= otherPlane.second) continue;
+            other->memoryStale = false;
+            other->DropMirror();
+        }
+    }
     if ((depthWritten || cleared) && mirrorable(target)) {
         surface->memoryStale = true;
         const auto plane = target.address;
