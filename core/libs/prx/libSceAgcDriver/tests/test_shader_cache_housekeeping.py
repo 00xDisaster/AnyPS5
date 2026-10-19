@@ -20,7 +20,7 @@ def snapshot(directory):
 def main():
     executable = str(Path(sys.argv[1]).resolve())
     mode = sys.argv[2]
-    assert mode in ('plain', 'plain-long', 'extended', 'extended-long', 'device-long')
+    assert mode in ('plain', 'plain-long', 'extended', 'extended-long', 'device')
     assert os.name == 'nt' or mode in ('plain', 'plain-long')
     sandbox = Path(tempfile.mkdtemp(prefix='aps5-housekeeping-')).resolve()
     temporary = Path(tempfile.gettempdir()).resolve()
@@ -69,7 +69,7 @@ def main():
         before = snapshot(outside)
         if mode.startswith('extended'):
             environment['ANYPS5_SHADER_CACHE_DIR'] = str(root)
-        elif mode == 'device-long':
+        elif mode == 'device':
             environment['ANYPS5_SHADER_CACHE_DIR'] = '\\\\.\\' + str(root)[4:]
         else:
             environment['ANYPS5_SHADER_CACHE_DIR'] = str(root)[4:] if os.name == 'nt' else str(root)
@@ -83,7 +83,7 @@ def main():
         assert result.returncode == 0, result.stdout
         assert 'housekeeping version ' + version in result.stdout, result.stdout
         assert (current / 'last-used').stat().st_mtime >= started - 2, 'active cache stamp was not refreshed'
-        skipped = mode.startswith('extended') or mode == 'device-long'
+        skipped = mode.startswith('extended') or mode == 'device'
         for name in siblings[:2]:
             assert (root / name).exists() == skipped, 'unexpected stale cache directory eviction'
         assert (root / siblings[2] / 'sentinel').read_bytes() == b'preserve outside the cache root'
