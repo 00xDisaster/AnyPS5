@@ -135,14 +135,14 @@ int frameNumberMatchesCaption() {
     std::ofstream(directory / "app0" / "sce_sys" / "param.json") << R"({"titleId":"PPSA00000","localizedParameters":{"defaultLanguage":"en-US","en-US":{"titleName":"Telemetry Test"}}})";
     std::filesystem::current_path(directory);
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
-        std::printf("skipped, no SDL video driver: %s\n", SDL_GetError());
+        std::printf("skipped, no display or Vulkan device: SDL video driver: %s\n", SDL_GetError());
         return 77;
     }
     DisplayWindow window;
     try {
         window.Ensure(640, 360);
     } catch (const std::exception& error) {
-        std::printf("skipped, no window: %s\n", error.what());
+        std::printf("skipped, no display or Vulkan device: %s\n", error.what());
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return 77;
     }
