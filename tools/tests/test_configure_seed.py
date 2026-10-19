@@ -106,16 +106,7 @@ class ConfigureSeedPathTests(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("ninja") and (shutil.which("gcc") or shutil.which("cc")), "needs ninja and a C compiler")
-class ConfigureSeedTests(unittest.TestCase):
-    def test_check_names_with_spaces_round_trip_through_cmake(self):
-        cache = self.root / "named-check.txt"
-        cache.write_text('//Test HAVE FEATURE\nHAVE FEATURE:INTERNAL=1\n', encoding="utf-8")
-        output = self.configure("named-check", "-C", str(self.seed(cache, "named-check.cmake")))
-        self.assertNotRegex(output, r"CMake Error")
-        seeded = self.root / "named-check" / "CMakeCache.txt"
-        self.assertEqual(configure_seed.checks(seeded)["HAVE FEATURE"][0], "1")
-        self.assertNotIn("HAVE:INTERNAL=", seeded.read_text(encoding="utf-8"))
-
+class ConfigureSeedProject(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory()
@@ -139,30 +130,13 @@ class ConfigureSeedTests(unittest.TestCase):
         subprocess.run([sys.executable, str(TOOL), str(cache), str(seed)], check=True, capture_output=True)
         return seed
 
-    def test_seeded_configure_runs_no_check_and_gets_the_same_results(self):
-        self.assertRegex(self.fresh, r"Looking for|Performing Test")
-        output = self.configure("seeded", "-C", str(self.seed(self.root / "fresh" / "CMakeCache.txt", "seed.cmake")))
-        self.assertNotRegex(output, r"Looking for|Performing Test")
-        fresh = configure_seed.checks(self.root / "fresh" / "CMakeCache.txt")
-        self.assertEqual(configure_seed.checks(self.root / "seeded" / "CMakeCache.txt"), fresh)
-        self.assertEqual(fresh["MINI_HAVE_STDIO_H"][0], "1")
-        self.assertEqual(fresh["MINI_FAILS"][0], "")
 
+class ConfigureSeedTests(ConfigureSeedProject):
     def test_only_check_results_are_seeded(self):
         found = configure_seed.checks(self.root / "fresh" / "CMakeCache.txt")
         self.assertEqual({n for n in found if n.startswith("MINI_")},
                          {"MINI_HAVE_STDIO_H", "MINI_HAVE_MISSING_H", "MINI_HAVE_PRINTF", "MINI_COMPILES", "MINI_FAILS"})
         self.assertNotIn("CMAKE_C_COMPILER", found)
-
-    def test_values_with_cmake_syntax_round_trip(self):
-        cache = self.root / "odd" / "CMakeCache.txt"
-        cache.parent.mkdir()
-        value = r'a;b "c" \d ${e} $f'
-        cache.write_text(f"//Test MINI_ODD\nMINI_ODD:INTERNAL={value}\n", encoding="utf-8")
-        self.configure("odd-seeded", "-C", str(self.seed(cache, "odd.cmake")))
-        seeded = (self.root / "odd-seeded" / "CMakeCache.txt").read_text(encoding="utf-8")
-        self.assertIn(f"MINI_ODD:INTERNAL={value}\n", seeded)
-        self.assertEqual(configure_seed.checks(self.root / "odd-seeded" / "CMakeCache.txt")["MINI_ODD"][0], value)
 
     def test_cache_without_checks_writes_an_empty_seed(self):
         cache = self.root / "empty" / "CMakeCache.txt"
@@ -191,6 +165,36 @@ class ConfigureSeedTests(unittest.TestCase):
         subprocess.run([sys.executable, str(TOOL), str(self.root / "fresh" / "CMakeCache.txt"), str(seed),
                         "--include", "no_match_*"], check=True, capture_output=True)
         self.assertEqual(seed.read_text(encoding="utf-8"), "")
+
+
+class ConfigureSeedRoundTripTests(ConfigureSeedProject):
+    def test_check_names_with_spaces_round_trip_through_cmake(self):
+        cache = self.root / "named-check.txt"
+        cache.write_text('//Test HAVE FEATURE\nHAVE FEATURE:INTERNAL=1\n', encoding="utf-8")
+        output = self.configure("named-check", "-C", str(self.seed(cache, "named-check.cmake")))
+        self.assertNotRegex(output, r"CMake Error")
+        seeded = self.root / "named-check" / "CMakeCache.txt"
+        self.assertEqual(configure_seed.checks(seeded)["HAVE FEATURE"][0], "1")
+        self.assertNotIn("HAVE:INTERNAL=", seeded.read_text(encoding="utf-8"))
+
+    def test_seeded_configure_runs_no_check_and_gets_the_same_results(self):
+        self.assertRegex(self.fresh, r"Looking for|Performing Test")
+        output = self.configure("seeded", "-C", str(self.seed(self.root / "fresh" / "CMakeCache.txt", "seed.cmake")))
+        self.assertNotRegex(output, r"Looking for|Performing Test")
+        fresh = configure_seed.checks(self.root / "fresh" / "CMakeCache.txt")
+        self.assertEqual(configure_seed.checks(self.root / "seeded" / "CMakeCache.txt"), fresh)
+        self.assertEqual(fresh["MINI_HAVE_STDIO_H"][0], "1")
+        self.assertEqual(fresh["MINI_FAILS"][0], "")
+
+    def test_values_with_cmake_syntax_round_trip(self):
+        cache = self.root / "odd" / "CMakeCache.txt"
+        cache.parent.mkdir()
+        value = r'a;b "c" \d ${e} $f'
+        cache.write_text(f"//Test MINI_ODD\nMINI_ODD:INTERNAL={value}\n", encoding="utf-8")
+        self.configure("odd-seeded", "-C", str(self.seed(cache, "odd.cmake")))
+        seeded = (self.root / "odd-seeded" / "CMakeCache.txt").read_text(encoding="utf-8")
+        self.assertIn(f"MINI_ODD:INTERNAL={value}\n", seeded)
+        self.assertEqual(configure_seed.checks(self.root / "odd-seeded" / "CMakeCache.txt")["MINI_ODD"][0], value)
 
 
 
