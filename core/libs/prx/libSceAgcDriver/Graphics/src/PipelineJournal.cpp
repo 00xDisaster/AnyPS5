@@ -215,6 +215,7 @@ void encodeState(Writer& writer, const State& state) {
     writer.Bool(state.customSampleLocations);
     writer.Bool(state.sampleLocationGrid);
     writer.Bool(state.perSampleShading);
+    writer.Bool(state.mergedCoverage);
     for (const auto mask : state.quadSampleMask) writer.Raw(mask);
     writer.U32(state.depthRemap.mode);
 }
@@ -274,6 +275,7 @@ void decodeState(Reader& reader, State& state) {
     state.customSampleLocations = reader.Bool();
     state.sampleLocationGrid = reader.Bool();
     state.perSampleShading = reader.Bool();
+    state.mergedCoverage = reader.Bool();
     for (auto& mask : state.quadSampleMask) mask = reader.Raw<std::uint16_t>();
     state.depthRemap.mode = reader.U32();
 }
@@ -1038,6 +1040,7 @@ State CanonicalPipelineState(const State& state) {
     canonical.customSampleLocations = state.customSampleLocations;
     canonical.sampleLocationGrid = state.sampleLocationGrid;
     canonical.perSampleShading = state.perSampleShading;
+    canonical.mergedCoverage = state.mergedCoverage;
     canonical.quadSampleMask = state.quadSampleMask;
     canonical.depthRemap.mode = state.depthRemap.mode;
     return canonical;

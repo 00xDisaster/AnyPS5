@@ -53,6 +53,7 @@ std::uint64_t DrawRenderPassKey(const Context& context, const State& state, std:
     mix(state.renderExtent.width);
     mix(state.renderExtent.height);
     mix(state.samples);
+    mix(state.mergedCoverage);
     mix(state.customSampleLocations);
     if (state.customSampleLocations) {
         mix(state.sampleLocationGrid);
@@ -725,7 +726,7 @@ std::uint32_t CachedFragmentOutputs(const Context& context, std::span<const Comp
     }
     std::uint32_t outputs = 0;
     try {
-        for (const auto location : ValidateShaders(shaders, state, context.subgroup, context.fragmentShaderBarycentric, context.descriptorIndexing, context.imageInt64Atomics, context.geometryShader, context.sampleRateShading, context.bufferInt64Atomics, context.shaderClipDistance, context.shaderCullDistance, context.viewportIndexLayer, context.runtimeDescriptorArray, context.demoteToHelperInvocation, context.shaderTerminateInvocation)) {
+        for (const auto location : ValidateShaders(shaders, state, context.subgroup, context.fragmentShaderBarycentric, context.descriptorIndexing, context.imageInt64Atomics, context.geometryShader, context.sampleRateShading, context.bufferInt64Atomics, context.shaderClipDistance, context.shaderCullDistance, context.viewportIndexLayer, context.runtimeDescriptorArray, context.demoteToHelperInvocation, context.shaderTerminateInvocation, context.meshShader)) {
             Require(location < 32, "fragment output location exceeds the output mask");
             outputs |= 1u << location;
         }
