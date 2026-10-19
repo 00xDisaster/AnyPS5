@@ -11,6 +11,8 @@ from test_sce_module_code_extent import sce_module, unwind_table
 
 SLOT = bytes.fromhex("48 66 66 66 66 66 66 2e 0f 1f 84 00 00 00 00 00")
 SYSCALL = bytes.fromhex("0f 05 c3")
+SYSCALL_NUMBER = bytes.fromhex("b8 14 00 00 00")
+TABLE = bytes.fromhex("0c 05 00 00 0f 05 00 b0 0f 05 00 00 10 05 00 50")
 GAP = FUNCTION + FUNCTION_SIZE
 TARGETS = (("linux", []), ("windows", ["--windows"]), ("macos", ["--macos"]))
 
@@ -72,7 +74,11 @@ def main():
         for target, flags in TARGETS:
             run(relinker, work, "sce-gap-slot-" + target, executable(SLOT), flags)
             run_module(relinker, work, "sce-module-gap-slot-" + target, module(False), flags)
-        run(relinker, work, "sce-gap-syscall-after-slot", executable(SLOT + SYSCALL), [],
+        run(relinker, work, "sce-gap-syscall-bytes-after-slot", executable(SLOT + SYSCALL), [])
+        run(relinker, work, "sce-gap-table-with-syscall-bytes", executable(TABLE), [])
+        run(relinker, work, "sce-gap-syscall-with-number", executable(SLOT + SYSCALL_NUMBER + SYSCALL), [],
+            ["Forbidden syscall instruction at code offset 0x225: syscall number 20"])
+        run(relinker, work, "sysv-gap-syscall-bytes", executable(bytes.fromhex("90") * 16 + SYSCALL, sce_block=False), [],
             ["Forbidden syscall instruction at code offset 0x220"])
         run(relinker, work, "sce-function-slot", executable(function=SLOT), [],
             ["Cannot decode instruction", "offset 0x200"])

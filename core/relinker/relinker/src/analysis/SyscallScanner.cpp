@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <iterator>
 #include <limits>
 
 #include <memory>
@@ -190,6 +191,14 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
     const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, source, completed, total}); }, unwindRanges);
     RecentInstructions recent;
     std::vector<std::size_t> trapped;
+    std::vector<CodeRange> functions(unwindRanges);
+    std::sort(functions.begin(), functions.end(), [](const CodeRange& left, const CodeRange& right) { return left.Begin < right.Begin; });
+    const auto insideFunction = [&](const std::size_t offset) {
+        const auto after = std::upper_bound(functions.begin(), functions.end(), offset, [](const std::size_t value, const CodeRange& range) { return value < range.Begin; });
+        return after != functions.begin() && offset < std::prev(after)->End;
+    };
+    std::size_t skipped = 0;
+    std::optional<FileByteOffset> firstSkipped;
     scanner->VisitCodeSection(codeSection, codeSectionOffset, codeSectionSize, [&](const Codegen::InstructionMatch& match) {
         recent.Push(match);
         if (match.Offset < codeSectionOffset) throw RelinkerException("Instruction match precedes code section offset", match.Offset);
@@ -213,15 +222,26 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
             return;
         }
 
+        const auto number = kind == ForbiddenInstruction::Invocation ? ConstantSyscallNumber(codeSection, codeSectionOffset, recent) : std::nullopt;
+        if (!functions.empty() && !number && !insideFunction(start)) {
+            ++skipped;
+            if (!firstSkipped) firstSkipped = match.Offset;
+            return;
+        }
+
         std::ostringstream msg;
         msg << "Forbidden syscall instruction at code offset 0x" << std::hex << match.Offset;
 
-        if (kind == ForbiddenInstruction::Invocation)
-            if (const auto number = ConstantSyscallNumber(codeSection, codeSectionOffset, recent))
-                msg << ": syscall number " << std::dec << *number;
+        if (number)
+            msg << ": syscall number " << std::dec << *number;
 
         throw RelinkerException(msg.str(), match.Offset);
     });
+    if (skipped != 0) {
+        std::ostringstream message;
+        message << "Skipped " << std::dec << skipped << " syscall byte pattern(s) without a syscall number outside the unwind functions, the first at code offset 0x" << std::hex << *firstSkipped << '\n';
+        progress.Message(message.str());
+    }
     progress.Report({Domain::ProgressStage::Syscalls, source, limit, limit});
     return trapped;
 }
