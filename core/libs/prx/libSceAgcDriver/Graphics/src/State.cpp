@@ -139,6 +139,7 @@ std::uint32_t inactiveVertexPointSize(const QueueState& queue) {
         case 7:
         case 17:
         case 21:
+        case 19:
             return 1u << 16u;
         default:
             return 0;
@@ -1129,10 +1130,15 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
             result.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
             break;
         case 6: result.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
+        case 19:
+            Require(result.stages.path == ShaderPath::Vertex, "quad-list requires vertex routing");
+            result.quadList = true;
+            result.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            break;
         default: throw std::runtime_error("AGC graphics: unsupported primitive type " + std::to_string(primitive));
     }
     APS5_LOG_OUT_DEBUG("Topology=%u", static_cast<unsigned>(result.topology));
-    result.primitiveRestart = read(queue.userConfig, 0x24b, RegisterBank::UserConfig) != 0 && !result.rectList && result.topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+    result.primitiveRestart = read(queue.userConfig, 0x24b, RegisterBank::UserConfig) != 0 && !result.rectList && !result.quadList && result.topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
     zero(cx, 0x207, ~(LayerExports | ClipCullExports | inactiveVertexPointSize(queue)), "layer, viewport or auxiliary vertex exports");
     Require(std::popcount(read(cx, 0x207) & 0xffffu) <= 8, "more than eight clip and cull distances are unsupported");
     result.paClVsOutCntl = read(cx, 0x207);
