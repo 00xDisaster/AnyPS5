@@ -106,6 +106,8 @@ void SetHostImportWindow(std::uint64_t bytes);
 // Tests: the window of one large registered range (64 MiB) and the import budget (0: the configured one).
 void SetHostImportRangeWindow(std::uint64_t bytes);
 void SetHostImportBudget(std::uint64_t bytes);
+std::uint64_t HostImportBudgetFor(const VkPhysicalDeviceMemoryProperties& memory, const VkPhysicalDeviceMemoryBudgetPropertiesEXT* reported, std::uint64_t configured, std::uint64_t liveBytes);
+std::uint64_t HostImportBudgetWith(std::uint64_t configured, bool set, std::uint64_t reported, bool allocationFailed, std::uint64_t ceiling);
 void SetAddressCopyLimit(std::uint64_t bytes);
 void SetHostImportDeferredSettles(bool enabled);
 // The larger of 6 GiB and half the physical memory, at most the largest host heap less the larger of 2 GiB and half
