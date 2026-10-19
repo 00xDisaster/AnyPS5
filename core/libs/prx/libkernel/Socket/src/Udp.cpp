@@ -20,6 +20,9 @@
 #include <cerrno>
 #ifdef __linux__
 #include <sys/uio.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
 #endif
 #endif
 #include "SceTypes.hpp"
@@ -1359,6 +1362,10 @@ static bool ReadGuest(void* destination, const void* source, std::size_t bytes) 
     iovec local{destination, bytes};
     iovec remote{const_cast<void*>(source), bytes};
     return Transferred(::process_vm_readv(::getpid(), &local, 1, &remote, 1, 0), bytes, "process_vm_readv");
+#elif defined(__APPLE__)
+    mach_vm_size_t copied = 0;
+    return ::mach_vm_read_overwrite(::mach_task_self(), reinterpret_cast<mach_vm_address_t>(source), bytes,
+        reinterpret_cast<mach_vm_address_t>(destination), &copied) == KERN_SUCCESS && copied == bytes;
 #else
     std::memcpy(destination, source, bytes);
     return true;
@@ -1378,6 +1385,9 @@ static bool WriteGuest(void* destination, const void* source, std::size_t bytes)
     iovec local{const_cast<void*>(source), bytes};
     iovec remote{destination, bytes};
     return Transferred(::process_vm_writev(::getpid(), &local, 1, &remote, 1, 0), bytes, "process_vm_writev");
+#elif defined(__APPLE__)
+    return ::mach_vm_write(::mach_task_self(), reinterpret_cast<mach_vm_address_t>(destination),
+        reinterpret_cast<vm_offset_t>(source), static_cast<mach_msg_type_number_t>(bytes)) == KERN_SUCCESS;
 #else
     std::memcpy(destination, source, bytes);
     return true;
