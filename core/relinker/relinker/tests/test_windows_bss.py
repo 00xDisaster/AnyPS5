@@ -66,6 +66,7 @@ def main():
             executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
             assert executed.returncode == 42, f"exit code {executed.returncode:#x}"
         check_relocated_zero_fill(relinker, work)
+        check_scattered_relocations_macos(relinker, work)
     print("Windows zero-filled memory tests passed")
 
 
@@ -94,6 +95,34 @@ def check_relocated_zero_fill(relinker, work):
     if os.name == "nt":
         executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
         assert executed.returncode == 42, f"exit code {executed.returncode:#x}"
+
+
+def check_scattered_relocations_macos(relinker, work):
+    image = fixture()
+    file_size = struct.unpack_from("<Q", image, 64 + 32)[0]
+    memory_size = file_size + (1 << 20)
+    struct.pack_into("<Q", image, 64 + 40, memory_size)
+    count = 40
+    for index in range(count):
+        struct.pack_into("<QQq", image, 0x700 + index * 24, file_size + index * 0x2000, 8, 0x210)
+    tags = image[0x400:0x500]
+    for offset in range(0, len(tags), 16):
+        if struct.unpack_from("<q", tags, offset)[0] == 8:
+            struct.pack_into("<Q", image, 0x400 + offset + 8, count * 24)
+    source = work / "scattered.elf"
+    source.write_bytes(image)
+    output = work / "scattered.macho"
+    result = subprocess.run([str(relinker), "--skip-sce-module", "--macos", str(source), str(output)],
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    macho = output.read_bytes()
+    commands = struct.unpack_from("<I", macho, 16)[0]
+    offset, segments = 32, 0
+    for _ in range(commands):
+        command, size = struct.unpack_from("<II", macho, offset)
+        segments += command == 0x19
+        offset += size
+    assert segments <= 16, f"{segments} Mach-O segments"
 
 
 if __name__ == "__main__":
