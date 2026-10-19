@@ -122,8 +122,17 @@ std::uint32_t EmitBuiltinU32(SpirvEmitterState& state, StageInputKind kind, std:
         if (kind == StageInputKind::LocalInvocationId) {
             return local;
         }
-        const auto group = EmitInputComponentU32(state, StageInputKind::WorkgroupId, component);
+        const auto group = EmitBuiltinU32(state, StageInputKind::WorkgroupId, component);
         return EmitBinaryU32(state, spv::OpIAdd, local, EmitBinaryU32(state, spv::OpIMul, group, ConstantU32(state, size)));
+    }
+    if (StageOf(state) == IrShaderStage::Compute && (kind == StageInputKind::WorkgroupId || kind == StageInputKind::GlobalInvocationId)) {
+        const auto offset = state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::WorkgroupOffsetBase + component, 0u);
+        const auto value = EmitInputComponentU32(state, kind, component);
+        if (kind == StageInputKind::WorkgroupId) {
+            return EmitBinaryU32(state, spv::OpIAdd, value, offset);
+        }
+        const auto local = WorkgroupLocalSize(state, *ShaderWorkgroupInput(state));
+        return EmitBinaryU32(state, spv::OpIAdd, value, EmitBinaryU32(state, spv::OpIMul, offset, ConstantU32(state, local[component])));
     }
     const auto variable = InputVariableForKind(state, kind);
     if (variable == 0) {
