@@ -1044,6 +1044,10 @@ struct DrawInputs {
     const VertexInputLayout& VertexLayout() const { return retainedVertexInput != nullptr ? *retainedVertexInput : vertexInput; }
 };
 
+bool StripPatches(const State& state, std::span<const CompiledShader> shaders) {
+    return state.topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP && BarycentricPatches(state, shaders);
+}
+
 std::shared_ptr<Buffer> zeroVertexBuffer(const Context& context, const ShaderRecompiler::VertexAttribute& attribute) {
     auto zero = std::make_shared<Buffer>(context, DecodeVertexFormat(attribute).bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     std::fill(zero->Bytes().begin(), zero->Bytes().end(), std::byte{0});
@@ -1127,14 +1131,14 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
     ValidateSampleMask(context, state, shaders);
     timer.phase(PhaseValidate);
     inputs.maxIndex = draw.indexed ? 0u : draw.firstVertex + draw.indexCount - 1u;
-    if (state.quadList) {
-        Require(!draw.indirect, "indirect quad-list draw is unsupported");
-        const std::uint32_t primitives = draw.indexCount / 4u;
+    if (state.quadList || StripPatches(state, shaders)) {
+        Require(!draw.indirect, state.quadList ? "indirect quad-list draw is unsupported" : "an indirect triangle strip through emulated barycentric patches is unsupported");
+        const std::uint32_t primitives = state.quadList ? draw.indexCount / 4u : draw.indexCount >= 3u ? draw.indexCount - 2u : 0u;
         if (primitives == 0u || draw.instanceCount == 0u) {
             inputs.nothing = true;
             return inputs;
         }
-        const std::uint32_t corners = 6u;
+        const std::uint32_t corners = state.quadList ? 6u : 3u;
         const std::uint32_t outputIndexCount = primitives * corners;
         const std::size_t expandedIndexBytes = static_cast<std::size_t>(outputIndexCount) * sizeof(std::uint32_t);
         auto indexCopy = std::make_shared<Buffer>(context, expandedIndexBytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
@@ -1144,24 +1148,37 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
         const auto expand = [&](const auto& source) {
             for (std::uint32_t primitive = 0; primitive < primitives; ++primitive) {
                 auto* out = outIndices + static_cast<std::size_t>(primitive) * corners;
-                const auto i0 = source(primitive * 4u + 0u);
-                const auto i1 = source(primitive * 4u + 1u);
-                const auto i2 = source(primitive * 4u + 2u);
-                const auto i3 = source(primitive * 4u + 3u);
-                if (lastProvoking) {
-                    out[0] = i0;
-                    out[1] = i1;
-                    out[2] = i3;
-                    out[3] = i1;
-                    out[4] = i2;
-                    out[5] = i3;
+                if (state.quadList) {
+                    const auto i0 = source(primitive * 4u + 0u);
+                    const auto i1 = source(primitive * 4u + 1u);
+                    const auto i2 = source(primitive * 4u + 2u);
+                    const auto i3 = source(primitive * 4u + 3u);
+                    if (lastProvoking) {
+                        out[0] = i0;
+                        out[1] = i1;
+                        out[2] = i3;
+                        out[3] = i1;
+                        out[4] = i2;
+                        out[5] = i3;
+                    } else {
+                        out[0] = i0;
+                        out[1] = i1;
+                        out[2] = i2;
+                        out[3] = i0;
+                        out[4] = i2;
+                        out[5] = i3;
+                    }
                 } else {
-                    out[0] = i0;
-                    out[1] = i1;
-                    out[2] = i2;
-                    out[3] = i0;
-                    out[4] = i2;
-                    out[5] = i3;
+                    const std::uint32_t odd = primitive & 1u;
+                    if (lastProvoking) {
+                        out[0] = source(primitive + odd);
+                        out[1] = source(primitive + 1u - odd);
+                        out[2] = source(primitive + 2u);
+                    } else {
+                        out[0] = source(primitive);
+                        out[1] = source(primitive + 1u + odd);
+                        out[2] = source(primitive + 2u - odd);
+                    }
                 }
                 for (std::uint32_t corner = 0; corner < corners; ++corner) maxIdx = std::max(maxIdx, out[corner]);
             }
@@ -1183,7 +1200,7 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
             expand(readIndex);
             Require(draw.firstVertex <= std::numeric_limits<std::uint32_t>::max() - maxIdx, "indexed draw vertex range overflow");
         } else {
-            const std::uint32_t lastVertex = primitives * 4u - 1u;
+            const std::uint32_t lastVertex = state.quadList ? primitives * 4u - 1u : primitives + 1u;
             Require(draw.firstVertex <= std::numeric_limits<std::uint32_t>::max() - lastVertex, "auto draw vertex range overflow");
             expand([](std::uint32_t idx) { return idx; });
         }
@@ -2097,7 +2114,7 @@ void Draw(const Context& context, const State& state, const Pm4::DrawParameters&
         Require(state.samples == 1u && (!state.depth || HasStencil(state.depth->format)), "stencil replay requires single-sample rendering and an eight-bit stencil format");
         recipeOut = nullptr;
     }
-    if (state.quadList) recipeOut = nullptr;
+    if (state.quadList || StripPatches(state, shaders)) recipeOut = nullptr;
     if (context.recorder != nullptr) context.recorder->BoundKeptBytes();
     PerformanceTimer timing("Graphics.Draw");
     // APS5_PROFILE_DRAW prints the time of each phase of the draw (microseconds) and the [draws] totals.
@@ -2765,7 +2782,7 @@ DrawRecipeOutcome DrawWithRecipe(const Context& context, const State& state, con
     };
     Require(!draw.indirect, "a draw recipe covers direct draws only");
     auto* recorder = Recorder::Active();
-    if (state.quadList || !RecordDraws() || recorder == nullptr || DumpTargetLimit() != 0) return miss(DrawRecipeMiss::NotRecordable);
+    if (state.quadList || StripPatches(state, shaders) || !RecordDraws() || recorder == nullptr || DumpTargetLimit() != 0) return miss(DrawRecipeMiss::NotRecordable);
     if (recipe.hasDepth != state.depth.has_value()) return miss(DrawRecipeMiss::TargetGone);
     const std::size_t expectedViews = state.colors.size() + (recipe.hasDepth ? 1u : 0u);
     Require(recipe.targets.size() == state.colors.size() && recipe.targetViews.size() == expectedViews, "draw recipe targets do not match the state");
