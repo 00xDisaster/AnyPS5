@@ -557,6 +557,47 @@ struct AudioOut2MasteringStatesHeader {
     std::uint32_t states_id;
 };
 
+struct AudioOut2MasteringStatesDescriptor {
+    std::uint32_t id;
+    std::uint32_t size;
+};
+
+struct AudioOut2MasteringCompressorStates {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_rms[3][8];
+    float compression_coeff[3][8];
+};
+
+struct AudioOut2MasteringCompressorStatesV2 {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_rms[4][8];
+    float compression_coeff[4][8];
+};
+
+struct AudioOut2MasteringLimiterStates {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_peak[8];
+    float output_peak[8];
+    float gain_peak[8];
+};
+
+struct AudioOut2MasteringStates {
+    AudioOut2MasteringStatesHeader states_header;
+    std::uint32_t reserved[3];
+    AudioOut2MasteringCompressorStates compressor_states;
+    AudioOut2MasteringLimiterStates limiter_states;
+};
+
+struct AudioOut2MasteringStatesV2 {
+    AudioOut2MasteringStatesHeader states_header;
+    std::uint32_t reserved[3];
+    AudioOut2MasteringCompressorStatesV2 compressor_states;
+    AudioOut2MasteringLimiterStates limiter_states;
+};
+
 struct AudioOutOutputParam {
     int handle;
     const void* ptr;
@@ -921,6 +962,14 @@ struct VoicePortInfo {
     std::uint16_t reserved;
 };
 
+struct VoiceResourceInfo {
+    std::uint16_t max_voice_input_ports;
+    std::uint16_t max_voice_output_ports;
+    std::uint16_t max_device_input_ports;
+    std::uint16_t max_device_output_ports;
+    std::uint16_t max_ports;
+};
+
 struct VoiceStartParam {
     void* container;
     std::uint32_t mem_size;
@@ -1280,7 +1329,7 @@ struct NetCtlIfStat {
     std::uint32_t reserved[8];
 };
 
-using NetCtlCallback = void (*)(int, void*);
+using NetCtlCallback = void (APS5_VABI *)(int, void*);
 
 struct HttpEpoll;
 using HttpEpollHandle = HttpEpoll*;
@@ -1371,10 +1420,6 @@ struct NpUniversalDataSystemMemoryStat {
     std::size_t max_inuse_size;
     std::size_t current_inuse_size;
 };
-
-struct NpUniversalDataSystemEvent {};
-struct NpUniversalDataSystemEventPropertyObject {};
-struct NpUniversalDataSystemEventPropertyArray {};
 
 struct NpUniversalDataSystemStorageStat {
     std::size_t in_events;
@@ -2031,6 +2076,11 @@ struct VideoOutColorSettings {
     float gamma = 1.0f;
     std::uint32_t reserved[3] = {};
 };
+
+struct VideoOutColorSpaceConversionSettings {
+    std::uint32_t internalData[8] = {};
+};
+static_assert(sizeof(VideoOutColorSpaceConversionSettings) == 32);
 
 
 using atexit_func_t = void (*)();

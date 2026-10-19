@@ -18,6 +18,7 @@
 #endif
 
 extern "C" int* APS5_VABI __error_nid_postfix();
+extern "C" int APS5_VABI sceKernelMunmap(std::uint64_t address, std::size_t length);
 extern "C" int APS5_VABI sceKernelMlock_nid_postfix(void* address, std::uint64_t length);
 extern "C" int APS5_VABI sceKernelMunlock_nid_postfix(void* address, std::uint64_t length);
 extern "C" int APS5_VABI sceKernelMunlockall_nid_postfix();
@@ -119,6 +120,7 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
         try {
             const auto result = DoMapAnon(&mapped, rounded, protection, placement, alignment, exclusive);
             if (result != 0) return failed(GuestNoMemory);
+            if (fixedAnonymous) ReleaseFlexibleMappingRange(start, rounded);
             return mapped;
         } catch (const std::invalid_argument&) {
             return failed(fixedAnonymous ? GuestInvalid : GuestNoMemory);
@@ -160,6 +162,7 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
         mapped = address;
         const auto result = DoMapFileBacked_nid_no_patch(&mapped, rounded, protection, kind | placement, mappingDescriptor, static_cast<std::uint64_t>(offset), alignment);
         if (result != 0) return failed(result == SCE_KERNEL_ERROR_EINVAL ? GuestInvalid : GuestNoMemory);
+        if ((placement & GuestMapFixed) != 0) ReleaseFlexibleMappingRange(reinterpret_cast<std::uintptr_t>(mapped), rounded);
         return mapped;
     } catch (const std::invalid_argument&) {
         return failed(GuestInvalid);
@@ -188,7 +191,7 @@ int APS5_VABI munmap_nid_postfix(void* address, std::size_t length) noexcept {
         rounded > std::numeric_limits<std::uintptr_t>::max() - start)
         return failed(GuestInvalid);
     try {
-        if (DoMunmap(address, rounded) != 0) return failed(GuestInvalid);
+        if (sceKernelMunmap(start, rounded) != 0) return failed(GuestInvalid);
         return 0;
     } catch (const std::bad_alloc&) {
         return failed(GuestNoMemory);

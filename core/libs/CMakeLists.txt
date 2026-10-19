@@ -198,6 +198,29 @@ if(APS5_ENABLE_TRACY)
     list(APPEND PATCHED_OUTPUTS ${TRACY_CLIENT_COPIED})
 endif()
 
+if(TARGET mimalloc)
+    add_executable(pe_import_first ${CMAKE_CURRENT_SOURCE_DIR}/allocator/PeImportFirstMain.cpp ${CMAKE_CURRENT_SOURCE_DIR}/allocator/PeImportFirst.cpp)
+    target_compile_features(pe_import_first PRIVATE cxx_std_20)
+    if(MINGW)
+        target_compile_options(pe_import_first PRIVATE -fasynchronous-unwind-tables)
+        target_link_options(pe_import_first PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
+    add_custom_command(
+            OUTPUT ${PATCHED_DIR}/mimalloc.dll
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:mimalloc> ${PATCHED_DIR}/mimalloc.dll
+            COMMAND $<TARGET_FILE:pe_import_first> ${PATCHED_DIR}/mimalloc.dll mimalloc-redirect.dll
+            DEPENDS mimalloc pe_import_first
+            COMMENT "Copying mimalloc.dll beside the libraries, its redirection module imported first"
+    )
+    add_custom_command(
+            OUTPUT ${PATCHED_DIR}/mimalloc-redirect.dll
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect.dll ${PATCHED_DIR}/mimalloc-redirect.dll
+            DEPENDS mimalloc
+            COMMENT "Copying mimalloc-redirect.dll beside the libraries"
+    )
+    list(APPEND PATCHED_OUTPUTS ${PATCHED_DIR}/mimalloc.dll ${PATCHED_DIR}/mimalloc-redirect.dll)
+endif()
+
 add_custom_target(libs DEPENDS ${PATCHED_OUTPUTS})
 
 if(BUILD_TESTING)
@@ -218,6 +241,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME nid_buffer_validation COMMAND nid_buffer_validation_tests)
     set_tests_properties(nid_buffer_validation PROPERTIES TIMEOUT 10)
+
+    add_test_executable(pe_import_first_tests allocator/tests/PeImportFirstTests.cpp allocator/PeImportFirst.cpp)
+    target_include_directories(pe_import_first_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_features(pe_import_first_tests PRIVATE cxx_std_20)
+    if(MINGW)
+        target_compile_options(pe_import_first_tests PRIVATE -fasynchronous-unwind-tables)
+    endif()
+    add_test(NAME pe_import_first COMMAND pe_import_first_tests)
+    set_tests_properties(pe_import_first PROPERTIES TIMEOUT 10)
 
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
@@ -242,6 +274,17 @@ if(BUILD_TESTING)
         target_link_options(patched_libraries_tests PRIVATE -static -static-libgcc -static-libstdc++)
     endif()
     add_test(NAME patched_libraries COMMAND patched_libraries_tests ${PATCHED_DIR})
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_library(host_libstdcxx_exception_module SHARED tests/HostLibstdcxxExceptionModule.cpp)
+        target_link_libraries(host_libstdcxx_exception_module PRIVATE ${PATCHED_DIR}/libc.prx)
+        add_dependencies(host_libstdcxx_exception_module libs)
+        add_test_executable(host_libstdcxx_exception_tests tests/HostLibstdcxxException.cpp)
+        target_link_libraries(host_libstdcxx_exception_tests PRIVATE host_libstdcxx_exception_module ${PATCHED_DIR}/libc.prx)
+        add_dependencies(host_libstdcxx_exception_tests libs)
+        set_target_properties(host_libstdcxx_exception_module host_libstdcxx_exception_tests PROPERTIES BUILD_RPATH ${PATCHED_DIR})
+        add_test(NAME host_libstdcxx_exception COMMAND host_libstdcxx_exception_tests)
+        set_tests_properties(host_libstdcxx_exception PROPERTIES TIMEOUT 20)
+    endif()
     if(Python3_Interpreter_FOUND)
         add_test(NAME nid_elf_layout COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/nid/tests/test_elf_layout.py $<TARGET_FILE:nid_patcher>)
@@ -261,6 +304,7 @@ if(BUILD_TESTING)
     endif()
     if(APPLE)
         add_subdirectory(tests/write_watch)
+        add_subdirectory(tests/guest_arena)
     endif()
     if(WIN32)
         add_test_executable(windows_write_watch_tests tests/WindowsWriteWatch.cpp)
@@ -381,6 +425,16 @@ if(BUILD_TESTING)
     add_test(NAME guest_rudp_pump COMMAND guest_rudp_pump_tests)
     if(WIN32)
         set_tests_properties(guest_rudp_pump PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceRudp>")
+    endif()
+
+    add_test_executable(guest_rudp_context_lifecycle_tests tests/GuestRudpContextLifecycle.cpp)
+    target_include_directories(guest_rudp_context_lifecycle_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(guest_rudp_context_lifecycle_tests PRIVATE libSceRudp libc)
+    configure_windows_unwind(guest_rudp_context_lifecycle_tests)
+    add_test(NAME guest_rudp_context_lifecycle COMMAND guest_rudp_context_lifecycle_tests)
+    if(WIN32)
+        set_tests_properties(guest_rudp_context_lifecycle PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceRudp>")
     endif()
 

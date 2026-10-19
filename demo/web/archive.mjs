@@ -1,8 +1,9 @@
 import { BlobReader, Uint8ArrayReader, ZipReader, ZipWriter, configure } from "https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.57/lib/zip-no-worker.js/+esm";
+import { batchMemoryEstimate, batchOutputDirectory, MEMORY_LIMIT, memoryEstimate } from "./batch.mjs";
 
 configure({ useWebWorkers: false, useCompressionStream: false, chunkSize: 65536 });
 
-export const MEMORY_LIMIT = 256 * 1024 * 1024;
+export { batchMemoryEstimate, batchOutputDirectory, memoryEstimate, MEMORY_LIMIT };
 export const CONVERSION_LIMIT = 256 * 1024 * 1024;
 export const ICON_LIMIT = 16 * 1024 * 1024;
 const MAX_ENTRIES = 100000;
@@ -243,8 +244,8 @@ export class Archive {
   async close() { await this.reader.close(); }
 }
 
-export function memoryEstimate(archiveBytes, selectedBytes, libraryBytes, entries) {
-  return safeSize(Math.ceil(archiveBytes * 1.02) + selectedBytes * 4 + libraryBytes + entries * 1024 + 8 * 1024 * 1024);
+export function createPackageWriter(destination) {
+  return new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
 }
 
 async function appendEntry(writer, name, entry, report) {
@@ -321,13 +322,19 @@ class DirectoryWriter {
   async close() {}
 }
 
-export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false) {
+export async function packageArchive(archive, converted, outputName, libraryFile, destination, report, directory = false, options = {}) {
   const libraries = new ZipReader(new BoundedBlobReader(libraryFile));
-  const writer = directory ? new DirectoryWriter(destination) : new ZipWriter(destination, { level: 9, zip64: true, bufferedWrite: false, useWebWorkers: false, useCompressionStream: false, preventClose: true });
+  const ownsWriter = !options.writer;
+  const writer = options.writer ?? (directory ? new DirectoryWriter(destination) : createPackageWriter(destination));
+  const outputPath = name => {
+    const path = options.prefix ? `${options.prefix}${name}` : name;
+    validPath(path);
+    return path;
+  };
   const names = new Set();
   const claim = name => {
-    validPath(name);
-    const key = name.replace(/\/$/u, "").toLowerCase();
+    const path = outputPath(name);
+    const key = path.replace(/\/$/u, "").toLowerCase();
     if (names.has(key)) throw new Error(`Output path collision: ${name}`);
     names.add(key);
   };
@@ -347,19 +354,34 @@ export async function packageArchive(archive, converted, outputName, libraryFile
       if (!module.name.startsWith("app0/sce_module/")) throw new Error("Invalid converted module path");
       claim(module.name);
     }
+    const outputEntries = [
+      ...libraryEntries.map(entry => ({ name: entry.filename, directory: entry.directory })),
+      ...originalFiles.map(item => ({ name: "app0/" + item.name, directory: item.entry.directory })),
+      { name: outputName },
+      ...(converted.diagnostics ? [{ name: "windows-diagnostics-imports.txt" }] : []),
+      ...converted.modules.map(module => ({ name: module.name }))
+    ];
+    const files = new Set(outputEntries.filter(entry => !entry.directory).map(entry => entry.name.toLowerCase()));
+    for (const { name } of outputEntries) {
+      const parts = name.replace(/\/$/u, "").toLowerCase().split("/");
+      for (let index = 1; index < parts.length; index++) {
+        const parent = parts.slice(0, index).join("/");
+        if (files.has(parent)) throw new Error(`Output path collision: ${parent}`);
+      }
+    }
     const binary = { versionMadeBy: 0x31e, externalFileAttributes: (0o100755 << 16) >>> 0 };
-    await writer.add(outputName, new Uint8ArrayReader(converted.executable), binary);
-    if (converted.diagnostics) await writer.add("windows-diagnostics-imports.txt", new Uint8ArrayReader(new TextEncoder().encode(converted.diagnostics)));
-    for (const module of converted.modules) await writer.add(module.name, new Uint8ArrayReader(module.bytes), binary);
+    await writer.add(outputPath(outputName), new Uint8ArrayReader(converted.executable), binary);
+    if (converted.diagnostics) await writer.add(outputPath("windows-diagnostics-imports.txt"), new Uint8ArrayReader(new TextEncoder().encode(converted.diagnostics)));
+    for (const module of converted.modules) await writer.add(outputPath(module.name), new Uint8ArrayReader(module.bytes), binary);
     for (const entry of libraryEntries) {
-      if (entry.directory) await writer.add(entry.filename, undefined, { directory: true });
-      else await appendEntry(writer, entry.filename, entry, report);
+      if (entry.directory) await writer.add(outputPath(entry.filename), undefined, { directory: true });
+      else await appendEntry(writer, outputPath(entry.filename), entry, report);
     }
     for (const { entry, name } of originalFiles) {
-      if (entry.directory) await writer.add("app0/" + name, undefined, { directory: true });
-      else await appendEntry(writer, "app0/" + name, entry, report);
+      if (entry.directory) await writer.add(outputPath("app0/" + name), undefined, { directory: true });
+      else await appendEntry(writer, outputPath("app0/" + name), entry, report);
     }
-    await writer.close();
+    if (ownsWriter) await writer.close();
   } finally {
     await libraries.close();
   }
