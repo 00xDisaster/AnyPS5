@@ -1096,6 +1096,7 @@ private:
     struct DescriptorWeb {
         static constexpr std::size_t maxStates = 512u;
         static constexpr std::size_t maxArms = 64u;
+        std::string failure;
         std::vector<std::vector<IrValue*>> arms;
         std::map<std::vector<IrValue*>, IrValue*> selectors;
         std::vector<std::pair<IrBlock*, IrValue*>> phis;
@@ -1103,6 +1104,13 @@ private:
         std::unordered_map<IrValue*, IrValue*> resolved;
         std::unordered_map<const IrBlock*, std::size_t> order;
     };
+
+    static IrValue* GiveUp(DescriptorWeb& web, const char* reason) {
+        if (web.failure.empty()) {
+            web.failure = reason;
+        }
+        return nullptr;
+    }
 
     IrValue* WebSelector(std::vector<IrValue*> tuple, DescriptorWeb& web, IrValue& position) {
         for (IrValue*& value : tuple) {
@@ -1127,8 +1135,11 @@ private:
         }
         if (phi == tuple.end()) {
             for (IrValue* value : tuple) {
-                if (HoldsProgramCounter(value, phiSearchDepth) || Rematerialize(value, position, false, phiSearchDepth) == nullptr) {
-                    return nullptr;
+                if (HoldsProgramCounter(value, phiSearchDepth)) {
+                    return GiveUp(web, "a descriptor dword depends on the program counter");
+                }
+                if (Rematerialize(value, position, false, phiSearchDepth) == nullptr) {
+                    return GiveUp(web, "a descriptor dword is not rebuilt from user data, the SRT and uniform operations before the read");
                 }
             }
             const auto same = std::ranges::find_if(web.arms, [&](const std::vector<IrValue*>& arm) {
@@ -1138,7 +1149,7 @@ private:
                 return &m_builder.Constant(static_cast<std::uint32_t>(same - web.arms.begin()));
             }
             if (web.arms.size() == DescriptorWeb::maxArms) {
-                return nullptr;
+                return GiveUp(web, "more than 64 distinct descriptors");
             }
             web.arms.push_back(std::move(tuple));
             return &m_builder.Constant(static_cast<std::uint32_t>(web.arms.size() - 1u));
@@ -1157,23 +1168,26 @@ private:
             }
             const auto found = web.order.find(value->Parent());
             if (found == web.order.end()) {
-                return nullptr;
+                return GiveUp(web, "a descriptor Phi is in a block outside the program order");
             }
             if (block == nullptr || found->second > latest) {
                 block = value->Parent();
                 latest = found->second;
             }
         }
-        if (block == nullptr || web.selectors.size() == DescriptorWeb::maxStates) {
-            return nullptr;
+        if (block == nullptr) {
+            return GiveUp(web, "a descriptor Phi has no block");
+        }
+        if (web.selectors.size() == DescriptorWeb::maxStates) {
+            return GiveUp(web, "more than 512 descriptor states");
         }
         const auto& predecessors = block->Predecessors();
         if (predecessors.size() < 2u) {
-            return nullptr;
+            return GiveUp(web, "a descriptor Phi's block has fewer than two predecessors");
         }
         for (const IrValue* value : tuple) {
             if (value->IsPhi() && value->Parent() == block && value->PhiBlockCount() != predecessors.size()) {
-                return nullptr;
+                return GiveUp(web, "a descriptor Phi's operands do not match its block's predecessors");
             }
         }
         IrValue& selector = m_program.CreateValue(IrOpcode::Phi, IrType::U32);
@@ -1184,7 +1198,7 @@ private:
             for (IrValue* value : tuple) {
                 IrValue* edge = value->IsPhi() && value->Parent() == block ? PhiIncoming(*value, predecessor) : value;
                 if (edge == nullptr) {
-                    return nullptr;
+                    return GiveUp(web, "a descriptor Phi has no value for one of its predecessors");
                 }
                 incoming.push_back(edge);
             }
@@ -1201,8 +1215,11 @@ private:
         IrBlock* block = first.Parent();
         const auto op = first.Opcode();
         const bool select = op == IrOpcode::SelectU32;
-        if (block == nullptr || first.ArgumentCount() != (select ? 3u : 2u) || web.selectors.size() == DescriptorWeb::maxStates) {
-            return nullptr;
+        if (block == nullptr || first.ArgumentCount() != (select ? 3u : 2u)) {
+            return GiveUp(web, "a per-lane descriptor selection has an unexpected form");
+        }
+        if (web.selectors.size() == DescriptorWeb::maxStates) {
+            return GiveUp(web, "more than 512 descriptor states");
         }
         IrValue* shared = first.Argument(select ? 0u : 1u);
         std::vector<IrValue*> left;
@@ -1219,7 +1236,7 @@ private:
                     right.push_back(value);
                 }
             } else {
-                return nullptr;
+                return GiveUp(web, "a per-lane descriptor selection mixes dwords selected differently");
             }
         }
         auto& instructions = block->Instructions();
@@ -1230,7 +1247,7 @@ private:
             }
         }
         if (latest == instructions.end()) {
-            return nullptr;
+            return GiveUp(web, "a per-lane descriptor selection is not in its block");
         }
         IrValue* before = std::next(latest) == instructions.end() ? nullptr : *std::next(latest);
         IrValue* leftSelector = WebSelector(std::move(left), web, position);
@@ -1297,6 +1314,12 @@ private:
             }
         }
         if (selector == nullptr || web.arms.empty()) {
+            const std::string reason = web.failure.empty() ? std::string("no descriptor was found on any path") : web.failure;
+            for (std::uint32_t slot = 0; slot < handleCount; slot++) {
+                if (split[slot]) {
+                    m_splitFailures.try_emplace(handles[slot], reason);
+                }
+            }
             return;
         }
 
@@ -1308,6 +1331,11 @@ private:
         ReplaceWithArmCopies(inst, handles, split, handleCount, conditions, [&](std::uint32_t arm, std::uint32_t slot, std::size_t dword) {
             return Rematerialize(web.arms[arm][offsets[slot] + dword], inst, true, phiSearchDepth);
         });
+    }
+
+    std::string SplitFailure(const IrValue& handle) const {
+        const auto found = m_splitFailures.find(&handle);
+        return found == m_splitFailures.end() ? std::string() : "; descriptor web: " + found->second;
     }
 
     void SplitDescriptorPhis() {
@@ -1671,7 +1699,7 @@ private:
         MakeSource(*handle, width, sampler, sampleAdjust, descriptor);
         std::uint32_t badDword = 0;
         if (!ValidateSource(descriptor, badDword)) {
-            fail(std::string(IrOpcodeName(expected)) + " dword " + std::to_string(badDword) + " is not a valid runtime value; chain: " + describeValueChain(descriptor.dwords[badDword], 8u));
+            fail(std::string(IrOpcodeName(expected)) + " dword " + std::to_string(badDword) + " is not a valid runtime value; chain: " + describeValueChain(descriptor.dwords[badDword], 8u) + SplitFailure(*handle));
         }
         source = InternSource(descriptor);
     }
@@ -2038,6 +2066,7 @@ private:
         IrValue* value = nullptr;
     };
     std::vector<EdgeSelectorEntry> m_edgeSelectors;
+    std::unordered_map<const IrValue*, std::string> m_splitFailures;
 };
 
 }
