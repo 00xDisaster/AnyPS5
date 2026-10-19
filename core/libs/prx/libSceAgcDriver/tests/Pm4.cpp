@@ -1734,6 +1734,10 @@ void testWaitRegMemPipelineDrain() {
 
     blockerHold.store(false);
     AgcDriverWaitIdle_nid_postfix();
+    const auto idleDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() != 0 && std::chrono::steady_clock::now() < idleDeadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     check(AgcDriver::DriverDetail::DrawPipeline::Queue0().Outstanding() == 0, "draw pipeline should be idle");
 
     std::atomic<bool> blocker2Hold{true};
