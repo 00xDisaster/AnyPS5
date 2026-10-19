@@ -7776,6 +7776,24 @@ std::string interlockShape(std::span<const std::uint32_t> words) {
     return shape;
 }
 
+bool coherentImageRead(std::span<const std::uint32_t> words) {
+    std::map<std::uint32_t, std::uint32_t> sources;
+    std::set<std::uint32_t> coherent;
+    std::uint32_t image = 0;
+    for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
+        const auto op = static_cast<spv::Op>(words[at] & 0xffffu);
+        if (op == spv::OpDecorate && words[at + 2] == spv::DecorationCoherent) coherent.insert(words[at + 1]);
+        if (op == spv::OpLoad || op == spv::OpAccessChain || op == spv::OpInBoundsAccessChain) sources[words[at + 2]] = words[at + 3];
+        if (op == spv::OpImageRead) image = words[at + 3];
+    }
+    for (std::size_t step = 0; image != 0 && step < 8u; ++step) {
+        if (coherent.contains(image)) return true;
+        const auto source = sources.find(image);
+        image = source == sources.end() ? 0u : source->second;
+    }
+    return false;
+}
+
 std::string interlockExits(std::span<const std::uint32_t> words, std::size_t& kills, std::size_t& terminates) {
     struct Block {
         std::vector<spv::Op> ops;
@@ -8877,6 +8895,7 @@ void unorm4_4_4_4TargetTests() {
             }
             const auto what = std::string(registration ? "a registration" : "a specialized") + " 4_4_4_4 merge module";
             Require(merged.registrationModule == registration && reads == 1u && writes == 1u && interlockShape(words) == "capability extension ordered begin end " && declaresEarlyFragmentTests(merging), what + " did not read and write the target once inside a pixel interlock after early tests: " + interlockShape(words));
+            Require(coherentImageRead(words), what + " does not read the target through a Coherent image variable");
             const auto bound = std::ranges::any_of(merged.bindings, [&](const ShaderRecompiler::DescriptorBinding& binding) {
                 if (binding.role != ShaderRecompiler::DescriptorRole::GuestImages || binding.kind != ShaderRecompiler::DescriptorKind::StorageImage) return false;
                 for (std::size_t offset = 0; offset + 8u <= binding.guestDescriptor.size(); offset += 8u) {
