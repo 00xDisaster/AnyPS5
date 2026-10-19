@@ -3,6 +3,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ColorTargetLayout.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Recorder.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/State.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
@@ -29,6 +30,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
@@ -254,6 +256,7 @@ std::uint32_t Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTa
     state.blends = {blend};
     state.blend = blend;
     state.blendConstants = {};
+    state.pixelKill = (setup.shaderControl & LateKill) != 0u;
     if (setup.depth != 0) {
         state.depth = AgcDriver::Graphics::DepthTarget{setup.depth, 0, {Width, Height}, VK_FORMAT_D32_SFLOAT, 1.0f, 0, 0, false};
         state.depthTest = true;
@@ -421,6 +424,26 @@ void DepthRejection(AgcDriver::VulkanDevice& device, Block& block, const ColorTa
     ExpectWords(device, block, layout, expected, before, "an X merge at z 0.25 in front of every stored depth");
 }
 
+void CountedKill(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color) {
+    {
+        std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
+        auto* recorder = AgcDriver::Graphics::Recorder::Active();
+        Require(recorder != nullptr, "the test device has no command recorder to count samples");
+        recorder->CountSamples();
+    }
+    const auto before = Fill(block, 501u);
+    const std::array<float, 4> rgba{0.6f, 0.2f, 0.8f, 0.4f};
+    std::string refusal;
+    try {
+        DrawCase(device, color, 0x1u, 0xf000u, Float32Export, Float32Program(rgba, Kill::BeforeExport), {PositionInputs, LateKill});
+    } catch (const std::exception& error) {
+        refusal = error.what();
+    }
+    Require(refusal.find("while occlusion queries count samples") != std::string::npos, "a merge that kills under late tests drew while occlusion queries count samples" + (refusal.empty() ? std::string() : ": " + refusal));
+    DrawCase(device, color, 0x1u, 0xf000u, Float32Export, Float32Program(rgba));
+    ExpectSurface(device, block, layout, before, Packed(rgba), 0xf000u, "a merged X write that kills nothing while occlusion queries count samples");
+}
+
 void ExpectKilled(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint16_t>& before, std::uint32_t word, std::uint32_t wordMask, const std::string& what) {
     const auto stored = ReadBack(device, block);
     for (std::uint32_t y = 0; y < Height; ++y) {
@@ -498,7 +521,8 @@ int main() {
         SameDrawOverdraw(*device, block, layout, color, 0.2f, 0.8f, 401u);
         SameDrawOverdraw(*device, block, layout, color, 0.8f, 0.2f, 402u);
         DepthRejection(*device, block, layout, color);
-        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences, 4 checkerboard-killing draws, 2 same-draw overdraws of 16 layers and a depth-rejected merge into a %ux%u tiled target, the killed, rejected and unscissored pixels kept\n", cases.size() + 1u, Width, Height);
+        CountedKill(*device, block, layout, color);
+        std::printf("4_4_4_4 unorm partial write tests passed: %zu masked draws, 3 back-to-back sequences, 4 checkerboard-killing draws, 2 same-draw overdraws of 16 layers, a depth-rejected merge and a refused killing merge while samples are counted, into a %ux%u tiled target, the killed, rejected and unscissored pixels kept\n", cases.size() + 1u, Width, Height);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

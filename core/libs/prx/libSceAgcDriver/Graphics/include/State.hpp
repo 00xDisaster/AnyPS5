@@ -155,6 +155,7 @@ struct State {
     std::uint32_t paClVsOutCntl = 0;
     std::array<std::uint16_t, 4> quadSampleMask{0xffffu, 0xffffu, 0xffffu, 0xffffu};
     bool pixelEarlyZ = false;
+    bool pixelKill = false;
 };
 
 // PA_CL_VS_OUT_CNTL bits that place position exports (clip and cull distances, the misc and the two
