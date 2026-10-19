@@ -52,6 +52,13 @@ static std::size_t liveAllocations = 0;
 static const char* activeCase = nullptr;
 static unsigned activeBudget = 0;
 
+#ifndef _WIN32
+extern "C" void NotImplemented_nid_no_patch(const char* name) {
+    std::fprintf(stderr, "unexpected unimplemented JSON export: %s\n", name);
+    std::abort();
+}
+#endif
+
 void* operator new(std::size_t bytes) {
     if (allocationBudget == 0) throw std::bad_alloc();
     if (allocationBudget > 0) --allocationBudget;
