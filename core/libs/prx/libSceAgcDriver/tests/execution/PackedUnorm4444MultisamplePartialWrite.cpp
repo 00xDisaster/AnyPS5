@@ -24,6 +24,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <numeric>
 #include <span>
 #include <string>
 #include <vector>
@@ -42,11 +44,9 @@ using AgcDriver::Graphics::Require;
 using ShaderRecompiler::ShaderStage;
 
 constexpr std::uint32_t Side = 16;
-constexpr std::uint32_t Samples = 2;
-constexpr std::uint32_t SampleShift = 1;
+constexpr std::array<std::uint32_t, 3> SampleCounts{2, 4, 8};
 constexpr std::size_t BlockBytes = 65536;
 constexpr std::uint32_t Unorm4_4_4_4Info = 0x8000u | (19u << 2u) | (2u << 11u);
-constexpr std::uint32_t MultisampledAttrib = (SampleShift << 12u) | (SampleShift << 15u);
 constexpr std::uint32_t TiledAttrib3 = 0x4dc6c000u;
 constexpr std::uint32_t Float32Export = 9;
 constexpr std::uint32_t Threads = 32;
@@ -85,9 +85,14 @@ constexpr std::array<std::array<float, 4>, 3> Overlapping{{
     {-0.08f, -0.47f, 0.5f, 1.0f}, {1.0f, -0.13f, 0.5f, 1.0f}, {0.29f, 1.0f, 0.5f, 1.0f}
 }};
 
-alignas(256) std::array<std::array<std::uint32_t, 16>, 8> Programs{};
+alignas(256) std::array<std::array<std::uint32_t, 16>, 24> Programs{};
 std::size_t programCount = 0;
 alignas(256) std::array<std::uint32_t, Threads * Words> Buffer{};
+
+std::uint32_t MultisampledAttrib(std::uint32_t samples) {
+    const auto shift = static_cast<std::uint32_t>(std::countr_zero(samples));
+    return (shift << 12u) | (shift << 15u);
+}
 
 std::uint32_t Unorm(float value) {
     if (!(value > 0.0f)) return 0;
@@ -143,21 +148,21 @@ struct Block {
     std::uint8_t* data = nullptr;
 };
 
-AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
+AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block, std::uint32_t samples) {
     AgcDriver::Registers cx;
     cx[0x318] = static_cast<std::uint32_t>(block.Address() >> 8u);
     cx[0x31b] = 0;
     cx[0x31c] = Unorm4_4_4_4Info;
-    cx[0x31d] = MultisampledAttrib;
+    cx[0x31d] = MultisampledAttrib(samples);
     cx[0x3b0] = ((Side - 1u) << 14u) | (Side - 1u);
     cx[0x3b8] = TiledAttrib3;
     cx[0x390] = static_cast<std::uint32_t>(block.Address() >> 40u);
     const auto color = AgcDriver::Graphics::DecodeColorBuffer(cx, 0);
-    Require(color.format == VK_FORMAT_R16_UINT && color.componentMapping == 0x1bu && color.packing == ShaderRecompiler::ColorExportPacking::Unorm4_4_4_4 && color.samples == Samples && color.extent.width == Side && color.extent.height == Side, "the target did not decode as a 16x16 packed R16_UINT surface of 2 samples");
+    Require(color.format == VK_FORMAT_R16_UINT && color.componentMapping == 0x1bu && color.packing == ShaderRecompiler::ColorExportPacking::Unorm4_4_4_4 && color.samples == samples && color.extent.width == Side && color.extent.height == Side, "the target did not decode as a 16x16 packed R16_UINT surface of " + std::to_string(samples) + " samples");
     return color;
 }
 
-AgcDriver::QueueState Queue(const Block& block, std::uint32_t targetMask) {
+AgcDriver::QueueState Queue(const Block& block, std::uint32_t targetMask, std::uint32_t samples) {
     AgcDriver::QueueState queue;
     queue.userConfig[0x242] = 4;
     queue.context = {
@@ -169,7 +174,7 @@ AgcDriver::QueueState Queue(const Block& block, std::uint32_t targetMask) {
         {0x8e, targetMask}, {0x8f, 0xf}, {0x202, 0xcc0010},
         {0x1c4, 0}, {0x1c5, Float32Export}, {0x1c3, 4},
         {0x318, static_cast<std::uint32_t>(block.Address() >> 8u)}, {0x390, static_cast<std::uint32_t>(block.Address() >> 40u)},
-        {0x31b, 0}, {0x31c, Unorm4_4_4_4Info}, {0x31d, MultisampledAttrib},
+        {0x31b, 0}, {0x31c, Unorm4_4_4_4Info}, {0x31d, MultisampledAttrib(samples)},
         {0x3b0, ((Side - 1u) << 14u) | (Side - 1u)}, {0x3b8, TiledAttrib3}, {0x1e0, 0},
         {0xc, 0}, {0xd, (Side << 16u) | Side},
         {0x81, 0x80000000}, {0x82, (Side << 16u) | Side},
@@ -185,15 +190,15 @@ AgcDriver::QueueState Queue(const Block& block, std::uint32_t targetMask) {
     return queue;
 }
 
-AgcDriver::Graphics::State TargetState(const Block& block, std::uint32_t exportedMask) {
+AgcDriver::Graphics::State TargetState(const Block& block, std::uint32_t exportedMask, std::uint32_t samples) {
     const bool partial = exportedMask != 0xfu;
-    const auto decoded = AgcDriver::Graphics::DecodeState(Queue(block, exportedMask));
+    const auto decoded = AgcDriver::Graphics::DecodeState(Queue(block, exportedMask, samples));
     const auto& color = decoded.colors.front();
     char detail[256];
-    std::snprintf(detail, sizeof(detail), "CB_TARGET_MASK 0x%x of the 2-sample 4_4_4_4 target decoded %zu targets, %u samples, word mask 0x%04x, write mask 0x%x and %s shading", exportedMask, decoded.colors.size(), decoded.samples, color.partialWriteMask, decoded.blends.front().colorWriteMask, decoded.perSampleShading ? "per-sample" : "pixel-rate");
-    Require(decoded.colors.size() == 1u && decoded.samples == Samples && color.samples == Samples && color.partialWriteMask == (partial ? AgcDriver::Graphics::PackedWriteMask(color.componentMapping, exportedMask) : 0u) && decoded.blends.size() == 1u && decoded.blends.front().colorWriteMask == (partial ? 0u : 0xfu) && decoded.blend.colorWriteMask == decoded.blends.front().colorWriteMask && decoded.perSampleShading == partial, detail);
+    std::snprintf(detail, sizeof(detail), "CB_TARGET_MASK 0x%x of the %u-sample 4_4_4_4 target decoded %zu targets, %u samples, word mask 0x%04x, write mask 0x%x and %s shading", exportedMask, samples, decoded.colors.size(), decoded.samples, color.partialWriteMask, decoded.blends.front().colorWriteMask, decoded.perSampleShading ? "per-sample" : "pixel-rate");
+    Require(decoded.colors.size() == 1u && decoded.samples == samples && color.samples == samples && color.partialWriteMask == (partial ? AgcDriver::Graphics::PackedWriteMask(color.componentMapping, exportedMask) : 0u) && decoded.blends.size() == 1u && decoded.blends.front().colorWriteMask == (partial ? 0u : 0xfu) && decoded.blend.colorWriteMask == decoded.blends.front().colorWriteMask && decoded.perSampleShading == partial, detail);
     const auto merge = AgcDriver::Graphics::ExportTargetMerge(decoded);
-    Require(merge.mask == color.partialWriteMask && merge.samples == (partial ? Samples : 1u) && !merge.depthStencilWrites && merge.descriptor == (partial ? AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color)) : std::array<std::uint32_t, 8>{}), "the decoded 2-sample target exported another merge than its own surface");
+    Require(merge.mask == color.partialWriteMask && merge.samples == (partial ? samples : 1u) && !merge.depthStencilWrites && merge.descriptor == (partial ? AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color)) : std::array<std::uint32_t, 8>{}), "the decoded " + std::to_string(samples) + "-sample target exported another merge than its own surface");
     AgcDriver::Graphics::State state{};
     state.stages = {AgcDriver::Graphics::ShaderPath::Vertex, 0u, 64u, 64u, std::nullopt, std::nullopt};
     state.colors = decoded.colors;
@@ -258,7 +263,7 @@ void Draw(AgcDriver::VulkanDevice& device, const AgcDriver::Graphics::State& sta
     device.Draw(state, draw, shaders);
 }
 
-std::vector<std::uint32_t> LoadSamples(AgcDriver::VulkanDevice& device, const std::array<std::uint32_t, 8>& texture) {
+std::vector<std::uint32_t> LoadSamples(AgcDriver::VulkanDevice& device, const std::array<std::uint32_t, 8>& texture, std::uint32_t samples) {
     std::vector<std::uint32_t> userData(16, 0u);
     const auto address = reinterpret_cast<std::uintptr_t>(Buffer.data());
     const std::array<std::uint32_t, 4> buffer{static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu), static_cast<std::uint32_t>(Buffer.size() * 4u), 0x31016facu};
@@ -274,13 +279,13 @@ std::vector<std::uint32_t> LoadSamples(AgcDriver::VulkanDevice& device, const st
     };
     request.useCache = false;
     const auto program = ShaderRecompiler::Recompile(request);
-    std::vector<std::uint32_t> loaded(Side * Side * Samples);
+    std::vector<std::uint32_t> loaded(Side * Side * samples);
     for (std::uint32_t first = 0; first < loaded.size(); first += Threads) {
         Buffer.fill(0xdeadbeefu);
         for (std::uint32_t tid = 0; tid < Threads; ++tid) {
             const auto index = first + tid;
-            const auto pixel = index / Samples;
-            const std::array<std::uint32_t, 6> words{0u, 0u, 0u, pixel % Side, pixel / Side, index % Samples};
+            const auto pixel = index / samples;
+            const std::array<std::uint32_t, 6> words{0u, 0u, 0u, pixel % Side, pixel / Side, index % samples};
             std::copy(words.begin(), words.end(), &Buffer[tid * Words]);
         }
         device.Dispatch(program, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(LoadCode.data()));
@@ -306,6 +311,90 @@ double Inside(const std::array<std::array<float, 4>, 3>& triangle, double x, dou
     return std::min({EdgeDistance(triangle, x, y, 0), EdgeDistance(triangle, x, y, 1), EdgeDistance(triangle, x, y, 2)});
 }
 
+void RunSamples(AgcDriver::VulkanDevice& device, const Block& block, std::uint32_t samples) {
+    const auto color = DecodeTarget(block, samples);
+    const auto full = TargetState(block, 0xfu, samples);
+    Draw(device, full, Covering, Float32Program(First));
+    const auto merged = TargetState(block, 0x1u, samples);
+    Require(merged.colors.front().partialWriteMask == 0xf000u, "an X write of the 4_4_4_4 target did not merge bits 15..12");
+    Draw(device, merged, Cutting, Float32Program(Second));
+    Draw(device, full, Overlapping, Float32Program(Third));
+    const auto texture = AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color));
+    const auto loaded = LoadSamples(device, texture, samples);
+    const auto background = Packed(First);
+    const auto written = (background & 0x0fffu) | (Packed(Second) & 0xf000u);
+    const auto over = Packed(Third);
+    Require(written != background && over != written && over != background, "the test colors do not differ in the merged nibble");
+    const auto locations = AgcDriver::Graphics::SampleLocations(merged);
+    std::vector<std::uint32_t> pixelsByCoverage(samples + 1u);
+    std::uint32_t checked = 0;
+    std::uint32_t overdrawn = 0;
+    std::uint32_t mergedAfterOverdraw = 0;
+    for (std::uint32_t y = 0; y < Side; ++y) {
+        for (std::uint32_t x = 0; x < Side; ++x) {
+            std::uint32_t covered = 0;
+            for (std::uint32_t sample = 0; sample < samples; ++sample) {
+                const auto word = loaded[(y * Side + x) * samples + sample];
+                char where[160];
+                std::snprintf(where, sizeof(where), "sample %u of pixel (%u, %u) holds 0x%04x", sample, x, y, word);
+                Require(word == written || word == background || word == over, std::string(where) + ", neither the merged word, the first draw's word nor the last draw's word");
+                covered += word == written ? 1u : 0u;
+                const auto px = x + static_cast<double>(locations[sample].x);
+                const auto py = y + static_cast<double>(locations[sample].y);
+                const auto distance = Inside(Cutting, px, py);
+                const auto overDistance = Inside(Overlapping, px, py);
+                if (std::fabs(distance) < EdgeMargin || std::fabs(overDistance) < EdgeMargin) continue;
+                ++checked;
+                const auto expected = overDistance > 0 ? over : distance > 0 ? written : background;
+                overdrawn += overDistance > 0 && distance > 0 ? 1u : 0u;
+                mergedAfterOverdraw += overDistance <= 0 && distance > 0 ? 1u : 0u;
+                Require(word == expected, std::string(where) + (overDistance > 0 ? ", which the last full write covers" : distance > 0 ? ", which only the merging triangle covers" : ", which no later triangle covers"));
+            }
+            ++pixelsByCoverage[covered];
+        }
+    }
+    const auto partlyMerged = std::accumulate(pixelsByCoverage.begin() + 1, pixelsByCoverage.end() - 1, 0u);
+    Require(checked >= Side * Side * samples * 8u / 10u, "fewer than eight in ten samples are clear of the triangles' edges");
+    Require(pixelsByCoverage[0] != 0 && pixelsByCoverage[samples] != 0 && partlyMerged != 0, "the merged samples do not leave pixels unmerged, merged and partly merged");
+    Require(overdrawn != 0 && mergedAfterOverdraw != 0, "the last full write does not cover some merged samples and leave others");
+    Draw(device, full, Covering, Float32Program(First));
+    const auto lowMerged = TargetState(block, 0x8u, samples);
+    Require(lowMerged.colors.front().partialWriteMask == 0x000fu, "a W write of the 4_4_4_4 target did not merge bits 3..0");
+    Draw(device, merged, Cutting, Float32Program(Second));
+    Draw(device, lowMerged, Crossing, Float32Program(Fourth));
+    const auto twice = LoadSamples(device, texture, samples);
+    std::uint32_t checkedTwice = 0;
+    std::uint32_t mergedTwice = 0;
+    for (std::uint32_t y = 0; y < Side; ++y) {
+        for (std::uint32_t x = 0; x < Side; ++x) {
+            for (std::uint32_t sample = 0; sample < samples; ++sample) {
+                const auto px = x + static_cast<double>(locations[sample].x);
+                const auto py = y + static_cast<double>(locations[sample].y);
+                const auto high = Inside(Cutting, px, py);
+                const auto low = Inside(Crossing, px, py);
+                if (std::fabs(high) < EdgeMargin || std::fabs(low) < EdgeMargin) continue;
+                ++checkedTwice;
+                mergedTwice += high > 0 && low > 0 ? 1u : 0u;
+                auto expected = background;
+                if (high > 0) expected = (expected & 0x0fffu) | (Packed(Second) & 0xf000u);
+                if (low > 0) expected = (expected & 0xfff0u) | (Packed(Fourth) & 0x000fu);
+                const auto word = twice[(y * Side + x) * samples + sample];
+                char where[192];
+                std::snprintf(where, sizeof(where), "after an X merge and a W merge drawn back to back, sample %u of pixel (%u, %u) holds 0x%04x, expected 0x%04x", sample, x, y, word, expected);
+                Require(word == expected, where);
+            }
+        }
+    }
+    Require(checkedTwice >= Side * Side * samples * 8u / 10u && mergedTwice != 0, "the back-to-back merges leave fewer than eight in ten samples clear of their edges, or no sample inside both");
+    std::printf("4_4_4_4 unorm %u-sample partial write tests passed: %u partly merged pixels kept bits 15..12 merged into their covered samples only, a full write drawn right after covered %u merged samples, and %u samples kept both of two merges drawn back to back\n", samples, partlyMerged, overdrawn, mergedTwice);
+}
+
+bool SupportsSamples(const AgcDriver::Graphics::Context& context, std::uint32_t samples) {
+    VkImageFormatProperties properties{};
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    return (context.limits.framebufferColorSampleCounts & samples) != 0u && context.imageFormatProperties(context.physical, VK_FORMAT_R16_UINT, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, usage, 0, &properties) == VK_SUCCESS && (properties.sampleCounts & samples) != 0u;
+}
+
 }
 
 int main() {
@@ -318,81 +407,18 @@ int main() {
             std::printf("skipped, the device lacks %s\n", feature);
             return VulkanTestSkipped;
         }
-        Block block(4u * BlockBytes);
-        const auto color = DecodeTarget(block);
-        const auto full = TargetState(block, 0xfu);
-        Draw(*device, full, Covering, Float32Program(First));
-        const auto merged = TargetState(block, 0x1u);
-        Require(merged.colors.front().partialWriteMask == 0xf000u, "an X write of the 4_4_4_4 target did not merge bits 15..12");
-        Draw(*device, merged, Cutting, Float32Program(Second));
-        Draw(*device, full, Overlapping, Float32Program(Third));
-        const auto texture = AgcDriver::Graphics::EncodeTextureResource(AgcDriver::Graphics::TargetMergeSurface(color));
-        const auto loaded = LoadSamples(*device, texture);
-        const auto background = Packed(First);
-        const auto written = (background & 0x0fffu) | (Packed(Second) & 0xf000u);
-        const auto over = Packed(Third);
-        Require(written != background && over != written && over != background, "the test colors do not differ in the merged nibble");
-        const auto locations = AgcDriver::Graphics::SampleLocations(merged);
-        std::array<std::uint32_t, Samples + 1u> pixelsByCoverage{};
-        std::uint32_t checked = 0;
-        std::uint32_t overdrawn = 0;
-        std::uint32_t mergedAfterOverdraw = 0;
-        for (std::uint32_t y = 0; y < Side; ++y) {
-            for (std::uint32_t x = 0; x < Side; ++x) {
-                std::uint32_t covered = 0;
-                for (std::uint32_t sample = 0; sample < Samples; ++sample) {
-                    const auto word = loaded[(y * Side + x) * Samples + sample];
-                    char where[160];
-                    std::snprintf(where, sizeof(where), "sample %u of pixel (%u, %u) holds 0x%04x", sample, x, y, word);
-                    Require(word == written || word == background || word == over, std::string(where) + ", neither the merged word, the first draw's word nor the last draw's word");
-                    covered += word == written ? 1u : 0u;
-                    const auto px = x + static_cast<double>(locations[sample].x);
-                    const auto py = y + static_cast<double>(locations[sample].y);
-                    const auto distance = Inside(Cutting, px, py);
-                    const auto overDistance = Inside(Overlapping, px, py);
-                    if (std::fabs(distance) < EdgeMargin || std::fabs(overDistance) < EdgeMargin) continue;
-                    ++checked;
-                    const auto expected = overDistance > 0 ? over : distance > 0 ? written : background;
-                    overdrawn += overDistance > 0 && distance > 0 ? 1u : 0u;
-                    mergedAfterOverdraw += overDistance <= 0 && distance > 0 ? 1u : 0u;
-                    Require(word == expected, std::string(where) + (overDistance > 0 ? ", which the last full write covers" : distance > 0 ? ", which only the merging triangle covers" : ", which no later triangle covers"));
-                }
-                ++pixelsByCoverage[covered];
+        std::vector<std::unique_ptr<Block>> blocks;
+        std::uint32_t tested = 0;
+        for (const auto samples : SampleCounts) {
+            if (!SupportsSamples(context, samples)) {
+                std::printf("%u-sample R16_UINT storage color targets skipped, the device lacks them\n", samples);
+                continue;
             }
+            blocks.push_back(std::make_unique<Block>(4u * BlockBytes));
+            RunSamples(*device, *blocks.back(), samples);
+            ++tested;
         }
-        Require(checked >= Side * Side * Samples * 8u / 10u, "fewer than eight in ten samples are clear of the triangles' edges");
-        Require(pixelsByCoverage[0] != 0 && pixelsByCoverage[Samples] != 0 && pixelsByCoverage[1] != 0, "the merged samples do not leave pixels unmerged, merged and partly merged");
-        Require(overdrawn != 0 && mergedAfterOverdraw != 0, "the last full write does not cover some merged samples and leave others");
-        Draw(*device, full, Covering, Float32Program(First));
-        const auto lowMerged = TargetState(block, 0x8u);
-        Require(lowMerged.colors.front().partialWriteMask == 0x000fu, "a W write of the 4_4_4_4 target did not merge bits 3..0");
-        Draw(*device, merged, Cutting, Float32Program(Second));
-        Draw(*device, lowMerged, Crossing, Float32Program(Fourth));
-        const auto twice = LoadSamples(*device, texture);
-        std::uint32_t checkedTwice = 0;
-        std::uint32_t mergedTwice = 0;
-        for (std::uint32_t y = 0; y < Side; ++y) {
-            for (std::uint32_t x = 0; x < Side; ++x) {
-                for (std::uint32_t sample = 0; sample < Samples; ++sample) {
-                    const auto px = x + static_cast<double>(locations[sample].x);
-                    const auto py = y + static_cast<double>(locations[sample].y);
-                    const auto high = Inside(Cutting, px, py);
-                    const auto low = Inside(Crossing, px, py);
-                    if (std::fabs(high) < EdgeMargin || std::fabs(low) < EdgeMargin) continue;
-                    ++checkedTwice;
-                    mergedTwice += high > 0 && low > 0 ? 1u : 0u;
-                    auto expected = background;
-                    if (high > 0) expected = (expected & 0x0fffu) | (Packed(Second) & 0xf000u);
-                    if (low > 0) expected = (expected & 0xfff0u) | (Packed(Fourth) & 0x000fu);
-                    const auto word = twice[(y * Side + x) * Samples + sample];
-                    char where[192];
-                    std::snprintf(where, sizeof(where), "after an X merge and a W merge drawn back to back, sample %u of pixel (%u, %u) holds 0x%04x, expected 0x%04x", sample, x, y, word, expected);
-                    Require(word == expected, where);
-                }
-            }
-        }
-        Require(checkedTwice >= Side * Side * Samples * 8u / 10u && mergedTwice != 0, "the back-to-back merges leave fewer than eight in ten samples clear of their edges, or no sample inside both");
-        std::printf("4_4_4_4 unorm 2-sample partial write tests passed: %u partly merged pixels kept bits 15..12 merged into their covered samples only, a full write drawn right after covered %u merged samples, and %u samples kept both of two merges drawn back to back\n", pixelsByCoverage[1], overdrawn, mergedTwice);
+        if (tested == 0) return VulkanTestSkipped;
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
