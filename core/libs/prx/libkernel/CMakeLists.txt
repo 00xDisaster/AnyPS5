@@ -727,9 +727,11 @@ if(BUILD_TESTING)
     target_link_libraries(guest_sleep_wake_tests PRIVATE libkernel libc)
     configure_windows_unwind(guest_sleep_wake_tests)
     add_test(NAME guest_sleep_wake COMMAND guest_sleep_wake_tests)
-    set_tests_properties(guest_sleep_wake PROPERTIES TIMEOUT 20)
+    add_test(NAME guest_sleep_wake_coarse COMMAND guest_sleep_wake_tests)
+    set_tests_properties(guest_sleep_wake guest_sleep_wake_coarse PROPERTIES TIMEOUT 20)
+    set_tests_properties(guest_sleep_wake_coarse PROPERTIES ENVIRONMENT "APS5_COARSE_TIMED_WAITS=1")
     if(WIN32)
-        set_tests_properties(guest_sleep_wake PROPERTIES ENVIRONMENT_MODIFICATION
+        set_tests_properties(guest_sleep_wake guest_sleep_wake_coarse PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
     endif()
     add_test_executable(guest_pthread_sem_tests ${LIBS_INCLUDE_DIR}/tests/GuestPthreadSem.cpp)

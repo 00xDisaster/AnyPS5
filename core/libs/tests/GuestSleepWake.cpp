@@ -48,6 +48,14 @@ private:
     std::thread thread;
 };
 
+static void CoarseWaitsKeepEverySleepFull() {
+    Waker waker;
+    for (unsigned i = 0; i < 12; ++i) {
+        KernelNoteGpuSubmit_nid_no_patch();
+        Require(Usleep(WAKEABLE_MICROS) >= std::chrono::microseconds(WAKEABLE_MICROS));
+    }
+}
+
 static void SleepWithoutWakeIsFull() {
     for (unsigned i = 0; i < 4; ++i) Require(Usleep(WAKEABLE_MICROS) >= std::chrono::microseconds(WAKEABLE_MICROS));
 }
@@ -104,6 +112,10 @@ static void GapStartsNewRun() {
 }
 
 int main() {
+    if (std::getenv("APS5_COARSE_TIMED_WAITS") != nullptr) {
+        CoarseWaitsKeepEverySleepFull();
+        return 0;
+    }
     SleepWithoutWakeIsFull();
     WakeEndsShortSleep();
     WakeLeavesLongSleep();
