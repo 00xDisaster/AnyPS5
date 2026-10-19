@@ -1491,6 +1491,7 @@ State DecodeState(const QueueState& queue, bool vertexWorkgroup) {
     for (std::uint32_t i = 0; i < 3; ++i) {
         if ((requiredBlendMask & (1u << i)) != 0) result.blendConstants[i] = requiredBlendConstants[i];
     }
+    Require(!result.mergedCoverage || std::ranges::none_of(result.colors, [](const ColorTarget& color) { return color.partialWriteMask != 0; }), "partial writes of a 4_4_4_4 unorm color target under merged coverage (a one-sample target under a multisampled rasterizer) are not implemented");
     if (!result.colors.empty()) {
         result.color = result.colors.front();
         result.blend = result.blends[result.colors.front().exportIndex];

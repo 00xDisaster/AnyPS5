@@ -8865,6 +8865,19 @@ void unorm4_4_4_4TargetTests() {
         }
     }
     {
+        auto smoothed = queue;
+        smoothed.context[0x2f8] = 0x0020c002u;
+        smoothed.context[0x292] = 3;
+        smoothed.context[0x3b8] = 0x0dc00000u;
+        for (std::uint32_t pixel = 0; pixel < 4; ++pixel) smoothed.context[0x2fe + pixel * 4u] = 0xcc44;
+        smoothed.context[0x31d] = smoothed.context.at(0x31d) & ~0x3f000u;
+        smoothed.context[0x201] = 0x02130000u;
+        const auto merged = AgcDriver::Graphics::DecodeState(smoothed);
+        Require(merged.samples == 4 && merged.mergedCoverage && merged.color.samples == 1 && merged.color.partialWriteMask == 0u, "a full write of a one-sample 4_4_4_4 unorm target under OVERRASTERIZATION_AMOUNT 2 did not decode as merged coverage");
+        smoothed.context[0x8e] = 1;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(smoothed); }, "under merged coverage");
+    }
+    {
         changed.context[0x8e] = 1;
         const auto partial = AgcDriver::Graphics::DecodeState(changed);
         constexpr std::array<std::uint32_t, 3> mergeCode{0xf800180fu, 0x07060504u, 0xbf810000u};
