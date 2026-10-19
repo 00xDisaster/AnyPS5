@@ -8009,9 +8009,10 @@ void stencilRefExportTests() {
     Require(emulated.stencilReferenceDword == 0u && emulated.pushConstants.size() == sizeof(std::uint32_t), "a stencil-only shader did not reserve dynamic reference data");
     {
         const std::array<std::uint32_t, 5> literalStencil{0x7e0e02ffu, 0x00002a05u, 0xf8001882u, 0x700u, 0xbf810000u};
-        const auto shifts = [](std::span<const std::uint32_t> words) {
+        const auto readsOperationByte = [](std::span<const std::uint32_t> words) {
             for (std::size_t at = 5; at < words.size() && (words[at] >> 16u) != 0; at += words[at] >> 16u) {
                 if ((words[at] & 0xffffu) == spv::OpShiftRightLogical) return true;
+                if ((words[at] & 0xffffu) == spv::OpConstant && (words[at] >> 16u) == 4u && words[at + 3] == 0x2au) return true;
             }
             return false;
         };
@@ -8023,7 +8024,7 @@ void stencilRefExportTests() {
         const auto exportedTest = stencilRefExportRequest(0x52u, stencilExport, literalStencil);
         auto exportedOperation = exportedTest;
         exportedOperation.context.pixel->stencilOperationValueExport = true;
-        Require(!shifts(ShaderRecompiler::Recompile(exportedTest).spirv.Words()) && shifts(ShaderRecompiler::Recompile(exportedOperation).spirv.Words()), "the exported stencil operation value was not taken from the second byte of the MRTZ stencil channel");
+        Require(!readsOperationByte(ShaderRecompiler::Recompile(exportedTest).spirv.Words()) && readsOperationByte(ShaderRecompiler::Recompile(exportedOperation).spirv.Words()), "the exported stencil operation value was not taken from the second byte of the MRTZ stencil channel");
         Require(serializer.Deserialize(serializer.Serialize(exportedOperation)).request.context.pixel->stencilOperationValueExport, "the serialized request lost the stencil operation value export");
         std::vector<std::uint64_t> testKey;
         std::vector<std::uint64_t> operationKey;
