@@ -472,11 +472,11 @@ int main() {
         request.target.spannedWaves = spanned;
         Require(serializer.Deserialize(serializer.Serialize(request)).request.target.spannedWaves == spanned);
         request.target.float32FlushToZero = true;
-        auto version32 = DecodeBase64(serializer.Serialize(request));
-        version32[4] = 32u;
-        version32.pop_back();
-        const auto replay32 = serializer.Deserialize(EncodeBase64(version32));
-        Require(replay32.request.target.spannedWaves == spanned && !replay32.request.target.float32FlushToZero);
+        auto version35 = DecodeBase64(serializer.Serialize(request));
+        version35[4] = 35u;
+        version35.pop_back();
+        const auto replay35 = serializer.Deserialize(EncodeBase64(version35));
+        Require(replay35.request.target.spannedWaves == spanned && !replay35.request.target.float32FlushToZero);
     }
 
     return 0;
