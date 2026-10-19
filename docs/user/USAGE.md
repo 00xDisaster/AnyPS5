@@ -200,6 +200,10 @@ A Windows executable started without a standard output or error handle, such as 
 
 The game chooses its video-output resolution; AnyPS5 uses that mode for rendering. The display window can be resized or switched to fullscreen, which scales the presented image to fit the window. Changing the window size does not change the game's render resolution. AnyPS5 does not currently provide a global render-resolution override; use a game's own display setting when it offers one.
 
+### VR compatibility
+
+AnyPS5 does not currently support PS VR2 headsets or PC VR headsets connected through an OpenXR runtime. It does not provide headset tracking, stereoscopic output or reprojection. A VR title may skip its headset setup when no device is detected, but that does not mean its VR gameplay is supported.
+
 ### Controller input for test runs
 
 Set `APS5_PAD_INPUT_FILE` to an absolute path before launching the application to enable controller pulses from a local command file. Once the application is reading controller input, send a button with the helper from the repository root:
