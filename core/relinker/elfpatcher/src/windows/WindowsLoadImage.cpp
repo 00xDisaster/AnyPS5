@@ -130,7 +130,7 @@ std::vector<PeSection> WindowsLoadImage::BuildSections() const {
         while (block != blocks.end() && block->Offset + block->Bytes.size() <= first * SectionAlignment)
             ++block;
         const auto backed = block != blocks.end() && block->Offset <= first * SectionAlignment;
-        const auto dataEnd = backed ? (block->Offset + block->Bytes.size()) / SectionAlignment : first;
+        const auto dataEnd = backed ? static_cast<std::size_t>((block->Offset + block->Bytes.size()) / SectionAlignment) : first;
         const auto following = backed ? std::next(block) : block;
         const auto stop = following != blocks.end() ? following->Offset / SectionAlignment : pageFlags.size();
         auto last = first + 1;
