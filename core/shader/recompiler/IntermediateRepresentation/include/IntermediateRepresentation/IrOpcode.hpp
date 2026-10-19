@@ -434,6 +434,7 @@ enum class IrOpcode : std::uint16_t {
     DataAppend,
     DataConsume,
     DataOrderedCount,
+    DataOrderedSwap,
     SwizzleU32,
     ImageQueryDimensions,
     ImageQueryLod,
