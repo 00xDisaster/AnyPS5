@@ -81,6 +81,7 @@ void SetHostImportWindow(std::uint64_t bytes);
 // Tests: the window of one large registered range (64 MiB) and the import budget (0: the configured one).
 void SetHostImportRangeWindow(std::uint64_t bytes);
 void SetHostImportBudget(std::uint64_t bytes);
+void SetAddressCopyLimit(std::uint64_t bytes);
 void SetHostImportDeferredSettles(bool enabled);
 // The larger of 6 GiB and half the physical memory, at most the largest host heap less the larger of 2 GiB and half
 // that heap: the other half stays for the buffers, mirrors and textures that share it.
@@ -170,6 +171,7 @@ std::uint64_t ImageMirrorSerial(const Context& context, std::uint64_t address, s
 // prints the [address-sync] leases line every 10 s from LeaseCounters (cumulative).
 bool SyncLeaseWork();
 void CountLeaseOutcome(bool synced, std::uint64_t batchSerial);
+void FinishLeaseWork();
 struct LeaseStats {
     std::uint64_t deferred = 0;
     std::uint64_t synced = 0;

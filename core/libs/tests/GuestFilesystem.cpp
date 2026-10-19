@@ -96,6 +96,10 @@ std::int64_t APS5_VABI read_nid_postfix(int, void*, std::size_t);
 std::int64_t APS5_VABI write_nid_postfix(int, const void*, std::size_t);
 int APS5_VABI sceKernelDebugOutText(int, const char*);
 }
+#ifdef _WIN32
+static bool g_invalidParameter = false;
+static void RecordInvalidParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, std::uintptr_t) { g_invalidParameter = true; }
+#endif
 static void Check(bool value, int line) {
     if (!value) {
 #ifdef _WIN32
@@ -783,6 +787,17 @@ int main() {
     Require(sceKernelFsync(socket) == static_cast<int>(0x80020009u));
     Require(sceKernelFdatasync(0x7fffffff) == static_cast<int>(0x80020009u));
     Require(sceKernelFsync(0x7fffffff) == static_cast<int>(0x80020009u));
+#ifdef _WIN32
+    const auto previousParameterHandler = _set_invalid_parameter_handler(RecordInvalidParameter);
+#endif
+    FileStat closedStatus{};
+    Require(sceKernelFstat(descriptor, &closedStatus) == static_cast<int>(0x80020009u));
+    Require(sceKernelFstat(socket, &closedStatus) == static_cast<int>(0x80020009u));
+    Require(sceKernelFstat(0x7fffffff, &closedStatus) == static_cast<int>(0x80020009u));
+#ifdef _WIN32
+    _set_invalid_parameter_handler(previousParameterHandler);
+    Require(!g_invalidParameter);
+#endif
     Require(remove_nid_postfix(sized.string().c_str()) == 0);
     const auto present = root / "present.txt";
     const auto presentName = present.string();
@@ -1120,6 +1135,25 @@ int main() {
     const auto longLeaf = rootName + "/" + std::string(300, 'n');
     Require(sceKernelMkdir(longLeaf.c_str(), 0700) == static_cast<int>(0x8002003fu));
     Require(mkdir_nid_postfix(longLeaf.c_str(), 0700) == -1 && *__error_nid_postfix() == 63);
+    FileStat unreachable{};
+    Require(sceKernelOpen(longLeaf.c_str(), 0, 0) == static_cast<int>(0x8002003fu));
+    Require(sceKernelOpen(longLeaf.c_str(), 0x201, 0600) == static_cast<int>(0x8002003fu));
+    Require(open_nid_postfix(longLeaf.c_str(), 0, 0) == -1 && *__error_nid_postfix() == 63);
+    Require(sceKernelUnlink(longLeaf.c_str()) == static_cast<int>(0x8002003fu));
+    Require(unlink_nid_postfix(longLeaf.c_str()) == -1 && *__error_nid_postfix() == 63);
+    Require(sceKernelStat(longLeaf.c_str(), &unreachable) == static_cast<int>(0x8002003fu));
+    Require(stat_nid_postfix(longLeaf.c_str(), &unreachable) == -1 && *__error_nid_postfix() == 63);
+    const auto loop = root / "loop";
+    std::filesystem::create_symlink("loop", loop);
+    const auto loopName = loop.string();
+    const auto underLoop = loopName + "/leaf";
+    Require(sceKernelOpen(loopName.c_str(), 0, 0) == static_cast<int>(0x8002003eu));
+    Require(open_nid_postfix(loopName.c_str(), 0, 0) == -1 && *__error_nid_postfix() == 62);
+    Require(sceKernelStat(loopName.c_str(), &unreachable) == static_cast<int>(0x8002003eu));
+    Require(stat_nid_postfix(loopName.c_str(), &unreachable) == -1 && *__error_nid_postfix() == 62);
+    Require(sceKernelUnlink(underLoop.c_str()) == static_cast<int>(0x8002003eu));
+    Require(unlink_nid_postfix(underLoop.c_str()) == -1 && *__error_nid_postfix() == 62);
+    Require(unlink_nid_postfix(loopName.c_str()) == 0 && !std::filesystem::is_symlink(loop));
 #endif
     const auto invalidNameUnderFile = presentName + "/a:b/x";
     Require(mkdir_nid_postfix(invalidNameUnderFile.c_str(), 0700) == -1 && *__error_nid_postfix() == 20);
