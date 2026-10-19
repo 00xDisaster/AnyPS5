@@ -4,6 +4,7 @@
 #include "SpirvBackend/SpirvBufferFormat.hpp"
 #include "IntermediateRepresentation/IrBuilder.hpp"
 #include "Optimization/SrtWalker/SrtInstructionPredicates.hpp"
+#include "RdnaDecoder/RdnaDescriptorFormat.hpp"
 
 #include <algorithm>
 #include <array>
@@ -860,6 +861,37 @@ private:
         return &value;
     }
 
+    void EmitDescriptorFault(IrValue& inst, IrValue& condition, IrValue& low, IrValue& high) {
+        IrValue* exec = inst.Argument(inst.ArgumentCount() - 1u);
+        if (exec->Type() != IrType::Bool) {
+            fail("a split image instruction has no EXEC operand");
+        }
+        const std::array<IrValue*, 2> active {&condition, exec};
+        IrValue* fault = EmitBefore(inst, IrOpcode::LogicalAnd, IrType::Bool, active);
+        const std::array<IrValue*, 4> arguments {fault, &low, &high, &m_builder.Constant(inst.Flags<MemoryFlags>().pc)};
+        static_cast<void>(EmitBefore(inst, IrOpcode::DescriptorFault, IrType::Void, arguments));
+        m_info.usesFaultBuffer = true;
+    }
+
+    IrValue& UndefinedImageWords(IrValue& inst, const std::array<IrValue*, 3>& words) {
+        const auto emit = [&](IrOpcode op, IrType type, std::initializer_list<IrValue*> arguments) {
+            return EmitBefore(inst, op, type, std::vector<IrValue*>(arguments));
+        };
+        const auto constant = [&](std::uint32_t value) { return &m_builder.Constant(value); };
+        IrValue* address = emit(IrOpcode::LogicalOr, IrType::Bool, {emit(IrOpcode::INotEqual32, IrType::Bool, {words[0], constant(0u)}), emit(IrOpcode::INotEqual32, IrType::Bool, {emit(IrOpcode::BitwiseAnd32, IrType::U32, {words[1], constant(0xffu)}), constant(0u)})});
+        IrValue* type = emit(IrOpcode::ShiftRightLogical32, IrType::U32, {words[2], constant(28u)});
+        IrValue* format = emit(IrOpcode::BitwiseAnd32, IrType::U32, {emit(IrOpcode::ShiftRightLogical32, IrType::U32, {words[1], constant(20u)}), constant(0x1ffu)});
+        IrValue* defined = nullptr;
+        for (const auto& range : DefinedImageFormats) {
+            IrValue* inside = emit(IrOpcode::LogicalAnd, IrType::Bool, {emit(IrOpcode::UGreaterThanEqual32, IrType::Bool, {format, constant(range.first)}), emit(IrOpcode::ULessThan32, IrType::Bool, {format, constant(range.last + 1u)})});
+            defined = defined == nullptr ? inside : emit(IrOpcode::LogicalOr, IrType::Bool, {defined, inside});
+        }
+        IrValue* notImage = emit(IrOpcode::ULessThan32, IrType::Bool, {type, constant(static_cast<std::uint32_t>(ImageType::Color1D))});
+        IrValue* undefined = emit(IrOpcode::LogicalOr, IrType::Bool, {notImage, emit(IrOpcode::LogicalNot, IrType::Bool, {defined})});
+        IrValue* typed = emit(IrOpcode::UGreaterThanEqual32, IrType::Bool, {type, constant(2u)});
+        return *emit(IrOpcode::LogicalAnd, IrType::Bool, {emit(IrOpcode::LogicalAnd, IrType::Bool, {address, typed}), undefined});
+    }
+
     IrValue* EmitCopy(const IrValue& original, std::span<IrValue* const> arguments, IrValue& position) {
         return EmitBefore(position, original.Opcode(), original.Type(), arguments, original.Flags<std::uint64_t>());
     }
@@ -1032,9 +1064,11 @@ private:
     void ReplaceWithArmCopies(IrValue& inst, const std::array<IrValue*, 2>& handles, const std::array<bool, 2>& split, std::uint32_t handleCount, std::span<IrValue* const> conditions, bool optionalArms, Dword&& dword) {
         std::vector<IrValue*> copies;
         const auto flags = inst.Flags<MemoryFlags>();
-        if (optionalArms && !conditions.empty() && split[0]) {
+        const bool optional = optionalArms && !conditions.empty() && split[0];
+        if (optional) {
             m_program.Resources().memoryInfo.at(flags.index).descriptorWebArm = true;
         }
+        std::vector<std::array<IrValue*, 3>> armWords;
         const auto memory = m_program.Resources().memoryInfo.at(flags.index);
         for (std::uint32_t arm = 0; arm <= conditions.size(); arm++) {
             std::vector<IrValue*> arguments(inst.Arguments().begin(), inst.Arguments().end());
@@ -1046,6 +1080,9 @@ private:
                 for (std::size_t index = 0; index < handles[slot]->ArgumentCount(); index++) {
                     dwords.push_back(dword(arm, slot, index));
                 }
+                if (slot == 0u && optional) {
+                    armWords.push_back({dwords[0], dwords[1], dwords[3]});
+                }
                 arguments[slot] = EmitCopy(*handles[slot], dwords, inst);
             }
             auto copyFlags = flags;
@@ -1056,6 +1093,17 @@ private:
             std::uint64_t rawFlags = 0;
             std::memcpy(&rawFlags, &copyFlags, sizeof(copyFlags));
             copies.push_back(EmitBefore(inst, inst.Opcode(), inst.Type(), arguments, rawFlags));
+        }
+
+        if (optional) {
+            std::array<IrValue*, 3> selected = armWords.back();
+            for (std::uint32_t arm = static_cast<std::uint32_t>(armWords.size()) - 1u; arm-- > 0u;) {
+                for (std::size_t word = 0; word < selected.size(); word++) {
+                    const std::array<IrValue*, 3> arguments {conditions[arm], armWords[arm][word], selected[word]};
+                    selected[word] = EmitBefore(inst, IrOpcode::SelectU32, IrType::U32, arguments);
+                }
+            }
+            EmitDescriptorFault(inst, UndefinedImageWords(inst, selected), *selected[0], *selected[1]);
         }
 
         IrValue* result = copies.back();
@@ -1120,6 +1168,7 @@ private:
     struct DescriptorWeb {
         static constexpr std::size_t maxStates = 512u;
         static constexpr std::size_t maxArms = 64u;
+        static constexpr std::uint32_t foldedArm = 0xffffffffu;
         std::string failure;
         bool foldedControlValue = false;
         std::vector<std::vector<IrValue*>> arms;
@@ -1203,7 +1252,7 @@ private:
                     return GiveUp(web, "a descriptor dword depends on the program counter, EXEC or a lane mask");
                 }
                 web.foldedControlValue = true;
-                return &m_builder.Constant(0u);
+                return &m_builder.Constant(DescriptorWeb::foldedArm);
             }
             for (IrValue* value : tuple) {
                 if (Rematerialize(value, position, false, phiSearchDepth) == nullptr) {
@@ -1351,7 +1400,7 @@ private:
         }
         DescriptorWeb web;
         IrValue* selector = WebSelector(tuple, web, inst);
-        const bool select = selector != nullptr && web.arms.size() > 1u;
+        const bool select = selector != nullptr && !web.arms.empty() && (web.arms.size() > 1u || web.foldedControlValue);
         if (select) {
             for (const auto& [block, phi] : web.phis) {
                 block->InsertInstructionBefore(nullptr, phi);
@@ -1391,6 +1440,13 @@ private:
             return;
         }
 
+        if (web.foldedControlValue) {
+            const std::array<IrValue*, 2> compare {selector, &m_builder.Constant(DescriptorWeb::foldedArm)};
+            IrValue* folded = EmitBefore(inst, IrOpcode::IEqual32, IrType::Bool, compare);
+            EmitDescriptorFault(inst, *folded, m_builder.Constant(0u), m_builder.Constant(0u));
+            const std::array<IrValue*, 3> first {folded, &m_builder.Constant(0u), selector};
+            selector = EmitBefore(inst, IrOpcode::SelectU32, IrType::U32, first);
+        }
         std::vector<IrValue*> conditions;
         for (std::uint32_t arm = 0; arm + 1u < web.arms.size(); arm++) {
             const std::array<IrValue*, 2> compare {selector, &m_builder.Constant(arm)};

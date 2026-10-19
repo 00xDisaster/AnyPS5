@@ -118,6 +118,11 @@ RdnaImageDimension descriptorDimension(const DescriptorValue& descriptor, RdnaIm
     }
 }
 
+bool undefinedImageWords(const DescriptorValue& descriptor) {
+    const auto type = static_cast<std::uint32_t>(rawImageType(descriptor));
+    return !nullImageDescriptor(descriptor) && type >= 2u && (type < static_cast<std::uint32_t>(ImageType::Color1D) || !IsDefinedImageFormat(rawImageFormat(descriptor)));
+}
+
 bool validImageDescriptor(const DescriptorValue& descriptor, bool r128) {
     const auto type = rawImageType(descriptor);
     const auto format = rawImageFormat(descriptor);
@@ -1304,7 +1309,7 @@ void materializeSnapshot(const IrResourcePlan& plan, const SrtRuntime& runtime, 
             descriptor.dwordCount = 8u;
         }
         if (!validImageDescriptor(descriptor, image.r128) && !nullImageDescriptor(image, descriptor)) {
-            if (!image.optionalDescriptor) {
+            if (!image.optionalDescriptor || !undefinedImageWords(descriptor)) {
                 throw std::runtime_error("runtime image descriptor is invalid");
             }
             descriptor = DescriptorValue{};

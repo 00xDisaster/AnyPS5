@@ -109,7 +109,7 @@ const FormatInfo* FindFormatInfo(IrBufferFormat format) {
 
 bool IsDefinedImageFormat(IrBufferFormat format) {
     const auto value = static_cast<std::uint32_t>(format);
-    return (value >= 1u && value <= 77u) || (value >= 128u && value <= 154u) || (value >= 156u && value <= 182u) || (value >= 265u && value <= 292u);
+    return std::ranges::any_of(DefinedImageFormats, [&](const ImageFormatRange& range) { return value >= range.first && value <= range.last; });
 }
 
 bool IsFmaskTextureFormat(IrBufferFormat format) {
