@@ -6,6 +6,7 @@
 #include "prx/libc/include/general/AsmMacros.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
 #include "prx/libc/include/CpuTopology.hpp"
+#include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libkernel/DirectMemory/DirectMemory.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -200,17 +201,23 @@ static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
     *low = PrecommittedStackStart(lowLimit, highLimit);
     *high = highLimit;
 #else
-    pthread_attr_t attr;
-    if (pthread_getattr_np(pthread_self(), &attr) != 0)
-        return false;
-    void* address = nullptr;
-    std::size_t size = 0;
-    const bool queried = pthread_attr_getstack(&attr, &address, &size) == 0;
-    pthread_attr_destroy(&attr);
-    if (!queried)
-        return false;
-    *low = reinterpret_cast<std::uintptr_t>(address);
-    *high = *low + size;
+    static thread_local std::uintptr_t stackLow = 0;
+    static thread_local std::uintptr_t stackHigh = 0;
+    if (stackHigh == 0) {
+        pthread_attr_t attr;
+        if (pthread_getattr_np(pthread_self(), &attr) != 0)
+            return false;
+        void* address = nullptr;
+        std::size_t size = 0;
+        const bool queried = pthread_attr_getstack(&attr, &address, &size) == 0;
+        pthread_attr_destroy(&attr);
+        if (!queried || size == 0)
+            return false;
+        stackLow = reinterpret_cast<std::uintptr_t>(address);
+        stackHigh = stackLow + size;
+    }
+    *low = stackLow;
+    *high = stackHigh;
 #endif
     return *high > *low;
 }
@@ -249,6 +256,7 @@ static void RestoreStackPages(std::uintptr_t start, std::size_t bytes) noexcept 
     const bool restored = ::mprotect(reinterpret_cast<void*>(start), bytes, PROT_READ | PROT_WRITE) == 0;
 #endif
     if (!restored) std::fprintf(stderr, "[thread] cannot restore the protection of guest stack pages 0x%llx+0x%zx at thread exit\n", static_cast<unsigned long long>(start), bytes);
+    GuestAllocations::GuestAllocationsInvalidate_nid_postfix(start, bytes);
 }
 
 void NoteGuestStackProtection(std::uintptr_t start, std::size_t bytes, bool readWrite) {
@@ -878,9 +886,22 @@ int APS5_VABI scePthreadJoin(Pthread thread, void** retval) {
     ThreadCancel::Check();
     {
         std::unique_lock lock(thread->_join_mtx);
-        ThreadCancel::WaitUntil(thread->_join_cv, lock, std::nullopt, [&] { return thread->_finished.load(); });
+        if (thread->_detached) return SCE_KERNEL_ERROR_EINVAL;
+        if (thread->_joining) return SCE_KERNEL_ERROR_EOPNOTSUPP;
+        thread->_joining = true;
+        while (!thread->_finished.load()) {
+            ThreadCancel::Wait(thread->_join_cv, lock, std::nullopt);
+            if (ThreadCancel::Requested()) {
+                thread->_joining = false;
+                lock.unlock();
+                ThreadCancel::Check();
+                lock.lock();
+                thread->_joining = true;
+            }
+        }
+        thread->_joining = false;
+        if (thread->_joined.exchange(true, std::memory_order_acq_rel)) return SCE_KERNEL_ERROR_ESRCH;
     }
-    if (thread->_joined.exchange(true, std::memory_order_acq_rel)) return SCE_KERNEL_ERROR_ESRCH;
 #ifdef _WIN32
     if (WaitForSingleObject(thread->nativeHandle, INFINITE) != WAIT_OBJECT_0)
         throw std::system_error(GetLastError(), std::system_category(), "Joining guest thread");
@@ -897,9 +918,11 @@ int APS5_VABI scePthreadJoin(Pthread thread, void** retval) {
 
 int APS5_VABI scePthreadDetach(Pthread thread) {
     if (!thread) return SCE_KERNEL_ERROR_EINVAL;
-    if (thread->_detached) return SCE_KERNEL_ERROR_EINVAL;
-    if (thread->_joined.load(std::memory_order_acquire)) return SCE_KERNEL_ERROR_EINVAL;
-    thread->_detached = true;
+    {
+        std::lock_guard lock(thread->_join_mtx);
+        if (thread->_detached || thread->_joining || thread->_joined.load(std::memory_order_acquire)) return SCE_KERNEL_ERROR_EINVAL;
+        thread->_detached = true;
+    }
 #ifdef _WIN32
     ReleaseThread(thread);
 #else
