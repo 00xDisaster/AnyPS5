@@ -57,7 +57,7 @@ def main():
         image = make_image("register", "unwind", body=instruction + b"\xc3")
         struct.pack_into("<I", image, 176, 0)
         check_trapped("gs-without-pt-tls", convert(relinker, directory, "gs-without-pt-tls", image), instruction)
-        check_refused(relinker, directory, "branch-into-gs", bytes.fromhex("74 01 65 b8 2a 00 00 00 c3"),
+        check_refused(relinker, directory, "branch-into-gs", bytes.fromhex("74 01 65 48 8b 0c 25 78 03 00 00 c3"),
                       "Branch enters a guest GS instruction")
     print("macOS GS trap checks passed")
 
