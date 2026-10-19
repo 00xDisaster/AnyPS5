@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,11 @@ struct RuntimeImageModeMatch {
     std::optional<std::uint32_t> mode;
     ImageTableAbi::PoisonReason reason = ImageTableAbi::PoisonReason::InvalidFormat;
     std::string detail;
+};
+
+class ConvertedSampleRequired : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
 };
 
 class ResourceMaterializer {
