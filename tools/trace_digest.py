@@ -143,8 +143,8 @@ def digest(trace, summary=None, stacks=None, worst=5, top=10):
                         leaders[name] += overlap
                 if is_wait(name) and not nested:
                     waited += overlap
-            if is_wait(name) and not nested:
-                waits.append((dur, name, trace.name(tid), ts))
+            if is_wait(name) and not nested and (overlap > 0 or not frames):
+                waits.append((overlap, name, trace.name(tid), max(ts, frames[0][1]) if frames else ts))
         threads.append({"thread": trace.name(tid), "busy_ms_per_frame": (traced - waited) / 1000.0 / count,
                         "wait_ms_per_frame": waited / 1000.0 / count,
                         "untraced_ms_per_frame": max(span_us - traced, 0.0) / 1000.0 / count,
