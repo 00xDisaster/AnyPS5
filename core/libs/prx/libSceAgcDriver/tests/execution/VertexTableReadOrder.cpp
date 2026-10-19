@@ -1,5 +1,6 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawCache.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
+#include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgc/Shader/include/ShaderConstants.hpp"
 #include "SceShaders.hpp"
 #include <array>
@@ -15,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -89,6 +91,14 @@ void WaitEmpty() {
     }
 }
 
+Gate* completeAtBufferRead = nullptr;
+
+void CompleteQueuedStoreAtBufferRead(std::uint64_t address, std::size_t) {
+    if (address != Address(BufferTable.data()) || completeAtBufferRead == nullptr) return;
+    std::exchange(completeAtBufferRead, nullptr)->release.store(true, std::memory_order_release);
+    WaitEmpty();
+}
+
 ShaderRecompiler::ShaderVertexStageInfo DecodeBehindQueuedStore(const void* range, std::size_t bytes, std::function<void()> store, std::vector<AgcDriver::Graphics::DecodeRead>& reads) {
     WaitEmpty();
     Gate gate;
@@ -139,6 +149,21 @@ int main() {
         check(DrawPipeline::QueuedItems() == 1, "a decode that overlaps nothing queued drained the pipeline");
         gate.release.store(true, std::memory_order_release);
         WaitEmpty();
+
+        Gate completing;
+        Hold(completing, AttribTable.data(), 4, [] { AttribTable[0] = (0x2cu << 5u) | 1u; });
+        completeAtBufferRead = &completing;
+        AgcDriver::GuestMemory::SetReadGuard(&CompleteQueuedStoreAtBufferRead);
+        try {
+            info = Decode(reads);
+        } catch (...) {
+            AgcDriver::GuestMemory::SetReadGuard(nullptr);
+            throw;
+        }
+        AgcDriver::GuestMemory::SetReadGuard(nullptr);
+        check(completeAtBufferRead == nullptr, "the queued attribute store did not complete during the decode");
+        check(info.resources[0].fields[0] == 0x9000u && info.resources[0].fields[2] == 128u, "the decode kept the vertex buffer of an attribute word that a queued store replaced during the decode");
+        check(reads.size() == 2 && reads[1].address == Address(BufferTable.data() + 4), "the recorded reads are not the stored attribute word and the V# it names");
 
         DrawPipeline::Active() = false;
         DrawPipeline::Queue0().Stop();

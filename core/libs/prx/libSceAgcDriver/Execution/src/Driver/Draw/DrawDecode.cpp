@@ -4,6 +4,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
+#include <array>
 #include <spirv/unified1/spirv.hpp>
 
 namespace AgcDriver::DriverDetail {
@@ -36,10 +37,19 @@ ShaderRecompiler::ShaderVertexStageInfo DecodeOrderedVertexStageInfo(std::span<c
         reads.clear();
         return Graphics::DecodeVertexStageInfo(header, headerAddress, userData, &reads, false, hiddenUserWords);
     };
+    if (!DrawPipeline::Active()) return decode();
+    auto& queue = DrawPipeline::Queue0();
+    const bool queued = queue.Busy();
     auto info = decode();
-    if (!DrawPipeline::Active() || !DrawPipeline::Queue0().Busy()) return info;
-    if (std::none_of(reads.begin(), reads.end(), [](const Graphics::DecodeRead& read) { return DrawPipeline::Queue0().Overlaps(read.address, read.Bytes().size()); })) return info;
-    DrawPipeline::Queue0().Drain(DrawPipeline::DrainReason::Capture);
+    if (!queued && !queue.Busy()) return info;
+    const auto pending = [&queue](const Graphics::DecodeRead& read) { return queue.Overlaps(read.address, read.size); };
+    const auto unchanged = [](const Graphics::DecodeRead& read) {
+        std::array<std::byte, 16> now{};
+        GuestMemory::Read(read.address, std::span(now.data(), read.size), 4);
+        return std::equal(read.data.begin(), read.data.begin() + read.size, now.begin());
+    };
+    if (std::none_of(reads.begin(), reads.end(), pending) && std::all_of(reads.begin(), reads.end(), unchanged)) return info;
+    queue.Drain(DrawPipeline::DrainReason::Capture);
     return decode();
 }
 
