@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import check_compile
@@ -37,12 +38,12 @@ class CheckCompileTests(unittest.TestCase):
         if compiler is None or shutil.which("ninja") is None:
             self.skipTest("needs Ninja and a C compiler")
         name = "ação"
+        build = self.root / name
         if os.name == "nt":
             try:
-                name.encode("mbcs", "strict")
+                str(build).encode("mbcs", "strict")
             except UnicodeEncodeError:
-                self.skipTest("the ANSI code page cannot represent the build directory name")
-        build = self.root / name
+                self.skipTest("the ANSI code page cannot represent the build directory")
         build.mkdir()
         self.source("unit.c")
         command = subprocess.list2cmdline([compiler]) if os.name == "nt" else '"' + compiler + '"'
@@ -51,6 +52,23 @@ class CheckCompileTests(unittest.TestCase):
         result = self.tool("--build", name, "unit.c")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("1 translation units compile", result.stdout)
+
+    def test_windows_ninja_output_is_decoded_in_its_declared_build_file_encoding(self):
+        cases = (("Build file encoding: UTF-8\n", 0, "utf-8"), ("Build file encoding: ANSI\n", 0, "mbcs"),
+                 ("Build file encoding: OEM\n", 0, None), ("", 1, None))
+        for declared, status, expected in cases:
+            with self.subTest(declared=declared, status=status):
+                result = subprocess.CompletedProcess([], status, declared, "ninja: error: unknown tool" if status else "")
+                with patch.object(check_compile.sys, "platform", "win32"), \
+                        patch.object(check_compile, "capture", return_value=result):
+                    if expected is None:
+                        with self.assertRaises(ValueError):
+                            check_compile.ninja_encoding("ninja")
+                    else:
+                        self.assertEqual(check_compile.ninja_encoding("ninja"), expected)
+        with patch.object(check_compile.sys, "platform", "linux"), \
+                patch.object(check_compile, "capture", side_effect=AssertionError("queried Ninja")):
+            self.assertEqual(check_compile.ninja_encoding("ninja"), "utf-8")
 
     def test_syntax_check_preserves_existing_clang_compilation_fragment(self):
         compiler = shutil.which("clang")

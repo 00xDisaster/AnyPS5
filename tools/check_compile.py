@@ -21,7 +21,10 @@ def capture(command, cwd=None, encoding="utf-8"):
 def ninja_encoding(ninja):
     if sys.platform != "win32":
         return "utf-8"
-    declared = capture([ninja, "-t", "wincodepage"]).stdout.strip()
+    result = capture([ninja, "-t", "wincodepage"])
+    if result.returncode != 0:
+        raise ValueError(f"ninja -t wincodepage: {result.stderr.strip() or result.stdout.strip()}")
+    declared = result.stdout.strip()
     encodings = {"Build file encoding: UTF-8": "utf-8", "Build file encoding: ANSI": "mbcs"}
     if declared not in encodings:
         raise ValueError(f"unsupported Ninja build-file encoding: {declared!r}")
