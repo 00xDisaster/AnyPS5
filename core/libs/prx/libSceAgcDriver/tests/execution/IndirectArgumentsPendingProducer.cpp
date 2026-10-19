@@ -320,7 +320,7 @@ void Run(Slot& slot, const Variant& variant) {
         RunArgumentLabel(slot);
         break;
     }
-    AgcDriverWaitIdle_nid_postfix();
+    if (variant.order != Order::ArgumentLabelInEarlierBatch) AgcDriverWaitIdle_nid_postfix();
     const auto start = std::chrono::steady_clock::now();
     while (Load(slot.done) == 0) {
         Require(std::chrono::steady_clock::now() - start < std::chrono::seconds(10), std::string(variant.name) + ": the consumer's completion label did not land");
