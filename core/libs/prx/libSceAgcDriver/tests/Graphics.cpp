@@ -8847,13 +8847,15 @@ void unorm4_4_4_4TargetTests() {
         for (const auto offset : {0x013u, 0x015u}) depthQueue.context[offset] = 0x200;
         depthQueue.context[0x005] = 0x300;
         depthQueue.context[0x01e] = 0x1;
+        depthQueue.context[0x008] = std::bit_cast<std::uint32_t>(0.25f);
+        depthQueue.context[0x009] = std::bit_cast<std::uint32_t>(0.75f);
         struct DepthStencilCase {
             std::uint32_t control;
             std::uint32_t ops;
             std::uint32_t masks;
             bool writes;
         };
-        for (const auto& [control, ops, masks, writes] : {DepthStencilCase{0x00700710u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700712u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700714u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700716u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0u, 0x01ffff01u, false}, DepthStencilCase{0x00700711u, 0x00050050u, 0x0100ff01u, false}, DepthStencilCase{0x00700713u, 0u, 0x01ffff01u, false}}) {
+        for (const auto& [control, ops, masks, writes] : {DepthStencilCase{0x00700710u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700712u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700714u, 0x00050050u, 0x01ffff01u, false}, DepthStencilCase{0x00700716u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0x00050050u, 0x01ffff01u, true}, DepthStencilCase{0x00700711u, 0u, 0x01ffff01u, false}, DepthStencilCase{0x00700711u, 0x00050050u, 0x0100ff01u, false}, DepthStencilCase{0x00700713u, 0u, 0x01ffff01u, false}, DepthStencilCase{0x00700718u, 0x00050050u, 0x01ffff01u, false}}) {
             depthQueue.context[0x200] = control;
             depthQueue.context[0x10b] = ops;
             depthQueue.context[0x10c] = depthQueue.context[0x10d] = masks;
@@ -8861,7 +8863,7 @@ void unorm4_4_4_4TargetTests() {
             Require(AgcDriver::Graphics::DrawRejection(depthQueue, false).empty(), "the draw precheck refused a partial 4_4_4_4 write under " + what);
             const auto partial = AgcDriver::Graphics::DecodeState(depthQueue);
             const auto merge = AgcDriver::Graphics::ExportTargetMerge(partial);
-            Require(partial.depth.has_value() == ((control & 3u) != 0u) && merge.mask == 0xf000u && AgcDriver::Graphics::DepthStencilWrites(partial) == writes && merge.depthStencilWrites == writes, "a partial 4_4_4_4 write under " + what + (writes ? " did not report" : " reported") + " depth or stencil writes");
+            Require(partial.depth.has_value() == ((control & 0xbu) != 0u) && partial.depthBoundsTest == ((control & 8u) != 0u) && merge.mask == 0xf000u && AgcDriver::Graphics::DepthStencilWrites(partial) == writes && merge.depthStencilWrites == writes && merge.depthStencilTests == ((control & 0xbu) != 0u), "a partial 4_4_4_4 write under " + what + (writes ? " did not report" : " reported") + " depth or stencil writes");
         }
     }
     {
@@ -8970,12 +8972,24 @@ void unorm4_4_4_4TargetTests() {
         static const std::array<std::uint32_t, 4> atomicCapabilities{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat, spv::CapabilityInt64};
         counting.target.supportedCapabilities = atomicCapabilities;
         counting.context.pixel->earlyZ = false;
+        static_cast<void>(ShaderRecompiler::Recompile(counting));
+        counting.context.pixel->targetMerge.depthStencilTests = true;
         expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(counting)); }, "writes guest memory (stores, atomics or GDS) under late tests");
         counting.context.pixel->earlyZ = true;
         const auto earlyWords = ShaderRecompiler::Recompile(counting).spirv.Copy();
         std::size_t atomics = 0;
         for (std::size_t at = 5; at < earlyWords.size() && (earlyWords[at] >> 16u) != 0; at += earlyWords[at] >> 16u) atomics += static_cast<spv::Op>(earlyWords[at] & 0xffffu) == spv::OpAtomicIAdd ? 1u : 0u;
         Require(atomics == 1u && interlockShape(earlyWords) == "capability extension ordered begin end " && declaresEarlyFragmentTests(counting), "a 4_4_4_4 merge whose shader adds to a counter under early tests did not keep its one atomic add beside the merge");
+        constexpr std::array<std::uint32_t, 9> gdsReadCode{0xbefc03ffu, 0x00000100u, 0x7e000280u, 0xd8da0000u, 0x04000000u, 0xbf8c0000u, 0xf800180fu, 0x07060504u, 0xbf810000u};
+        auto gdsReading = packedExportRequest(changed, partial, gdsReadCode);
+        gdsReading.context.pixel->targetMerge = counting.context.pixel->targetMerge;
+        gdsReading.context.pixel->earlyZ = false;
+        gdsReading.target = counting.target;
+        static_cast<void>(ShaderRecompiler::Recompile(gdsReading));
+        constexpr std::array<std::uint32_t, 9> gdsAddCode{0xbefc03ffu, 0x00000100u, 0x7e000280u, 0xd8020000u, 0x00000000u, 0xbf8c0000u, 0xf800180fu, 0x07060504u, 0xbf810000u};
+        auto gdsAdding = gdsReading;
+        gdsAdding.shader.code = gdsAddCode;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(gdsAdding)); }, "writes guest memory (stores, atomics or GDS) under late tests");
         auto lateMerge = counting;
         lateMerge.context.pixel->earlyZ = false;
         lateMerge.context.pixel->targetMerge = {};

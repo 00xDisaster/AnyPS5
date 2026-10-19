@@ -1537,6 +1537,10 @@ bool DepthStencilWrites(const State& state) {
     return state.depthWrite || (state.stencilTest && (writes(state.stencilFront) || writes(state.stencilBack)));
 }
 
+bool DepthStencilTests(const State& state) {
+    return state.depth.has_value() && (state.depthTest || state.stencilTest || state.depthBoundsTest);
+}
+
 ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
     ShaderRecompiler::TargetMerge merge;
     for (const auto& color : state.colors) {
@@ -1547,6 +1551,7 @@ ShaderRecompiler::TargetMerge ExportTargetMerge(const State& state) {
         merge.samples = static_cast<std::uint8_t>(color.samples);
         merge.descriptor = EncodeTextureResource(SurfaceForTarget(color));
         merge.depthStencilWrites = DepthStencilWrites(state);
+        merge.depthStencilTests = DepthStencilTests(state);
     }
     return merge;
 }

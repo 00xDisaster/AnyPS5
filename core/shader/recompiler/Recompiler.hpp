@@ -157,6 +157,7 @@ struct TargetMerge {
     std::uint8_t samples = 1;
     std::array<std::uint32_t, 8> descriptor{};
     bool depthStencilWrites = false;
+    bool depthStencilTests = false;
 
     bool operator==(const TargetMerge&) const = default;
 };

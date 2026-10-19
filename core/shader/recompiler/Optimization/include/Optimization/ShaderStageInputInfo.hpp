@@ -199,6 +199,7 @@ struct ShaderPixelInputInfo {
     std::uint16_t mergeMask = 0;
     std::uint8_t mergeSamples = 1;
     bool mergeDepthStencilWrites = false;
+    bool mergeDepthStencilTests = false;
     ShaderStageRuntime stage;
 
     bool HasPositionInput() const {

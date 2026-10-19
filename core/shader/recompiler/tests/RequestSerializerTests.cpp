@@ -54,7 +54,7 @@ void InsertMeshBarycentricFlag(std::vector<std::uint8_t>& bytes) {
 
 void InsertPixelDefaultsAfterFrontFace(std::vector<std::uint8_t>& bytes) {
     bytes.insert(bytes.begin() + 261u, {0x0fu, 0xffu, 0xffu, 0u, 0u, 0xffu, 0xffu, 0u, 0u, 0xffu, 0xffu, 0u, 0u, 0xffu, 0xffu, 0u, 0u, 0u, 0u, 0u, 0u});
-    bytes.insert(bytes.begin() + 282u, 74u, 0u);
+    bytes.insert(bytes.begin() + 282u, 75u, 0u);
     bytes[322] = 1u;
 }
 
@@ -411,7 +411,7 @@ int main() {
                 if (fixture.pixel) main38.insert(main38.begin() + 259u, {0u, 0u});
                 if (fixture.pixel) InsertPixelDefaultsAfterFrontFace(main38);
                 auto upgraded = main38;
-                if (fixture.pixel) main38.erase(main38.begin() + 317u, main38.begin() + 356u);
+                if (fixture.pixel) main38.erase(main38.begin() + 317u, main38.begin() + 357u);
                 upgraded[4] = 40u;
                 if (fixture.tessellation) upgraded.insert(upgraded.end() - 35u, 1u, 0u);
                 main38.insert(main38.end(), sizeof(std::uint64_t) + 1u + 5u + 1u, 0u);
@@ -500,7 +500,7 @@ int main() {
         auto version35 = DecodeBase64(serializer.Serialize(request));
         const auto stencilOperationValue = std::search(version35.begin(), version35.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
         Require(stencilOperationValue < version35.end() && *stencilOperationValue == 0u);
-        version35.erase(stencilOperationValue, stencilOperationValue + 1 + 39);
+        version35.erase(stencilOperationValue, stencilOperationValue + 1 + 40);
         version35[4] = 35u;
         version35.pop_back();
         const auto replay35 = serializer.Deserialize(EncodeBase64(version35));
