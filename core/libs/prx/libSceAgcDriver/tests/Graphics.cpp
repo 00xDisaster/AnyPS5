@@ -8952,6 +8952,28 @@ void unorm4_4_4_4TargetTests() {
         auto exporting = merging;
         exporting.context.pixel->depthExportEnable = true;
         expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(exporting)); }, "exports depth");
+        alignas(16) static std::array<std::uint32_t, 4> counted{};
+        static const std::array<std::uint32_t, 4> counter{static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(counted.data())), static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(counted.data()) >> 32u) & 0xffffu, 16u, 0x31016facu};
+        constexpr std::array<std::uint32_t, 6> countingCode{0x7e000281u, 0xe0c80000u, 0x80000000u, 0xf800180fu, 0x07060504u, 0xbf810000u};
+        auto counting = packedExportRequest(changed, partial, countingCode);
+        counting.context.userData = counter;
+        counting.context.pixel->targetMerge = merging.context.pixel->targetMerge;
+        counting.target = merging.target;
+        counting.target.registrationModules = false;
+        counting.target.bdaAbiVersion = ShaderRecompiler::BdaAbi::Version;
+        static const std::array<std::uint32_t, 4> atomicCapabilities{spv::CapabilityShader, spv::CapabilityFragmentShaderPixelInterlockEXT, spv::CapabilityStorageImageReadWithoutFormat, spv::CapabilityInt64};
+        counting.target.supportedCapabilities = atomicCapabilities;
+        counting.context.pixel->earlyZ = false;
+        expectFailure([&] { static_cast<void>(ShaderRecompiler::Recompile(counting)); }, "writes guest memory (stores, atomics or GDS) under late tests");
+        counting.context.pixel->earlyZ = true;
+        const auto earlyWords = ShaderRecompiler::Recompile(counting).spirv.Copy();
+        std::size_t atomics = 0;
+        for (std::size_t at = 5; at < earlyWords.size() && (earlyWords[at] >> 16u) != 0; at += earlyWords[at] >> 16u) atomics += static_cast<spv::Op>(earlyWords[at] & 0xffffu) == spv::OpAtomicIAdd ? 1u : 0u;
+        Require(atomics == 1u && interlockShape(earlyWords) == "capability extension ordered begin end " && declaresEarlyFragmentTests(counting), "a 4_4_4_4 merge whose shader adds to a counter under early tests did not keep its one atomic add beside the merge");
+        auto lateMerge = counting;
+        lateMerge.context.pixel->earlyZ = false;
+        lateMerge.context.pixel->targetMerge = {};
+        static_cast<void>(ShaderRecompiler::Recompile(lateMerge));
     }
     changed = queue;
     changed.context[0x8e] = 0xau;
