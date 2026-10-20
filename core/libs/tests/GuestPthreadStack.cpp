@@ -6,6 +6,8 @@
 #include <chrono>
 #include <thread>
 #include <string>
+#include <vector>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
@@ -32,6 +34,10 @@ static constexpr std::size_t FRAME_SIZE = 4096;
 static constexpr std::size_t FRAME_MARGIN = 2 * FRAME_SIZE;
 static constexpr std::size_t HOST_CALL_STACK = 256 * 1024;
 static constexpr std::size_t STACK_SIZES[] = {16384, 65536, 1u << 20, 16u << 20};
+#ifdef __linux__
+static void* lastGuestStack = nullptr;
+static std::size_t lastGuestStackSize = 0;
+#endif
 
 #ifdef __linux__
 extern bool GuestThreadStackHostRangeOverlaps(std::uintptr_t start, std::uintptr_t end);
@@ -71,6 +77,10 @@ static void* APS5_VABI Worker(void* arg) {
     void* address = nullptr;
     std::size_t size = 0;
     Require(scePthreadAttrGetstack(&attr, &address, &size) == SCE_OK);
+#ifdef __linux__
+    lastGuestStack = address;
+    lastGuestStackSize = size;
+#endif
     Require(scePthreadAttrDestroy(&attr) == SCE_OK);
     Require(size == requested);
 
@@ -154,6 +164,16 @@ int main() {
         void* result = nullptr;
         Require(scePthreadJoin(thread, &result) == SCE_OK);
         Require(result == &stackSize);
+#ifdef __linux__
+        if (stackSize == STACK_SIZES[sizeof(STACK_SIZES) / sizeof(STACK_SIZES[0]) - 1]) {
+            const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+            const auto pageCount = (lastGuestStackSize + pageSize - 1) / pageSize;
+            std::vector<unsigned char> residency(pageCount);
+            Require(mincore(lastGuestStack, lastGuestStackSize, residency.data()) == 0);
+            for (std::size_t page = 1; page < pageCount; ++page)
+                Require((residency[page] & 1u) == 0);
+        }
+#endif
     }
 #ifdef __linux__
     constexpr std::size_t JoinedStackSize = 81920;
