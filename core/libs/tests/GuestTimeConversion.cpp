@@ -300,7 +300,6 @@ static void CheckLocalRange() {
     Require(localtime_s_nid_postfix(&overflow, &scratch) == nullptr, "Unrepresentable negative local time was accepted");
 }
 
-#ifndef _WIN32
 static void CheckRegionZones() {
     constexpr std::array<const char*, 4> zones{"America/Los_Angeles", "Europe/Berlin", "Asia/Kolkata", "America/Argentina/Buenos_Aires"};
     constexpr std::array<std::int64_t, 9> timers{-62135553600, -12609691200, -5016340800, -5000011200, -2732356800, -2209032000, -2208988800, -2208945600, -631108800};
@@ -325,7 +324,6 @@ static void CheckRegionZones() {
     Require(setenv_nid_postfix("TZ", "UTC-2", 1) == 0, "Could not restore the guest time zone");
     tzset_nid_postfix();
 }
-#endif
 
 static void CheckGuestZone() {
     const std::int64_t moment = 172800;
@@ -501,9 +499,7 @@ int main() {
 
     CheckFreeBsdConversions();
     CheckLocalRange();
-#ifndef _WIN32
     CheckRegionZones();
-#endif
     CheckLiteralConversions();
 
     CheckConcurrent(libc_gmtime_nid_postfix, gmtime_s_nid_postfix, "Concurrent libc_gmtime returned another thread's date");
