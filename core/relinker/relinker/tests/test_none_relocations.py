@@ -133,6 +133,15 @@ def main():
         if os.name == "nt":
             run = subprocess.run([str(page_output)], capture_output=True, timeout=20)
             assert run.returncode == 42, ("page-crossing relocation", run.returncode, run.stderr)
+            moved = bytearray(page_output.read_bytes())
+            optional_header = struct.unpack_from("<I", moved, 0x3c)[0] + 24
+            characteristics = struct.unpack_from("<H", moved, optional_header + 70)[0]
+            struct.pack_into("<H", moved, optional_header + 70, characteristics | 0x40)
+            moved_output = work / "base-relocation-page-crossing-moved.exe"
+            moved_output.write_bytes(moved)
+            for _ in range(3):
+                run = subprocess.run([str(moved_output)], capture_output=True, timeout=20)
+                assert run.returncode == 42, ("page-crossing relocation after the loader moved the image", run.returncode, run.stderr)
     print("No-op executable relocation tests passed")
 
 
