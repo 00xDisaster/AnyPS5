@@ -6,7 +6,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 
 #include <ft2build.h>
@@ -193,6 +195,42 @@ int APS5_VABI LibrarySupport(FontLibNative* library, std::uint32_t formats) {
     return SCE_FONT_OK;
 }
 
+#ifdef _WIN32
+unsigned long ReadWideFile(FT_Stream stream, unsigned long offset, unsigned char* buffer, unsigned long count) {
+    auto* file = static_cast<std::FILE*>(stream->descriptor.pointer);
+    if (_fseeki64(file, static_cast<long long>(offset), SEEK_SET) != 0) return count == 0 ? 1 : 0;
+    return count == 0 ? 0 : static_cast<unsigned long>(std::fread(buffer, 1, count, file));
+}
+
+void CloseWideFile(FT_Stream stream) {
+    std::fclose(static_cast<std::FILE*>(stream->descriptor.pointer));
+    delete stream;
+}
+
+FT_Error OpenFileFace(FT_Library library, const char* path, FT_Long subFontIndex, FT_Face* face) {
+    std::FILE* file = _wfopen(std::filesystem::path(reinterpret_cast<const char8_t*>(path)).c_str(), L"rb");
+    if (!file) return FT_Err_Cannot_Open_Resource;
+    const long long size = _fseeki64(file, 0, SEEK_END) == 0 ? _ftelli64(file) : -1;
+    if (size < 0 || static_cast<unsigned long long>(size) > std::numeric_limits<unsigned long>::max()) {
+        std::fclose(file);
+        return FT_Err_Cannot_Open_Stream;
+    }
+    auto* stream = new FT_StreamRec{};
+    stream->size = static_cast<unsigned long>(size);
+    stream->descriptor.pointer = file;
+    stream->read = &ReadWideFile;
+    stream->close = &CloseWideFile;
+    FT_Open_Args args{};
+    args.flags = FT_OPEN_STREAM;
+    args.stream = stream;
+    return FT_Open_Face(library, &args, subFontIndex, face);
+}
+#else
+FT_Error OpenFileFace(FT_Library library, const char* path, FT_Long subFontIndex, FT_Face* face) {
+    return FT_New_Face(library, path, subFontIndex, face);
+}
+#endif
+
 int APS5_VABI LibraryOpenFont(FontLibNative* library, std::uint32_t mode, const void* fontAddress, std::uint32_t fontSize, std::uint32_t subFontIndex, std::uint32_t uniqueWord, FontObj** inoutFontObj) {
     (void)uniqueWord;
     if (!library || !fontAddress || !inoutFontObj) return SCE_FONT_ERROR_INVALID_PARAMETER;
@@ -217,7 +255,7 @@ int APS5_VABI LibraryOpenFont(FontLibNative* library, std::uint32_t mode, const 
     if (fromMemory) {
         error = FT_New_Memory_Face(*ftLibrary, static_cast<const FT_Byte*>(fontAddress), static_cast<FT_Long>(fontSize), static_cast<FT_Long>(subFontIndex), &face);
     } else {
-        error = FT_New_Face(*ftLibrary, static_cast<const char*>(fontAddress), static_cast<FT_Long>(subFontIndex), &face);
+        error = OpenFileFace(*ftLibrary, static_cast<const char*>(fontAddress), static_cast<FT_Long>(subFontIndex), &face);
     }
     if (error != 0 || !face) {
         if (fromMemory || error == FT_Err_Unknown_File_Format) return SCE_FONT_ERROR_NO_SUPPORT_FORMAT;

@@ -85,9 +85,9 @@ static void Check(bool value, int line) {
 
 static void SetFontDirectory(const std::filesystem::path& directory) {
 #ifdef _WIN32
-    Require(_putenv_s("ANYPS5_SYSTEM_FONTS", directory.string().c_str()) == 0);
+    Require(_wputenv_s(L"ANYPS5_SYSTEM_FONTS", directory.wstring().c_str()) == 0);
 #else
-    Require(::setenv("ANYPS5_SYSTEM_FONTS", directory.string().c_str(), 1) == 0);
+    Require(::setenv("ANYPS5_SYSTEM_FONTS", directory.c_str(), 1) == 0);
 #endif
 }
 
