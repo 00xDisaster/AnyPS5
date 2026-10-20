@@ -148,7 +148,7 @@ int APS5_VABI sceVoiceQoSDisconnect(int32_t connectionId) {
     return Locked([&](QoS& qos) { return qos.connections.erase(connectionId) != 0 ? 0 : SCE_VOICE_ERROR_LIBVOICEQOS_ARGUMENT_INVALID; });
 }
 
-int APS5_VABI sceVoiceQoSSetConnectionAttribute() {
+int APS5_VABI sceVoiceQoSSetConnectionAttribute(std::int32_t connectionId, std::int32_t attributeId, const void* value, std::int32_t size) {
  NotImplemented_nid_no_patch(__func__);
  return 0;
 }
@@ -180,7 +180,7 @@ int APS5_VABI sceVoiceQoSGetLocalEndpointAttribute(int32_t localId, int32_t attr
     return Locked([&](QoS& qos) { return GetAttribute(qos.locals, localId, attributeId, value, size); });
 }
 
-int APS5_VABI sceVoiceQoSGetRemoteEndpointAttribute(int32_t remoteId, int32_t attributeId, const void* value, int32_t size) {
+int APS5_VABI sceVoiceQoSGetRemoteEndpointAttribute(int32_t remoteId, int32_t attributeId, void* value, int32_t size) {
     (void)remoteId;
     (void)attributeId;
     (void)value;
@@ -237,12 +237,12 @@ int APS5_VABI sceVoiceQoSGetStatus(int32_t connectionId, int32_t statusId, void*
     return 0;
 }
 
-int APS5_VABI sceVoiceQoSDebugGetStatus() {
+int APS5_VABI sceVoiceQoSDebugGetStatus(std::int32_t connectionId, std::int32_t statusId, void* value, std::int32_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceVoiceQoSInitHQ() {
+int APS5_VABI sceVoiceQoSInitHQ(void* memory, std::uint32_t memorySize, std::int32_t appType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
