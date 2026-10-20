@@ -2175,7 +2175,7 @@ int APS5_VABI sceNetEventCallbackWaitCB(std::int32_t timeout, void* waitData, st
     return 0;
 }
 
-int APS5_VABI sceNetFreeAllRouteInfo(void) {
+int APS5_VABI sceNetFreeAllRouteInfo(void* routes) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2290,11 +2290,11 @@ int APS5_VABI sceNetIoctl(int socketId, std::uint32_t command, void* argument) {
     return 0;
 }
 
-void* APS5_VABI sceNetMemoryAllocate(std::int64_t size, int flags) {
+void* APS5_VABI sceNetMemoryAllocate(std::int32_t size, int flags) {
     constexpr int zeroFill = 2;
-    if ((flags & ~zeroFill) != 0)
-        throw std::runtime_error("sceNetMemoryAllocate: flags " + std::to_string(flags) + " are not supported");
     if (size <= 0) return nullptr;
+    if ((flags & 4) != 0)
+        throw std::runtime_error("sceNetMemoryAllocate: pool reserve allocation is not implemented");
     void* memory = nullptr;
     try {
         memory = GuestHeap::GuestHeapAllocate_nid_postfix(static_cast<std::size_t>(size));

@@ -135,7 +135,7 @@ int APS5_VABI sceNetPoolDestroy(int);
 int APS5_VABI sceNetGetMemoryPoolStats(int, NetMemoryPoolStats*);
 const char* APS5_VABI sceNetGetIfName(std::uint32_t);
 int APS5_VABI sceNetGetRandom(std::uint32_t*);
-void* APS5_VABI sceNetMemoryAllocate(std::int64_t, int);
+void* APS5_VABI sceNetMemoryAllocate(std::int32_t, int);
 void APS5_VABI sceNetMemoryFree(void*);
 }
 
@@ -303,6 +303,8 @@ static void CheckRandom() {
 static void CheckNetMemory() {
     Require(sceNetMemoryAllocate(0, 0) == nullptr);
     Require(sceNetMemoryAllocate(-1, 2) == nullptr);
+    Require(sceNetMemoryAllocate(0, 4) == nullptr);
+    Require(sceNetMemoryAllocate(INT32_MIN, -1) == nullptr);
     auto* zeroed = static_cast<std::uint8_t*>(sceNetMemoryAllocate(4096, 2));
     Require(zeroed != nullptr);
     Require(std::all_of(zeroed, zeroed + 4096, [](std::uint8_t byte) { return byte == 0; }));
@@ -314,9 +316,15 @@ static void CheckNetMemory() {
     sceNetMemoryFree(plain);
     sceNetMemoryFree(zeroed);
     sceNetMemoryFree(nullptr);
+    for (const int flags : {1, 0x40000001, -5}) {
+        auto* allocation = static_cast<std::uint8_t*>(sceNetMemoryAllocate(16, flags));
+        Require(allocation != nullptr);
+        if ((flags & 2) != 0) Require(std::all_of(allocation, allocation + 16, [](std::uint8_t byte) { return byte == 0; }));
+        sceNetMemoryFree(allocation);
+    }
     bool threw = false;
     try {
-        sceNetMemoryAllocate(16, 1);
+        sceNetMemoryAllocate(16, 4);
     } catch (const std::runtime_error&) {
         threw = true;
     }
