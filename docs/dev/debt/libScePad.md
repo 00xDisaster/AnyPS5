@@ -77,23 +77,9 @@
 - [scePadReadHistory](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadRemoteControlInsertData](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadRemoteControlInsertDataForAston](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateInit](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateIsReady](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadBondUpdateStart](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateGetStatus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateSendData](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateResetBond](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateGetReconnectStatus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadBondUpdateTerm](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateInit](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadControllerUpdateIsUpdateNeeded2](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateIsReady](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadControllerUpdateStart](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateGetStatus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateSendData](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateResetController](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateGetReconnectStatus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadControllerUpdateTerm](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 
 ### Functional
 
