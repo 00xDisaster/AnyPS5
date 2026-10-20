@@ -288,12 +288,18 @@ std::string Quote(const std::string& text) {
 
 void LinesSurviveEnd(const std::string& self, const std::string& mode) {
     const auto output = std::filesystem::temp_directory_path() / ("aps5-async-log-" + mode + "-" + std::to_string(Clock::now().time_since_epoch().count()) + ".txt");
-    std::string command = Quote(self) + " child " + mode + " " + Quote(output.string());
 #ifdef _WIN32
-    command = Quote(command);
-#endif
+    (void)self;
+    std::wstring executable(32768, L'\0');
+    executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
+    const std::wstring command = L"\"\"" + executable + L"\" child " + std::filesystem::path(mode).wstring() + L" \"" + output.wstring() + L"\"\"";
+    const auto start = Clock::now();
+    const int status = _wsystem(command.c_str());
+#else
+    const std::string command = Quote(self) + " child " + mode + " " + Quote(output.string());
     const auto start = Clock::now();
     const int status = std::system(command.c_str());
+#endif
     const auto lived = Clock::now() - start;
     std::error_code error;
     const bool started = std::filesystem::exists(output, error);
