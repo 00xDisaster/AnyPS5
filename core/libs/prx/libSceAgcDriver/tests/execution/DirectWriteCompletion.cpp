@@ -37,6 +37,7 @@ constexpr std::uint32_t TileR64KBX = 0x1b;
 constexpr std::uint32_t Type2D = 9;
 constexpr std::size_t Block = 0x10000;
 constexpr std::size_t SurfaceBytes = 4 * Block;
+constexpr std::size_t SettledImportBytes = 64 * Block;
 constexpr std::uint32_t Untouched = 0xdeadbeefu;
 constexpr std::uint32_t Stored = 0x12345678u;
 constexpr std::uint32_t Filled = 0x9abcdef0u;
@@ -198,7 +199,7 @@ int main() {
             Require(AgcDriver::Graphics::DescribeSurface(AgcDriver::Graphics::DecodeTextureResource(TextureDescriptor(probe.Texels()))).guestBytes == SurfaceBytes, "direct write completion: unexpected surface size");
         }
         {
-            constexpr std::size_t Runs = 16;
+            constexpr std::size_t Runs = SettledImportBytes / SurfaceBytes - 1;
             std::vector<std::unique_ptr<Surface>> surfaces;
             for (std::size_t index = 0; index <= Runs; ++index) surfaces.push_back(std::make_unique<Surface>());
             static_cast<void>(StoreAfterFill(*surfaces[0]));

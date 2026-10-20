@@ -4058,7 +4058,10 @@ std::uint64_t StorageTexture::StampKeepingNewerResults(std::uint64_t address, st
     }
     std::erase_if(kept, [](const auto& entry) {
         const auto& [texture, unit] = entry;
-        return !GuestMemory::UnchangedSince(texture->layerBegin(unit), static_cast<std::size_t>(texture->layerBytes(unit)), texture->layerGeneration[unit]);
+        const auto begin = texture->layerBegin(unit);
+        const auto unitBytes = static_cast<std::size_t>(texture->layerBytes(unit));
+        GuestMemory::CollectWritesUncached(begin, unitBytes);
+        return !GuestMemory::UnchangedSince(begin, unitBytes, texture->layerGeneration[unit]);
     });
     const auto generation = stamp();
     if (generation == 0 || kept.empty()) return generation;
