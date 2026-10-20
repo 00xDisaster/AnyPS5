@@ -323,10 +323,15 @@ int main(int argc, char** argv) {
         reject([pointer] { ApplicationHeapUsableSize_nid_no_patch(pointer); });
         pointer = static_cast<unsigned char*>(reallocf_nid_postfix(nullptr, 40));
         require(pointer != nullptr);
-        require(reallocf_nid_postfix(pointer, SIZE_MAX - 4096) == nullptr && *__error_nid_postfix() == 12);
+        *__error_nid_postfix() = 77;
+        require(reallocf_nid_postfix(pointer, SIZE_MAX - 4096) == nullptr && *__error_nid_postfix() == 77);
         reject([pointer] { ApplicationHeapUsableSize_nid_no_patch(pointer); });
-        *__error_nid_postfix() = 0;
-        require(reallocf_nid_postfix(nullptr, SIZE_MAX) == nullptr && *__error_nid_postfix() == 12);
+        pointer = static_cast<unsigned char*>(reallocf_nid_postfix(nullptr, 40));
+        require(pointer != nullptr);
+        require(reallocf_nid_postfix(pointer, SIZE_MAX - 0x1008f) == nullptr && *__error_nid_postfix() == 22);
+        reject([pointer] { ApplicationHeapUsableSize_nid_no_patch(pointer); });
+        *__error_nid_postfix() = 77;
+        require(reallocf_nid_postfix(nullptr, SIZE_MAX) == nullptr && *__error_nid_postfix() == 77);
         void* empty = ApplicationHeapAllocate_nid_no_patch(0);
         require(empty != nullptr);
         ApplicationHeapFree_nid_no_patch(empty);
