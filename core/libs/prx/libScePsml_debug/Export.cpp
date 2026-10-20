@@ -56,6 +56,67 @@ static_assert(offsetof(Mfsr2SharedResourcesParam, blockCount) == 16);
 static_assert(offsetof(Mfsr2SharedResourcesParam, width) == 24);
 static_assert(offsetof(Mfsr2SharedResourcesParam, reserved1) == 28);
 
+struct Mfsr2ContextParam {
+ std::uint32_t profile;
+ std::uint32_t reserved0;
+ void* sharedResources;
+ const MfsrBlock* blocks;
+ std::uint64_t blockCount;
+ std::uint64_t reserved1;
+ std::uint16_t outputWidth;
+ std::uint16_t outputHeight;
+ std::uint32_t inputColorSpace;
+};
+
+struct MfsrCommandBuffer {
+ std::uint32_t* cursor;
+ std::uint32_t sizeInDwords;
+};
+
+struct MfsrTextureDescriptor {
+ std::uint32_t words[8];
+};
+
+struct Mfsr2DispatchParam {
+ const MfsrTextureDescriptor* outputColor;
+ const MfsrTextureDescriptor* color;
+ const MfsrTextureDescriptor* motionVectors;
+ const MfsrTextureDescriptor* depth;
+ const MfsrTextureDescriptor* exposure;
+ std::uint64_t reserved0;
+ float preExposure;
+ std::uint32_t renderX;
+ std::uint32_t renderY;
+ std::uint32_t renderWidth;
+ std::uint32_t renderHeight;
+ float jitter[2];
+ float motionVectorScale[2];
+ float motionVectorOffset[2];
+ float depthRange[2];
+ std::uint8_t resetHistory;
+ std::uint8_t reserved1[3];
+ std::uint32_t optionFlags;
+ float sharpness;
+};
+
+static_assert(sizeof(Mfsr2ContextParam) == 48);
+static_assert(offsetof(Mfsr2ContextParam, sharedResources) == 8);
+static_assert(offsetof(Mfsr2ContextParam, blocks) == 16);
+static_assert(offsetof(Mfsr2ContextParam, blockCount) == 24);
+static_assert(offsetof(Mfsr2ContextParam, outputWidth) == 40);
+static_assert(offsetof(Mfsr2ContextParam, inputColorSpace) == 44);
+static_assert(sizeof(MfsrCommandBuffer) == 16);
+static_assert(offsetof(MfsrCommandBuffer, sizeInDwords) == 8);
+static_assert(sizeof(MfsrTextureDescriptor) == 32);
+static_assert(sizeof(Mfsr2DispatchParam) == 112);
+static_assert(offsetof(Mfsr2DispatchParam, preExposure) == 48);
+static_assert(offsetof(Mfsr2DispatchParam, renderX) == 52);
+static_assert(offsetof(Mfsr2DispatchParam, jitter) == 68);
+static_assert(offsetof(Mfsr2DispatchParam, depthRange) == 92);
+static_assert(offsetof(Mfsr2DispatchParam, resetHistory) == 100);
+static_assert(offsetof(Mfsr2DispatchParam, optionFlags) == 104);
+static_assert(offsetof(Mfsr2DispatchParam, sharpness) == 108);
+
 struct MfsrContextParam {
  std::uint32_t reserved0[2];
  const MfsrBlock* blocks;
@@ -301,7 +362,7 @@ int APS5_VABI scePsmlMfsr2GetSharedResourcesInitRequirement(MfsrRequirement* req
     return 0;
 }
 
-int APS5_VABI scePsmlMfsr2GetContextInitRequirement() {
+int APS5_VABI scePsmlMfsr2GetContextInitRequirement(MfsrRequirement* requirement, const Mfsr2ContextParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -321,12 +382,12 @@ int APS5_VABI scePsmlMfsr2CreateSharedResources(void** sharedResources, const Mf
     return 0;
 }
 
-int APS5_VABI scePsmlMfsr2GetDispatchPackets() {
+int APS5_VABI scePsmlMfsr2GetDispatchPackets(void* context, const MfsrCommandBuffer* commandBuffer, const Mfsr2DispatchParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI scePsmlMfsr2CreateContext() {
+int APS5_VABI scePsmlMfsr2CreateContext(void** context, const Mfsr2ContextParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
