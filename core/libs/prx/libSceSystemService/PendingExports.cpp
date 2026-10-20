@@ -691,17 +691,17 @@ int APS5_VABI sceShellCoreUtilGetAppLaunchedParamInt(std::int32_t appId, const c
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppLaunchedParamIntByBudgetType() {
+int APS5_VABI sceShellCoreUtilGetAppLaunchedParamIntByBudgetType(std::int32_t budgetType, const char* key, std::int32_t* value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppLaunchedParamString() {
+int APS5_VABI sceShellCoreUtilGetAppLaunchedParamString(std::int32_t appId, const char* key, char* value, std::int32_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppLaunchedParamStringByBudgetType() {
+int APS5_VABI sceShellCoreUtilGetAppLaunchedParamStringByBudgetType(std::int32_t budgetType, const char* key, char* value, std::int32_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -716,17 +716,17 @@ int APS5_VABI sceShellCoreUtilGetBasicProductShape() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetCheckerString() {
+int APS5_VABI sceShellCoreUtilGetCheckerString(const char* key, char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetCheckerStringEx() {
+int APS5_VABI sceShellCoreUtilGetCheckerStringEx(const char* firstKey, const char* secondKey, char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetCloudClientStatus() {
+int APS5_VABI sceShellCoreUtilGetCloudClientStatus(std::uint32_t* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -771,22 +771,22 @@ int APS5_VABI sceShellCoreUtilGetCrashReportUploadStatus() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetDeviceIndexBehavior() {
+int APS5_VABI sceShellCoreUtilGetDeviceIndexBehavior(std::uint32_t* first, std::uint32_t* second, std::uint32_t* third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetDeviceIndexBehaviorWithTimeout() {
+int APS5_VABI sceShellCoreUtilGetDeviceIndexBehaviorWithTimeout(std::uint32_t* first, std::uint32_t* second, std::uint32_t* third, std::uint8_t timeout) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetEffectiveTotalSizeOfUserPartition() {
+int APS5_VABI sceShellCoreUtilGetEffectiveTotalSizeOfUserPartition(std::uint64_t* size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetFreeSizeOfAvContentsTmp() {
+std::uint64_t APS5_VABI sceShellCoreUtilGetFreeSizeOfAvContentsTmp() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
