@@ -121,6 +121,7 @@ void CheckMappings(AgcDriver::VulkanDevice& device) {
     middle = static_cast<std::uint8_t*>(mapping) + BlockBytes;
     Require(munmap_nid_postfix(middle, BlockBytes) == 0, "guest middle unmap failed");
     Require(!Imported(device, mapping, 3 * BlockBytes), "middle unmap left a host import spanning the unmapped range");
+    Require(!Imported(device, mapping), "middle unmap retained the prefix of the retired host import");
     Fill(device, mapping);
     Require(Imported(device, mapping), "the retained prefix was not imported again after middle unmap");
     Require(munmap_nid_postfix(mapping, BlockBytes) == 0, "guest prefix unmap failed");
