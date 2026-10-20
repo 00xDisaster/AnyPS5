@@ -6,6 +6,7 @@
 #include "prx/libSceUserService/UserService.hpp"
 #include "SceTypes.hpp"
 
+#include <cstddef>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -32,15 +33,38 @@ static_assert(sizeof(MirroringOption) == 32);
 struct GazeResultParameter;
 struct GazeResult;
 struct FoveatedRenderingResult;
-struct GazeCalibrationData;
-struct GazeUserCalibrationData;
-struct GazeUserCalibrationStatus;
+struct GazeCalibrationData {
+    void* data;
+    std::int32_t size;
+};
+struct GazeUserCalibrationData {
+    const void* data;
+    std::int32_t size;
+};
+struct GazeUserCalibrationStatus {
+    std::int32_t status;
+    std::int32_t eye;
+    float point[3];
+};
 struct GazeRawData;
 struct GazeObjectSelectionParameter;
 struct GazeObjectSelectionResult;
-struct GazeObjectSelectionInitializeParameter;
-struct GazeObjectSelectionMemoryParameter;
-struct GazeObjectSelectionMemoryInfo;
+struct GazeObjectSelectionInitializeParameter {
+    std::uint32_t size;
+    std::uint32_t maxObjects;
+    void* memory;
+    std::uint32_t memorySize;
+    std::uint32_t reserved;
+};
+struct GazeObjectSelectionMemoryParameter {
+    std::uint32_t size;
+    std::uint32_t maxObjects;
+};
+struct GazeObjectSelectionMemoryInfo {
+    std::uint32_t size;
+    std::uint32_t memorySize;
+    std::uint64_t alignment;
+};
 
 struct CalibrationPoint {
     float x;
@@ -49,6 +73,18 @@ struct CalibrationPoint {
 };
 
 static_assert(sizeof(CalibrationPoint) == 12);
+static_assert(sizeof(GazeCalibrationData) == 16);
+static_assert(offsetof(GazeCalibrationData, size) == 8);
+static_assert(sizeof(GazeUserCalibrationData) == 16);
+static_assert(offsetof(GazeUserCalibrationData, size) == 8);
+static_assert(sizeof(GazeUserCalibrationStatus) == 20);
+static_assert(offsetof(GazeUserCalibrationStatus, point) == 8);
+static_assert(sizeof(GazeObjectSelectionInitializeParameter) == 24);
+static_assert(offsetof(GazeObjectSelectionInitializeParameter, memory) == 8);
+static_assert(offsetof(GazeObjectSelectionInitializeParameter, memorySize) == 16);
+static_assert(sizeof(GazeObjectSelectionMemoryParameter) == 8);
+static_assert(sizeof(GazeObjectSelectionMemoryInfo) == 16);
+static_assert(offsetof(GazeObjectSelectionMemoryInfo, alignment) == 8);
 
 }
 
