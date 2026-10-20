@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <bit>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
@@ -494,8 +495,8 @@ private:
             } else {
                 const unsigned long long value = std::strtoull(text.c_str(), nullptr, 10);
                 if (errno == 0) {
-                    if (value <= static_cast<unsigned long long>(INT64_MAX)) { out.type = TypeInteger; out.integer = static_cast<std::int64_t>(value); }
-                    else { out.type = TypeUInteger; out.uinteger = value; }
+                    out.type = TypeUInteger;
+                    out.uinteger = value;
                     return true;
                 }
             }
@@ -882,15 +883,15 @@ ValueType APS5_VABI _ZNK3sce4Json5Value7getTypeEv(const Value* self) { return No
 const bool* APS5_VABI _ZNK3sce4Json5Value10getBooleanEv(const Value* self) { return &Typed(self, TypeBoolean).boolean; }
 const std::int64_t* APS5_VABI _ZNK3sce4Json5Value10getIntegerEv(const Value* self) {
     Node& n = const_cast<Node&>(NodeOf(*self));
-    if (n.type == TypeUInteger && n.uinteger <= static_cast<std::uint64_t>(INT64_MAX)) {
-        n.integer = static_cast<std::int64_t>(n.uinteger);
+    if (n.type == TypeUInteger) {
+        n.integer = std::bit_cast<std::int64_t>(n.uinteger);
         return &n.integer;
     }
     return &Typed(self, TypeInteger).integer;
 }
 const std::uint64_t* APS5_VABI _ZNK3sce4Json5Value11getUIntegerEv(const Value* self) {
     Node& n = const_cast<Node&>(NodeOf(*self));
-    if (n.type == TypeInteger && n.integer >= 0) {
+    if (n.type == TypeInteger) {
         n.uinteger = static_cast<std::uint64_t>(n.integer);
         return &n.uinteger;
     }

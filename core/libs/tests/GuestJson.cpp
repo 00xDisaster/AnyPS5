@@ -197,7 +197,7 @@ static void ParseAndRoundTrip() {
     Require(_ZNK3sce4Json5Value7getTypeEv(&root) == TypeObject);
     Require(_ZNK3sce4Json5Value5countEv(&root) == 8);
     Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(_ZNK3sce4Json5Value9getStringEv(&Member(root, "name"))), "x\xc3\xa9\n") == 0);
-    Require(_ZNK3sce4Json5Value7getTypeEv(&Member(root, "count")) == TypeInteger);
+    Require(_ZNK3sce4Json5Value7getTypeEv(&Member(root, "count")) == TypeUInteger);
     Require(*_ZNK3sce4Json5Value10getIntegerEv(&Member(root, "count")) == 3);
     Require(*_ZNK3sce4Json5Value11getUIntegerEv(&Member(root, "count")) == 3);
     Require(*_ZNK3sce4Json5Value7getRealEv(&Member(root, "count")) == 3.0);
@@ -228,7 +228,7 @@ static void ParseAndRoundTrip() {
         types.push_back(_ZNK3sce4Json5Value7getTypeEv(_ZNK3sce4Json5Array8iteratordeEv(&it)));
     _ZN3sce4Json5Array8iteratorD1Ev(&it);
     _ZN3sce4Json5Array8iteratorD1Ev(&end);
-    Require((types == std::vector<std::int32_t>{TypeInteger, TypeString, TypeArray}));
+    Require((types == std::vector<std::int32_t>{TypeUInteger, TypeString, TypeArray}));
     Require(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5ValueixEm(_ZNK3sce4Json5ValueixEm(&list, 2), 0)) == 3);
 
     const std::string serialized = Serialize(root);
@@ -1053,6 +1053,28 @@ static int APS5_VABI ReadNext(char& ch, void* context) {
     return state->successStatus;
 }
 
+static void IntegerRepresentation() {
+    Value value{};
+    _ZN3sce4Json5ValueC1Ev(&value);
+    for (const char* text : {"0", "1", "9223372036854775807", "9223372036854775808", "18446744073709551615"}) {
+        Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&value, text, std::strlen(text)) == 0);
+        Require(_ZNK3sce4Json5Value7getTypeEv(&value) == TypeUInteger);
+        Require(Serialize(value) == text);
+    }
+    Require(*_ZNK3sce4Json5Value10getIntegerEv(&value) == -1);
+    Require(_ZNK3sce4Json5Value7getTypeEv(&value) == TypeUInteger);
+    Require(_ZN3sce4Json5Value3setEl(&value, -1) == 0);
+    Require(*_ZNK3sce4Json5Value11getUIntegerEv(&value) == std::numeric_limits<std::uint64_t>::max());
+    Require(_ZNK3sce4Json5Value7getTypeEv(&value) == TypeInteger);
+    for (const char* text : {"-0", "-1", "-9223372036854775808"}) {
+        Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&value, text, std::strlen(text)) == 0);
+        Require(_ZNK3sce4Json5Value7getTypeEv(&value) == TypeInteger);
+    }
+    Require(*_ZNK3sce4Json5Value11getUIntegerEv(&value) == (std::uint64_t{1} << 63));
+    Require(_ZNK3sce4Json5Value7getTypeEv(&value) == TypeInteger);
+    _ZN3sce4Json5ValueD1Ev(&value);
+}
+
 static void StreamParse() {
     Value root{};
     _ZN3sce4Json5ValueC1Ev(&root);
@@ -1346,5 +1368,6 @@ int main() {
     InitParameters();
     ValueClear();
     ValueOperatorBool();
+    IntegerRepresentation();
     StreamParse();
 }
