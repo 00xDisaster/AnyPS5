@@ -7,10 +7,33 @@
 
 #include "prx/libc/include/General.hpp"
 
-#ifdef __linux__
+#if defined(__linux__)
 #include <dlfcn.h>
 #include <execinfo.h>
-
+#elif defined(_WIN32)
+#include <windows.h>
+#include "prx/libc/include/exceptions/Unwind.hpp"
+extern "C" {
+_Unwind_Reason_Code APS5_VABI _Unwind_Backtrace_nid_postfix(_Unwind_Trace_Fn, void*);
+_Unwind_Ptr APS5_VABI _Unwind_GetIP_nid_postfix(_Unwind_Context*);
+std::string BacktraceModulePath_nid_no_patch(HMODULE handle, std::size_t initialCapacity) {
+    std::string module;
+    std::size_t capacity = initialCapacity == 0 ? 1 : initialCapacity;
+    while (true) {
+        module.resize(capacity);
+        SetLastError(ERROR_SUCCESS);
+        const DWORD length = GetModuleFileNameA(handle, module.data(), static_cast<DWORD>(module.size()));
+        if (length == 0) return {};
+        if (length < capacity && GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+            module.resize(length);
+            return module;
+        }
+        if (capacity >= 32768) return {};
+        capacity *= 2;
+    }
+}
+}
+#endif
 namespace {
 
 constexpr int MaxFrames = 256;
