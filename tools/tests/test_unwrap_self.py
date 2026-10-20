@@ -222,6 +222,56 @@ class UnwrapTest(unittest.TestCase):
                 self.assertEqual([data[header[2]:header[2] + header[5]] for header in headers],
                                  [pattern(1, 0x100), pattern(9, 0x88)] + blocks)
 
+    def test_file_backed_load_uses_the_first_congruent_offset_after_the_headers(self):
+        cases = ((PROGRAM_TABLE_OFFSET, 0, 0x1400, 0x400),
+                 (PROGRAM_TABLE_OFFSET, 1, 0x1400, 0x400),
+                 (PROGRAM_TABLE_OFFSET, 8, 0x1003, 0x403),
+                 (PROGRAM_TABLE_OFFSET, PAGE, 0x1400, 0x400),
+                 (PROGRAM_TABLE_OFFSET, PAGE, 0x1480, 0x480),
+                 (PROGRAM_TABLE_OFFSET, PAGE, 0x1200, 0x1200),
+                 (PROGRAM_TABLE_OFFSET, PAGE, 0x1000, 0x1000),
+                 (PROGRAM_TABLE_OFFSET, PAGE, 0x1FFF, 0xFFF),
+                 (0xFF0, PAGE, 0x2100, 0x1100),
+                 (PROGRAM_TABLE_OFFSET, 1 << 63, 0x480, 0x480))
+        payload = pattern(3, 0x20) * 8
+        for program_offset, alignment, address, expected in cases:
+            with self.subTest(program_offset=program_offset, alignment=alignment, address=address):
+                segments = [(PT_LOAD, 5, 0x1234, address, len(payload), alignment)]
+                container = build_container(segments, [(0x2804, 0x2000, len(payload))],
+                                            {0x2000: payload}, program_offset=program_offset)
+                result, output = self.convert(container)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data, headers = read_program_headers(output)
+                load = headers[0]
+                self.assertEqual(load[2], expected)
+                self.assertGreaterEqual(load[2], max(FIRST_REGION, program_offset + 56))
+                self.assertEqual(load[2] % max(alignment, 1), address % max(alignment, 1))
+                self.assertEqual(load[3:], (address, address, len(payload), len(payload), alignment))
+                self.assertEqual(data[load[2]:load[2] + load[5]], payload)
+                self.assertEqual(len(data), expected + len(payload))
+                self.assertEqual((Path(self.directory) / "input.self").read_bytes(), container)
+
+    def test_recorded_non_load_region_can_start_at_an_already_congruent_cursor(self):
+        load_payload = pattern(3, 0x20) * 8 + b"tail"
+        separate_payload = pattern(9, 0x10)
+        for kind in (PT_DYNAMIC, PT_TLS):
+            for alignment in (8, 0x10):
+                with self.subTest(kind=kind, alignment=alignment):
+                    segments = [(PT_LOAD, 5, 0x1234, 0x1000, len(load_payload), PAGE),
+                                (kind, 4, 0x2000, 0x1004, len(separate_payload), alignment)]
+                    records = [(0x2804, 0x800, len(load_payload)), (0x102804, 0xA00, len(separate_payload))]
+                    container = build_container(segments, records, {0x800: load_payload, 0xA00: separate_payload})
+                    result, output = self.convert(container)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    data, headers = read_program_headers(output)
+                    load, separate = headers
+                    self.assertEqual(load[2], PAGE)
+                    self.assertEqual(separate[2], load[2] + len(load_payload))
+                    self.assertEqual(separate[2] % alignment, separate[3] % alignment)
+                    self.assertEqual(data[load[2]:load[2] + load[5]], load_payload)
+                    self.assertEqual(data[separate[2]:separate[2] + separate[5]], separate_payload)
+                    self.assertEqual(len(data), separate[2] + len(separate_payload))
+
     def test_declared_offsets_are_used_when_the_container_has_no_records(self):
         segments = [(PT_LOAD, 1, 0x800, 0x0, 0x40, 0x1000), (PT_LOAD, 4, 0x900, 0x1000, 0x40, 0x1000)]
         payloads = {0x800: pattern(3, 0x40), 0x900: pattern(5, 0x40)}
