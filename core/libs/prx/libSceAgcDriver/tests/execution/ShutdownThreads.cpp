@@ -76,6 +76,27 @@ void ClosingJoinsPreparation() {
     Require(ranHere && RegistrationPreparationThreads() == 0, "a closed preparation pool restarted after being joined");
 }
 
+void ClosingDropsQueuedPrebuilds() {
+    using namespace AgcDriver::DriverDetail;
+    std::promise<void> started;
+    auto running = started.get_future();
+    std::promise<void> gate;
+    auto opened = gate.get_future().share();
+    bool queuedRan = false;
+    SubmitLibraryPrebuild([&] { started.set_value(); opened.wait(); });
+    for (int index = 0; index < 3; ++index) SubmitLibraryPrebuild([&] { queuedRan = true; });
+    running.wait();
+    auto closing = std::async(std::launch::async, [] { CloseRegistrationPreparation(); });
+    const bool waited = closing.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
+    gate.set_value();
+    const bool returned = closing.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
+    closing.get();
+    Require(waited, "closing returned while a library prebuild was still running");
+    Require(returned, "closing did not return once the running library prebuild ended");
+    Require(!queuedRan, "closing ran the queued library prebuilds");
+    Require(RegistrationPreparationThreads() == 0, "closing the library prebuilds left their thread running");
+}
+
 void StoppingJoinsCompareHelpers() {
     using namespace AgcDriver::Graphics;
     const std::vector<std::byte> first(std::size_t{2} << 20u, std::byte{1});
@@ -168,6 +189,7 @@ int main(int argc, char** argv) {
     try {
         const std::string_view mode = argc > 1 ? argv[1] : "";
         if (mode == "--joined") ClosingJoinsPreparation();
+        else if (mode == "--queued-prebuilds") ClosingDropsQueuedPrebuilds();
         else if (mode == "--compare-helpers") StoppingJoinsCompareHelpers();
         else if (mode == "--draw-committer") ShutdownJoinsDrawCommitter();
         else if (mode == "--shader-cache-writer") ShutdownJoinsShaderCacheWriter();
