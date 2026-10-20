@@ -16,6 +16,35 @@ namespace Hmd2 {
 struct ReprojectionStatus;
 struct ReprojectionOutput;
 struct ReprojectionInitializeParameter;
+struct ReprojectionLayer;
+struct ReprojectionBufferedLayer;
+
+struct ReprojectionOption {
+    std::uint32_t size;
+    std::uint32_t flags;
+    std::uint32_t reserved[30];
+};
+
+struct ReprojectionParameter {
+    const ReprojectionLayer* layers;
+    std::int32_t layerCount;
+    std::uint8_t padding[4];
+    const ReprojectionOption* option;
+};
+
+struct ReprojectionBufferedParameter {
+    const ReprojectionBufferedLayer* layers;
+    std::int32_t layerCount;
+    std::uint8_t padding[4];
+    const ReprojectionOption* option;
+};
+
+static_assert(sizeof(ReprojectionOption) == 128);
+static_assert(sizeof(ReprojectionParameter) == 24);
+static_assert(sizeof(ReprojectionBufferedParameter) == 24);
+static_assert(offsetof(ReprojectionParameter, option) == 16);
+static_assert(offsetof(ReprojectionBufferedParameter, option) == 16);
+
 
 struct MirroringParameter {
     void* workMemory;
@@ -270,17 +299,17 @@ int APS5_VABI sceHmd2ReprojectionSetMirroringOption(const Hmd2::MirroringOption*
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetParam() {
+int APS5_VABI sceHmd2ReprojectionSetParam(std::uint32_t bufferSetId, std::uint64_t frameId, const Hmd2::ReprojectionParameter* parameter, std::uint64_t reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetParamWithBuffer() {
+int APS5_VABI sceHmd2ReprojectionSetParamWithBuffer(std::uint32_t bufferSetId, std::uint64_t frameId, const Hmd2::ReprojectionBufferedParameter* parameter, std::uint64_t reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetRenderConfig() {
+int APS5_VABI sceHmd2ReprojectionSetRenderConfig(std::uint64_t flags, std::uint64_t reserved, std::uint64_t reserved2) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
