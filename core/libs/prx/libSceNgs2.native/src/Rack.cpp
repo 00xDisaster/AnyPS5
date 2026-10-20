@@ -247,7 +247,7 @@ int APS5_VABI sceNgs2RackLock(uintptr_t rack_handle) {
     const Ngs2Lock lock;
     const auto self = std::this_thread::get_id();
     auto* rack = Ngs2FindRack(rack_handle);
-    while (rack != nullptr && rack->lockDepth != 0 && rack->lockOwner != self) {
+    while (rack != nullptr && ((rack->lockDepth != 0 && rack->lockOwner != self) || Ngs2RenderingElsewhere(*rack->system))) {
         Ngs2WaitOnce();
         rack = Ngs2FindRack(rack_handle);
     }
