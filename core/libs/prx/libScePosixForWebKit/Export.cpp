@@ -246,7 +246,8 @@ int APS5_VABI getenv_np() {
     return 0;
 }
 
-int APS5_VABI gethostbyname_r() {
+APS5_EXPORT("dt8ermYp-Wc", scePosixForWebKit_gethostbyname_r);
+int APS5_VABI scePosixForWebKit_gethostbyname_r() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -271,7 +272,8 @@ int APS5_VABI setenv_np() {
     return 0;
 }
 
-int APS5_VABI sysinfo() {
+APS5_EXPORT("9Vqxt-qBPB4", scePosixForWebKit_sysinfo);
+int APS5_VABI scePosixForWebKit_sysinfo() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
