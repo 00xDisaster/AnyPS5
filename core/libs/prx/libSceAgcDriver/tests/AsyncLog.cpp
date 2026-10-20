@@ -243,7 +243,12 @@ void FullQueueBlocksCaller() {
 constexpr int ChildLines = 50;
 
 [[noreturn]] void EndChild(const std::string& mode, const char* output) {
-    std::FILE* file = std::fopen(output, "wb");
+    const auto path = std::filesystem::temp_directory_path() / output;
+#ifdef _WIN32
+    std::FILE* file = _wfopen(path.c_str(), L"wb");
+#else
+    std::FILE* file = std::fopen(path.c_str(), "wb");
+#endif
     Check(file != nullptr, "child output file");
 #ifdef _WIN32
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
@@ -292,11 +297,11 @@ void LinesSurviveEnd(const std::string& self, const std::string& mode) {
     (void)self;
     std::wstring executable(32768, L'\0');
     executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
-    const std::wstring command = L"\"\"" + executable + L"\" child " + std::filesystem::path(mode).wstring() + L" \"" + output.wstring() + L"\"\"";
+    const std::wstring command = L"\"\"" + executable + L"\" child " + std::filesystem::path(mode).wstring() + L" \"" + output.filename().wstring() + L"\"\"";
     const auto start = Clock::now();
     const int status = _wsystem(command.c_str());
 #else
-    const std::string command = Quote(self) + " child " + mode + " " + Quote(output.string());
+    const std::string command = Quote(self) + " child " + mode + " " + Quote(output.filename().string());
     const auto start = Clock::now();
     const int status = std::system(command.c_str());
 #endif
