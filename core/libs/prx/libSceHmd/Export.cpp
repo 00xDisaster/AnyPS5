@@ -186,7 +186,7 @@ int APS5_VABI sceHmdInternalAnotherScreenSendVideo(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetRequiredPUPVersion(void) {
+int APS5_VABI sceHmdInternalGetRequiredPUPVersion(std::uint32_t* firstVersion, std::uint32_t* secondVersion) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -250,7 +250,7 @@ int APS5_VABI sceHmdInternalSetVRMode(std::int32_t enabled) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalCrashReportReadDataSize(void) {
+int APS5_VABI sceHmdInternalCrashReportReadDataSize(std::uint32_t* dataSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -287,7 +287,7 @@ int APS5_VABI sceHmdInternalSetDebugSocialScreenMode(std::uint8_t mode) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetHmuPowerStatusForDebug(void) {
+int APS5_VABI sceHmdInternalGetHmuPowerStatusForDebug(std::uint8_t* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -335,7 +335,7 @@ int APS5_VABI sceHmdReprojectionStopCapture(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalIsCommonDlgMiniAppVr2d(void) {
+bool APS5_VABI sceHmdInternalIsCommonDlgMiniAppVr2d(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -359,12 +359,12 @@ int APS5_VABI sceHmdInternalGetDebugMode(std::uint8_t* mode) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalIsMiniAppVr2d(void) {
+bool APS5_VABI sceHmdInternalIsMiniAppVr2d(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdInternalIsCommonDlgVr2d(void) {
+bool APS5_VABI sceHmdInternalIsCommonDlgVr2d(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -374,7 +374,7 @@ int APS5_VABI sceHmdReprojectionSetOutputMinColor(float red, float green, float 
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetPortConnection(void) {
+int APS5_VABI sceHmdInternalSetPortConnection(std::uint64_t connection) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -384,7 +384,7 @@ int APS5_VABI sceHmdReprojectionDebugGetLastInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetM2LedOn(void) {
+int APS5_VABI sceHmdInternalSetM2LedOn(std::int32_t handle, std::uint32_t ledMask, std::uint32_t brightness) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -405,7 +405,7 @@ int APS5_VABI sceHmdInternalSetIpdSettingEnableForSystemService(std::uint8_t ena
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetLedOn(void) {
+int APS5_VABI sceHmdInternalSetLedOn(std::int32_t handle, std::uint32_t ledMask) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
