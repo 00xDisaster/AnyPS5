@@ -10,12 +10,15 @@ extern "C" {
 int APS5_VABI sceNetThreadCreate(Pthread*, void*, const char*);
 void APS5_VABI sceNetThreadExit();
 int APS5_VABI sceNetThreadJoin(Pthread);
+int APS5_VABI sceNetEmulationGet();
+int APS5_VABI sceNetEmulationSet();
 int* APS5_VABI sceNetErrnoLoc();
 }
 
 namespace {
 
 constexpr int Einval = 22;
+constexpr int Eopnotsupp = 45;
 constexpr int NetError = static_cast<int>(0x80410100u);
 
 struct ThreadParam {
@@ -74,6 +77,10 @@ int main() {
     while (run.started != 3 && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(std::chrono::milliseconds(1));
     Require(run.started == 3, "the thread created without an output did not run");
 
+    *sceNetErrnoLoc() = 0;
+    Require(sceNetEmulationGet() == (NetError | Eopnotsupp) && *sceNetErrnoLoc() == Eopnotsupp, "sceNetEmulationGet did not return EOPNOTSUPP");
+    *sceNetErrnoLoc() = 0;
+    Require(sceNetEmulationSet() == (NetError | Eopnotsupp) && *sceNetErrnoLoc() == Eopnotsupp, "sceNetEmulationSet did not return EOPNOTSUPP");
     std::puts("net thread tests passed");
     return 0;
 }

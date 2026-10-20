@@ -3122,14 +3122,12 @@ int APS5_VABI sceNetEmulationDebugSettingsGet(NetEmulationParameter* parameter, 
     return 0;
 }
 
-int APS5_VABI sceNetEmulationSet(const NetEmulationParameter* parameter, std::uint32_t flags) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNetEmulationSet(const NetEmulationParameter*, std::uint32_t) {
+    return fail(NET_EOPNOTSUPP);
 }
 
-int APS5_VABI sceNetEmulationGet(NetEmulationParameter* parameter, std::uint32_t flags) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNetEmulationGet(NetEmulationParameter*, std::uint32_t) {
+    return fail(NET_EOPNOTSUPP);
 }
 
 }
