@@ -3,6 +3,7 @@
 #include <relinker/analysis/UnusedNidFilter/EhFrameReader.hpp>
 #include <relinker/analysis/SceCodeExtent.hpp>
 #include <relinker/analysis/RelativeJumpTables.hpp>
+#include <codegen/IInstructionScanner.hpp>
 #include <codegen/x86/X64InstructionDecoder.hpp>
 #include <codegen/CodegenException.hpp>
 #include <io/BufferUtils.hpp>
@@ -12,6 +13,7 @@
 #include <limits>
 #include <map>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -38,7 +40,7 @@ public:
 
 }
 
-std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::vector<std::uint8_t>& bytes, const std::vector<Domain::ProgramHeader>& headers, const std::function<void(std::uint64_t, std::uint64_t)>& progress, std::set<Domain::VirtualAddress>* entryRoots) const {
+std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::vector<std::uint8_t>& bytes, const std::vector<Domain::ProgramHeader>& headers, const std::function<void(std::uint64_t, std::uint64_t)>& progress, std::set<Domain::VirtualAddress>* entryRoots, const std::function<void(std::string_view)>& message) const {
     std::uint64_t lastProgress = 0;
     const auto report = [&](std::uint64_t completed) {
         if (completed <= lastProgress) return;
@@ -96,11 +98,11 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
         range(offset, size);
         return offset;
     };
-    std::vector<std::pair<std::uint64_t, std::uint64_t>> sceFunctions;
+    std::vector<Domain::CodeRange> sceFunctions;
     if (sceBase) {
         const auto unwindFunctions = UnusedNidFilter::ReadExceptionFunctions(bytes, headers, {}, {});
-        for (const auto& function : unwindFunctions) sceFunctions.emplace_back(function.Begin, function.End);
-        std::sort(sceFunctions.begin(), sceFunctions.end());
+        for (const auto& function : unwindFunctions) sceFunctions.push_back({function.Begin, function.End});
+        sceFunctions = Codegen::MergeCodeRanges(std::move(sceFunctions));
         for (auto& header : codeHeaders) {
             if (header.Type != 1 || (header.Flags & 1) == 0) continue;
             range(header.Offset, header.FileSize);
@@ -121,14 +123,17 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
     std::map<std::uint64_t, std::uint64_t> tables;
     const auto inTable = [&](std::uint64_t address) { const auto after = tables.upper_bound(address); return after != tables.begin() && address < std::prev(after)->second; };
     const auto addRoot = [&](std::uint64_t address) { if (isCode(address) && !inTable(address)) roots.insert(address); };
+    const auto sceFunctionAfter = [&](std::uint64_t address) {
+        return std::upper_bound(sceFunctions.begin(), sceFunctions.end(), address, [](std::uint64_t value, const Domain::CodeRange& function) { return value < function.Begin; });
+    };
     const auto insideSceFunction = [&](std::uint64_t address) {
-        const auto after = std::upper_bound(sceFunctions.begin(), sceFunctions.end(), address, [](std::uint64_t value, const std::pair<std::uint64_t, std::uint64_t>& function) { return value < function.first; });
-        return after != sceFunctions.begin() && address < std::prev(after)->second;
+        const auto after = sceFunctionAfter(address);
+        return after != sceFunctions.begin() && address < std::prev(after)->End;
     };
     const auto nearSceFunctionEnd = [&](std::uint64_t address) {
-        const auto after = std::upper_bound(sceFunctions.begin(), sceFunctions.end(), address, [](std::uint64_t value, const std::pair<std::uint64_t, std::uint64_t>& function) { return value < function.first; });
+        const auto after = sceFunctionAfter(address);
         if (after == sceFunctions.begin()) return false;
-        const auto end = std::prev(after)->second;
+        const auto end = std::prev(after)->End;
         return address >= end && address - end < 256;
     };
     const auto codeAt = [&](std::uint64_t address) {
@@ -137,33 +142,53 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
                 return std::span<const std::uint8_t>(bytes.data() + header.Offset + (address - header.MappedAddress), header.FileSize - (address - header.MappedAddress));
         return std::span<const std::uint8_t>();
     };
-    const auto decodesToTransfer = [&](std::uint64_t address) {
+    const auto absoluteFsAccess = [](const std::uint8_t* code, const Codegen::DecodedInstructionInfo& info) {
+        return info.SegmentPrefix == 0x64 && info.OpcodeOffset + 2 < info.Length && (code[info.OpcodeOffset + 1] & 0xc7) == 0x04 && code[info.OpcodeOffset + 2] == 0x25;
+    };
+    struct GapRun {
+        bool Transfer = false;
+        bool AbsoluteFsAccess = false;
+    };
+    const auto decodeGapRun = [&](std::uint64_t address) {
+        const auto after = sceFunctionAfter(address);
+        const auto limit = after == sceFunctions.end() ? std::numeric_limits<std::uint64_t>::max() : after->Begin;
         const Codegen::X64InstructionDecoder probe;
-        for (std::size_t count = 0; count < 256; ++count) {
+        GapRun run;
+        for (std::size_t count = 0; count < 256 && address < limit; ++count) {
             const auto code = codeAt(address);
-            if (code.empty()) return false;
+            if (code.empty()) return run;
+            const auto available = std::min<std::uint64_t>(code.size(), limit - address);
             Codegen::DecodedInstructionInfo info;
             try {
-                info = probe.DecodeInstruction(code.data(), code.size());
+                info = probe.DecodeInstruction(code.data(), available);
             } catch (const Codegen::CodegenException&) {
-                return false;
+                return run;
             }
-            if (info.Length == 0 || info.Length > code.size()) return false;
+            if (info.Length == 0 || info.Length > available) return run;
+            if (absoluteFsAccess(code.data(), info)) run.AbsoluteFsAccess = true;
             switch (info.FlowKind) {
                 case Codegen::ControlFlowKind::UnconditionalJump:
                 case Codegen::ControlFlowKind::Return:
                 case Codegen::ControlFlowKind::IndirectJump:
                 case Codegen::ControlFlowKind::Trap:
-                    return true;
+                    run.Transfer = true;
+                    return run;
                 default:
                     break;
             }
             address += info.Length;
         }
-        return false;
+        return run;
     };
+    std::set<std::uint64_t> dataTargets;
     const auto addPointerRoot = [&](std::uint64_t address) {
-        if (sceFunctions.empty() || insideSceFunction(address) || (address % 16 == 0 && nearSceFunctionEnd(address) && decodesToTransfer(address))) addRoot(address);
+        if (sceFunctions.empty() || !isCode(address) || insideSceFunction(address)) {
+            addRoot(address);
+            return;
+        }
+        const auto run = decodeGapRun(address);
+        if (run.AbsoluteFsAccess || (address % 16 == 0 && nearSceFunctionEnd(address) && run.Transfer)) addRoot(address);
+        else dataTargets.insert(address);
     };
     const auto addAddressTakenRoot = [&](std::uint64_t address, const std::uint8_t* code, const Codegen::DecodedInstructionInfo& info) {
         if (!info.HasRipRelativeDisp || code[info.OpcodeOffset] != 0x8d || !(info.RexPrefix & 8)) return;
@@ -413,8 +438,7 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
                 position = crossed;
                 continue;
             }
-            const auto opcode = position + info.OpcodeOffset;
-            if (info.SegmentPrefix == 0x64 && opcode + 2 < next && (text[opcode + 1] & 0xc7) == 0x04 && text[opcode + 2] == 0x25) addRoot(header.MappedAddress + position);
+            if (absoluteFsAccess(text + position, info)) addRoot(header.MappedAddress + position);
             afterTransfer = info.FlowKind != Codegen::ControlFlowKind::Sequential && info.FlowKind != Codegen::ControlFlowKind::ConditionalBranch;
             position = next;
         }
@@ -522,7 +546,16 @@ std::set<Domain::VirtualAddress> CodeInstructionCollector::Collect(const std::ve
         }
     }
     report(10000);
-    if (entryRoots) *entryRoots = std::move(roots);
+    std::erase_if(dataTargets, [&](std::uint64_t address) { return roots.contains(address) || inTable(address); });
+    if (!dataTargets.empty() && message) {
+        std::ostringstream text;
+        text << "Took " << std::dec << dataTargets.size() << " pointer target(s) outside the unwind functions as data, the first at 0x" << std::hex << *dataTargets.begin() << '\n';
+        message(text.str());
+    }
+    if (entryRoots) {
+        *entryRoots = std::move(roots);
+        entryRoots->insert(dataTargets.begin(), dataTargets.end());
+    }
     return instructions;
 }
 

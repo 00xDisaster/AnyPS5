@@ -378,7 +378,8 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         runtime.Names = {Io::Utf8Path(image.SourcePath.filename()), image.Soname};
         runtime.DeferInitialization = deferred(index);
         std::vector<std::uint8_t> output;
-        if (windows) output = Elfpatcher::GuestModuleWriter().WriteWindows(image, runtime);
+        const auto message = [&](std::string_view text) { progress.Message(text); };
+        if (windows) output = Elfpatcher::GuestModuleWriter().WriteWindows(image, runtime, message);
         else {
             std::string guestRunPath = runPath;
             const auto relativeRoot = outputDirectory.lexically_relative(destination.lexically_normal()).generic_string();
@@ -394,7 +395,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
                 needed.push_back("$ORIGIN/" + dependencyPath.lexically_relative(image.SourcePath.parent_path()).generic_string());
             }
             needed.insert(needed.end(), moduleHostLibraries[index].begin(), moduleHostLibraries[index].end());
-            output = macos ? Elfpatcher::GuestModuleWriter().WriteMacOs(image, needed, guestRunPath) : Elfpatcher::GuestModuleWriter().WriteLinux(image, needed, guestRunPath);
+            output = macos ? Elfpatcher::GuestModuleWriter().WriteMacOs(image, needed, guestRunPath, message) : Elfpatcher::GuestModuleWriter().WriteLinux(image, needed, guestRunPath);
         }
         if (windows) {
             for (const auto& [name, provider] : guestNames) {
