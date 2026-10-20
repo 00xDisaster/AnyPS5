@@ -3,6 +3,18 @@
 
 #include <atomic>
 
+struct HmdDistortionCommandParameter;
+struct HmdWideNearDistortionCommandParameter;
+struct Hmd2dVrCommandParameter;
+
+struct HmdCommandBuffer {
+    const std::uint32_t* commands;
+    std::uint32_t dwordCount;
+};
+
+static_assert(sizeof(HmdCommandBuffer) == 16);
+static_assert(offsetof(HmdCommandBuffer, dwordCount) == 8);
+
 struct HmdReprojectionFrameParameter;
 struct HmdReprojectionWideNearParameter;
 struct HmdReprojection2dVrParameter;
@@ -419,7 +431,7 @@ int APS5_VABI sceHmdInternalMmapGetSensorCalibrationData(void* buffer, std::uint
     return 0;
 }
 
-int APS5_VABI sceHmdDistortionGetCorrectionCommand(void) {
+int APS5_VABI sceHmdDistortionGetCorrectionCommand(std::int32_t handle, const HmdDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -553,7 +565,7 @@ int APS5_VABI sceHmdInternalGetHmuSerialNumber(std::uint8_t* serialNumber) {
     return 0;
 }
 
-int APS5_VABI sceHmdDistortionGetWideNearCorrectionCommand(void) {
+int APS5_VABI sceHmdDistortionGetWideNearCorrectionCommand(std::int32_t handle, const HmdWideNearDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -608,7 +620,7 @@ int APS5_VABI sceHmdInternalSetVirtualDisplayHeight(std::uint8_t height) {
     return 0;
 }
 
-int APS5_VABI sceHmdDistortionInitialize(void) {
+int APS5_VABI sceHmdDistortionInitialize(void* workMemory) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -708,7 +720,7 @@ int APS5_VABI sceHmdInternalMmapGetModeId(std::uint32_t* modeId) {
     return 0;
 }
 
-int APS5_VABI sceHmdDistortionGet2dVrCommand(void) {
+int APS5_VABI sceHmdDistortionGet2dVrCommand(std::int32_t handle, const Hmd2dVrCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -718,7 +730,7 @@ int APS5_VABI sceHmdInternalDfuSendSize(std::int32_t size) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(void) {
+int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(std::int32_t handle, const HmdWideNearDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -728,7 +740,7 @@ int APS5_VABI sceHmdReprojectionStartMultilayer2(const HmdReprojectionMultilayer
     return 0;
 }
 
-int APS5_VABI sceHmdGetDistortionCorrectionCommand(void) {
+int APS5_VABI sceHmdGetDistortionCorrectionCommand(std::int32_t handle, const HmdDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -943,7 +955,7 @@ int APS5_VABI sceHmdReprojectionQueryGarlicBuffSize(void) {
     return 0x100000;
 }
 
-int APS5_VABI sceHmdGet2dVrCommand(void) {
+int APS5_VABI sceHmdGet2dVrCommand(std::int32_t handle, const Hmd2dVrCommandParameter* parameter, HmdCommandBuffer* commandBuffer) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
