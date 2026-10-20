@@ -19,6 +19,8 @@ int APS5_VABI printf_nid_postfix(const char*, ...);
 int APS5_VABI puts_nid_postfix(const char*);
 int APS5_VABI fprintf_nid_postfix(FileStream*, const char*, ...);
 int APS5_VABI fflush_nid_postfix(FileStream*);
+void APS5_VABI perror_nid_postfix(const char*);
+int* APS5_VABI __error_nid_postfix();
 extern FileStream _Stdout_nid_postfix;
 extern FileStream _Stderr_nid_postfix;
 }
@@ -78,6 +80,8 @@ static void GuestText(int standard, const std::string& text) {
         Require(fflush_nid_postfix(&_Stdout_nid_postfix) == 0);
     } else {
         Require(fprintf_nid_postfix(&_Stderr_nid_postfix, "guest-fprintf\n") >= 0);
+        *__error_nid_postfix() = 2;
+        perror_nid_postfix("guest-perror");
         Require(fflush_nid_postfix(&_Stderr_nid_postfix) == 0);
     }
     std::string got(text.size(), '\0');
@@ -94,6 +98,6 @@ int main() {
     Split(2);
     Split(1);
     GuestText(1, "guest-printf\nguest-puts\n");
-    GuestText(2, "guest-fprintf\n");
+    GuestText(2, "guest-fprintf\nguest-perror: No such file or directory\n");
     return 0;
 }
