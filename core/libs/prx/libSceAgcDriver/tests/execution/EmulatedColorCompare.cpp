@@ -345,10 +345,11 @@ int main() {
         Require(BindsDepthCompare(Compile(*device, Format16UNorm, {ClampEdge, FilterPoint})), "an R16 unorm texture left the native comparison path");
         Require(BindsDepthCompare(Compile(*device, Format32Float, {ClampEdge, FilterBilinear})), "an R32 float texture left the native comparison path");
         Require(!BindsDepthCompare(Compile(*device, Format8888UNorm, {ClampEdge, FilterBilinear})), "a color texture kept a depth-compare binding");
-        // Format 51 maps to VK_FORMAT_A2B10G10R10_SNORM_PACK32, which is not an
-        // image format on every Vulkan device (including RADV NAVI31). Keep this
-        // execution test limited to formats the test device can create.
-        for (const auto format : {1u, 2u, 8u, 13u, 14u, 15u, 23u, 24u, 29u, 36u, 50u, 56u, 57u, 65u, 66u, 71u, 77u}) {
+        for (const auto format : {1u, 2u, 8u, 13u, 14u, 15u, 23u, 24u, 29u, 36u, 50u, 51u, 56u, 57u, 65u, 66u, 71u, 77u}) {
+            if (format == 51u && !device->SupportsImageFormat(VK_FORMAT_A2B10G10R10_SNORM_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+                std::puts("measured GFX10 color format 51 returns zero: skipped, Vulkan device does not support the image format");
+                continue;
+            }
             const auto name = "measured GFX10 color format " + std::to_string(format) + " returns zero";
             RunZero(*device, format, {ClampEdge, FilterPoint}, name.c_str(), false, 0u);
         }
