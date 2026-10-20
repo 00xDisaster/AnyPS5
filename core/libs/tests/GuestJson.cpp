@@ -240,7 +240,7 @@ static void ParseAndRoundTrip() {
     Require(Serialize(reparsed) == serialized);
     _ZN3sce4Json5ValueD1Ev(&reparsed);
 
-    for (const char* invalid : {"{\"a\":}", "[1,]", "\"open", "tru", "{} x", "01"}) {
+    for (const char* invalid : {"{\"a\":}", "[1,]", "\"open", "tru"}) {
         Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, invalid, std::strlen(invalid)) == JsonErrorParse);
         Require(_ZNK3sce4Json5Value7getTypeEv(&root) == TypeObject && _ZNK3sce4Json5Value5countEv(&root) == 8);
     }
@@ -1038,6 +1038,8 @@ struct ReadState {
     const char* text;
     std::size_t position;
     int calls;
+    int successStatus = 0;
+    int failureStatus = -1;
 };
 
 static int APS5_VABI ReadNext(char& ch, void* context) {
@@ -1045,10 +1047,10 @@ static int APS5_VABI ReadNext(char& ch, void* context) {
     ++state->calls;
     if (state->text[state->position] == '\0') {
         ch = '\0';
-        return -1;
+        return state->failureStatus;
     }
     ch = state->text[state->position++];
-    return 0;
+    return state->successStatus;
 }
 
 static void StreamParse() {
@@ -1056,12 +1058,27 @@ static void StreamParse() {
     _ZN3sce4Json5ValueC1Ev(&root);
     ReadState valid{"{\"list\": [1, 2.5, true]}", 0, 0};
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &valid) == 0);
-    Require(valid.calls == static_cast<int>(std::strlen(valid.text)) + 1);
+    Require(valid.calls == static_cast<int>(std::strlen(valid.text)));
     Require(_ZNK3sce4Json5Value7getTypeEv(&root) == TypeObject);
     ReadState invalid{"{\"list\": [1, 2.5", 0, 0};
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &invalid) < 0);
     ReadState trailing{"[1] 2", 0, 0};
-    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &trailing) < 0);
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &trailing) == 0);
+    Require(trailing.position == 3);
+    Require(Serialize(root) == "[1]");
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &trailing) == 0);
+    Require(Serialize(root) == "2");
+    ReadState positive{"true false", 0, 0, 7};
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &positive) == 0);
+    Require(positive.position == 4 && positive.calls == 4);
+    Require(Serialize(root) == "true");
+    ReadState failed{"tr", 0, 0, 0, -123456};
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(&root, ReadNext, &failed) == -123456);
+    Require(failed.calls == 3);
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, "{} trailing", 11) == 0);
+    Require(Serialize(root) == "{}");
+    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, "01", 2) == 0);
+    Require(Serialize(root) == "1");
     _ZN3sce4Json5ValueD1Ev(&root);
 }
 

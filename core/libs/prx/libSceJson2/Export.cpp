@@ -360,30 +360,57 @@ Value& ObjectEntry(Object& object, const std::string& key) {
     }
 }
 
+using ParserReadCallback = int (APS5_VABI*)(char&, void*);
+
 class Parser {
 public:
-    Parser(const char* text, std::size_t size, const Handlers& handlers) : _text(text), _end(text + size), _handlers(handlers) {}
+    Parser(const char* text, std::size_t size, const Handlers& handlers) : text(text), end(text + size), handlers(handlers) {}
+    Parser(ParserReadCallback read, void* context, const Handlers& handlers) : read(read), context(context), handlers(handlers) {}
 
     bool Parse(Node& out) {
         skip();
-        if (!value(out)) return false;
-        skip();
-        return _text == _end || *_text == '\0';
+        return value(out);
     }
+
+    int Error() const { return readError < 0 ? readError : JsonErrorParse; }
 
 private:
     static constexpr std::size_t MaxNestingDepth = 512;
 
-    const char* _text;
-    const char* _end;
-    Handlers _handlers;
-    std::size_t _depth = 0;
+    const char* text = nullptr;
+    const char* end = nullptr;
+    ParserReadCallback read = nullptr;
+    void* context = nullptr;
+    Handlers handlers;
+    std::size_t depth = 0;
+    int current = -2;
+    int readError = 0;
 
-    void skip() { while (_text < _end && (*_text == ' ' || *_text == '\t' || *_text == '\n' || *_text == '\r')) ++_text; }
+    int peek() {
+        if (current != -2) return current;
+        if (read != nullptr) {
+            char character = 0;
+            readError = read(character, context);
+            current = readError < 0 ? -1 : static_cast<unsigned char>(character);
+        } else if (text == end) {
+            readError = JsonErrorParse;
+            current = -1;
+        } else {
+            current = static_cast<unsigned char>(*text++);
+        }
+        return current;
+    }
+    int take() {
+        const int character = peek();
+        if (character >= 0) current = -2;
+        return character;
+    }
+    void skip() { while (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r') take(); }
     bool literal(const char* word) {
-        const auto length = std::strlen(word);
-        if (static_cast<std::size_t>(_end - _text) < length || std::memcmp(_text, word, length) != 0) return false;
-        _text += length;
+        for (; *word != '\0'; ++word) {
+            if (peek() != static_cast<unsigned char>(*word)) return false;
+            take();
+        }
         return true;
     }
     static void appendUtf8(std::string& out, std::uint32_t code) {
@@ -393,10 +420,9 @@ private:
         else { out += static_cast<char>(0xf0 | (code >> 18)); out += static_cast<char>(0x80 | ((code >> 12) & 0x3f)); out += static_cast<char>(0x80 | ((code >> 6) & 0x3f)); out += static_cast<char>(0x80 | (code & 0x3f)); }
     }
     bool hex4(std::uint32_t& code) {
-        if (_end - _text < 4) return false;
         code = 0;
         for (int i = 0; i < 4; ++i) {
-            const char c = *_text++;
+            const int c = take();
             code <<= 4;
             if (c >= '0' && c <= '9') code |= static_cast<std::uint32_t>(c - '0');
             else if (c >= 'a' && c <= 'f') code |= static_cast<std::uint32_t>(c - 'a' + 10);
@@ -406,14 +432,14 @@ private:
         return true;
     }
     bool string(std::string& out) {
-        if (_text >= _end || *_text != '"') return false;
-        ++_text;
-        while (_text < _end && *_text != '"') {
-            const char c = *_text++;
+        if (peek() < 0 || peek() != '"') return false;
+        take();
+        while (peek() >= 0 && peek() != '"') {
+            const int c = take();
             if (static_cast<unsigned char>(c) < 0x20) return false;
             if (c != '\\') { out += c; continue; }
-            if (_text >= _end) return false;
-            switch (*_text++) {
+            if (peek() < 0) return false;
+            switch (take()) {
                 case '"': out += '"'; break;
                 case '\\': out += '\\'; break;
                 case '/': out += '/'; break;
@@ -436,31 +462,30 @@ private:
                 default: return false;
             }
         }
-        if (_text >= _end) return false;
-        ++_text;
+        if (peek() < 0) return false;
+        take();
         return true;
     }
     bool number(Node& out) {
-        const char* start = _text;
-        if (_text < _end && *_text == '-') ++_text;
-        if (_text >= _end || *_text < '0' || *_text > '9') return false;
-        if (*_text == '0') ++_text;
-        else while (_text < _end && *_text >= '0' && *_text <= '9') ++_text;
+        std::string token;
+        if (peek() >= 0 && peek() == '-') token.push_back(static_cast<char>(take()));
+        if (peek() < 0 || peek() < '0' || peek() > '9') return false;
+        while (peek() >= '0' && peek() <= '9') token.push_back(static_cast<char>(take()));
         bool integral = true;
-        if (_text < _end && *_text == '.') {
+        if (peek() >= 0 && peek() == '.') {
             integral = false;
-            ++_text;
-            if (_text >= _end || *_text < '0' || *_text > '9') return false;
-            while (_text < _end && *_text >= '0' && *_text <= '9') ++_text;
+            token.push_back(static_cast<char>(take()));
+            if (peek() < 0 || peek() < '0' || peek() > '9') return false;
+            while (peek() >= 0 && peek() >= '0' && peek() <= '9') token.push_back(static_cast<char>(take()));
         }
-        if (_text < _end && (*_text == 'e' || *_text == 'E')) {
+        if (peek() >= 0 && (peek() == 'e' || peek() == 'E')) {
             integral = false;
-            ++_text;
-            if (_text < _end && (*_text == '+' || *_text == '-')) ++_text;
-            if (_text >= _end || *_text < '0' || *_text > '9') return false;
-            while (_text < _end && *_text >= '0' && *_text <= '9') ++_text;
+            token.push_back(static_cast<char>(take()));
+            if (peek() >= 0 && (peek() == '+' || peek() == '-')) token.push_back(static_cast<char>(take()));
+            if (peek() < 0 || peek() < '0' || peek() > '9') return false;
+            while (peek() >= 0 && peek() >= '0' && peek() <= '9') token.push_back(static_cast<char>(take()));
         }
-        const std::string text(start, _text);
+        const std::string& text = token;
         if (integral) {
             errno = 0;
             if (text[0] == '-') {
@@ -482,8 +507,8 @@ private:
         return true;
     }
     bool value(Node& out) {
-        if (_text >= _end) return false;
-        switch (*_text) {
+        if (peek() < 0) return false;
+        switch (peek()) {
             case 'n': if (!literal("null")) return false; SetType(out, TypeNull); return true;
             case 't': if (!literal("true")) return false; SetType(out, TypeBoolean); out.boolean = true; return true;
             case 'f': if (!literal("false")) return false; SetType(out, TypeBoolean); return true;
@@ -495,47 +520,47 @@ private:
                 return true;
             }
             case '[': {
-                if (_depth == MaxNestingDepth) return false;
-                ++_text;
-                ++_depth;
+                if (depth == MaxNestingDepth) return false;
+                take();
+                ++depth;
                 SetType(out, TypeArray);
                 skip();
-                if (_text < _end && *_text == ']') { ++_text; --_depth; return true; }
+                if (peek() >= 0 && peek() == ']') { take(); --depth; return true; }
                 for (;;) {
                     Value item{};
                     Construct(item);
-                    item.node->handlers = _handlers;
+                    item.node->handlers = handlers;
                     out.array.items->push_back(item);
                     skip();
                     if (!value(*item.node)) return false;
                     skip();
-                    if (_text < _end && *_text == ',') { ++_text; continue; }
-                    if (_text < _end && *_text == ']') { ++_text; --_depth; return true; }
+                    if (peek() >= 0 && peek() == ',') { take(); continue; }
+                    if (peek() >= 0 && peek() == ']') { take(); --depth; return true; }
                     return false;
                 }
             }
             case '{': {
-                if (_depth == MaxNestingDepth) return false;
-                ++_text;
-                ++_depth;
+                if (depth == MaxNestingDepth) return false;
+                take();
+                ++depth;
                 SetType(out, TypeObject);
                 skip();
-                if (_text < _end && *_text == '}') { ++_text; --_depth; return true; }
+                if (peek() >= 0 && peek() == '}') { take(); --depth; return true; }
                 for (;;) {
                     skip();
                     std::string key;
                     if (!string(key)) return false;
                     skip();
-                    if (_text >= _end || *_text != ':') return false;
-                    ++_text;
+                    if (peek() < 0 || peek() != ':') return false;
+                    take();
                     skip();
                     Value& entry = ObjectEntry(out.object, key);
                     Clear(*entry.node);
-                    entry.node->handlers = _handlers;
+                    entry.node->handlers = handlers;
                     if (!value(*entry.node)) return false;
                     skip();
-                    if (_text < _end && *_text == ',') { ++_text; continue; }
-                    if (_text < _end && *_text == '}') { ++_text; --_depth; return true; }
+                    if (peek() >= 0 && peek() == ',') { take(); continue; }
+                    if (peek() >= 0 && peek() == '}') { take(); --depth; return true; }
                     return false;
                 }
             }
@@ -544,6 +569,25 @@ private:
         }
     }
 };
+
+int ParseValue(Value* out, Parser& parser) {
+    Node parsed{};
+    parsed.handlers = NodeOf(*out).handlers;
+    bool parsedOk = false;
+    try {
+        parsedOk = parser.Parse(parsed);
+    } catch (...) {
+        Clear(parsed);
+        throw;
+    }
+    if (!parsedOk) {
+        Clear(parsed);
+        return parser.Error();
+    }
+    Clear(NodeOf(*out));
+    *out->node = parsed;
+    return 0;
+}
 
 [[noreturn]] void APS5_VABI JsonMemAllocatorPureVirtual() {
     throw std::runtime_error("sce::Json::MemAllocator: pure virtual function called");
@@ -940,38 +984,18 @@ int APS5_VABI _ZNK3sce4Json5Value8toStringERNS0_6StringE(const Value* self, Stri
     return 0;
 }
 
-using ParserReadCallback = int (APS5_VABI*)(char&, void*);
-
-int APS5_VABI _ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(Value* out, const char* text, std::size_t size);
 
 int APS5_VABI _ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(Value* out, ParserReadCallback read, void* context) {
     if (read == nullptr) throw std::invalid_argument("sce::Json::Parser::parse: null read callback");
-    std::string text;
-    char ch = 0;
-    while (read(ch, context) == 0 && ch != '\0') text.push_back(ch);
-    return _ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(out, text.data(), text.size());
+    Parser parser(read, context, NodeOf(*out).handlers);
+    return ParseValue(out, parser);
 }
 
 int APS5_VABI _ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(Value* out, const char* text, std::size_t size) {
     if (size == 0) return JsonErrorParse;
     if (text == nullptr) throw std::invalid_argument("sce::Json::Parser::parse: null text");
-    Node parsed{};
-    parsed.handlers = NodeOf(*out).handlers;
-    Parser parser(text, size, parsed.handlers);
-    bool parsedOk = false;
-    try {
-        parsedOk = parser.Parse(parsed);
-    } catch (...) {
-        Clear(parsed);
-        throw;
-    }
-    if (!parsedOk) {
-        Clear(parsed);
-        return JsonErrorParse;
-    }
-    Clear(NodeOf(*out));
-    *out->node = parsed;
-    return 0;
+    Parser parser(text, size, NodeOf(*out).handlers);
+    return ParseValue(out, parser);
 }
 
 
