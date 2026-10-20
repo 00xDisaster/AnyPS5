@@ -443,6 +443,22 @@ void snapshotTests(const Context& context) {
     Require(TextureCacheUsage().sampledBytes == tiny->AllocationBytes(), "a snapshot whose " + std::to_string(tiny->AllocationBytes()) + "-byte image is smaller than its " + std::to_string(guestBytes) + " guest bytes counted " + std::to_string(TextureCacheUsage().sampledBytes) + " bytes, not its allocation");
 }
 
+void recycleTests(const Context& context) {
+    Block block(context);
+    ClearCachedTextures(context.device);
+    const auto address = block.Surface(0);
+    std::memset(reinterpret_cast<void*>(address), 0xa1, SurfaceBytes);
+    const auto first = Sampled(context, address);
+    Require(Sampled(context, address) == first, "an unchanged surface did not serve its snapshot");
+    std::memset(reinterpret_cast<void*>(address), 0xb2, SurfaceBytes);
+    const auto second = Sampled(context, address);
+    Require(second != first, "a changed surface did not replace its snapshot");
+    std::memset(reinterpret_cast<void*>(address), 0xa1, SurfaceBytes);
+    const auto third = Sampled(context, address);
+    Require(third != second, "the replaced snapshot's size-equal buffer was not reread from guest memory");
+    Require(Sampled(context, address) == third, "an unchanged surface did not serve its remade snapshot");
+}
+
 void heldTests(const Context& context) {
     Block block(context);
     auto held = Sampled(context, block.Surface(0));
@@ -769,6 +785,7 @@ int main(int argc, char** argv) {
             std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
             reportedBudgetTests(context);
             snapshotTests(context);
+            recycleTests(context);
             heldTests(context);
             releasedTests(context);
             rescanTests(context);
