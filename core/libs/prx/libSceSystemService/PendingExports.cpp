@@ -72,7 +72,20 @@ struct LncVideoFinalizeState;
 struct LncLocalProcessParam;
 struct LncAppStatus;
 struct LncShellUiAppStatus;
-struct AppMessagingMessage;
+struct AppMessagingMessage {
+    std::int32_t sender;
+    std::uint32_t messageType;
+    std::uint8_t payload[8192];
+    std::uint32_t payloadSize;
+    std::uint64_t timestamp;
+};
+
+static_assert(sizeof(AppMessagingMessage) == 8216);
+static_assert(offsetof(AppMessagingMessage, sender) == 0);
+static_assert(offsetof(AppMessagingMessage, messageType) == 4);
+static_assert(offsetof(AppMessagingMessage, payload) == 8);
+static_assert(offsetof(AppMessagingMessage, payloadSize) == 8200);
+static_assert(offsetof(AppMessagingMessage, timestamp) == 8208);
 
 struct UsbStorageEvent;
 struct UsbStorageDeviceInfo;
