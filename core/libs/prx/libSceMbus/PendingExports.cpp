@@ -2,7 +2,7 @@
 
 extern "C" {
 
-int APS5_VABI sceMbusAcquireControl() {
+int APS5_VABI sceMbusAcquireControl(std::uint64_t control, std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -11,22 +11,22 @@ int APS5_VABI sceMbusAcquireControlList() {
     return static_cast<int>(0x809B00FF);
 }
 
-int APS5_VABI sceMbusAcquireControlWithState() {
+int APS5_VABI sceMbusAcquireControlWithState(std::uint32_t deviceClass, std::int32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAcquireControlWithState2() {
+int APS5_VABI sceMbusAcquireControlWithState2(std::uint32_t deviceClass, std::int32_t moduleId, std::int32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAcquireControlWithStateFlag() {
+int APS5_VABI sceMbusAcquireControlWithStateFlag(std::uint32_t deviceClass, std::uint32_t moduleId, std::uint32_t state, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAddHandle() {
+int APS5_VABI sceMbusAddHandle(std::uint32_t deviceClass, std::int32_t handle, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -36,32 +36,32 @@ int APS5_VABI sceMbusAddHandleByDeviceId(std::uint32_t deviceClass, std::int32_t
     return 0;
 }
 
-int APS5_VABI sceMbusAddHandleByUserId() {
+int APS5_VABI sceMbusAddHandleByUserId(std::uint32_t deviceClass, std::int32_t handle, std::int32_t userId, std::int32_t first, std::int32_t second, std::int32_t third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAddHandleByVidPid() {
+int APS5_VABI sceMbusAddHandleByVidPid(std::uint32_t deviceClass, std::int32_t handle, std::int32_t first, std::uint16_t vendorId, std::uint16_t productId, std::int32_t second, std::int32_t third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAddHandleWithModuleId() {
+int APS5_VABI sceMbusAddHandleWithModuleId(std::uint32_t deviceClass, std::int32_t handle, std::uint32_t flags, std::uint32_t moduleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusAttachToApplicationByPid() {
+int APS5_VABI sceMbusAttachToApplicationByPid(std::int32_t processId, std::int32_t deviceClass, std::int32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusBindDeviceWithUserId() {
+int APS5_VABI sceMbusBindDeviceWithUserId(std::uint64_t deviceId, std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusChangeAppModuleState() {
+int APS5_VABI sceMbusChangeAppModuleState(std::uint32_t deviceClass, std::int32_t moduleId, std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -71,17 +71,17 @@ int APS5_VABI sceMbusCheckDriverCallback() {
     return 0;
 }
 
-int APS5_VABI sceMbusConvertToLocalDeviceId() {
+int APS5_VABI sceMbusConvertToLocalDeviceId(std::uint64_t deviceId, std::uint32_t* localId, std::uint32_t* deviceClass) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusConvertToLocalDeviceId2() {
+int APS5_VABI sceMbusConvertToLocalDeviceId2(std::uint64_t deviceId, std::uint32_t deviceClass, std::uint64_t* localId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusConvertToMbusDeviceId() {
+int APS5_VABI sceMbusConvertToMbusDeviceId(std::uint64_t localId, std::uint32_t deviceClass, std::uint64_t* deviceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
