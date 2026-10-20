@@ -37,9 +37,23 @@ struct SystemServiceJvmProcessParam;
 struct SystemServicePs2ProcessParam;
 struct SystemServiceAppInstallStatus;
 struct SystemServiceAppStatus;
-struct ShellCoreLaunchByUriParam;
+struct ShellCoreLaunchByUriParam {
+    std::uint32_t option;
+    std::int32_t userId;
+};
+
+static_assert(sizeof(ShellCoreLaunchByUriParam) == 8);
+static_assert(offsetof(ShellCoreLaunchByUriParam, option) == 0);
+static_assert(offsetof(ShellCoreLaunchByUriParam, userId) == 4);
 struct ShellCoreTelemetryToken;
-struct ShellCoreUmmStatus;
+struct ShellCoreUmmStatus {
+    std::int32_t state;
+    std::int32_t inDeviceMuteState;
+};
+
+static_assert(sizeof(ShellCoreUmmStatus) == 8);
+static_assert(offsetof(ShellCoreUmmStatus, state) == 0);
+static_assert(offsetof(ShellCoreUmmStatus, inDeviceMuteState) == 4);
 struct ShellCorePbtcUserInfoList;
 struct ShellCorePrivacyEventData;
 struct ShellCorePsnAccountInfoFirst;
@@ -836,7 +850,7 @@ std::uint64_t APS5_VABI sceShellCoreUtilGetFreeSizeOfAvContentsTmp() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetFreeSizeOfUserPartition(std::uint64_t* firstSize, std::uint64_t* secondSize) {
+int APS5_VABI sceShellCoreUtilGetFreeSizeOfUserPartition(std::uint64_t* freeSize, std::uint64_t* totalSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -881,7 +895,7 @@ int APS5_VABI sceShellCoreUtilGetHidConfigName(char* value, std::size_t capacity
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigNum(std::uint32_t* count) {
+int APS5_VABI sceShellCoreUtilGetHidConfigNum(std::int32_t* configNum) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1036,7 +1050,7 @@ int APS5_VABI sceShellCoreUtilGetUIStatus(std::uint64_t* status) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUmmStatus(std::uint32_t id, ShellCoreUmmStatus* status) {
+int APS5_VABI sceShellCoreUtilGetUmmStatus(std::int32_t userId, ShellCoreUmmStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1066,7 +1080,7 @@ int APS5_VABI sceShellCoreUtilGoBackToKratosCurrentSessionGame() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilHideBlocksFromUser(std::uint64_t first, std::int32_t second) {
+int APS5_VABI sceShellCoreUtilHideBlocksFromUser(std::int64_t bytes, std::int32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1276,7 +1290,7 @@ int APS5_VABI sceShellCoreUtilPostActivityForPsNow(std::int32_t type, const char
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilPostErrorLog(const char* firstText, std::uint32_t firstValue, const char* secondText, const char* thirdText, std::uint32_t secondValue, const char* fourthText) {
+int APS5_VABI sceShellCoreUtilPostErrorLog(const char* titleId, std::int32_t internalErrorCode, const char* shortError, const char* messageBuffer, std::int32_t suggestionType, const char* logReport) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
