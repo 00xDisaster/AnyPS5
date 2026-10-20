@@ -121,6 +121,7 @@ static void* APS5_VABI RetainedStackWorker(void* opaque) {
     probe.stack = reinterpret_cast<std::uintptr_t>(address);
     probe.markerAddress = probe.stack + size - 4096;
     *reinterpret_cast<std::uintptr_t*>(probe.markerAddress) = probe.marker;
+    Require(*reinterpret_cast<const std::uintptr_t*>(probe.markerAddress) == probe.marker);
     probe.hostTid = static_cast<int>(syscall(SYS_gettid));
     probe.done.store(true, std::memory_order_release);
     return nullptr;
@@ -139,10 +140,10 @@ static void WaitForProbe(StackProbe& probe) {
     }
 }
 
-static void RequireRetained(const StackProbe& probe) {
+static void RequireCachedStackDiscarded(const StackProbe& probe) {
     const auto range = GuestAllocations::GuestAllocationsLookup_nid_postfix(probe.markerAddress, false);
     Require(range != nullptr && range->readable && range->writable);
-    Require(*reinterpret_cast<const std::uintptr_t*>(probe.markerAddress) == probe.marker);
+    Require(*reinterpret_cast<const std::uintptr_t*>(probe.markerAddress) == 0);
 }
 
 static bool ReusesOneOf(const StackProbe& probe, const StackProbe* previous, std::size_t count) {
@@ -195,7 +196,7 @@ int main() {
         Require(scePthreadCreate(&thread, &attr, RetainedStackWorker, &joined[i], nullptr) == SCE_OK);
         Require(scePthreadAttrDestroy(&attr) == SCE_OK);
         Require(scePthreadJoin(thread, nullptr) == SCE_OK);
-        RequireRetained(joined[i]);
+        RequireCachedStackDiscarded(joined[i]);
     }
     StackProbe joinedReuse;
     joinedReuse.requested = JoinedStackSize;
@@ -208,7 +209,7 @@ int main() {
     Require(scePthreadAttrDestroy(&joinedAttr) == SCE_OK);
     Require(scePthreadJoin(joinedThread, nullptr) == SCE_OK);
     Require(ReusesOneOf(joinedReuse, joined, 6));
-    Require(*reinterpret_cast<const std::uintptr_t*>(joinedReuse.markerAddress) == joinedReuse.marker);
+    RequireCachedStackDiscarded(joinedReuse);
 
     constexpr std::size_t DetachedStackSize = 114688;
     StackProbe detached[5];
@@ -223,7 +224,7 @@ int main() {
         Require(scePthreadAttrDestroy(&attr) == SCE_OK);
         Require(scePthreadDetach(thread) == SCE_OK);
         WaitForProbe(detached[i]);
-        RequireRetained(detached[i]);
+        RequireCachedStackDiscarded(detached[i]);
     }
     StackProbe detachedReuse;
     detachedReuse.requested = DetachedStackSize;
@@ -236,7 +237,7 @@ int main() {
     Require(scePthreadAttrDestroy(&detachedAttr) == SCE_OK);
     Require(scePthreadJoin(detachedThread, nullptr) == SCE_OK);
     Require(ReusesOneOf(detachedReuse, detached, 5));
-    Require(*reinterpret_cast<const std::uintptr_t*>(detachedReuse.markerAddress) == detachedReuse.marker);
+    RequireCachedStackDiscarded(detachedReuse);
 
     for (std::size_t stackSize = 4u << 20; stackSize <= 20u << 20; stackSize += 1u << 20) {
         PthreadAttr attr = nullptr;
