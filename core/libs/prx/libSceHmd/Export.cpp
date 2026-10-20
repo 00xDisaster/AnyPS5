@@ -498,9 +498,9 @@ int APS5_VABI sceHmdInternalIsGameVr2d(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetAssyError(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceHmdGetAssyError(void* data) {
+    if (!data) return Hmd::ParameterNull;
+    return initialized.load() ? Hmd::DeviceDisconnected : Hmd::NotInitialized;
 }
 
 int APS5_VABI sceHmdReprojectionFinalize(void) {

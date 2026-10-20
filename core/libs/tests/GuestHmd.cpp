@@ -53,6 +53,14 @@ void CheckHandleQueries(std::int32_t expected) {
     for (const auto byte : sensor) Require(byte == 0x5a, "a refused sensor query wrote its output");
 }
 
+void CheckAssyError(std::int32_t expected) {
+    unsigned char data[32];
+    std::memset(data, 0x5a, sizeof(data));
+    Require(sceHmdGetAssyError(nullptr) == Hmd::ParameterNull, "null assembly error output accepted");
+    Require(sceHmdGetAssyError(data) == expected, "assembly error query without a headset");
+    for (const auto byte : data) Require(byte == 0x5a, "a refused assembly error query wrote its output");
+}
+
 }
 
 int main() {
@@ -70,6 +78,7 @@ int main() {
     Require(sceHmdGetDeviceInformation(&info) == Hmd::NotInitialized, "query before initialize");
     Require(std::memcmp(&info, &untouched, sizeof(info)) == 0, "failed query modified output");
     CheckHandleQueries(Hmd::NotInitialized);
+    CheckAssyError(Hmd::NotInitialized);
     Require(sceHmdGetDeviceInformationByHandle(0, &info) == Hmd::NotInitialized,
             "handle query before initialize");
     Require(sceHmdInitialize(nullptr) == Hmd::ParameterNull, "null initialize");
@@ -107,6 +116,7 @@ int main() {
             Require(std::memcmp(&info, &expected, sizeof(info)) == 0, "invalid handle modified output");
         }
         CheckHandleQueries(Hmd::InvalidHandle);
+        CheckAssyError(Hmd::DeviceDisconnected);
         Require(sceHmdGetDeviceInformationByHandle(0, nullptr) == Hmd::InvalidHandle,
                 "null query accepted invalid handle");
         Require(sceHmdTerminate() == 0, "terminate failed");

@@ -72,6 +72,7 @@ int APS5_VABI sceHmdReprojectionQueryOnionBuffSize(void);
 int APS5_VABI sceHmdGetFieldOfView(std::int32_t handle, void* fieldOfView);
 int APS5_VABI sceHmdGet2DEyeOffset(std::int32_t handle, void* leftOffset, void* rightOffset);
 int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, void* data, std::int32_t count);
+int APS5_VABI sceHmdGetAssyError(void* data);
 }
 
 #endif
