@@ -626,6 +626,22 @@ static void ObjectKeyOrder() {
     _ZN3sce4Json6ObjectD1Ev(&object);
 }
 
+static void StringComparison() {
+    String left{}, right{};
+    _ZN3sce4Json6StringC1EPKc(&left, "a");
+    _ZN3sce4Json6StringC1EPKc(&right, "a");
+    _ZN3sce4Json6String6appendEPKcm(&left, "\0suffix", 7);
+    Require(_ZNK3sce4Json6StringeqERKS1_(&left, &right));
+    Require(_ZNK3sce4Json6StringeqEPKc(&left, "a"));
+    Require(_ZNK3sce4Json6String7compareERKS1_(&left, &right) == 0);
+    Require(_ZNK3sce4Json6String7compareEPKc(&left, "a") == 0);
+    Require(_ZNK3sce4Json6String7compareEPKc(&left, "z") == -25);
+    Require(_ZNK3sce4Json6String7compareEPKc(&left, "") == 97);
+    Require(_ZNK3sce4Json6String7compareEPKc(&left, "\xff") == -158);
+    _ZN3sce4Json6StringD1Ev(&right);
+    _ZN3sce4Json6StringD1Ev(&left);
+}
+
 static void StringMethods() {
     Require(_ZN3sce4Json6String4nposE == static_cast<std::size_t>(-1));
     const auto text = [](const String& string) { return std::string(_ZNK3sce4Json6String5c_strEv(&string), _ZNK3sce4Json6String6lengthEv(&string)); };
@@ -1286,6 +1302,7 @@ int main() {
     ObjectIteratorCopies();
     AllocatorNotifyError();
     StringMethods();
+    StringComparison();
     ValueSwap();
     ArrayIteratorAdvance();
     ObjectOperations();
