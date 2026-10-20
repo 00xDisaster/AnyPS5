@@ -41,6 +41,28 @@ static_assert(offsetof(VrTracker2InitializeParameter, coordinateSystem) == 52);
 static_assert(offsetof(VrTracker2InitializeParameter, reserved) == 58);
 static_assert(sizeof(VrTracker2MemoryParameter) == 32);
 static_assert(sizeof(VrTracker2MemoryRequirement) == 32);
+struct VrTracker2CalibrationResult;
+struct VrTracker2TelemetryData;
+struct VrTracker2PoseParameter;
+struct VrTracker2PoseResult;
+
+struct VrTracker2MeshRequirement {
+    std::uint32_t vertexCount;
+    std::uint32_t indexCount;
+    std::uint32_t vertexDataSize;
+    std::uint32_t indexDataSize;
+};
+
+struct VrTracker2Pose {
+    float position[3];
+    std::uint8_t padding[4];
+    float orientation[4];
+};
+
+static_assert(sizeof(VrTracker2MeshRequirement) == 16);
+static_assert(sizeof(VrTracker2Pose) == 32);
+static_assert(offsetof(VrTracker2Pose, orientation) == 16);
+
 struct VrTracker2ResultParameter;
 struct VrTracker2Result;
 struct VrTracker2CoordinateLocation;
@@ -280,43 +302,43 @@ std::int32_t APS5_VABI VrTracker2ClearWord(void* output) {
 }
 
 APS5_EXPORT("jRmuXjsknsI", VrTracker2Unknown01);
-std::int32_t APS5_VABI VrTracker2Unknown01() {
+std::int32_t APS5_VABI VrTracker2Unknown01(VrTracker2CalibrationResult* result, std::uint32_t capacity) {
     NotImplemented_nid_no_patch("jRmuXjsknsI");
     return 0;
 }
 
 APS5_EXPORT("NBhWy+Gl0tY", VrTracker2Unknown02);
-std::int32_t APS5_VABI VrTracker2Unknown02() {
+std::int32_t APS5_VABI VrTracker2Unknown02(VrTracker2MeshRequirement* requirement, std::uint32_t format) {
     NotImplemented_nid_no_patch("NBhWy+Gl0tY");
     return 0;
 }
 
 APS5_EXPORT("9R6W33Au4B4", VrTracker2Unknown03);
-std::int32_t APS5_VABI VrTracker2Unknown03() {
+std::int32_t APS5_VABI VrTracker2Unknown03(std::uint32_t mode, void* output, std::size_t capacity, std::size_t* writtenSize) {
     NotImplemented_nid_no_patch("9R6W33Au4B4");
     return 0;
 }
 
 APS5_EXPORT("O8ZkTFtvUL4", VrTracker2Unknown04);
-std::int32_t APS5_VABI VrTracker2Unknown04() {
+std::int32_t APS5_VABI VrTracker2Unknown04(const VrTracker2ResultParameter* parameter, VrTracker2Result* result) {
     NotImplemented_nid_no_patch("O8ZkTFtvUL4");
     return 0;
 }
 
 APS5_EXPORT("940WPg+WwIk", VrTracker2Unknown05);
-std::int32_t APS5_VABI VrTracker2Unknown05() {
+std::int32_t APS5_VABI VrTracker2Unknown05(VrTracker2Pose* pose, std::uint64_t coordinateId) {
     NotImplemented_nid_no_patch("940WPg+WwIk");
     return 0;
 }
 
 APS5_EXPORT("oZDm1bynCaA", VrTracker2Unknown06);
-std::int32_t APS5_VABI VrTracker2Unknown06() {
+std::int32_t APS5_VABI VrTracker2Unknown06(const VrTracker2TelemetryData* data) {
     NotImplemented_nid_no_patch("oZDm1bynCaA");
     return 0;
 }
 
 APS5_EXPORT("U1VYczwqukY", VrTracker2Unknown07);
-std::int32_t APS5_VABI VrTracker2Unknown07() {
+std::int32_t APS5_VABI VrTracker2Unknown07(const VrTracker2PoseParameter* parameter, VrTracker2PoseResult* result) {
     NotImplemented_nid_no_patch("U1VYczwqukY");
     return 0;
 }
