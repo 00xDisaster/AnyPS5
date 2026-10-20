@@ -410,7 +410,7 @@ if(BUILD_TESTING)
 
     add_test_executable(guest_np_ps4_imports_tests tests/GuestNpPs4Imports.cpp)
     target_include_directories(guest_np_ps4_imports_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(guest_np_ps4_imports_tests PRIVATE libSceNpMatching2 libSceNpSignaling libc)
+    target_link_libraries(guest_np_ps4_imports_tests PRIVATE libSceNpMatching2 libSceNpSignaling libSceNpTrophy libc)
     configure_windows_unwind(guest_np_ps4_imports_tests)
     add_test(NAME guest_np_ps4_imports COMMAND guest_np_ps4_imports_tests)
     if(WIN32)
