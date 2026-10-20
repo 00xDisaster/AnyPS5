@@ -126,8 +126,12 @@ int APS5_VABI sceRudpInit_nid_postfix(void* mem_pool, int mem_pool_size) {
     return 0;
 }
 
-int APS5_VABI sceRudpActivate() {
-    return 0;
+int APS5_VABI sceRudpActivate(std::int32_t contextId, const void* address, std::uint32_t addressLength) {
+    std::lock_guard lock(g_mutex);
+    if (!g_inited) return RUDP_ERROR_NOT_INITIALIZED;
+    if (contextId < 0 || !address) return RUDP_ERROR_INVALID_ARGUMENT;
+    static_cast<void>(addressLength);
+    throw std::runtime_error(__func__);
 }
 
 int APS5_VABI sceRudpGetStatus(void* status, std::size_t size) {
