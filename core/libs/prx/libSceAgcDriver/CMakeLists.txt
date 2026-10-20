@@ -3202,7 +3202,6 @@ if(BUILD_TESTING)
     endif()
 endif()
 
-
 if(BUILD_TESTING)
     add_test_executable(agc_flat_scratch_tests tests/FlatScratch.cpp)
     target_link_libraries(agc_flat_scratch_tests PRIVATE shader_recompiler_agc_driver libc)
