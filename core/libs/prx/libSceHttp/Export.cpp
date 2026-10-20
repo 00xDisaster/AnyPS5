@@ -24,6 +24,9 @@
 // No network is emulated: contexts, templates and requests can be created, but any request
 // that would touch the network fails with the library's network error.
 static std::atomic<int> g_nextHandle{1};
+struct HttpConnectionStat;
+struct HttpRequestStat;
+
 using HttpRequestStatusCallback = void (APS5_VABI *)(int, int, void*);
 struct RequestStatusRegistration {
     HttpRequestStatusCallback callback;
@@ -706,12 +709,12 @@ int APS5_VABI sceHttpDbgShowMemoryPoolStat(void) {
     return 0;
 }
 
-int APS5_VABI sceHttpDbgGetConnectionStat(void) {
+int APS5_VABI sceHttpDbgGetConnectionStat(std::int32_t connectionId, HttpConnectionStat* stat) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHttpDbgGetRequestStat(void) {
+int APS5_VABI sceHttpDbgGetRequestStat(std::int32_t requestId, HttpRequestStat* stat) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -731,12 +734,12 @@ int APS5_VABI sceHttpGetAuthEnabled(int id, int* enabled) {
     return 0;
 }
 
-int APS5_VABI sceHttpSetEpollId(void) {
+int APS5_VABI sceHttpSetEpollId(std::int32_t id, std::int32_t epollId, void* userArg) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHttpGetEpollId(void) {
+int APS5_VABI sceHttpGetEpollId(std::int32_t id, std::int32_t* epollId, void** userArg) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -837,7 +840,7 @@ int APS5_VABI sceHttpGetRegisteredCtxIds(int contextId, int* netPoolId, int* ssl
     return 0;
 }
 
-int APS5_VABI sceHttpGetConnectionStat(void) {
+int APS5_VABI sceHttpGetConnectionStat(std::int32_t connectionId, HttpConnectionStat* stat) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
