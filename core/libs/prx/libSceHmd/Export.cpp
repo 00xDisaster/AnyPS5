@@ -452,7 +452,7 @@ int APS5_VABI sceHmdInternalAnotherScreenClose(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalCrashReportReadData(void) {
+int APS5_VABI sceHmdInternalCrashReportReadData(void* buffer, std::uint32_t* bytesRead, std::uint32_t bufferSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -696,7 +696,7 @@ int APS5_VABI sceHmdInternalGetHmuOpticalParam(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSeparateModeSendVideo(void) {
+int APS5_VABI sceHmdInternalSeparateModeSendVideo(const HmdScreenData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -812,12 +812,12 @@ int APS5_VABI sceHmdInternalSetBrightness(std::uint8_t brightness) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSocialScreenGetFadeState(void) {
+int APS5_VABI sceHmdInternalSocialScreenGetFadeState(std::int32_t* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSeparateModeSendAudio(void) {
+int APS5_VABI sceHmdInternalSeparateModeSendAudio(const HmdScreenData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
