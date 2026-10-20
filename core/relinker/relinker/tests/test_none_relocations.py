@@ -142,6 +142,17 @@ def main():
             for _ in range(3):
                 run = subprocess.run([str(moved_output)], capture_output=True, timeout=20)
                 assert run.returncode == 42, ("page-crossing relocation after the loader moved the image", run.returncode, run.stderr)
+        past_end_image = image_with_relocations([(0x1ffc, 8, 0x210)], False, False)
+        past_end_image.extend(bytes(0x1000))
+        struct.pack_into("<QQ", past_end_image, 64 + 32, len(past_end_image), len(past_end_image))
+        past_end_source = work / "invalid-base-relocation-past-end.elf"
+        past_end_source.write_bytes(past_end_image)
+        past_end_output = work / "invalid-base-relocation-past-end.exe"
+        past_end_result = subprocess.run([str(relinker), "--skip-sce-module", "--windows",
+                                          str(past_end_source), str(past_end_output)],
+                                         capture_output=True, text=True, timeout=20)
+        assert past_end_result.returncode == 2 and "ELF address is not contained in PT_LOAD memory" in past_end_result.stderr, past_end_result.stderr
+        assert not past_end_output.exists()
     print("No-op executable relocation tests passed")
 
 
