@@ -125,6 +125,7 @@
 - [sceNpTusTryAndSetVariableForCrossSaveAsync](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
 - [sceNpTusTryAndSetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
 - [sceNpTusTryAndSetVariableForCrossSaveVUserAsync](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusDeleteNpTitleCtx](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - the PS5 signature, error codes and child-request lifetime have not been measured on a console. Deletion invalidates the context and all its requests, following [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/a808e7626e3c7de8d0f0fda6a91f620b42f6c762/src/core/libraries/np/np_tus/np_tus.cpp#L158-L180).
 
 ### Functional
 
