@@ -89,16 +89,10 @@ GuestRudpEventHandler g_handler = nullptr;
 void* g_handler_arg = nullptr;
 
 struct RudpPoll {
-    uint32_t capacity;
+    std::size_t capacity;
     std::map<int, uint16_t> entries;
 };
 
-struct RudpPollEvent {
-    int ctxId;
-    uint16_t reqEvents;
-    uint16_t rtnEvents;
-};
-static_assert(sizeof(RudpPollEvent) == 8);
 
 int g_next_poll = 1;
 std::map<int, RudpPoll> g_polls;
@@ -386,7 +380,7 @@ int APS5_VABI sceRudpGetMaxSegmentSize(uint16_t* size) {
     return 0;
 }
 
-int APS5_VABI sceRudpPollCreate(uint32_t size) {
+int APS5_VABI sceRudpPollCreate(std::size_t size) {
     std::lock_guard<std::mutex> lk(g_mutex);
     if (!g_inited) {
         return RUDP_ERROR_NOT_INITIALIZED;
@@ -440,7 +434,7 @@ int APS5_VABI sceRudpPollControl(int pollId, int op, int ctxId, uint16_t events)
     return 0;
 }
 
-int APS5_VABI sceRudpPollWait(int pollId, RudpPollEvent* events, uint32_t eventLen, uint64_t timeout) {
+int APS5_VABI sceRudpPollWait(int pollId, RudpPollEvent* events, std::size_t eventLen, uint64_t timeout) {
     std::unique_lock<std::mutex> lk(g_mutex);
     if (!g_inited) {
         return RUDP_ERROR_NOT_INITIALIZED;
