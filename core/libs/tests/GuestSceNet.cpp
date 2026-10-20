@@ -467,6 +467,14 @@ static void CheckDontWait() {
     NetIovec in[] = {{buffer, sizeof(buffer)}};
     NetMsghdr receive{nullptr, 0, in, 1, nullptr, 0, 0};
     const auto start = std::chrono::steady_clock::now();
+    const int unbound = sceNetSocket("dontwait-unbound", 2, 2, 17);
+    Require(unbound >= 0);
+    const auto unboundStart = std::chrono::steady_clock::now();
+    Require(Failed(sceNetRecv(unbound, buffer, sizeof(buffer), DontWait), 35));
+    Require(Failed(sceNetRecvfrom(unbound, buffer, sizeof(buffer), DontWait, nullptr, nullptr), 35));
+    Require(Failed(sceNetRecvmsg(unbound, &receive, DontWait), 35));
+    Require(std::chrono::steady_clock::now() - unboundStart < std::chrono::seconds(1));
+    Require(sceNetSocketClose(unbound) == 0);
     Require(Failed(sceNetRecv(receiver, buffer, sizeof(buffer), DontWait), 35));
     Require(Failed(sceNetRecvfrom(receiver, buffer, sizeof(buffer), DontWait, nullptr, nullptr), 35));
     Require(Failed(sceNetRecvmsg(receiver, &receive, DontWait), 35));

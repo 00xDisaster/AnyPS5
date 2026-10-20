@@ -542,11 +542,11 @@ int wait_for_datagram(const Sock& socket, std::chrono::steady_clock::time_point 
     return WSAPoll(&descriptor, 1, static_cast<INT>(std::min<long long>(remaining, INT_MAX))) == 0 ? NET_EAGAIN : 0;
 }
 
-int wait_for_local_address(int s, const Sock& socket, bool empty) {
+int wait_for_local_address(int s, const Sock& socket, bool empty, int flags) {
     if (socket.type == NET_SOCK_STREAM || socket.bound) return 0;
     const bool named = has_local_address(socket.native->value);
     if (!named && (socket.read_shut || empty)) return RECEIVE_NOTHING;
-    if (!named && socket.nonblock) return NET_EAGAIN;
+    if (!named && (socket.nonblock || (flags & NET_MSG_DONTWAIT) != 0)) return NET_EAGAIN;
     const auto deadline = socket.rcv_timeout_us > 0
         ? std::chrono::steady_clock::now() + std::chrono::microseconds(socket.rcv_timeout_us)
         : std::chrono::steady_clock::time_point::max();
@@ -1000,7 +1000,7 @@ int64_t APS5_VABI sceNetRecv(int s, void* buf, size_t len, int flags) {
         socket = it->second;
     }
 #ifdef _WIN32
-    if (const int wait = wait_for_local_address(s, socket, len == 0)) return wait == RECEIVE_NOTHING ? 0 : fail(wait);
+    if (const int wait = wait_for_local_address(s, socket, len == 0, flags)) return wait == RECEIVE_NOTHING ? 0 : fail(wait);
 #endif
     const GuestArena::HostWrite destination(len == 0 ? nullptr : buf, len);
     if (!destination.Open()) return fail(NET_EFAULT);
@@ -1028,7 +1028,7 @@ int64_t APS5_VABI sceNetRecvfrom(int s, void* buf, size_t len, int flags, void* 
     const GuestArena::HostWrite lengthOutput(from == nullptr ? nullptr : fromlen, from == nullptr ? 0 : sizeof(*fromlen));
     if (!lengthOutput.Open()) return fail(NET_EFAULT);
 #ifdef _WIN32
-    if (const int wait = wait_for_local_address(s, socket, len == 0)) {
+    if (const int wait = wait_for_local_address(s, socket, len == 0, flags)) {
         if (wait != RECEIVE_NOTHING) return fail(wait);
         if (from) *fromlen = 0;
         return 0;
@@ -1140,7 +1140,7 @@ int64_t APS5_VABI sceNetRecvmsg(int s, NetMsghdr* msg, int flags) {
     }
     const bool datagram = socket.type != NET_SOCK_STREAM;
 #ifdef _WIN32
-    if (const int wait = wait_for_local_address(s, socket, total == 0)) {
+    if (const int wait = wait_for_local_address(s, socket, total == 0, flags)) {
         if (wait != RECEIVE_NOTHING) return fail(wait);
         msg->flags = 0;
         if (msg->name) msg->name_length = 0;
