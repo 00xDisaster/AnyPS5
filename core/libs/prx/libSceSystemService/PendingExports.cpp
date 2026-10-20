@@ -7,6 +7,17 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+struct ShellCoreErrorDialogParam {
+    const char* message;
+    const char* const* formatArgs;
+    std::uint8_t flag;
+};
+
+static_assert(sizeof(ShellCoreErrorDialogParam) == 24);
+static_assert(offsetof(ShellCoreErrorDialogParam, message) == 0);
+static_assert(offsetof(ShellCoreErrorDialogParam, formatArgs) == 8);
+static_assert(offsetof(ShellCoreErrorDialogParam, flag) == 16);
+
 struct ShellCoreLaunchByUriParam;
 struct ShellCoreTelemetryToken;
 struct ShellCoreUmmStatus;
@@ -1436,22 +1447,22 @@ int APS5_VABI sceShellCoreUtilSetUserFocus(std::int32_t userId) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilShowCriticalErrorDialog() {
+int APS5_VABI sceShellCoreUtilShowCriticalErrorDialog(std::uint32_t error, const char* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilShowErrorDialog() {
+int APS5_VABI sceShellCoreUtilShowErrorDialog(std::uint32_t error, const char* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilShowErrorDialogWithFormatArgs() {
+int APS5_VABI sceShellCoreUtilShowErrorDialogWithFormatArgs(std::uint32_t error, const char* message, const char* const* formatArgs) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilShowErrorDialogWithParam() {
+int APS5_VABI sceShellCoreUtilShowErrorDialogWithParam(std::uint32_t error, const ShellCoreErrorDialogParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1466,22 +1477,22 @@ int APS5_VABI sceShellCoreUtilSignalUserInput() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilStartPsNowGame() {
+int APS5_VABI sceShellCoreUtilStartPsNowGame(const char* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilStopPsNowGame() {
+int APS5_VABI sceShellCoreUtilStopPsNowGame(const char* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilTalkKeyEventReceived() {
+int APS5_VABI sceShellCoreUtilTalkKeyEventReceived(std::uint64_t first, std::uint32_t second, std::uint32_t third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilTestBusTransferSpeed() {
+int APS5_VABI sceShellCoreUtilTestBusTransferSpeed(const char* path, std::uint8_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1491,7 +1502,7 @@ int APS5_VABI sceShellCoreUtilTickHeartBeat() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilTriggerPapcUpdate() {
+int APS5_VABI sceShellCoreUtilTriggerPapcUpdate(std::uint32_t value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1501,12 +1512,12 @@ int APS5_VABI sceShellCoreUtilTurnOffScreenSaver() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilUnmountAppRight() {
+int APS5_VABI sceShellCoreUtilUnmountAppRight(const char* key) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilUnmountDownloadDataForShellUI() {
+int APS5_VABI sceShellCoreUtilUnmountDownloadDataForShellUI(const char* key) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
