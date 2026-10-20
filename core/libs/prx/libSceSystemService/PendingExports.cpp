@@ -1006,7 +1006,7 @@ int APS5_VABI sceShellCoreUtilGetUmmStatus(std::uint32_t id, ShellCoreUmmStatus*
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUserFocus(std::int32_t userId, std::int32_t* appId) {
+int APS5_VABI sceShellCoreUtilGetUserFocus(std::int32_t appId, std::int32_t* userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1326,112 +1326,112 @@ int APS5_VABI sceShellCoreUtilResetBgdcConfig() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetAppData() {
+int APS5_VABI sceShellCoreUtilSetAppData(const char* key, const char* value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetBgmProhibition() {
+int APS5_VABI sceShellCoreUtilSetBgmProhibition(std::uint32_t value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetDeviceIndexBehavior() {
+int APS5_VABI sceShellCoreUtilSetDeviceIndexBehavior(std::uint8_t first, std::uint32_t second, std::uint16_t third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetGameLiveStreamingOnAirFlag() {
+int APS5_VABI sceShellCoreUtilSetGameLiveStreamingOnAirFlag(std::int32_t enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetGameLiveStreamingStatus() {
+int APS5_VABI sceShellCoreUtilSetGameLiveStreamingStatus(std::int32_t active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetGnmCompositorOnScreenProfilerFlag() {
+int APS5_VABI sceShellCoreUtilSetGnmCompositorOnScreenProfilerFlag(std::int32_t enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetGpuLoadEmulationMode() {
+int APS5_VABI sceShellCoreUtilSetGpuLoadEmulationMode(std::uint32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetGpuLoadEmulationModeByAppId() {
+int APS5_VABI sceShellCoreUtilSetGpuLoadEmulationModeByAppId(std::int32_t appId, std::uint32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetIDUMode() {
+int APS5_VABI sceShellCoreUtilSetIDUMode(std::uint8_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetImposeStatusFlag() {
+int APS5_VABI sceShellCoreUtilSetImposeStatusFlag(std::int32_t enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetPsStoreIconLayout() {
+int APS5_VABI sceShellCoreUtilSetPsStoreIconLayout(std::uint32_t layout) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetPsStoreIconState() {
+int APS5_VABI sceShellCoreUtilSetPsStoreIconState(std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetRemotePlayStatus() {
+int APS5_VABI sceShellCoreUtilSetRemotePlayStatus(std::int32_t active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSharePlayStatus() {
+int APS5_VABI sceShellCoreUtilSetSharePlayStatus(std::int32_t active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSkipUpdateCheck() {
+int APS5_VABI sceShellCoreUtilSetSkipUpdateCheck(std::uint8_t skip) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSocialScreenStatus() {
+int APS5_VABI sceShellCoreUtilSetSocialScreenStatus(std::int32_t active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSplashScreenState() {
+int APS5_VABI sceShellCoreUtilSetSplashScreenState(std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSystemBGState() {
+int APS5_VABI sceShellCoreUtilSetSystemBGState(std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSystemBGWaveColor() {
+int APS5_VABI sceShellCoreUtilSetSystemBGWaveColor(std::uint32_t color) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetSystemBGWaveState() {
+int APS5_VABI sceShellCoreUtilSetSystemBGWaveState(std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetUIStatus() {
+int APS5_VABI sceShellCoreUtilSetUIStatus(std::uint64_t status, std::uint64_t mask) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetUserFocus() {
+int APS5_VABI sceShellCoreUtilSetUserFocus(std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
