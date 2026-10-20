@@ -192,12 +192,12 @@ int APS5_VABI sceHmdInternalResetInertialSensor(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionSetUserEventStart(void) {
+int APS5_VABI sceHmdReprojectionSetUserEventStart(std::int64_t eventQueue, std::int32_t eventId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdDistortionSetOutputMinColor(void) {
+int APS5_VABI sceHmdDistortionSetOutputMinColor(float red, float green, float blue) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -355,7 +355,7 @@ int APS5_VABI sceHmdInternalIsCommonDlgVr2d(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionSetOutputMinColor(void) {
+int APS5_VABI sceHmdReprojectionSetOutputMinColor(float red, float green, float blue) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -684,7 +684,7 @@ int APS5_VABI sceHmdReprojectionStartWithOverlay(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionSetUserEventEnd(void) {
+int APS5_VABI sceHmdReprojectionSetUserEventEnd(std::int64_t eventQueue, std::int32_t eventId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
