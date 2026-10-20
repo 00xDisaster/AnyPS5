@@ -691,21 +691,21 @@ int APS5_VABI sceShellCoreUtilAcquireSharePlayCpuBudget() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateAbort() {
+int APS5_VABI sceShellCoreUtilActivateAbort(std::intptr_t handle) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateGetStatus(std::uintptr_t handle, std::uint32_t* status, std::int32_t* result) {
+int APS5_VABI sceShellCoreUtilActivateGetStatus(std::intptr_t handle, std::int32_t* status, std::int32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateInit(std::uint32_t type, std::uintptr_t* handle) {
+int APS5_VABI sceShellCoreUtilActivateInit(std::int32_t type, std::intptr_t* handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateIsActivated(std::uint32_t type, std::uint8_t* activated) {
+int APS5_VABI sceShellCoreUtilActivateIsActivated(std::intptr_t handle, bool* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -714,15 +714,15 @@ int APS5_VABI sceShellCoreUtilActivateRecordActivation() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateStart() {
+int APS5_VABI sceShellCoreUtilActivateStart(std::intptr_t handle) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateStartAsync() {
+int APS5_VABI sceShellCoreUtilActivateStartAsync(std::intptr_t handle) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateTerm() {
+int APS5_VABI sceShellCoreUtilActivateTerm(std::intptr_t handle) {
     return 0;
 }
 
@@ -781,7 +781,7 @@ int APS5_VABI sceShellCoreUtilDeleteDiscInstalledTitleWorkaroundFile() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilDeleteDownloadedHidConfigFile(std::uint32_t deviceType) {
+int APS5_VABI sceShellCoreUtilDeleteDownloadedHidConfigFile(std::int32_t configIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -801,7 +801,7 @@ int APS5_VABI sceShellCoreUtilDoFsck(const char* path) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilDownloadHidConfigFileFromServer(std::uint32_t deviceType) {
+int APS5_VABI sceShellCoreUtilDownloadHidConfigFileFromServer(std::int32_t configIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -966,12 +966,12 @@ int APS5_VABI sceShellCoreUtilGetCrashReportUploadStatus() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetDeviceIndexBehavior(std::uint32_t* first, std::uint32_t* second, std::uint32_t* third) {
+int APS5_VABI sceShellCoreUtilGetDeviceIndexBehavior(std::uint32_t* behavior, std::int32_t* userId, std::uint32_t* scene) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetDeviceIndexBehaviorWithTimeout(std::uint32_t* first, std::uint32_t* second, std::uint32_t* third, std::uint8_t timeout) {
+int APS5_VABI sceShellCoreUtilGetDeviceIndexBehaviorWithTimeout(std::uint32_t* behavior, std::int32_t* userId, std::uint32_t* scene, std::uint8_t timeout) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -991,7 +991,7 @@ int APS5_VABI sceShellCoreUtilGetFreeSizeOfUserPartition(std::uint64_t* freeSize
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetFsckProgress(const char* path, std::uint32_t* progress) {
+int APS5_VABI sceShellCoreUtilGetFsckProgress(const char* titleId, std::uint32_t* progress) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1016,17 +1016,17 @@ int APS5_VABI sceShellCoreUtilGetGpuLoadEmulationModeByAppId(std::int32_t appId)
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigFileInfoString(char* value, std::size_t capacity, std::int32_t index) {
+int APS5_VABI sceShellCoreUtilGetHidConfigFileInfoString(char* value, std::size_t capacity, std::int32_t configIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigFileString(char* value, std::size_t capacity, std::int32_t index) {
+int APS5_VABI sceShellCoreUtilGetHidConfigFileString(char* value, std::size_t capacity, std::int32_t configIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigName(char* value, std::size_t capacity, std::int32_t index) {
+int APS5_VABI sceShellCoreUtilGetHidConfigName(char* value, std::size_t capacity, std::int32_t configIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1401,7 +1401,7 @@ int APS5_VABI sceShellCoreUtilNotifyFsReadError(std::int32_t first, std::int32_t
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotifyImeStatusChanged(std::int32_t appId, std::uint8_t status) {
+int APS5_VABI sceShellCoreUtilNotifyImeStatusChanged(std::int32_t imeStatus, std::uint8_t isCalledFromGame) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1521,7 +1521,7 @@ int APS5_VABI sceShellCoreUtilSetBgmProhibition(std::uint32_t value) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilSetDeviceIndexBehavior(std::uint8_t first, std::uint32_t second, std::uint16_t third) {
+int APS5_VABI sceShellCoreUtilSetDeviceIndexBehavior(std::uint32_t behavior, std::int32_t userId, std::uint8_t scene) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1661,7 +1661,7 @@ int APS5_VABI sceShellCoreUtilStopPsNowGame(const char* data) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilTalkKeyEventReceived(std::uint64_t first, std::uint32_t second, std::uint32_t third) {
+int APS5_VABI sceShellCoreUtilTalkKeyEventReceived(std::int64_t deviceId, std::int32_t userId, std::int32_t keyEventType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
