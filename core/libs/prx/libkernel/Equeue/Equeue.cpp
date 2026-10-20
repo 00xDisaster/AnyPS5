@@ -16,18 +16,21 @@ extern "C" int APS5_VABI sceKernelFstat(int d, FileStat* sb);
 
 static constexpr std::uint64_t FileRepollNs = 1000000;
 
-static bool UnreadFileBytes(KernelEqueueEvent* e) {
-    const int file = static_cast<int>(e->event.ident);
+struct UnreadFile {
+    bool measured = false;
+    std::int64_t bytes = 0;
+};
+
+static UnreadFile UnreadFileBytes(int file) {
     FileStat status{};
     if (sceKernelFstat(file, &status) != 0) {
-        return false;
+        return {};
     }
     const std::int64_t offset = sceKernelLseek(file, 0, 1);
     if (offset < 0) {
-        return false;
+        return {};
     }
-    e->event.data = static_cast<intptr_t>(status.st_size - offset);
-    return true;
+    return {true, status.st_size - offset};
 }
 
 static bool RegularFile(int descriptor) {
@@ -51,8 +54,14 @@ static KernelEqueueEvent FileEvent(int descriptor, int16_t filter, uint16_t flag
             return true;
         };
     } else {
+        event.filter.owner = std::make_shared<UnreadFile>();
         event.filter.pollFunc = [](KernelEqueueEvent* e) {
-            return UnreadFileBytes(e) && e->event.data != 0;
+            const auto* unread = static_cast<const UnreadFile*>(e->filter.owner.get());
+            if (!unread->measured || unread->bytes == 0) {
+                return false;
+            }
+            e->event.data = static_cast<intptr_t>(unread->bytes);
+            return true;
         };
     }
     event.filter.resetFunc = [](KernelEqueueEvent* e) {
@@ -138,6 +147,28 @@ bool KernelEqueuePrivate::PollEvents() {
         }
     }
     return polled;
+}
+
+void KernelEqueuePrivate::MeasureFiles(std::unique_lock<std::mutex>& lock) {
+    std::vector<std::pair<int, std::shared_ptr<void>>> files;
+    for (const auto& e : m_events) {
+        if (e.enabled && e.filter.repoll && e.event.filter == EVFILT_READ) {
+            files.emplace_back(static_cast<int>(e.event.ident), e.filter.owner);
+        }
+    }
+    if (files.empty()) {
+        return;
+    }
+    lock.unlock();
+    std::vector<UnreadFile> measured;
+    measured.reserve(files.size());
+    for (const auto& [file, owner] : files) {
+        measured.push_back(UnreadFileBytes(file));
+    }
+    lock.lock();
+    for (std::size_t i = 0; i < files.size(); ++i) {
+        *static_cast<UnreadFile*>(files[i].second.get()) = measured[i];
+    }
 }
 
 void KernelEqueuePrivate::WakePollers() {
@@ -269,6 +300,10 @@ int KernelEqueuePrivate::GetTriggeredEvents(KernelEvent* ev, int num) {
     if (m_closed) {
         return SCE_KERNEL_ERROR_EBADF;
     }
+    MeasureFiles(lock);
+    if (m_closed) {
+        return SCE_KERNEL_ERROR_EBADF;
+    }
     TriggerExpiredTimers(MonotonicNs());
     PollEvents();
     return CollectTriggered(ev, num);
@@ -276,6 +311,10 @@ int KernelEqueuePrivate::GetTriggeredEvents(KernelEvent* ev, int num) {
 
 bool KernelEqueuePrivate::HasTriggeredEvents() {
     std::unique_lock lock(m_mutex);
+    if (m_closed) {
+        return false;
+    }
+    MeasureFiles(lock);
     if (m_closed) {
         return false;
     }
@@ -294,6 +333,10 @@ int KernelEqueuePrivate::WaitForEventsUntil(KernelEvent* ev, int num, std::uint6
         return SCE_KERNEL_ERROR_EBADF;
     }
     for (;;) {
+        MeasureFiles(lock);
+        if (m_closed) {
+            return SCE_KERNEL_ERROR_EBADF;
+        }
         TriggerExpiredTimers(MonotonicNs());
         const bool polling = PollEvents();
         const int ret = CollectTriggered(ev, num);

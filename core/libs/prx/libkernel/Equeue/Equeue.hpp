@@ -100,6 +100,7 @@ private:
     int CollectTriggered(KernelEvent* ev, int num);
     int CollectOncePerWait(KernelEvent* ev, int num);
     bool PollEvents();
+    void MeasureFiles(std::unique_lock<std::mutex>& lock);
     void WakePollers();
     void WaitForDescriptors(std::unique_lock<std::mutex>& lock, std::uint64_t deadlineNanos);
 
