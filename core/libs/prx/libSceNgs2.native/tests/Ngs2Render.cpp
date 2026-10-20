@@ -1138,6 +1138,10 @@ static void APS5_VABI DestroyFromCallback(const Ngs2VoiceCallbackInfo* info) {
     static_cast<void>(destroy.system ? sceNgs2SystemDestroy(destroy.handle, nullptr) : sceNgs2RackDestroy(destroy.handle, nullptr));
 }
 
+static void APS5_VABI RenderFromCallback(const Ngs2VoiceCallbackInfo* info) {
+    static_cast<void>(RenderI16(info->callback_data));
+}
+
 static void TestDestroyDuringOwnRenderThrows() {
     for (const bool destroySystem : {false, true}) {
         const auto system = CreateSystem();
@@ -1156,6 +1160,30 @@ static void TestDestroyDuringOwnRenderThrows() {
         }
         Require(refused);
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    }
+    for (const bool destroySystem : {false, true}) {
+        const auto outer = CreateSystem();
+        const auto inner = CreateSystem();
+        uintptr_t outerRack = 0;
+        const std::vector<std::int16_t> pcm(Grain / 2, 1000);
+        const auto outerSampler = Sampler(outer, pcm, 0, &outerRack);
+        Patch(outerSampler, Mastering(outer, 1));
+        const auto innerSampler = Sampler(inner, pcm, 0);
+        Patch(innerSampler, Mastering(inner, 1));
+        const DestroyInCallback destroy{destroySystem ? outer : outerRack, destroySystem};
+        Control(outerSampler, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{{}, RenderFromCallback, inner, SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+        Control(innerSampler, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{{}, DestroyFromCallback, reinterpret_cast<std::uintptr_t>(&destroy), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+        Event(outerSampler, SCE_NGS2_VOICE_EVENT_PLAY);
+        Event(innerSampler, SCE_NGS2_VOICE_EVENT_PLAY);
+        bool refused = false;
+        try {
+            RenderI16(outer);
+        } catch (const std::runtime_error& error) {
+            refused = std::string(error.what()).find("is not implemented") != std::string::npos;
+        }
+        Require(refused);
+        Require(sceNgs2SystemDestroy(inner, nullptr) == SCE_NGS2_OK);
+        Require(sceNgs2SystemDestroy(outer, nullptr) == SCE_NGS2_OK);
     }
 }
 

@@ -98,13 +98,8 @@ static ExclusiveState& Exclusive() {
     return state;
 }
 
-static const Ngs2System*& RenderedHere() {
-    thread_local const Ngs2System* system = nullptr;
-    return system;
-}
-
 bool Ngs2RenderingHere(const Ngs2System& system) {
-    return RenderedHere() == &system;
+    return system.renderDepth != 0;
 }
 
 bool Ngs2ExclusiveElsewhere() {
@@ -410,17 +405,18 @@ int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBuffe
         state = &found;
     }
     Ngs2EnterExclusive();
+    system->renderDepth++;
     struct Release {
         SystemLockState* state;
-        const Ngs2System* rendered;
+        Ngs2System* system;
         ~Release() {
-            RenderedHere() = rendered;
+            system->renderDepth--;
             Ngs2LeaveExclusive();
             Ngs2NotifyWaiters();
             std::lock_guard locks(SystemLockMutex());
             ReleaseSystemLock(*state);
         }
-    } release{state, std::exchange(RenderedHere(), system)};
+    } release{state, system};
     Ngs2RenderSystem(*system, buffer_info, num_buffer_info);
     return SCE_NGS2_OK;
 }

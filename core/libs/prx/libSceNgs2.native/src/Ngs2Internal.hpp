@@ -175,6 +175,7 @@ struct Ngs2System {
     Ngs2BufferAllocator allocator{};
     std::uint32_t uid = 0;
     std::int64_t renderCount = 0;
+    std::uint32_t renderDepth = 0;
     std::uintptr_t userData = 0;
     std::vector<Ngs2Rack*> racks;
 };
