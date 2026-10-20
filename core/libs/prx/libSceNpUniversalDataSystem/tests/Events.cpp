@@ -258,6 +258,8 @@ void testLocaleIndependentNumberFormatting() {
     NpUniversalDataSystemEvent event;
     event.properties.Set("float", 0.1f);
     event.properties.Set("double", 0.1);
+    check(Uds::Describe(event.properties) == R"({"float":0.100000001,"double":0.10000000000000001})",
+          "described event properties changed with the numeric locale");
     const auto converted = Uds::StatEvent(event);
     check(converted.properties.size() == 2, "float and double event properties were lost");
     check(converted.properties[0].text == "0.100000001", "float property text changed with the numeric locale");
