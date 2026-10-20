@@ -908,6 +908,79 @@ static void TestStereoIntoSurround() {
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
+static bool AnsweredWithin(const std::atomic<bool>& answered) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!answered && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    return answered;
+}
+
+static void TestRackLockLeavesQueries() {
+    const auto system = CreateSystem();
+    const auto rack = CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER);
+    const auto voice = Voice(rack);
+    Require(sceNgs2RackLock(0x1234) == SCE_NGS2_ERROR_INVALID_RACK_HANDLE);
+    Require(sceNgs2RackLock(rack) == SCE_NGS2_OK);
+    Require(sceNgs2RackLock(rack) == SCE_NGS2_OK);
+    std::atomic<bool> answered = false;
+    std::thread query([&] {
+        std::uint32_t flags = 0;
+        Require(sceNgs2VoiceGetStateFlags(voice, &flags) == SCE_NGS2_OK);
+        answered = true;
+    });
+    const bool answeredWhileLocked = AnsweredWithin(answered);
+    std::atomic<bool> rendered = false;
+    std::thread render([&] {
+        RenderI16(system);
+        rendered = true;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const bool renderedWhileLocked = rendered;
+    Require(sceNgs2RackUnlock(rack) == SCE_NGS2_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const bool renderedWhileLockedOnce = rendered;
+    Require(sceNgs2RackUnlock(rack) == SCE_NGS2_OK);
+    query.join();
+    render.join();
+    Require(answeredWhileLocked);
+    Require(!renderedWhileLocked && !renderedWhileLockedOnce && rendered);
+    Require(sceNgs2RackUnlock(rack) == SCE_NGS2_ERROR_INVALID_RACK_HANDLE);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
+struct QueryInCallback {
+    uintptr_t voice = 0;
+    std::atomic<bool> answered = false;
+    bool answeredInCallback = false;
+    std::thread query;
+};
+
+static void APS5_VABI QueryFromAnotherThread(const Ngs2VoiceCallbackInfo* info) {
+    auto& callback = *reinterpret_cast<QueryInCallback*>(info->callback_data);
+    callback.query = std::thread([&callback] {
+        std::uint32_t flags = 0;
+        Require(sceNgs2VoiceGetStateFlags(callback.voice, &flags) == SCE_NGS2_OK);
+        callback.answered = true;
+    });
+    callback.answeredInCallback = AnsweredWithin(callback.answered);
+}
+
+static void TestVoiceCallbackLeavesQueries() {
+    const auto system = CreateSystem();
+    const auto master = Mastering(system, 1);
+    const std::vector<std::int16_t> pcm(Grain / 2, 1000);
+    const auto sampler = Sampler(system, pcm, 0);
+    Patch(sampler, master);
+    QueryInCallback callback;
+    callback.voice = sampler;
+    Control(sampler, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{{}, QueryFromAnotherThread, reinterpret_cast<std::uintptr_t>(&callback), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+    Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+    RenderI16(system);
+    Require(callback.query.joinable());
+    callback.query.join();
+    Require(callback.answered && callback.answeredInCallback);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
 static void TestLock() {
     const auto system = CreateSystem();
     const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
@@ -1169,6 +1242,8 @@ int main() {
     TestMatrixLevelClamp();
     TestStereoIntoSurround();
     TestLock();
+    TestRackLockLeavesQueries();
+    TestVoiceCallbackLeavesQueries();
     TestDefaultChannelMap();
     TestUnsetMatrix();
     TestRenderCapacity<float>(SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1);
