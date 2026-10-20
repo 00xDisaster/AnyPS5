@@ -11,7 +11,7 @@ int APS5_VABI sceNpAuthDeleteRequest(int req_id);
 int APS5_VABI sceNpAuthGetAuthorizationCode(int req_id, const void* param, void* auth_code);
 int APS5_VABI sceNpAuthGetAuthorizationCodeA(int req_id, const void* param, void* auth_code, int* issuer_id);
 int APS5_VABI sceNpAuthGetAuthorizationCodeV3(int req_id, const void* param, void* auth_code, int* issuer_id);
-int APS5_VABI sceNpAuthGetAuthorizedAppCode();
+int APS5_VABI sceNpAuthGetAuthorizedAppCode(std::int32_t, const NpAuthAuthorizedAppCodeParameter*, char*, std::int32_t*, bool*);
 int APS5_VABI sceNpAuthGetIdToken(int req_id, const void* param, void* id_token);
 int APS5_VABI sceNpAuthGetIdTokenA(int req_id, const void* param, void* id_token);
 int APS5_VABI sceNpAuthGetIdTokenV3(int req_id, const void* param, void* id_token);
@@ -67,7 +67,7 @@ int main() {
     int waitUnprocessed = 0;
     Require(sceNpAuthWaitAsync(asyncReq, &waitUnprocessed) == invalidId);
 
-    Require(sceNpAuthGetAuthorizedAppCode() == signedOut);
+    Require(sceNpAuthGetAuthorizedAppCode(syncReq, nullptr, nullptr, nullptr, nullptr) == invalidArgument);
 
     Require(sceNpAuthGetIdToken(syncReq, nullptr, token) == invalidArgument);
     Require(sceNpAuthGetIdToken(syncReq, param, nullptr) == invalidArgument);
