@@ -714,6 +714,14 @@ static void ValueSwap() {
     _ZN3sce4Json5Value4swapERS1_(&v1, &v2);
     Require(*_ZNK3sce4Json5Value10getIntegerEv(&v2) == 123);
     Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(_ZNK3sce4Json5Value9getStringEv(&v1)), "hello") == 0);
+    Require(_ZN3sce4Json5Value3setEl(&v1, -456) == 0);
+    const auto* firstStorage = _ZNK3sce4Json5Value10getIntegerEv(&v1);
+    const auto* secondStorage = _ZNK3sce4Json5Value10getIntegerEv(&v2);
+    _ZN3sce4Json5Value4swapERS1_(&v1, &v2);
+    Require(_ZNK3sce4Json5Value10getIntegerEv(&v1) == firstStorage && *firstStorage == 123);
+    Require(_ZNK3sce4Json5Value10getIntegerEv(&v2) == secondStorage && *secondStorage == -456);
+    _ZN3sce4Json5Value4swapERS1_(&v1, &v1);
+    Require(*_ZNK3sce4Json5Value10getIntegerEv(&v1) == 123);
     _ZN3sce4Json5ValueD1Ev(&v1);
     _ZN3sce4Json5ValueD1Ev(&v2);
 }

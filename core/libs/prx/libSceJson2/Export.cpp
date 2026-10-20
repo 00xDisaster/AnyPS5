@@ -837,7 +837,16 @@ Value* APS5_VABI _ZN3sce4Json5ValueaSERKS1_(Value* self, const Value* other) {
     return self;
 }
 void APS5_VABI _ZN3sce4Json5Value4swapERS1_(Value* self, Value* other) {
-    std::swap(self->node, other->node);
+    Node temporary{};
+    try {
+        AssignNode(temporary, NodeOf(*self));
+        AssignNode(NodeOf(*self), NodeOf(*other));
+        AssignNode(NodeOf(*other), temporary);
+    } catch (...) {
+        Clear(temporary);
+        throw;
+    }
+    Clear(temporary);
 }
 
 int APS5_VABI _ZN3sce4Json5Value3setENS0_9ValueTypeE(Value* self, ValueType type) { SetType(NodeOf(*self), type); return 0; }
