@@ -86,13 +86,23 @@ void ClosingDropsQueuedPrebuilds() {
     SubmitLibraryPrebuild([&] { started.set_value(); opened.wait(); });
     for (int index = 0; index < 3; ++index) SubmitLibraryPrebuild([&] { queuedRan = true; });
     running.wait();
+    auto awaited = std::make_shared<std::promise<void>>();
+    auto woken = awaited->get_future();
+    std::thread([awaited] {
+        AwaitLibraryPrebuilds();
+        awaited->set_value();
+    }).detach();
+    const bool waiting = woken.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
     auto closing = std::async(std::launch::async, [] { CloseRegistrationPreparation(); });
     const bool waited = closing.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
     gate.set_value();
     const bool returned = closing.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
+    const bool wokeUp = woken.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
     closing.get();
+    Require(waiting, "a waiter for the library prebuilds returned while one was still running");
     Require(waited, "closing returned while a library prebuild was still running");
     Require(returned, "closing did not return once the running library prebuild ended");
+    Require(wokeUp, "a waiter for the library prebuilds did not return after closing dropped the queued ones");
     Require(!queuedRan, "closing ran the queued library prebuilds");
     Require(RegistrationPreparationThreads() == 0, "closing the library prebuilds left their thread running");
 }
