@@ -220,7 +220,9 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
             if (const auto number = ConstantSyscallNumber(codeSection, codeSectionOffset, recent))
                 msg << ": syscall number " << std::dec << *number;
 
-        throw RelinkerException(msg.str(), match.Offset);
+        RelinkerException error(msg.str(), match.Offset);
+        error.InputPath = source;
+        throw error;
     });
     progress.Report({Domain::ProgressStage::Syscalls, source, limit, limit});
     return trapped;
