@@ -41,6 +41,7 @@ struct ShellCorePsnAccountInfoThird;
 struct ShellCorePsnAccountInfoFourth;
 struct ShellCorePsnAccountInfoFifth;
 struct ShellCoreAppLaunchTypeInfo;
+struct LncGpuCrashAppStatus;
 struct LncLaunchParam;
 struct LncDaemonEvent;
 struct LncShellUiEvent;
@@ -129,7 +130,7 @@ int APS5_VABI sceLncUtilBlockingGetEventForDaemon() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilContinueApp() {
+int APS5_VABI sceLncUtilContinueApp(std::uint32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -184,12 +185,12 @@ int APS5_VABI sceLncUtilGetAppCategoryType(std::int32_t appId, std::uint32_t* ca
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppFocusedAppStatus() {
+int APS5_VABI sceLncUtilGetAppFocusedAppStatus(LncAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppId() {
+int APS5_VABI sceLncUtilGetAppId(const char* titleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -209,7 +210,7 @@ int APS5_VABI sceLncUtilGetAppLaunchedUser(std::int32_t appId, std::int32_t* use
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppStatus() {
+int APS5_VABI sceLncUtilGetAppStatus(LncAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -264,7 +265,7 @@ int APS5_VABI sceLncUtilGetEventForShellUI(LncShellUiEvent* event) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetGpuCrashFullDumpAppStatus() {
+int APS5_VABI sceLncUtilGetGpuCrashFullDumpAppStatus(LncGpuCrashAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -314,7 +315,7 @@ int APS5_VABI sceLncUtilIsAppSuspended(std::int32_t appId, bool* suspended) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsCdlgActivated() {
+int APS5_VABI sceLncUtilIsCdlgActivated(std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -374,7 +375,7 @@ int APS5_VABI sceLncUtilNotifyCoredumpRequestProgress(std::int32_t appId, std::i
     return 0;
 }
 
-int APS5_VABI sceLncUtilNotifyVshReady() {
+int APS5_VABI sceLncUtilNotifyVshReady(std::uint32_t value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -389,7 +390,7 @@ int APS5_VABI sceLncUtilRaiseExceptionLocalProcess(std::int32_t appId, std::int3
     return 0;
 }
 
-int APS5_VABI sceLncUtilRegisterCdlgSharedMemoryName() {
+int APS5_VABI sceLncUtilRegisterCdlgSharedMemoryName(const char* name) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -489,7 +490,7 @@ int APS5_VABI sceLncUtilUnblockAppSuspend(const char* reason) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilUnregisterCdlgSharedMemoryName() {
+int APS5_VABI sceLncUtilUnregisterCdlgSharedMemoryName(const char* name) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1800,7 +1801,7 @@ int APS5_VABI sceSystemServiceGetAppFocusedAppStatus(SystemServiceAppStatus* sta
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppId() {
+int APS5_VABI sceSystemServiceGetAppId(const char* titleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
