@@ -101,6 +101,11 @@ static int CompleteAsync(const char* function, int req_id, const Http2AsyncOptio
     return 0;
 }
 
+using Http2WebSocketTextCallback = void (APS5_VABI*)(std::int32_t requestId, const char* text, std::uint32_t flags, void* userData);
+using Http2WebSocketDataCallback = void (APS5_VABI*)(std::int32_t requestId, const void* data, std::size_t dataSize, std::uint32_t flags, void* userData);
+using Http2WebSocketCloseCallback = void (APS5_VABI*)(std::int32_t requestId, const std::uint16_t* status, const char* reason, std::uint32_t flags, void* userData);
+using Http2WebSocketErrorCallback = void (APS5_VABI*)(std::int32_t requestId, std::int32_t error, void* userData);
+
 extern "C" {
 
 int APS5_VABI sceHttp2AddRequestHeader(int id, const char* name, const char* value, uint32_t mode) {
@@ -381,22 +386,22 @@ int APS5_VABI sceHttp2SetResolveRetry(int id, int32_t retry) {
     return 0;
 }
 
-int APS5_VABI sceHttp2WebSocketCreateRequest() {
+int APS5_VABI sceHttp2WebSocketCreateRequest(std::int32_t templateId, const char* url, Http2WebSocketTextCallback textCallback, Http2WebSocketDataCallback dataCallback, Http2WebSocketCloseCallback closeCallback, Http2WebSocketErrorCallback errorCallback, void* receiveBuffer, std::size_t receiveBufferSize, void* userData, const void* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHttp2WebSocketCloseAsync() {
+int APS5_VABI sceHttp2WebSocketCloseAsync(std::int32_t requestId, const std::uint16_t* status, const char* reason, std::uint8_t flags, const Http2AsyncOption* asyncOption, const void* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHttp2WebSocketSendTextMessageAsync() {
+int APS5_VABI sceHttp2WebSocketSendTextMessageAsync(std::int32_t requestId, const char* text, std::uint8_t flags, const Http2AsyncOption* asyncOption, const void* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHttp2WebSocketSendDataMessageAsync() {
+int APS5_VABI sceHttp2WebSocketSendDataMessageAsync(std::int32_t requestId, const void* data, std::size_t dataSize, std::uint8_t flags, const Http2AsyncOption* asyncOption, const void* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
