@@ -557,6 +557,47 @@ struct AudioOut2MasteringStatesHeader {
     std::uint32_t states_id;
 };
 
+struct AudioOut2MasteringStatesDescriptor {
+    std::uint32_t id;
+    std::uint32_t size;
+};
+
+struct AudioOut2MasteringCompressorStates {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_rms[3][8];
+    float compression_coeff[3][8];
+};
+
+struct AudioOut2MasteringCompressorStatesV2 {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_rms[4][8];
+    float compression_coeff[4][8];
+};
+
+struct AudioOut2MasteringLimiterStates {
+    AudioOut2MasteringStatesDescriptor descriptor;
+    std::uint32_t reserved[2];
+    float input_peak[8];
+    float output_peak[8];
+    float gain_peak[8];
+};
+
+struct AudioOut2MasteringStates {
+    AudioOut2MasteringStatesHeader states_header;
+    std::uint32_t reserved[3];
+    AudioOut2MasteringCompressorStates compressor_states;
+    AudioOut2MasteringLimiterStates limiter_states;
+};
+
+struct AudioOut2MasteringStatesV2 {
+    AudioOut2MasteringStatesHeader states_header;
+    std::uint32_t reserved[3];
+    AudioOut2MasteringCompressorStatesV2 compressor_states;
+    AudioOut2MasteringLimiterStates limiter_states;
+};
+
 struct AudioOutOutputParam {
     int handle;
     const void* ptr;
@@ -1398,6 +1439,11 @@ struct NpGameIntentData {
     std::uint8_t padding[7];
 };
 
+struct NpGameIntentInitParam {
+    std::size_t size;
+    std::uint8_t reserved[32];
+};
+
 struct NpGameIntentInfo {
     std::size_t size;
     std::int32_t user_id;
@@ -1894,6 +1940,13 @@ struct SystemGestureTouchRecognizerInformation {
 };
 
 struct SystemGestureTouchEvent { std::uint8_t reserve[168]; };
+
+struct SystemGestureTouchPadData {
+    std::int32_t pad_handle;
+    std::int32_t report_number;
+    const PadData* pad_data_buffer;
+    std::uint8_t reserve[8];
+};
 
 struct UserServiceLoginUserIdList { int user_id[4]; };
 

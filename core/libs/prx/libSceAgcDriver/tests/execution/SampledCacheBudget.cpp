@@ -50,7 +50,7 @@ constexpr std::uint64_t Ceiling = Budget + Budget / 4u;
 
 class Device {
 public:
-    explicit Device(bool resourceImages = false) {
+    explicit Device(bool enableStorageImageMultisample = true) {
 #ifdef _WIN32
         library = SDL_LoadObject("vulkan-1.dll");
 #else
@@ -96,13 +96,12 @@ public:
             queue.queueFamilyIndex = family;
             queue.queueCount = 1;
             queue.pQueuePriorities = &priority;
+            VkPhysicalDeviceFeatures supported{};
+            function<PFN_vkGetPhysicalDeviceFeatures>("vkGetPhysicalDeviceFeatures")(context.physical, &supported);
             VkPhysicalDeviceFeatures enabled{};
             enabled.shaderInt64 = VK_TRUE;
-            if (resourceImages) {
-                VkPhysicalDeviceFeatures supported{};
-                function<PFN_vkGetPhysicalDeviceFeatures>("vkGetPhysicalDeviceFeatures")(context.physical, &supported);
-                enabled.shaderStorageImageMultisample = supported.shaderStorageImageMultisample;
-            }
+            enabled.shaderStorageImageMultisample = enableStorageImageMultisample && supported.shaderStorageImageMultisample;
+            context.storageImageMultisample = enabled.shaderStorageImageMultisample == VK_TRUE;
             address.pNext = &bytes;
             std::vector<const char*> extensionsEnabled{VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, VK_KHR_8BIT_STORAGE_EXTENSION_NAME};
             if (hasExtension(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)) {
@@ -564,10 +563,10 @@ void frameTests(const Context& context) {
         hits += again == made[surface].lock();
     }
     Require(hits == capacity, "the next frame over the same " + std::to_string(frame) + " textures found " + std::to_string(hits) + " of them cached, not the " + std::to_string(capacity) + " the cache kept");
-    auto admitted = Sampled(context, block.Surface(frame - 1u));
-    Require(Sampled(context, block.Surface(frame - 1u)) == admitted, "a texture used a second time in the frame was not cached");
-    Require(TextureCacheUsage().sampledEntries == capacity && TextureCacheUsage().sampledBytes <= Budget, "the texture admitted on its second use left the cache over its budget");
-    admitted.reset();
+    auto refused = Sampled(context, block.Surface(frame - 1u));
+    Require(Sampled(context, block.Surface(frame - 1u)) != refused, "a texture used a second time in the frame was cached in place of one of the frame's textures");
+    Require(TextureCacheUsage().sampledEntries == capacity && TextureCacheUsage().sampledBytes <= Budget, "the texture used a second time left the cache over its budget");
+    refused.reset();
     Recorder::CountPresent();
     std::vector<std::weak_ptr<Texture>> moved(frame);
     for (std::size_t surface = 0; surface < frame; ++surface) moved[surface] = Sampled(context, block.Surface(frame + surface));
@@ -577,6 +576,71 @@ void frameTests(const Context& context) {
     for (std::size_t surface = 0; surface < frame; ++surface) moved[surface] = Sampled(context, block.Surface(frame + surface));
     for (std::size_t surface = 0; surface < capacity; ++surface) Require(!moved[surface].expired(), "surface " + std::to_string(frame + surface) + " of a second frame over other textures did not replace the textures last used two frames before");
     Require(TextureCacheUsage().sampledEntries == capacity, "a second frame over other textures left " + std::to_string(TextureCacheUsage().sampledEntries) + " entries cached");
+}
+
+void scanTests(const Context& context) {
+    Block block(context);
+    ClearCachedTextures(context.device);
+    Recorder::CountPresent();
+    const auto bytes = Sampled(context, block.Surface(0))->AllocationBytes();
+    const auto capacity = static_cast<std::size_t>(Budget / bytes);
+    const auto working = 2u * capacity;
+    Require(capacity >= 2u && working <= Surfaces && TextureCacheUsage().sampledEntries == 1u, "a snapshot of the 256 KiB surface holds " + std::to_string(bytes) + " bytes, which the test's 1 MiB budget does not fit as planned");
+    constexpr std::size_t Presents = 6;
+    constexpr std::size_t Uses = 2;
+    std::vector<std::weak_ptr<Texture>> last(working);
+    std::size_t hits = 0;
+    std::size_t lookups = 0;
+    for (std::size_t present = 0; present < Presents; ++present) {
+        Recorder::CountPresent();
+        for (std::size_t surface = 0; surface < working; ++surface) {
+            for (std::size_t use = 0; use < Uses; ++use) {
+                const auto texture = Sampled(context, block.Surface(surface));
+                if (present != 0u) {
+                    hits += texture == last[surface].lock();
+                    ++lookups;
+                }
+                last[surface] = texture;
+            }
+        }
+    }
+    Require(TextureCacheUsage().sampledBytes <= Budget, "the sampled texture cache holds more than its budget after a scan");
+    const auto wanted = (Presents - 1u) * Uses * capacity / 2u;
+    Require(hits >= wanted, "a cyclic scan using each of " + std::to_string(working) + " textures twice in a row, twice the " + std::to_string(capacity) + " the budget holds, found " + std::to_string(hits) + " of " + std::to_string(lookups) + " lookups cached, fewer than " + std::to_string(wanted));
+}
+
+void shrinkTests(const Context& context) {
+    Block block(context);
+    ClearCachedTextures(context.device);
+    Recorder::CountPresent();
+    OverrideCacheBudgetForTest(2u * Budget);
+    const auto bytes = Sampled(context, block.Surface(0))->AllocationBytes();
+    const auto capacity = static_cast<std::size_t>((2u * Budget) / bytes);
+    Require(capacity >= 4u && capacity + 1u <= Surfaces, "a snapshot of the 256 KiB surface holds " + std::to_string(bytes) + " bytes, which the test's 2 MiB budget does not fit as planned");
+    for (std::size_t surface = 1; surface < capacity; ++surface) Sampled(context, block.Surface(surface));
+    Require(TextureCacheUsage().sampledEntries == capacity, "the 2 MiB budget did not keep " + std::to_string(capacity) + " snapshots");
+    Recorder::CountPresent();
+    OverrideCacheBudgetForTest(Budget);
+    for (std::size_t surface = 0; surface < capacity; ++surface) Sampled(context, block.Surface(surface));
+    Sampled(context, block.Surface(capacity));
+    Require(TextureCacheUsage().sampledBytes <= Ceiling, "after the budget fell to 1 MiB, one insert left " + std::to_string(TextureCacheUsage().sampledBytes) + " bytes cached with every entry in use this frame, past a quarter over the budget");
+    OverrideCacheBudgetForTest(0);
+}
+
+void secondUseTests(const Context& context) {
+    Block block(context);
+    ClearCachedTextures(context.device);
+    Recorder::CountPresent();
+    const auto bytes = Sampled(context, block.Surface(0))->AllocationBytes();
+    const auto capacity = static_cast<std::size_t>(Budget / bytes);
+    Require(capacity >= 2u && capacity < Surfaces && TextureCacheUsage().sampledEntries == 1u, "a snapshot of the 256 KiB surface holds " + std::to_string(bytes) + " bytes, which the test's 1 MiB budget does not fit as planned");
+    for (std::size_t surface = 1; surface < capacity; ++surface) Sampled(context, block.Surface(surface));
+    Recorder::CountPresent();
+    auto first = Sampled(context, block.Surface(capacity));
+    Require(TextureCacheUsage().sampledEntries == capacity && first.use_count() == 1, "the first use in a frame of a texture the cache does not hold was cached in place of one the last frame used");
+    const auto second = Sampled(context, block.Surface(capacity));
+    Require(Sampled(context, block.Surface(capacity)) == second, "a texture used a second time in a frame whose least recently used entry is from the last frame was not cached");
+    Require(TextureCacheUsage().sampledEntries == capacity && TextureCacheUsage().sampledBytes <= Budget, "the texture admitted on its second use left the cache over its budget");
 }
 
 void earlyMissTests(const Context& context) {
@@ -720,6 +784,7 @@ int main(int argc, char** argv) {
         const bool memory = argc > 1 && std::string(argv[1]) == "memory";
         const std::string mode = argc > 1 ? argv[1] : "";
         const bool resources = mode == "resource-admission" || mode == "resource-oversized" || mode == "resource-clear";
+        const bool disableStorageImageMultisample = mode == "without-storage-image-multisample";
 #ifdef _WIN32
         if (!memory) _putenv_s("APS5_TEXTURE_CACHE_MIB", "1");
 #else
@@ -727,13 +792,28 @@ int main(int argc, char** argv) {
 #endif
         std::unique_ptr<Device> device;
         try {
-            device = std::make_unique<Device>(resources);
+            device = std::make_unique<Device>(!disableStorageImageMultisample);
         } catch (const std::exception& error) {
             if (std::getenv("ANYPS5_REQUIRE_VULKAN") != nullptr) throw;
             std::printf("skipped, no usable Vulkan device: %s\n", error.what());
             return VulkanTestSkipped;
         }
         auto context = device->GetContext();
+        if (disableStorageImageMultisample) {
+            PlaceholderImages placeholders(context);
+            for (std::uint32_t heap = ShaderRecompiler::RuntimeAbi::FirstStorageImageBinding;
+                 heap < ShaderRecompiler::RuntimeAbi::FirstImageBinding + ShaderRecompiler::RuntimeAbi::ImageBindingCount; ++heap) {
+                const auto shape = PlaceholderImageShapeOf(heap);
+                if (shape.samples == VK_SAMPLE_COUNT_1_BIT) continue;
+                bool refused = false;
+                try {
+                    placeholders.View(heap);
+                } catch (const std::runtime_error&) {
+                    refused = true;
+                }
+                Require(refused, "a device without storage-image MSAA returned a placeholder for typed multisample storage heap " + std::to_string(heap));
+            }
+        }
         TextureDetiler detiler(context);
         context.detiler = &detiler;
         if (resources) {
@@ -759,7 +839,10 @@ int main(int argc, char** argv) {
             rescanTests(context);
             viewEvictionTests(context);
             viewTests(context);
+            scanTests(context);
             frameTests(context);
+            shrinkTests(context);
+            secondUseTests(context);
             earlyMissTests(context);
             collidingKeyTests(context);
             ClearCachedTextures(context.device);
