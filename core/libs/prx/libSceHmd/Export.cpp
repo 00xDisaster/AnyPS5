@@ -3,6 +3,24 @@
 
 #include <atomic>
 
+struct HmdReprojectionInitializeParameter;
+struct HmdReprojectionMultilayerParameter;
+struct HmdDeviceInformation;
+struct HmdDistortionParameters;
+struct HmdInertialSensorData;
+struct HmdStatusReport;
+
+struct HmdFieldOfView {
+    float angles[4];
+};
+
+struct HmdAssemblyError {
+    float offsets[4];
+};
+
+static_assert(sizeof(HmdFieldOfView) == 16);
+static_assert(sizeof(HmdAssemblyError) == 16);
+
 struct HmdVr2dData;
 struct HmdPuPositionParameter;
 struct HmdOpticalParameter;
@@ -48,6 +66,13 @@ struct HmdMirroringAspect {
     std::uint16_t reserved2;
 };
 
+struct HmdMirroringAspectDebug {
+    std::uint16_t values[5];
+    std::uint8_t mode;
+};
+
+static_assert(sizeof(HmdMirroringAspectDebug) == 12);
+static_assert(offsetof(HmdMirroringAspectDebug, mode) == 10);
 static_assert(sizeof(HmdMirroringAspect) == 8);
 static_assert(offsetof(HmdMirroringAspect, aspect) == 2);
 
@@ -219,7 +244,7 @@ int APS5_VABI sceHmdInternalMirroringModeSetAspect(const HmdMirroringAspect* asp
     return 0;
 }
 
-int APS5_VABI sceHmdInternalDfuGetStatus(void) {
+int APS5_VABI sceHmdInternalDfuGetStatus(std::uint64_t* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -339,7 +364,7 @@ int APS5_VABI sceHmdGetDistortionWorkMemorySize(void) {
     return 0x20000;
 }
 
-int APS5_VABI sceHmdReprojectionSetDisplayBuffers(void) {
+int APS5_VABI sceHmdReprojectionSetDisplayBuffers(std::int32_t videoOutHandle, std::int32_t firstBufferIndex, std::int32_t secondBufferIndex, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -354,7 +379,7 @@ int APS5_VABI sceHmdInternalCreateSharedMemory(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalMirroringModeSetAspectDebug(void) {
+int APS5_VABI sceHmdInternalMirroringModeSetAspectDebug(const HmdMirroringAspectDebug* aspect) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -432,13 +457,13 @@ int APS5_VABI sceHmdInternalSetM2LedOn(std::int32_t handle, std::uint32_t ledMas
     return 0;
 }
 
-int APS5_VABI sceHmdGetFieldOfView(std::int32_t handle, void* fieldOfView) {
+int APS5_VABI sceHmdGetFieldOfView(std::int32_t handle, HmdFieldOfView* fieldOfView) {
     (void)handle;
     if (!fieldOfView) return Hmd::ParameterNull;
     return initialized.load() ? Hmd::InvalidHandle : Hmd::NotInitialized;
 }
 
-int APS5_VABI sceHmdReprojectionAddDisplayBuffer(void) {
+int APS5_VABI sceHmdReprojectionAddDisplayBuffer(std::int32_t bufferIndex, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -458,12 +483,12 @@ int APS5_VABI sceHmdInternal3dAudioSendData(std::int32_t port, const void* data,
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionInitialize(void) {
+int APS5_VABI sceHmdReprojectionInitialize(const HmdReprojectionInitializeParameter* parameter, std::uint32_t mode, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetDeviceInformationByHandle(void) {
+int APS5_VABI sceHmdInternalGetDeviceInformationByHandle(std::int32_t handle, HmdDeviceInformation* information) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -483,7 +508,7 @@ int APS5_VABI sceHmdInternalCrashReportReadData(void* buffer, std::uint32_t* byt
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetDeviceInformation(void) {
+int APS5_VABI sceHmdInternalGetDeviceInformation(HmdDeviceInformation* information) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -552,7 +577,7 @@ bool APS5_VABI sceHmdInternalIsGameVr2d(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetAssyError(void* data) {
+int APS5_VABI sceHmdGetAssyError(HmdAssemblyError* data) {
     if (!data) return Hmd::ParameterNull;
     return initialized.load() ? Hmd::DeviceDisconnected : Hmd::NotInitialized;
 }
@@ -692,7 +717,7 @@ int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionStartMultilayer2(void) {
+int APS5_VABI sceHmdReprojectionStartMultilayer2(const HmdReprojectionMultilayerParameter* parameter, std::int32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -761,7 +786,7 @@ int APS5_VABI sceHmdReprojectionStartWideNearWithOverlay(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetDistortionParams(void) {
+int APS5_VABI sceHmdGetDistortionParams(HmdDistortionParameters* parameters) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -821,7 +846,7 @@ int APS5_VABI sceHmdInternalSetDefaultLedData(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, void* data, std::int32_t count) {
+int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, HmdInertialSensorData* data, std::uint32_t count) {
     (void)handle;
     (void)data;
     (void)count;
@@ -848,7 +873,7 @@ int APS5_VABI sceHmdInternalSeparateModeSendAudio(const HmdScreenData* data) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetStatusReport(void) {
+int APS5_VABI sceHmdInternalGetStatusReport(std::int32_t handle, HmdStatusReport* report) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
