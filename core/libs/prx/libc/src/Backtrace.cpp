@@ -74,10 +74,7 @@ static_assert(sizeof(FrameRecord) == NameOffset);
     };
     TraceState state{addresses, MaxFrames, 0};
     _Unwind_Backtrace_nid_postfix(traceCallback, &state);
-    int captured = state.count;
-    if (captured <= 2) {
-        captured = static_cast<int>(RtlCaptureStackBackTrace(0, MaxFrames, addresses, nullptr));
-    }
+    const int captured = state.count;
 #endif
     std::vector<Frame> frames;
     for (int index = 2; index < captured && (limit < 0 || static_cast<int>(frames.size()) < limit); ++index) {
