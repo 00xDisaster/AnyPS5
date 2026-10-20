@@ -18,6 +18,13 @@ static_assert(offsetof(ShellCoreErrorDialogParam, message) == 0);
 static_assert(offsetof(ShellCoreErrorDialogParam, formatArgs) == 8);
 static_assert(offsetof(ShellCoreErrorDialogParam, flag) == 16);
 
+struct SystemServiceDaemonEvent;
+struct SystemServiceLocalProcessStatus;
+struct SystemServiceEvent;
+struct SystemServicePSButtonEvent;
+struct SystemServicePrivacyDefinitionData;
+struct SystemServicePrivacyDefinitionVersion;
+struct SystemServiceTitleWorkaroundInfo;
 struct SystemServiceLocalProcessParam;
 struct SystemServiceJvmProcessParam;
 struct SystemServicePs2ProcessParam;
@@ -1813,22 +1820,22 @@ int APS5_VABI sceSystemServiceGetAppStatus(SystemServiceAppStatus* status) {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppTitleId() {
+int APS5_VABI sceSystemServiceGetAppTitleId(std::int32_t appId, char* titleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppType() {
+int APS5_VABI sceSystemServiceGetAppType(std::int32_t appId, std::int32_t* type) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetDbgExecutablePath() {
+int APS5_VABI sceSystemServiceGetDbgExecutablePath(char* path, std::uint64_t selector) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetEventForDaemon() {
+int APS5_VABI sceSystemServiceGetEventForDaemon(SystemServiceDaemonEvent* event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1838,7 +1845,7 @@ int APS5_VABI sceSystemServiceGetGpuLoadEmulationMode() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetLocalProcessStatusList() {
+int APS5_VABI sceSystemServiceGetLocalProcessStatusList(SystemServiceLocalProcessStatus* statuses, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1848,7 +1855,7 @@ int APS5_VABI sceSystemServiceGetMainAppTitleId() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetPSButtonEvent() {
+int APS5_VABI sceSystemServiceGetPSButtonEvent(const SystemServiceEvent* event, SystemServicePSButtonEvent* buttonEvent) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1873,12 +1880,12 @@ int APS5_VABI sceSystemServiceGetParentSocketForPsmKit() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetPlatformPrivacyDefinitionData() {
+int APS5_VABI sceSystemServiceGetPlatformPrivacyDefinitionData(const char* key, SystemServicePrivacyDefinitionData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetPlatformPrivacyDefinitionVersion() {
+int APS5_VABI sceSystemServiceGetPlatformPrivacyDefinitionVersion(const char* key, SystemServicePrivacyDefinitionVersion* version) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1888,7 +1895,7 @@ int APS5_VABI sceSystemServiceGetPlatformPrivacySetting() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetRecentLotusPushedButton() {
+int APS5_VABI sceSystemServiceGetRecentLotusPushedButton(std::uint32_t timeout, std::int32_t* deviceId, std::uint32_t* buttons) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1913,7 +1920,7 @@ int APS5_VABI sceSystemServiceGetSubAppTitleIdForSP() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetTitleWorkaroundInfo() {
+int APS5_VABI sceSystemServiceGetTitleWorkaroundInfo(SystemServiceTitleWorkaroundInfo* info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1933,12 +1940,12 @@ int APS5_VABI sceSystemServiceInitializeForShellCore() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceInvokeAppLaunchLink() {
+int APS5_VABI sceSystemServiceInvokeAppLaunchLink(const char* uri) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsAppSuspended() {
+int APS5_VABI sceSystemServiceIsAppSuspended(std::int32_t appId, bool* suspended) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
