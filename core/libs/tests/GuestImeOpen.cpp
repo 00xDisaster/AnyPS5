@@ -146,6 +146,22 @@ int32_t APS5_VABI SetInsideFilter(char16_t* outText, uint32_t* outTextLength, co
     return 0;
 }
 
+bool g_caretInsideFirstCall = true;
+int g_caretInsideRc = -1;
+
+int32_t APS5_VABI SetCaretInsideFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
+    if (g_caretInsideFirstCall) {
+        g_caretInsideFirstCall = false;
+        const Caret caret{0.0f, 0.0f, 0, 0};
+        g_caretInsideRc = sceImeSetCaret(&caret);
+    }
+    for (uint32_t i = 0; i < sourceTextLength; ++i) {
+        outText[i] = sourceText[i];
+    }
+    *outTextLength = sourceTextLength;
+    return 0;
+}
+
 void Require(bool value, const char* message) {
     if (value) return;
     std::fprintf(stderr, "%s\n", message);
@@ -494,6 +510,24 @@ void CheckTextFilter() {
     Require(std::u16string(buffers.text) == u"zz", "the setText inside the filter wins");
     Require(std::u16string(reinterpret_cast<const char16_t*>(buffers.work)) == u"zz", "the setText inside the filter wins in the work copy");
     Require(sceImeClose_nid_postfix() == 0, "close the set-inside session");
+
+    buffers = Buffers{};
+    param = MakeParam(buffers, 8);
+    std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
+    param.filter = reinterpret_cast<ImeTextFilter>(&SetCaretInsideFilter);
+    Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a filter that moves the caret");
+    Drain();
+    g_caretInsideFirstCall = true;
+    g_caretInsideRc = -1;
+    Publish(ImeHostInputKind::Text, "c");
+    Require(Drain().empty(), "an edit whose filter moved the caret sends no event");
+    Require(g_caretInsideRc == 0, "sceImeSetCaret inside the filter returns 0");
+    Require(std::u16string(buffers.text) == u"ab", "the discarded edit is not in the buffer");
+    Publish(ImeHostInputKind::Text, "d");
+    RequireText(Drain().at(0), EventUpdateText, u"dab", 1, 0, 1);
+    Require(std::u16string(buffers.text) == u"dab", "the edit after the discard builds on the old text");
+    Require(std::u16string(reinterpret_cast<const char16_t*>(buffers.work)) == u"dab", "the edit after the discard reaches the work copy");
+    Require(sceImeClose_nid_postfix() == 0, "close the caret-inside session");
 }
 
 void CheckHostEvents() {

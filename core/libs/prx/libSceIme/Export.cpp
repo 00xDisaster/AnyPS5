@@ -554,8 +554,13 @@ int APS5_VABI sceImeUpdate(EventHandler handler) {
             std::u16string filtered;
             const bool accepted = RunTextFilter(filter, filterText, filterMaxLength, filterMultiline, &filtered);
             std::lock_guard lock(g_imeMutex);
-            if (g_session && g_session->id == sessionId && g_session->revision == sessionRevision) {
-                CommitFilteredEdit(*g_session, accepted ? &filtered : nullptr, filterOldText);
+            if (g_session && g_session->id == sessionId) {
+                if (g_session->revision == sessionRevision) {
+                    CommitFilteredEdit(*g_session, accepted ? &filtered : nullptr, filterOldText);
+                } else if (g_session->text == filterText) {
+                    g_session->text = filterOldText;
+                    NormalizeCaret(*g_session);
+                }
             }
             continue;
         }
