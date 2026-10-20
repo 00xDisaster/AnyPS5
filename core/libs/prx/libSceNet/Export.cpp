@@ -46,6 +46,18 @@
 
 // Guest socket descriptors retain PS5 semantics while their transport is backed by host sockets.
 
+struct NetSockInfo6;
+struct NetStatisticsInfo;
+struct NetInterfaceStats;
+struct NetRouteInfo;
+struct NetDebugParameter;
+struct NetArpInfo;
+struct NetAppMemoryInfo;
+struct NetSystemMemoryInfo;
+struct NetBandwidthParameter;
+struct NetDataTraffic;
+struct NetEmulationParameter;
+
 struct NetResolverConnection;
 struct NetThreadParameter;
 struct NetInitializeParameter;
@@ -2075,12 +2087,12 @@ int APS5_VABI sceNetClearDnsCache(int flags) {
     return 0;
 }
 
-int APS5_VABI sceNetGetStatisticsInfo(void) {
+int APS5_VABI sceNetGetStatisticsInfo(NetStatisticsInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetGetInterfaceStats(void) {
+int APS5_VABI sceNetGetInterfaceStats(NetInterfaceStats* stats, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2134,7 +2146,7 @@ int APS5_VABI sceNetResolverConnectDestroy(NetResolverConnection* connection) {
     return 0;
 }
 
-int APS5_VABI sceNetGetSockInfo6(void) {
+int APS5_VABI sceNetGetSockInfo6(std::int32_t socket, NetSockInfo6* info, std::uint32_t capacity, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2153,12 +2165,12 @@ int APS5_VABI sceNetShowRoute6WithMemory(std::int32_t poolId) {
     return 0;
 }
 
-int APS5_VABI sceNetAllocateAllRouteInfo(void) {
+NetRouteInfo* APS5_VABI sceNetAllocateAllRouteInfo(std::int32_t interfaceId, std::int32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetAllocateAllRouteInfo6(void) {
+NetRouteInfo* APS5_VABI sceNetAllocateAllRouteInfo6(std::int32_t interfaceId, std::int32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2168,7 +2180,7 @@ int APS5_VABI sceNetControl(std::uint32_t interfaceId, std::int32_t interfaceInd
     return 0;
 }
 
-int APS5_VABI sceNetDbgInit(void) {
+int APS5_VABI sceNetDbgInit(NetDebugParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2198,12 +2210,12 @@ int APS5_VABI sceNetFreeAllRouteInfo(void* routes) {
     return 0;
 }
 
-int APS5_VABI sceNetGetArpInfo(void) {
+int APS5_VABI sceNetGetArpInfo(NetArpInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetGetAppMemInfo(void) {
+int APS5_VABI sceNetGetAppMemInfo(NetAppMemoryInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2276,7 +2288,7 @@ void APS5_VABI sceNetGetSystemTime(std::uint64_t* output) {
     if (output != nullptr) *output = sceKernelGetProcessTime();
 }
 
-int APS5_VABI sceNetGetSystemMemInfo(void) {
+int APS5_VABI sceNetGetSystemMemInfo(NetSystemMemoryInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2862,17 +2874,17 @@ int APS5_VABI sceNetPppoeStop(void) {
     return 0;
 }
 
-int APS5_VABI sceNetBandwidthControlSetDefaultParam(void) {
+int APS5_VABI sceNetBandwidthControlSetDefaultParam(const NetBandwidthParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetBandwidthControlGetDefaultParam(void) {
+int APS5_VABI sceNetBandwidthControlGetDefaultParam(NetBandwidthParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetBandwidthControlGetDataTraffic(void) {
+int APS5_VABI sceNetBandwidthControlGetDataTraffic(std::int32_t interfaceId, NetDataTraffic* traffic, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2932,22 +2944,22 @@ int APS5_VABI sceNetDumpRead(std::int32_t dumpId, void* buffer, std::int32_t buf
     return 0;
 }
 
-int APS5_VABI sceNetEmulationDebugSettingsSet(void) {
+int APS5_VABI sceNetEmulationDebugSettingsSet(const NetEmulationParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetEmulationDebugSettingsGet(void) {
+int APS5_VABI sceNetEmulationDebugSettingsGet(NetEmulationParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetEmulationSet(void) {
+int APS5_VABI sceNetEmulationSet(const NetEmulationParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetEmulationGet(void) {
+int APS5_VABI sceNetEmulationGet(NetEmulationParameter* parameter, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
