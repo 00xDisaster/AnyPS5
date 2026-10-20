@@ -656,20 +656,17 @@ int APS5_VABI sceAudioOutSysOpen(int userId, std::uint32_t mode) {
     return allocatePort(PORT_TYPE_SYS, SYS_PORT_SAMPLES, SYS_PORT_FRAME_RATE, Format::S16_8Ch);
 }
 
-int APS5_VABI sceAudioOutSetMixLevelPadSpk(int handle, int mixLevel) {
+int APS5_VABI sceAudioOutSetMixLevelPadSpk(int handle, std::uint32_t mixLevel) {
     std::lock_guard<std::mutex> lock(g_mutex);
     Port* port = getPort(handle);
     if (port == nullptr) {
         return -2144993277;
     }
-    if (port->type != PORT_TYPE_PADSPK) {
-        return -2144993270;
-    }
     if (mixLevel > DEFAULT_VOLUME) {
         return -2144993260;
     }
-    if (mixLevel < 0) {
-        throw std::runtime_error("sceAudioOutSetMixLevelPadSpk: negative mix level not supported");
+    if (port->type != PORT_TYPE_PADSPK) {
+        return -2144993270;
     }
     port->mixLevel = mixLevel;
     return 0;
