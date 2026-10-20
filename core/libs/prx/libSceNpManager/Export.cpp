@@ -161,6 +161,17 @@ int APS5_VABI sceNpNotifyPlusFeature(const void* param) {
     return 0;
 }
 
+int APS5_VABI sceNpGetAccountId(const NpOnlineId* online_id, uint64_t* account_id) {
+    if (!online_id || !account_id) return SCE_NP_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_ERROR_SIGNED_OUT;
+}
+
+int APS5_VABI sceNpSetGamePresenceOnline(int user_id, uint32_t timeout) {
+    (void)user_id;
+    (void)timeout;
+    return SCE_NP_ERROR_SIGNED_OUT;
+}
+
 int APS5_VABI sceNpGetAccountCountryA(int user_id, void* country_code) {
     (void)user_id;
     (void)country_code;
@@ -327,6 +338,10 @@ int APS5_VABI sceNpUnregisterStateCallbackA(int callbackId) {
 }
 
 int APS5_VABI sceNpUnregisterPremiumEventCallback(void) {
+    return 0;
+}
+
+int APS5_VABI sceNpUnregisterPlusEventCallback(void) {
     return 0;
 }
 
