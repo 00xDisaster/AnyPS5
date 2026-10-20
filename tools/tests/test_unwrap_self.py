@@ -537,6 +537,32 @@ class UnwrapTest(unittest.TestCase):
         self.assertEqual(tls[5], 0)
         self.assertEqual(tls[2], 0)
 
+    def test_zero_size_segment_in_unbacked_load_range_is_accepted(self):
+        for offset in (0, 0x800, 0x1900, 0xFFFFFFFFFFFFFFFF):
+            for address in (0x4000, 0x4020):
+                with self.subTest(offset=offset, address=address):
+                    segments = default_segments() + [(PT_LOAD, 6, offset, 0x4000, 0, PAGE),
+                                                     (PT_TLS, 4, offset, address, 0, 8)]
+                    container = bytearray(build_container(segments, default_records(), default_payloads()))
+                    struct.pack_into("<Q", container, ELF_HEADER_OFFSET + PROGRAM_TABLE_OFFSET + 3 * 56 + 40, 0x2000)
+                    struct.pack_into("<Q", container, ELF_HEADER_OFFSET + PROGRAM_TABLE_OFFSET + 4 * 56 + 40, 0x40)
+                    result, output = self.convert(container)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    _, headers = read_program_headers(output)
+                    self.assertEqual(headers[4], (PT_TLS, 4, 0, address, address, 0, 0x40, 8))
+        for address in (0x1088, 0x2000, 0x3000):
+            with self.subTest(bss_address=address):
+                segments = default_segments() + [(PT_TLS, 4, 0x1588, address, 0, 8)]
+                payloads = default_payloads()
+                payloads[0xA80] = pattern(23, 0x100)
+                container = bytearray(build_container(segments, default_records(), payloads))
+                struct.pack_into("<Q", container, ELF_HEADER_OFFSET + PROGRAM_TABLE_OFFSET + 56 + 40, 0x2000)
+                struct.pack_into("<Q", container, ELF_HEADER_OFFSET + PROGRAM_TABLE_OFFSET + 3 * 56 + 40, 0x40)
+                result, output = self.convert(container)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                _, headers = read_program_headers(output)
+                self.assertEqual(headers[3], (PT_TLS, 4, 0, address, address, 0, 0x40, 8))
+
     def test_the_report_names_a_non_ascii_output_path_on_a_cp1252_console(self):
         directory = Path(self.directory) / "\u65e5\u672c"
         directory.mkdir()
