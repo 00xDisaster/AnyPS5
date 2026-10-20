@@ -59,6 +59,10 @@ struct LncAppStatus;
 struct LncShellUiAppStatus;
 struct AppMessagingMessage;
 
+struct UsbStorageEvent;
+struct UsbStorageDeviceInfo;
+using UsbStorageCallback = void (APS5_VABI *)(const UsbStorageEvent* event, void* userData);
+
 extern "C" {
 
 int APS5_VABI sceAppMessagingClearEventFlag(std::int32_t appId, std::uint64_t flags) {
@@ -2195,67 +2199,67 @@ int APS5_VABI sceSystemServiceTurnOffScreenSaver() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageGetDeviceInfo() {
+int APS5_VABI sceSystemServiceUsbStorageGetDeviceInfo(std::uint32_t device, UsbStorageDeviceInfo* info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageGetDeviceList() {
+int APS5_VABI sceSystemServiceUsbStorageGetDeviceList(std::uint32_t* devices, std::int32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageGetdentsClose() {
+int APS5_VABI sceSystemServiceUsbStorageGetdentsClose(std::int32_t fd) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageGetdentsOpen() {
+int APS5_VABI sceSystemServiceUsbStorageGetdentsOpen(std::uint32_t device, std::int32_t* fd, std::uint64_t* bufferSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageGetdentsRead() {
+int APS5_VABI sceSystemServiceUsbStorageGetdentsRead(std::int32_t fd, void* buffer, std::uint64_t bufferSize, std::uint64_t* bytesRead) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageInit() {
+int APS5_VABI sceSystemServiceUsbStorageInit(void* attr) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageIsExist() {
+bool APS5_VABI sceSystemServiceUsbStorageIsExist(std::uint32_t device, const char* directory, std::uint8_t* exists) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRegisterCallback() {
+int APS5_VABI sceSystemServiceUsbStorageRegisterCallback(std::int32_t eventType, UsbStorageCallback callback, void* arg) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRegisterCallbackForMapAvailable() {
+int APS5_VABI sceSystemServiceUsbStorageRegisterCallbackForMapAvailable(std::uint32_t device, const char* directory, UsbStorageCallback callback, void* arg) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRegisterCallbackForMapUnavailable() {
+int APS5_VABI sceSystemServiceUsbStorageRegisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, UsbStorageCallback callback, void* arg) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRequestMap() {
+int APS5_VABI sceSystemServiceUsbStorageRequestMap(std::uint32_t device, const char* directory, std::int32_t flags, std::uint64_t volumeSize, char* mountPoint, std::uint64_t* mountId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRequestMapWSB() {
+int APS5_VABI sceSystemServiceUsbStorageRequestMapWSB(std::uint32_t device, const char* directory, std::int32_t flags, std::uint64_t volumeSize, char* mountPoint, std::uint64_t* mountId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageRequestUnmap() {
+int APS5_VABI sceSystemServiceUsbStorageRequestUnmap(std::uint32_t device, const char* directory) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2265,17 +2269,17 @@ int APS5_VABI sceSystemServiceUsbStorageTerm() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageUnregisterCallback() {
+int APS5_VABI sceSystemServiceUsbStorageUnregisterCallback(std::int32_t eventType, UsbStorageCallback callback) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageUnregisterCallbackForMapAvailable() {
+int APS5_VABI sceSystemServiceUsbStorageUnregisterCallbackForMapAvailable(std::uint32_t device, const char* directory, UsbStorageCallback callback) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceUsbStorageUnregisterCallbackForMapUnavailable() {
+int APS5_VABI sceSystemServiceUsbStorageUnregisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, UsbStorageCallback callback) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
