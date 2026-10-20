@@ -224,7 +224,6 @@ int main() {
         Require(scePthreadAttrDestroy(&attr) == SCE_OK);
         Require(scePthreadDetach(thread) == SCE_OK);
         WaitForProbe(detached[i]);
-        RequireCachedStackDiscarded(detached[i]);
     }
     StackProbe detachedReuse;
     detachedReuse.requested = DetachedStackSize;
@@ -236,6 +235,7 @@ int main() {
     Require(scePthreadCreate(&detachedThread, &detachedAttr, RetainedStackWorker, &detachedReuse, nullptr) == SCE_OK);
     Require(scePthreadAttrDestroy(&detachedAttr) == SCE_OK);
     Require(scePthreadJoin(detachedThread, nullptr) == SCE_OK);
+    for (const auto& probe : detached) RequireCachedStackDiscarded(probe);
     Require(ReusesOneOf(detachedReuse, detached, 5));
     RequireCachedStackDiscarded(detachedReuse);
 
