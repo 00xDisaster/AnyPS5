@@ -134,6 +134,7 @@ int main() {
     Require(sceRtcGetDaysInMonth(10000, 1) == 31);
     Require(sceRtcGetDaysInMonth(9999, 1) == 31);
     Require(sceRtcGetDayOfWeek(1, 1, 1) == 1 && sceRtcGetDayOfWeek(2026, 9, 26) == 6);
+    Require(sceRtcGetDayOfWeek(10000, 1, 1) == 6);
     Require(sceRtcGetDayOfWeek(2023, 2, 29) == invalidDay);
 
     RtcDateTime leapDay{2024, 2, 29, 12, 34, 56, 789000};
@@ -156,7 +157,7 @@ int main() {
     tick.tick = maxTick;
     Require(sceRtcSetTick(&converted, &tick) == 0 && Equal(converted, RtcDateTime{9999, 12, 31, 23, 59, 59, 999999}));
     tick.tick = maxTick + 1;
-    Require(sceRtcSetTick(&converted, &tick) == invalidValue);
+    Require(sceRtcSetTick(&converted, &tick) == 0 && Equal(converted, RtcDateTime{10000, 1, 1, 0, 0, 0, 0}));
 
     Require(sceRtcGetCurrentClock(nullptr, 0) == invalidPointer);
     Require(sceRtcGetCurrentClock(&converted, 0) == 0 && sceRtcCheckValid(&converted) == 0);
@@ -171,10 +172,24 @@ int main() {
     RtcDateTime millennium{2000, 1, 1, 0, 0, 0, 0};
     Require(sceRtcGetTime_t(&millennium, &seconds) == 0 && seconds == 946684800);
     Require(sceRtcSetTime_t(&converted, 946684800) == 0 && Equal(converted, millennium));
-    Require(sceRtcSetTime_t(&converted, -1) == invalidValue);
+    Require(sceRtcSetTime_t(&converted, -1) == 0 && Equal(converted, RtcDateTime{2106, 2, 7, 6, 28, 15, 0}));
+    Require(sceRtcSetTime_t(&converted, 0x100000001ll) == 0 && Equal(converted, RtcDateTime{1970, 1, 1, 0, 0, 1, 0}));
+    Require(sceRtcSetTime_t(&converted, -0x80000000ll) == 0 && Equal(converted, RtcDateTime{2038, 1, 19, 3, 14, 8, 0}));
+    const RtcDateTime past2106{2106, 2, 7, 6, 28, 16, 0};
+    Require(sceRtcGetTime_t(&past2106, &seconds) == 0 && seconds == 0x100000000ll);
+    const RtcDateTime beforeEpoch{1969, 12, 31, 23, 59, 59, 0};
+    seconds = -1;
+    Require(sceRtcGetTime_t(&beforeEpoch, &seconds) == invalidYear && seconds == 0);
+    const RtcDateTime badMonth{1969, 13, 1, 0, 0, 0, 0};
+    seconds = -1;
+    Require(sceRtcGetTime_t(&badMonth, &seconds) == invalidMonth && seconds == -1);
     std::uint64_t fileTime = 0;
     Require(sceRtcGetWin32FileTime(&epoch, &fileTime) == 0 && fileTime == 116444736000000000ull);
     Require(sceRtcSetWin32FileTime(&converted, 116444736000000000ull) == 0 && Equal(converted, epoch));
+    const RtcDateTime before1601{1600, 12, 31, 23, 59, 59, 0};
+    fileTime = 1;
+    Require(sceRtcGetWin32FileTime(&before1601, &fileTime) == invalidYear && fileTime == 0);
+    Require(sceRtcSetWin32FileTime(&converted, std::numeric_limits<std::uint64_t>::max()) == 0 && Equal(converted, RtcDateTime{60056, 5, 28, 5, 36, 10, 955161}));
     std::uint32_t dosTime = 0xffffffffu;
     const RtcDateTime dosDate{2024, 2, 29, 12, 34, 57, 789000};
     Require(sceRtcGetDosTime(&dosDate, &dosTime) == 0 && dosTime == 0x585d645cu);
@@ -270,6 +285,16 @@ int main() {
         Require(sceRtcFormatRFC3339(text, &tick, offset) == invalidValue);
         Require(std::memcmp(text, original, sizeof(text)) == 0);
     }
+    RtcTick edge{maxTick + 1};
+    Require(sceRtcFormatRFC3339(text, &edge, 0) == invalidYear);
+    edge.tick = std::numeric_limits<std::uint64_t>::max();
+    Require(sceRtcFormatRFC3339(text, &edge, 0) == invalidYear);
+    edge.tick = maxTick;
+    Require(sceRtcFormatRFC3339(text, &edge, 1) == invalidYear);
+    edge.tick = 59999999;
+    Require(sceRtcFormatRFC3339(text, &edge, -1) == invalidYear);
+    edge.tick = 60000000;
+    Require(sceRtcFormatRFC3339(text, &edge, -1) == 0 && std::strcmp(text, "0001-01-01T00:00:00.00-00:01") == 0);
     Require(sceRtcFormatRFC3339(nullptr, &tick, 1440) == invalidPointer);
     Require(sceRtcFormatRFC3339(text, nullptr, 1440) == invalidValue);
     {
@@ -775,7 +800,11 @@ int main() {
     Require(sceRtcFormatRFC2822(rfc2822, &tick, -1) == invalidValue);
     tick.tick = maxTick;
     Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == 0 && std::strcmp(rfc2822, "Fri, 31 Dec 9999 23:59:59 +0000") == 0);
-    Require(sceRtcFormatRFC2822(rfc2822, &tick, 1) == invalidValue);
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 1) == invalidYear);
+    tick.tick = maxTick + 1;
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == invalidYear);
+    tick.tick = std::numeric_limits<std::uint64_t>::max();
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == invalidValue);
     tick.tick = leapDayTick;
     for (int offset : {1440, -1440, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
         std::memset(rfc2822, 'x', sizeof(rfc2822));
