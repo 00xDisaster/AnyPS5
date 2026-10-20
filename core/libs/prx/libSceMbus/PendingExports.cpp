@@ -7,7 +7,13 @@ struct MbusSparkState;
 struct MbusDriverCallbacks;
 struct MbusUsbPowerEntry;
 struct MbusEvent;
-struct MbusEventCallbacks;
+struct MbusDeviceCondition;
+struct MbusEventCallbacks {
+    void (APS5_VABI *onOverflow)(std::int32_t eventHandle, void* userData);
+    void (APS5_VABI *onEvent)(std::int32_t eventHandle, void* userData, const MbusEvent* event);
+};
+
+static_assert(sizeof(MbusEventCallbacks) == 16);
 struct MbusProcessInfo;
 struct MbusStartupInfo;
 struct MbusStartupParam;
@@ -372,7 +378,7 @@ int APS5_VABI sceMbusGetDeviceInfoByConditionForDeviceService() {
     return 0;
 }
 
-int APS5_VABI sceMbusGetDeviceInfoByCondition_() {
+int APS5_VABI sceMbusGetDeviceInfoByCondition_(const MbusDeviceCondition* condition, std::int32_t flags, MbusDeviceInfo* infos, std::int32_t capacity, std::int32_t* first, std::int32_t* second, std::uint32_t infoSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
