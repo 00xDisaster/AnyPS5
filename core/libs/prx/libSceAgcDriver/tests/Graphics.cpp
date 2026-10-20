@@ -2729,6 +2729,11 @@ void depthCopyPassTests() {
     expectFailure([&] { (void)DecodeDepthCopyPass(queue); }, "over part of the depth surface");
     queue.context[0x10f] = std::bit_cast<std::uint32_t>(32.0f);
     Require(DecodeDepthCopyPass(queue).has_value(), "the restored DB depth copy was refused");
+    queue.context[0x010] = 0x80000183;
+    pass = DecodeDepthCopyPass(queue);
+    Require(pass.has_value() && pass->samples == 1 && pass->sample == 0, "a centroid DB depth copy of a one-sample depth plane decoded differently");
+    queue.context[0x000] = 0x104;
+    expectFailure([&] { (void)DecodeDepthCopyPass(queue); }, "a sample the depth plane does not have");
 }
 
 void metadataPassTests() {

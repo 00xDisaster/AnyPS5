@@ -495,7 +495,6 @@ public:
         auto* recorder = Recorder::Active();
         Require(recorder != nullptr, "depth sample copies need an active recorder");
         Require(sampleable, "DB depth copy from a depth surface the device cannot sample at its sample count");
-        Require(target.samples == 1 || samplingActive, "native multisample depth sampling requires its creation-time owner");
         ApplyFastClear();
         if (useSampleShadow) {
             if (sampleShadow == nullptr) createSampleShadow();
@@ -511,7 +510,7 @@ public:
             Check(context.Function<PFN_vkCreateImageView>("vkCreateImageView")(context.device, &viewInfo, nullptr, &depthView), "vkCreateImageView depth sample copy");
         }
         Require(context.detiler != nullptr, "depth sample copies need the texture detiler");
-        context.detiler->DispatchDepthSample(recorder->Commands(), depthView, destinationView, target.extent.width, target.extent.height, sample);
+        context.detiler->DispatchDepthSample(recorder->Commands(), depthView, target.samples > 1, destinationView, target.extent.width, target.extent.height, sample);
         Recorder::CountBarriers(Recorder::CommandClass::Copy, 2);
         destination.MarkDirty();
     }

@@ -131,17 +131,26 @@ add_custom_command(
 )
 
 set(agcDepthSampleShaderSource ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/shaders/DepthSample.comp)
-set(agcDepthSampleShaderSpv ${agcTextureDetileGeneratedDir}/DepthSample.spv)
-set(agcDepthSampleShaderHeader ${agcTextureDetileGeneratedDir}/DepthSample_spv.h)
-add_custom_command(
-        OUTPUT "${agcDepthSampleShaderHeader}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTextureDetileGeneratedDir}"
-        COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcDepthSampleShaderSpv}" "${agcDepthSampleShaderSource}"
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${agcDepthSampleShaderSpv} -DOUTPUT=${agcDepthSampleShaderHeader}
-        -DSYMBOL=DEPTH_SAMPLE_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
-        DEPENDS "${agcDepthSampleShaderSource}" glslang-standalone
-        VERBATIM
-)
+foreach(agcDepthSampleKind IN ITEMS Single Multisample)
+    string(TOUPPER ${agcDepthSampleKind} agcDepthSampleSymbol)
+    if(agcDepthSampleKind STREQUAL "Multisample")
+        set(agcDepthSampleMultisampled 1)
+    else()
+        set(agcDepthSampleMultisampled 0)
+    endif()
+    set(agcDepthSampleShaderSpv ${agcTextureDetileGeneratedDir}/DepthSample${agcDepthSampleKind}.spv)
+    set(agcDepthSampleShaderHeader ${agcTextureDetileGeneratedDir}/DepthSample${agcDepthSampleKind}_spv.h)
+    add_custom_command(
+            OUTPUT "${agcDepthSampleShaderHeader}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTextureDetileGeneratedDir}"
+            COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -DMULTISAMPLED=${agcDepthSampleMultisampled} -o "${agcDepthSampleShaderSpv}" "${agcDepthSampleShaderSource}"
+            COMMAND ${CMAKE_COMMAND} -DINPUT=${agcDepthSampleShaderSpv} -DOUTPUT=${agcDepthSampleShaderHeader}
+            -DSYMBOL=DEPTH_SAMPLE_${agcDepthSampleSymbol}_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
+            DEPENDS "${agcDepthSampleShaderSource}" glslang-standalone
+            VERBATIM
+    )
+    list(APPEND agcDepthSampleShaderHeaders ${agcDepthSampleShaderHeader})
+endforeach()
 
 set(agcSampleCounterShaderSource ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/shaders/SampleCounter.comp)
 set(agcSampleCounterShaderSpv ${agcTextureDetileGeneratedDir}/SampleCounter.spv)
@@ -316,7 +325,7 @@ set(agcDriverSources
         ${agcTextureDetileShaderHeader}
         ${agcReadbackHeaders}
         ${agcCmaskClearShaderHeader}
-        ${agcDepthSampleShaderHeader}
+        ${agcDepthSampleShaderHeaders}
         ${agcMeshArgumentsShaderHeader}
         ${agcTextureDetileImageShaderHeader}
         ${agcTextureRepackShaderHeader}

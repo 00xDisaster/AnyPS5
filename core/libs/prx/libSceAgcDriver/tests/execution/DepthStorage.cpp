@@ -350,6 +350,12 @@ void DepthCopyCase(Context context, std::uint8_t* block) {
     Require(countBlock(0.375f) == Side * Side, "the DB depth copy of sample 1 did not store the cleared depth in every texel of the R32 float target");
     ExpectFailure([&] { copy(2, 2, {Side, Side}); }, "does not have", "a DB depth copy of a third sample of a two-sample surface was accepted");
     ExpectFailure([&] { copy(2, 0, {Side / 2, Side / 2}); }, "of another size", "a DB depth copy of another extent than the depth surface was accepted");
+    ClearDepthSurfaces(context.device);
+    Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.625f, 0, 0, false, 1}) != VK_NULL_HANDLE, "the one-sample depth surface was not created");
+    std::fill(block, block + BlockBytes, std::uint8_t{0});
+    copy(1, 0, {Side, Side});
+    Require(countBlock(0.625f) == Side * Side, "the DB depth copy of a one-sample depth surface did not store the cleared depth in every texel of the R32 float target");
+    ExpectFailure([&] { copy(1, 1, {Side, Side}); }, "does not have", "a DB depth copy of a second sample of a one-sample surface was accepted");
 }
 
 }

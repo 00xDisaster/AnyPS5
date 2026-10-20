@@ -4,7 +4,8 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/shaders/TextureDetile_spv.h"
 #include "prx/libSceAgcDriver/Graphics/shaders/CmaskClear_spv.h"
-#include "prx/libSceAgcDriver/Graphics/shaders/DepthSample_spv.h"
+#include "prx/libSceAgcDriver/Graphics/shaders/DepthSampleMultisample_spv.h"
+#include "prx/libSceAgcDriver/Graphics/shaders/DepthSampleSingle_spv.h"
 #include "prx/libSceAgcDriver/Graphics/shaders/TextureDetileImage_spv.h"
 #include "prx/libSceAgcDriver/Graphics/shaders/TextureRepack_spv.h"
 #include <algorithm>
@@ -119,7 +120,7 @@ void TextureDetiler::release() noexcept {
     for (const auto pool : descriptorSets.pools) context.Function<PFN_vkDestroyDescriptorPool>("vkDestroyDescriptorPool")(context.device, pool, nullptr);
     for (const auto pool : imageDescriptorSets.pools) context.Function<PFN_vkDestroyDescriptorPool>("vkDestroyDescriptorPool")(context.device, pool, nullptr);
     for (const auto pool : depthSampleSets.pools) context.Function<PFN_vkDestroyDescriptorPool>("vkDestroyDescriptorPool")(context.device, pool, nullptr);
-    if (depthSamplePipeline) context.Function<PFN_vkDestroyPipeline>("vkDestroyPipeline")(context.device, depthSamplePipeline, nullptr);
+    for (const auto pipeline : depthSamplePipelines) if (pipeline) context.Function<PFN_vkDestroyPipeline>("vkDestroyPipeline")(context.device, pipeline, nullptr);
     if (depthSamplePipelineLayout) context.Function<PFN_vkDestroyPipelineLayout>("vkDestroyPipelineLayout")(context.device, depthSamplePipelineLayout, nullptr);
     if (depthSampleLayout) context.Function<PFN_vkDestroyDescriptorSetLayout>("vkDestroyDescriptorSetLayout")(context.device, depthSampleLayout, nullptr);
     if (depthSampler) context.Function<PFN_vkDestroySampler>("vkDestroySampler")(context.device, depthSampler, nullptr);
@@ -400,9 +401,9 @@ void TextureDetiler::DispatchCmaskClear(VkCommandBuffer commands, VkBuffer cmask
     barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, anyAccess);
 }
 
-void TextureDetiler::DispatchDepthSample(VkCommandBuffer commands, VkImageView depth, VkImageView target, std::uint32_t width, std::uint32_t height, std::uint32_t sample) {
+void TextureDetiler::DispatchDepthSample(VkCommandBuffer commands, VkImageView depth, bool multisampled, VkImageView target, std::uint32_t width, std::uint32_t height, std::uint32_t sample) {
     Require(commands != VK_NULL_HANDLE && depth != VK_NULL_HANDLE && target != VK_NULL_HANDLE, "a depth sample copy needs a command buffer, the depth view and the target view");
-    if (depthSamplePipeline == VK_NULL_HANDLE) {
+    if (depthSamplePipelineLayout == VK_NULL_HANDLE) {
         VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
         samplerInfo.magFilter = VK_FILTER_NEAREST;
         samplerInfo.minFilter = VK_FILTER_NEAREST;
@@ -424,9 +425,12 @@ void TextureDetiler::DispatchDepthSample(VkCommandBuffer commands, VkImageView d
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushRange;
         Check(context.Function<PFN_vkCreatePipelineLayout>("vkCreatePipelineLayout")(context.device, &pipelineLayoutInfo, nullptr, &depthSamplePipelineLayout), "vkCreatePipelineLayout depth sample copy");
+    }
+    auto& depthSamplePipeline = depthSamplePipelines[multisampled ? 1u : 0u];
+    if (depthSamplePipeline == VK_NULL_HANDLE) {
         VkShaderModuleCreateInfo moduleInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-        moduleInfo.codeSize = sizeof(DEPTH_SAMPLE_SPV);
-        moduleInfo.pCode = DEPTH_SAMPLE_SPV;
+        moduleInfo.codeSize = multisampled ? sizeof(DEPTH_SAMPLE_MULTISAMPLE_SPV) : sizeof(DEPTH_SAMPLE_SINGLE_SPV);
+        moduleInfo.pCode = multisampled ? DEPTH_SAMPLE_MULTISAMPLE_SPV : DEPTH_SAMPLE_SINGLE_SPV;
         VkShaderModule depthModule = VK_NULL_HANDLE;
         Check(context.Function<PFN_vkCreateShaderModule>("vkCreateShaderModule")(context.device, &moduleInfo, nullptr, &depthModule), "vkCreateShaderModule depth sample copy");
         VkComputePipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
@@ -461,13 +465,13 @@ void TextureDetiler::DispatchDepthSample(VkCommandBuffer commands, VkImageView d
     };
     constexpr VkAccessFlags anyWrite = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT;
     constexpr VkAccessFlags anyAccess = anyWrite | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_HOST_READ_BIT;
-    barrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, anyWrite, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+    barrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, anyWrite, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
     context.Function<PFN_vkCmdBindPipeline>("vkCmdBindPipeline")(commands, VK_PIPELINE_BIND_POINT_COMPUTE, depthSamplePipeline);
     context.Function<PFN_vkCmdBindDescriptorSets>("vkCmdBindDescriptorSets")(commands, VK_PIPELINE_BIND_POINT_COMPUTE, depthSamplePipelineLayout, 0, 1, &set, 0, nullptr);
     const std::array<std::uint32_t, 3> push{width, height, sample};
     context.Function<PFN_vkCmdPushConstants>("vkCmdPushConstants")(commands, depthSamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), push.data());
     context.Function<PFN_vkCmdDispatch>("vkCmdDispatch")(commands, (width + 7u) / 8u, (height + 7u) / 8u, 1);
-    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_SHADER_WRITE_BIT, anyAccess);
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_SHADER_WRITE_BIT, anyAccess);
 }
 
 void TextureDetiler::DispatchImage(VkCommandBuffer commands, TextureTileMode tileMode, std::uint32_t elementBytes, VkBuffer tiled, std::uint64_t tiledOffset, VkImageView view, const TileMipLayout& layout, bool retile, std::uint32_t slice, const DetileWindow& window) {
