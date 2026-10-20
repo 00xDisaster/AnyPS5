@@ -12,6 +12,23 @@
 
 namespace Hmd2 {
 
+struct ReprojectionStatus;
+struct ReprojectionOutput;
+struct ReprojectionInitializeParameter;
+
+struct MirroringParameter {
+    void* workMemory;
+    void* displayMemory;
+};
+
+struct MirroringOption {
+    std::uint32_t mode;
+    std::uint32_t reserved[7];
+};
+
+static_assert(sizeof(MirroringParameter) == 16);
+static_assert(sizeof(MirroringOption) == 32);
+
 struct GazeResultParameter;
 struct GazeResult;
 struct FoveatedRenderingResult;
@@ -75,7 +92,7 @@ std::int32_t GetDeviceInformation(Hmd2::DeviceInformation* info) {
 
 extern "C" {
 
-int APS5_VABI sceHmd2ReprojectionGetStatus() {
+int APS5_VABI sceHmd2ReprojectionGetStatus(Hmd2::ReprojectionStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -155,7 +172,7 @@ std::int32_t APS5_VABI sceHmd2Open(std::int32_t userId, std::int32_t type, std::
     return DeviceHandle;
 }
 
-int APS5_VABI sceHmd2ReprojectionBeginFrame() {
+int APS5_VABI sceHmd2ReprojectionBeginFrame(std::uint64_t frameId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -170,12 +187,12 @@ int APS5_VABI sceHmd2ReprojectionDisableVrMode() {
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionEnableMirroring() {
+int APS5_VABI sceHmd2ReprojectionEnableMirroring(const Hmd2::MirroringParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionEnableVrMode() {
+int APS5_VABI sceHmd2ReprojectionEnableVrMode(std::uint64_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -188,12 +205,12 @@ Hmd2::SizeAlign APS5_VABI sceHmd2ReprojectionGetMirroringWorkMemorySizeAlign() {
     return {0x4000, 0x100};
 }
 
-int APS5_VABI sceHmd2ReprojectionGetPredictedDisplayTime() {
+int APS5_VABI sceHmd2ReprojectionGetPredictedDisplayTime(std::uint64_t frameId, std::uint64_t* time) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionInitialize() {
+int APS5_VABI sceHmd2ReprojectionInitialize(const Hmd2::ReprojectionInitializeParameter* parameter, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -207,12 +224,12 @@ Hmd2::SizeAlign APS5_VABI sceHmd2ReprojectionQueryDisplayBufferSizeAlign() {
     return {0x6000000, 0x10000};
 }
 
-int APS5_VABI sceHmd2ReprojectionSetAllowPositionalReprojection() {
+int APS5_VABI sceHmd2ReprojectionSetAllowPositionalReprojection(std::uint8_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetMirroringOption() {
+int APS5_VABI sceHmd2ReprojectionSetMirroringOption(const Hmd2::MirroringOption* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -232,7 +249,7 @@ int APS5_VABI sceHmd2ReprojectionSetRenderConfig() {
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetTiming() {
+int APS5_VABI sceHmd2ReprojectionSetTiming(std::int32_t timing) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -284,12 +301,12 @@ int APS5_VABI sceHmd2ReprojectionSet() {
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetEventGpuEnd() {
+int APS5_VABI sceHmd2ReprojectionSetEventGpuEnd(KernelEqueue queue, std::int32_t eventId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionSetEventGpuStart() {
+int APS5_VABI sceHmd2ReprojectionSetEventGpuStart(KernelEqueue queue, std::int32_t eventId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -438,10 +455,10 @@ std::int32_t APS5_VABI Hmd2BeforeInitializeReprojectionNotInitialized() {
 APS5_EXPORT("d3SEIYTP6wc", Hmd2BeforeInitializeReprojectionNotInitialized);
 APS5_EXPORT("EVECbTvBezo", Hmd2BeforeInitializeReprojectionNotInitialized);
 APS5_EXPORT("ciusPdJKjSU", Hmd2BeforeInitializeReprojectionNotInitialized);
-int APS5_VABI sceHmd2ReprojectionSetUserEventStart() {
+int APS5_VABI sceHmd2ReprojectionSetUserEventStart(KernelEqueue queue, std::int32_t eventId) {
     return BeforeInitialize(Hmd2::ReprojectionNotInitialized, __func__);
 }
-int APS5_VABI sceHmd2ReprojectionSetUserEventEnd() {
+int APS5_VABI sceHmd2ReprojectionSetUserEventEnd(KernelEqueue queue, std::int32_t eventId) {
     return BeforeInitialize(Hmd2::ReprojectionNotInitialized, __func__);
 }
 int APS5_VABI sceHmd2ReprojectionClearUserEventStart() {
@@ -450,7 +467,7 @@ int APS5_VABI sceHmd2ReprojectionClearUserEventStart() {
 int APS5_VABI sceHmd2ReprojectionClearUserEventEnd() {
     return BeforeInitialize(Hmd2::ReprojectionNotInitialized, __func__);
 }
-int APS5_VABI sceHmd2ReprojectionGetCurrentOutput() {
+int APS5_VABI sceHmd2ReprojectionGetCurrentOutput(Hmd2::ReprojectionOutput* output) {
     return BeforeInitialize(Hmd2::ReprojectionNotInitialized, __func__);
 }
 APS5_EXPORT("aGOWaEeg04I", Hmd2BeforeInitializeReprojectionNotInitialized);
