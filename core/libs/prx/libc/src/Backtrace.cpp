@@ -34,6 +34,9 @@ std::string BacktraceModulePath_nid_no_patch(HMODULE handle, std::size_t initial
 }
 }
 #endif
+
+#if defined(__linux__) || defined(_WIN32)
+
 namespace {
 
 constexpr int MaxFrames = 256;
@@ -54,15 +57,48 @@ static_assert(sizeof(FrameRecord) == NameOffset);
 
 [[gnu::noinline]] std::vector<Frame> CaptureFrames(int limit) {
     void* addresses[MaxFrames];
+#if defined(__linux__)
     const int captured = backtrace(addresses, MaxFrames);
+#elif defined(_WIN32)
+    struct TraceState {
+        void** addrs;
+        int max;
+        int count;
+    };
+    static const auto traceCallback = [](_Unwind_Context* ctx, void* arg) APS5_VABI -> _Unwind_Reason_Code {
+        auto* s = static_cast<TraceState*>(arg);
+        if (s->count < s->max) {
+            s->addrs[s->count++] = reinterpret_cast<void*>(_Unwind_GetIP_nid_postfix(ctx));
+        }
+        return (s->count >= s->max) ? _URC_NORMAL_STOP : _URC_NO_REASON;
+    };
+    TraceState state{addresses, MaxFrames, 0};
+    _Unwind_Backtrace_nid_postfix(traceCallback, &state);
+    int captured = state.count;
+    if (captured == 0) {
+        captured = static_cast<int>(RtlCaptureStackBackTrace(0, MaxFrames, addresses, nullptr));
+    }
+#endif
     std::vector<Frame> frames;
     for (int index = 2; index < captured && (limit < 0 || static_cast<int>(frames.size()) < limit); ++index) {
+#if defined(__linux__)
         Dl_info info{};
         if (dladdr(addresses[index], &info) == 0 || info.dli_fbase == nullptr || info.dli_fname == nullptr) continue;
         const auto offset = reinterpret_cast<std::uintptr_t>(addresses[index]) - reinterpret_cast<std::uintptr_t>(info.dli_fbase);
         if (offset > UINT32_MAX) continue;
         std::string module = info.dli_fname;
-        if (const auto slash = module.find_last_of('/'); slash != std::string::npos) module.erase(0, slash + 1);
+#elif defined(_WIN32)
+        HMODULE handle = nullptr;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                static_cast<LPCSTR>(addresses[index]), &handle) || handle == nullptr) {
+            continue;
+        }
+        const auto offset = reinterpret_cast<std::uintptr_t>(addresses[index]) - reinterpret_cast<std::uintptr_t>(handle);
+        if (offset > UINT32_MAX) continue;
+        std::string module = BacktraceModulePath_nid_no_patch(handle, MAX_PATH);
+        if (module.empty()) continue;
+#endif
+        if (const auto slash = module.find_last_of("/\\"); slash != std::string::npos) module.erase(0, slash + 1);
         if (module.size() > sizeof(GuestSuffix) - 1 && module.compare(module.size() - (sizeof(GuestSuffix) - 1), std::string::npos, GuestSuffix) == 0)
             module.resize(module.size() - (sizeof(GuestSuffix) - 1));
         frames.push_back({static_cast<std::uint32_t>(offset), std::move(module)});
