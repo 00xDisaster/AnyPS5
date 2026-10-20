@@ -27,6 +27,13 @@ struct HmdEyeOffset {
     float z;
 };
 
+struct HmdScreenData {
+    const void* data;
+    std::int32_t size;
+};
+
+static_assert(sizeof(HmdScreenData) == 16);
+static_assert(offsetof(HmdScreenData, size) == 8);
 static_assert(sizeof(HmdEyeDistances) == 8);
 static_assert(sizeof(HmdEyeOffset) == 12);
 
@@ -108,7 +115,7 @@ int APS5_VABI sceHmdInternalGetVirtualDisplayDepth(std::uint8_t* depth) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetEyeStatus(void) {
+int APS5_VABI sceHmdInternalGetEyeStatus(std::int32_t handle, HmdEyeOffset* left, HmdEyeOffset* right) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -181,7 +188,7 @@ int APS5_VABI sceHmdInternalDfuGetStatus(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalAnotherScreenSendVideo(void) {
+int APS5_VABI sceHmdInternalAnotherScreenSendVideo(const HmdScreenData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -260,7 +267,7 @@ int APS5_VABI sceHmdInternalGetVr2dData(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalAnotherScreenSendAudio(void) {
+int APS5_VABI sceHmdInternalAnotherScreenSendAudio(const HmdScreenData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -840,7 +847,7 @@ int APS5_VABI sceHmdInternal3dAudioOpen(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalAnotherScreenGetFadeState(void) {
+int APS5_VABI sceHmdInternalAnotherScreenGetFadeState(std::int32_t* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
