@@ -1,5 +1,9 @@
 # libSceAudioOut technical debt
 
+### Silent stubs
+
+- [sceAudioOutMasteringTerm](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Mastering.cpp) (libSceAudioOut) - returns 0 without doing anything: there is no mastering stage to tear down, and `sceAudioOutMasteringInit` keeps no state. Whether the console fails a Term without a matching Init is unknown
+
 ### Unknown function info
 
 - [sceAudioOut2ContextAdvance and sceAudioOut2ContextPush](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Context.cpp) (libSceAudioOut) - with an SDL device, Advance snapshots each port's PCM and gain; Push consumes completed grains in order and a blocking Push waits for Advance when none is ready. Inferred from PPSA26358, which rewrites the same 512-frame, 12-channel float buffer on a producer thread and pushes on another thread. Console buffer ownership, snapshot timing and empty-queue errors are unverified. Completed grains remain queued until Push consumes them, so memory use grows with an unconsumed PCM backlog. The console backlog limit is unverified. A nonblocking Push without a completed grain throws; this is a runtime restriction, not a console measurement. Context destruction concurrent with active calls remains unsupported. Without an SDL device the existing wall-clock path remains.
