@@ -131,7 +131,7 @@ struct TextureCache {
     std::list<CachedTexture> entries;
     std::unordered_map<TextureKey, std::list<CachedTexture>::iterator, TextureKeyHash> index;
     std::unordered_multimap<const StorageTexture*, std::list<CachedTexture>::iterator> views;
-    std::vector<std::vector<std::byte>> spare;
+    std::vector<std::pair<std::vector<std::byte>, std::uint64_t>> spare;
     std::uint64_t spareBytes = 0;
     std::uint64_t bytes = 0;
     std::size_t passed = 0;
@@ -267,27 +267,33 @@ void touchTexture(TextureCache& cache, std::list<CachedTexture>::iterator it) {
     it->present = Recorder::Presents();
 }
 
-constexpr std::uint64_t SpareSnapshotBytes = 512ull << 20;
+constexpr std::uint64_t SpareSnapshotBytes = 256ull << 20;
 
 void parkSnapshot(TextureCache& cache, std::vector<std::byte>& bytes) {
     const auto size = bytes.size();
     if (size == 0) return;
-    while (!cache.spare.empty() && cache.spareBytes + size > SpareSnapshotBytes) {
-        cache.spareBytes -= cache.spare.front().size();
+    const auto present = Recorder::Presents();
+    while (!cache.spare.empty() && (present - cache.spare.front().second > SpareSnapshotPresents || cache.spareBytes + size > SpareSnapshotBytes)) {
+        cache.spareBytes -= cache.spare.front().first.size();
         cache.spare.erase(cache.spare.begin());
     }
     if (cache.spareBytes + size <= SpareSnapshotBytes) {
         cache.spareBytes += size;
-        cache.spare.push_back(std::move(bytes));
+        cache.spare.emplace_back(std::move(bytes), present);
     }
     bytes = std::vector<std::byte>{};
 }
 
 std::vector<std::byte> spareSnapshot(TextureCache& cache, std::size_t bytes) {
+    const auto present = Recorder::Presents();
+    while (!cache.spare.empty() && present - cache.spare.front().second > SpareSnapshotPresents) {
+        cache.spareBytes -= cache.spare.front().first.size();
+        cache.spare.erase(cache.spare.begin());
+    }
     for (auto spare = cache.spare.begin(); spare != cache.spare.end(); ++spare) {
-        if (spare->size() != bytes) continue;
+        if (spare->first.size() != bytes) continue;
         cache.spareBytes -= bytes;
-        std::vector<std::byte> taken = std::move(*spare);
+        std::vector<std::byte> taken = std::move(spare->first);
         cache.spare.erase(spare);
         return taken;
     }
@@ -1280,6 +1286,8 @@ TextureCacheUse TextureCacheUsage() {
         dropUncachedViews(sampled);
         use.sampledEntries = sampled.entries.size();
         use.sampledBytes = sampled.bytes;
+        use.spareEntries = sampled.spare.size();
+        use.spareBytes = sampled.spareBytes;
     }
     use.storageBytes = storageCacheBytes();
     return use;
