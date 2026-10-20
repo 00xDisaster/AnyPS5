@@ -198,7 +198,7 @@ int APS5_VABI sceNgs2RackDestroy(uintptr_t rack_handle, Ngs2ContextBufferInfo* b
     if (buffer_info != nullptr) *buffer_info = {};
     auto* rack = Ngs2FindRack(rack_handle);
     if (rack == nullptr) return SCE_NGS2_ERROR_INVALID_RACK_HANDLE;
-    while (rack != nullptr && Ngs2RenderingElsewhere(*rack->system)) {
+    while (rack != nullptr && Ngs2ExclusiveElsewhere()) {
         Ngs2WaitOnce();
         rack = Ngs2FindRack(rack_handle);
     }

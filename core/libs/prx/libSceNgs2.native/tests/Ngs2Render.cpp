@@ -1111,6 +1111,22 @@ static void TestRackLocksAcrossSystemsAndRender() {
     Require(sceNgs2SystemDestroy(second, nullptr) == SCE_NGS2_OK);
 }
 
+static void TestRackDestroyWaitsForLock() {
+    const auto system = CreateSystem();
+    const auto rack = CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER);
+    Require(sceNgs2RackLock(rack) == SCE_NGS2_OK);
+    std::atomic<bool> destroyed = false;
+    std::thread destroyer([&] {
+        Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+        destroyed = true;
+    });
+    const bool destroyedWhileLocked = AnsweredWithin(destroyed, std::chrono::milliseconds(200));
+    Require(!destroyedWhileLocked && sceNgs2RackUnlock(rack) == SCE_NGS2_OK);
+    Require(AnsweredWithin(destroyed));
+    destroyer.join();
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
 static void TestLock() {
     const auto system = CreateSystem();
     const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
@@ -1377,6 +1393,7 @@ int main() {
     TestRackLockWaitsForRender();
     TestCallbacksLockEachOthersSystem();
     TestRackLocksAcrossSystemsAndRender();
+    TestRackDestroyWaitsForLock();
     TestDefaultChannelMap();
     TestUnsetMatrix();
     TestRenderCapacity<float>(SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1);

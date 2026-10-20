@@ -88,10 +88,6 @@ struct HeldNgs2Lock {
     }
 };
 
-bool Ngs2RenderingElsewhere(const Ngs2System& system) {
-    return system.renderer != std::thread::id{} && system.renderer != std::this_thread::get_id();
-}
-
 struct ExclusiveState {
     std::thread::id owner;
     std::uint32_t depth = 0;
@@ -272,7 +268,7 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
     const Ngs2Lock lock;
     if (buffer_info != nullptr) *buffer_info = {};
     auto* system = Ngs2FindSystem(system_handle);
-    while (system != nullptr && Ngs2RenderingElsewhere(*system)) {
+    while (system != nullptr && Ngs2ExclusiveElsewhere()) {
         Ngs2WaitOnce();
         system = Ngs2FindSystem(system_handle);
     }
@@ -406,16 +402,13 @@ int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBuffe
     Ngs2EnterExclusive();
     struct Release {
         SystemLockState* state;
-        Ngs2System* system;
-        std::thread::id renderer;
         ~Release() {
-            system->renderer = renderer;
             Ngs2LeaveExclusive();
             Ngs2NotifyWaiters();
             std::lock_guard locks(SystemLockMutex());
             ReleaseSystemLock(*state);
         }
-    } release{state, system, std::exchange(system->renderer, std::this_thread::get_id())};
+    } release{state};
     Ngs2RenderSystem(*system, buffer_info, num_buffer_info);
     return SCE_NGS2_OK;
 }

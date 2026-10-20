@@ -177,7 +177,6 @@ struct Ngs2System {
     std::int64_t renderCount = 0;
     std::uintptr_t userData = 0;
     std::vector<Ngs2Rack*> racks;
-    std::thread::id renderer{};
 };
 
 std::string Ngs2Hex(std::uint32_t value);
@@ -203,7 +202,6 @@ private:
     std::uint32_t depth;
 };
 
-bool Ngs2RenderingElsewhere(const Ngs2System& system);
 bool Ngs2ExclusiveElsewhere();
 void Ngs2EnterExclusive();
 void Ngs2LeaveExclusive(std::uint32_t depth = 1);
