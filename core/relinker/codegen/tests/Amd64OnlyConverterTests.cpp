@@ -633,6 +633,29 @@ void converterMonitorWait() {
     require(result.Bytes == expected, "MONITORX/MWAITX/MCOMMIT were replaced with the wrong bytes");
 }
 
+void converterInPlaceFollower() {
+    const auto converter = Codegen::MakeAmd64OnlyConverter();
+    const auto convert = [&](const Bytes& following) {
+        Bytes file(0x300, 0xCC);
+        Bytes text = {0x66, 0x0F, 0x79, 0xCA};
+        text.insert(text.end(), following.begin(), following.end());
+        text.push_back(0xC3);
+        std::copy(text.begin(), text.end(), file.begin() + 0x200);
+        return converter->Convert(file, {segmentHeader(text.size())});
+    };
+    const auto tail = [](const Codegen::TrampolineSite& site, const std::size_t length) {
+        return Bytes(site.Body.begin() + static_cast<std::ptrdiff_t>(site.ReturnBranchOffset - length), site.Body.begin() + static_cast<std::ptrdiff_t>(site.ReturnBranchOffset));
+    };
+    const auto store = convert({0xF3, 0x0F, 0x2B, 0x07});
+    require(store.Trampolines.size() == 1 && store.Trampolines[0].Length == 8 && tail(store.Trampolines[0], 4) == Bytes{0xF3, 0x0F, 0x11, 0x07}, "MOVNTSS after a short EXTRQ was not moved into its stub as MOVSS");
+    const auto ripStore = convert({0xF2, 0x0F, 0x2B, 0x05, 0x40, 0x00, 0x00, 0x00});
+    require(ripStore.Trampolines.size() == 1 && ripStore.Trampolines[0].Length == 12, "RIP-relative MOVNTSD after a short EXTRQ was not moved into its stub");
+    const auto& ripSite = ripStore.Trampolines[0];
+    require(tail(ripSite, 8) == Bytes{0xF2, 0x0F, 0x11, 0x05, 0x00, 0x00, 0x00, 0x00} && ripSite.Relocations.size() == 1 && ripSite.Relocations[0].SiteTarget == 12 + 0x40 && ripSite.Relocations[0].InstructionEnd == ripSite.ReturnBranchOffset, "Moved MOVNTSD has the wrong bytes or relocation");
+    const auto monitor = convert({0x0F, 0x01, 0xFA});
+    require(monitor.Trampolines.size() == 1 && monitor.Trampolines[0].Length == 7 && tail(monitor.Trampolines[0], 3) == Bytes{0x0F, 0x1F, 0x00}, "MONITORX after a short EXTRQ was not moved into its stub as a NOP");
+}
+
 void converterClzero() {
     const auto converter = Codegen::MakeAmd64OnlyConverter();
     Bytes file(0x300, 0xCC);
@@ -1957,6 +1980,18 @@ void scannerZeroTail() {
     requireFailure([&] { (void)scanner->ScanCodeSection(truncated, 0, truncated.size()); }, "Truncated non-zero tail must still fail");
 }
 
+void scannerUnwindRanges() {
+    const Bytes slot{0x48, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x2E, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC3};
+    const auto gap = Codegen::MakeInstructionScanner({}, {{16, 17}})->ScanCodeSection(slot, 0x1000, slot.size());
+    require(gap.size() == 2 && gap[0].Offset == 0x1001 && gap[0].Length == 15 && gap[1].Offset == 0x1010 && gap[1].Length == 1, "An undecodable byte outside every unwind range must resume the scan at the next byte");
+    requireFailure([&] { (void)Codegen::MakeInstructionScanner({}, {{0, 17}})->ScanCodeSection(slot, 0, slot.size()); }, "An undecodable byte inside an unwind range must still fail");
+    requireFailure([&] { (void)Codegen::MakeInstructionScanner()->ScanCodeSection(slot, 0, slot.size()); }, "An undecodable byte without unwind ranges must still fail");
+    const Bytes crossing{0xB8, 0x0F, 0x05, 0xC3, 0x90};
+    const auto cut = Codegen::MakeInstructionScanner({}, {{3, 4}, {1, 3}})->ScanCodeSection(crossing, 0, crossing.size());
+    require(cut.size() == 3 && cut[0].Offset == 1 && cut[0].Length == 2 && cut[1].Offset == 3 && cut[2].Offset == 4, "A gap instruction that crosses into an unwind range must end at the range");
+    require(Codegen::MakeInstructionScanner()->ScanCodeSection(crossing, 0, crossing.size()).front().Length == 5, "Without unwind ranges the crossing instruction must decode whole");
+}
+
 int main() {
     try {
         decoderLengths();
@@ -1985,6 +2020,7 @@ int main() {
         converterSha256();
         converterSha1();
         converterMonitorWait();
+        converterInPlaceFollower();
         converterClzero();
         rosettaSubstitutions();
         converterRosetta();
@@ -2005,6 +2041,7 @@ int main() {
         linuxRipRelativePlacement();
         linuxStackSynthesis();
         scannerZeroTail();
+        scannerUnwindRanges();
         std::cout << "AMD64-only converter tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
