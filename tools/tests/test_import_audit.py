@@ -693,7 +693,7 @@ class ImportAuditTests(unittest.TestCase):
         (elsewhere / "libSceMissing.prx").write_bytes(exporting("DDDDDDDDDDD"))
         code, out, err = work.run(registry)
         self.assertEqual((code, err), (1, ""))
-        self.assertIn(f"libSceMissing.prx is in {elsewhere}: pass that directory with --modules", out)
+        self.assertIn(f"libSceMissing.prx is in {elsewhere.resolve()}: pass that directory with --modules", out)
         self.assertNotIn("libSceGone.prx is in", out)
         code, out, err = work.run(registry, "--modules", str(elsewhere))
         self.assertNotIn("libSceMissing.prx is in", out)
