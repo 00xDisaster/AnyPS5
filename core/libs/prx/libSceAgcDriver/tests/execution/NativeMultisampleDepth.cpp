@@ -824,6 +824,8 @@ void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
                     recorder.Activate();
                     Require(Recorder::Active() == &recorder, "driver idle did not restore the native depth fixture recorder");
                     if (!AgcDriver::GuestMemory::Watched(target.htileAddress, metadataBytes)) {
+                        Require(PrepareImportWatch(context) == ImportWatch::Unwatch,
+                                "the HTILE metadata range lost write-watch coverage on a device whose host imports stay watched");
                         std::puts("skipped native HTILE write-coverage assertion: the write tracker does not cover the imported metadata range; clear output checks still run");
                     } else {
                         const bool storedAll = AgcDriver::GuestMemory::StoredAllSince_nid_no_patch(target.htileAddress, metadataBytes, generation);
