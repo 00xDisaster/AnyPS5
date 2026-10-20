@@ -97,10 +97,12 @@ void* CreateMfsrObject(MfsrObjectKind kind, void* sharedResources, const char* f
  return object;
 }
 
-const MfsrObject* FindMfsrObject(void* handle) {
+bool FindMfsrObject(void* handle, MfsrObject* out) {
  std::lock_guard lock(g_mfsrMutex);
  const auto found = g_mfsrObjects.find(handle);
- return found != g_mfsrObjects.end() ? found->second : nullptr;
+ if (found == g_mfsrObjects.end()) return false;
+ *out = *found->second;
+ return true;
 }
 
 std::pair<std::uint32_t, std::uint32_t> MfsrInputDimensions(const MfsrContextParam* param) {
@@ -218,7 +220,8 @@ std::int32_t APS5_VABI scePsmlMfsrGetDispatchMfsrPacket1300(void* context, void*
 
 std::int32_t APS5_VABI scePsmlMfsrGetDispatchMfsrPacketSizeInDwords(void* context, std::uint32_t* packetSizeInDwords) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- if (FindMfsrObject(context) == nullptr) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ MfsrObject object;
+ if (!FindMfsrObject(context, &object)) return SCE_PSML_ERROR_INVALID_ARGUMENT;
  if (packetSizeInDwords == nullptr) return SCE_PSML_ERROR_NULL_OUTPUT;
  *packetSizeInDwords = MfsrDispatchPacketDwords;
  return 0;
@@ -226,29 +229,32 @@ std::int32_t APS5_VABI scePsmlMfsrGetDispatchMfsrPacketSizeInDwords(void* contex
 
 std::int32_t APS5_VABI scePsmlMfsrSelectConfig(void* config) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- if (FindMfsrObject(config) == nullptr) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ MfsrObject object;
+ if (!FindMfsrObject(config, &object)) return SCE_PSML_ERROR_INVALID_ARGUMENT;
  return 0;
 }
 
 std::int32_t APS5_VABI scePsmlMfsrGetMipmapBias(void* context, float* bias, std::uint32_t dimension) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- const MfsrObject* object = FindMfsrObject(context);
- if (object == nullptr || object->kind != MfsrObjectKind::Context) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ MfsrObject object;
+ if (!FindMfsrObject(context, &object) || object.kind != MfsrObjectKind::Context) return SCE_PSML_ERROR_INVALID_ARGUMENT;
  if (bias == nullptr) return SCE_PSML_ERROR_NULL_OUTPUT;
- if (object->inputWidth == 0) return SCE_PSML_ERROR_INVALID_ARGUMENT;
- *bias = std::log2f(static_cast<float>(dimension) / static_cast<float>(object->inputWidth)) - 1.0f;
+ if (object.inputWidth == 0) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ *bias = std::log2f(static_cast<float>(dimension) / static_cast<float>(object.inputWidth)) - 1.0f;
  return 0;
 }
 
 std::int32_t APS5_VABI scePsmlMfsrRequestCapture(void* context) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- if (FindMfsrObject(context) == nullptr) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ MfsrObject object;
+ if (!FindMfsrObject(context, &object)) return SCE_PSML_ERROR_INVALID_ARGUMENT;
  return 0;
 }
 
 std::int32_t APS5_VABI scePsmlMfsrIsCaptureInProgress(void* context) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- if (FindMfsrObject(context) == nullptr) return SCE_PSML_ERROR_INVALID_ARGUMENT;
+ MfsrObject object;
+ if (!FindMfsrObject(context, &object)) return SCE_PSML_ERROR_INVALID_ARGUMENT;
  return 0;
 }
 
