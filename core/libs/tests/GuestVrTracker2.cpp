@@ -17,7 +17,8 @@ std::int32_t APS5_VABI VrTracker2Accept();
 std::int32_t APS5_VABI VrTracker2FillDefaults(void* output);
 std::int32_t APS5_VABI VrTracker2ClearWord(void* output);
 std::int32_t APS5_VABI sceVrTracker2QueryMemory(const void* parameter, void* requirement);
-std::int32_t APS5_VABI sceVrTracker2Initialize();
+struct VrTracker2InitializeParameter;
+std::int32_t APS5_VABI sceVrTracker2Initialize(const VrTracker2InitializeParameter* parameter);
 }
 
 namespace {
@@ -110,6 +111,6 @@ int main() {
     parameter[0] = 0x21;
     Require(sceVrTracker2QueryMemory(parameter.data(), requirement.data()) == InvalidArgument, "query size");
 
-    Require(Throws([] { sceVrTracker2Initialize(); }), "unknown export");
+    Require(Throws([] { sceVrTracker2Initialize(nullptr); }), "unknown export");
     return 0;
 }

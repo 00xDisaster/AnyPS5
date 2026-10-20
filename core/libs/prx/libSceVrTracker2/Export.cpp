@@ -5,6 +5,29 @@
 #include <string>
 #include "prx/libc/include/General.hpp"
 
+struct VrTracker2InitializeParameter;
+struct VrTracker2ResultParameter;
+struct VrTracker2Result;
+struct VrTracker2CoordinateLocation;
+
+struct VrTracker2BoundaryGeometry {
+    std::uint32_t size;
+    std::uint32_t pointCount;
+    float points[256][3];
+};
+
+struct VrTracker2OrientedBoundingBox {
+    std::uint32_t size;
+    float transform[16];
+    float extents[3];
+};
+
+static_assert(sizeof(VrTracker2BoundaryGeometry) == 3080);
+static_assert(offsetof(VrTracker2BoundaryGeometry, points) == 8);
+static_assert(sizeof(VrTracker2OrientedBoundingBox) == 80);
+static_assert(offsetof(VrTracker2OrientedBoundingBox, transform) == 4);
+static_assert(offsetof(VrTracker2OrientedBoundingBox, extents) == 68);
+
 namespace {
 
 constexpr std::int32_t SCE_OK = 0;
@@ -25,39 +48,39 @@ std::int32_t APS5_VABI sceVrTracker2Finalize() {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2GetCoordinateSystem() {
+std::int32_t APS5_VABI sceVrTracker2GetCoordinateSystem(std::uint32_t* coordinateSystem) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2GetPlayAreaBoundaryGeometry() {
+std::int32_t APS5_VABI sceVrTracker2GetPlayAreaBoundaryGeometry(VrTracker2BoundaryGeometry* geometry) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2GetPlayAreaOrientedBoundingBox() {
+std::int32_t APS5_VABI sceVrTracker2GetPlayAreaOrientedBoundingBox(VrTracker2OrientedBoundingBox* box) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2GetResult() {
+std::int32_t APS5_VABI sceVrTracker2GetResult(const VrTracker2ResultParameter* parameter, VrTracker2Result* result) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2LocateCoordinateSystem() {
+std::int32_t APS5_VABI sceVrTracker2LocateCoordinateSystem(std::uint32_t coordinateSystem, VrTracker2CoordinateLocation* location) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2RegisterDevice() {
+std::int32_t APS5_VABI sceVrTracker2RegisterDevice(std::uint32_t deviceType, std::int32_t deviceHandle) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2ResetLocalCoordinate() {
+std::int32_t APS5_VABI sceVrTracker2ResetLocalCoordinate(std::int32_t deviceHandle) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2SetCoordinateSystem() {
+std::int32_t APS5_VABI sceVrTracker2SetCoordinateSystem(std::uint32_t coordinateSystem) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2UnregisterDevice() {
+std::int32_t APS5_VABI sceVrTracker2UnregisterDevice(std::int32_t deviceHandle) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
@@ -75,7 +98,7 @@ std::int32_t APS5_VABI sceVrTracker2QueryMemory(const void* parameter, void* req
     return SCE_OK;
 }
 
-std::int32_t APS5_VABI sceVrTracker2Initialize() {
+std::int32_t APS5_VABI sceVrTracker2Initialize(const VrTracker2InitializeParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
