@@ -448,6 +448,17 @@ int main() {
     SlotMatches(memoryFace->glyph, host->glyph);
     Require(face->size->metrics.y_ppem == 0);
 
+    Require(FT_Set_Pixel_Sizes_nid_postfix(nullptr, 0, 100) == FT_Err_Invalid_Face_Handle);
+    Require(FT_Set_Pixel_Sizes_nid_postfix(face, 0, 100) == 0 && FT_Set_Pixel_Sizes(host, 0, 100) == 0);
+    const auto& metrics = host->size->metrics;
+    const auto& guestMetrics = face->size->metrics;
+    Require(guestMetrics.x_ppem == 100 && guestMetrics.y_ppem == 100 && guestMetrics.x_scale == metrics.x_scale && guestMetrics.y_scale == metrics.y_scale);
+    Require(guestMetrics.ascender == metrics.ascender && guestMetrics.descender == metrics.descender && guestMetrics.height == metrics.height && guestMetrics.max_advance == metrics.max_advance);
+
+    Require(FT_Get_Char_Index_nid_postfix(face, 'A') == 1 && FT_Get_Char_Index_nid_postfix(face, 'B') == 0);
+    Require(FT_Get_Char_Index_nid_postfix(face, 0x100000041ull) == 1);
+    Require(FT_Get_Char_Index_nid_postfix(nullptr, 'A') == 0);
+
     GuestVector kerning{123, 456};
     Require(FT_Get_Kerning_nid_postfix(nullptr, 1, 1, FT_KERNING_DEFAULT, &kerning) == FT_Err_Invalid_Face_Handle);
     Require(kerning.x == 123 && kerning.y == 456);
@@ -508,17 +519,6 @@ int main() {
         Require(kerning.x == 0 && kerning.y == 0);
     }
     FT_Done_Face(kernHost);
-
-    Require(FT_Set_Pixel_Sizes_nid_postfix(nullptr, 0, 100) == FT_Err_Invalid_Face_Handle);
-    Require(FT_Set_Pixel_Sizes_nid_postfix(face, 0, 100) == 0 && FT_Set_Pixel_Sizes(host, 0, 100) == 0);
-    const auto& metrics = host->size->metrics;
-    const auto& guestMetrics = face->size->metrics;
-    Require(guestMetrics.x_ppem == 100 && guestMetrics.y_ppem == 100 && guestMetrics.x_scale == metrics.x_scale && guestMetrics.y_scale == metrics.y_scale);
-    Require(guestMetrics.ascender == metrics.ascender && guestMetrics.descender == metrics.descender && guestMetrics.height == metrics.height && guestMetrics.max_advance == metrics.max_advance);
-
-    Require(FT_Get_Char_Index_nid_postfix(face, 'A') == 1 && FT_Get_Char_Index_nid_postfix(face, 'B') == 0);
-    Require(FT_Get_Char_Index_nid_postfix(face, 0x100000041ull) == 1);
-    Require(FT_Get_Char_Index_nid_postfix(nullptr, 'A') == 0);
 
     Require(FT_Load_Char_nid_postfix(nullptr, 'A', FT_LOAD_DEFAULT) == FT_Err_Invalid_Face_Handle);
     for (const std::uint64_t code : std::array<std::uint64_t, 4>{'A', 'B', 0x100000041ull, 0xFFFFFFFFFFFFFFFFull}) {
