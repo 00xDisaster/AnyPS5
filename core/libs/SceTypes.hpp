@@ -963,12 +963,13 @@ struct VoicePortInfo {
 };
 
 struct VoiceResourceInfo {
-    std::uint16_t max_voice_input_ports;
-    std::uint16_t max_voice_output_ports;
-    std::uint16_t max_device_input_ports;
-    std::uint16_t max_device_output_ports;
-    std::uint16_t max_ports;
+    std::uint16_t maxVoiceInputPorts;
+    std::uint16_t maxVoiceOutputPorts;
+    std::uint16_t maxDeviceInputPorts;
+    std::uint16_t maxDeviceOutputPorts;
 };
+
+static_assert(sizeof(VoiceResourceInfo) == 8);
 
 struct VoiceStartParam {
     void* container;

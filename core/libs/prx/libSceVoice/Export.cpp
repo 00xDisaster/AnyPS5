@@ -23,19 +23,24 @@ constexpr std::uint32_t VoiceFrameMs = 20;
 constexpr std::int32_t PortAttrVoiceActivity = 1001;
 constexpr int VoiceErrorNotInitialized = static_cast<int>(0x804E0801u);
 constexpr int VoiceErrorAlreadyInitialized = static_cast<int>(0x804E0802u);
+constexpr auto NotInitialized = static_cast<std::int32_t>(0x804e0801u);
+constexpr auto InvalidPort = static_cast<std::int32_t>(0x804e0804u);
+constexpr auto InvalidArgument = static_cast<std::int32_t>(0x804e0805u);
+constexpr auto PortNotFound = static_cast<std::int32_t>(0x804e0807u);
 
 struct Port {
     std::int32_t type;
     float volume;
     std::uint32_t bitrate;
     bool muted = false;
+    bool paused = false;
 };
 
 struct Voice {
     std::mutex mutex;
     bool initialized = false;
     bool started = false;
-    bool chatEnabled = false;
+    std::int32_t appType = 0;
     std::uint32_t nextId = 0;
     std::map<std::uint32_t, Port> ports;
     std::set<std::pair<std::uint32_t, std::uint32_t>> connections;
@@ -69,6 +74,7 @@ int APS5_VABI sceVoiceInit(VoiceInitParam* param, int32_t version) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
     if (voice.initialized) return VoiceErrorAlreadyInitialized;
+    voice.appType = param->app_type;
     voice.initialized = true;
     return 0;
 }
@@ -102,7 +108,7 @@ int APS5_VABI sceVoiceEnd_nid_postfix(void) {
     voice.ports.clear();
     voice.connections.clear();
     voice.started = false;
-    voice.chatEnabled = false;
+    voice.appType = 0;
     voice.initialized = false;
     return 0;
 }
@@ -185,16 +191,36 @@ int APS5_VABI sceVoiceGetPortInfo(uint32_t port_id, VoicePortInfo* info) {
     return 0;
 }
 
-int APS5_VABI sceVoiceGetPortAttr(uint32_t port_id, int32_t attr, void* value, int32_t size) {
+int APS5_VABI sceVoiceGetPortAttr(std::uint32_t portId, std::int32_t attr, void* value, std::int32_t size) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__);
-    if (attr == PortAttrVoiceActivity) {
-        if (value == nullptr || size != 1) APS5_INVALID_ARG_EX;
-        std::memset(value, 0, 1);
-        return 0;
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    if (value == nullptr) return InvalidArgument;
+    std::int32_t expectedSize;
+    switch (attr) {
+    case 1000:
+    case 1001:
+    case 2000:
+    case 2002:
+        expectedSize = 1;
+        break;
+    case 1002:
+    case 2001:
+        expectedSize = 4;
+        break;
+    case 1003:
+        expectedSize = 2;
+        break;
+    default:
+        return InvalidArgument;
     }
-    Fail(__func__, "attribute " + std::to_string(attr) + " not implemented");
+    if (size != expectedSize) return InvalidArgument;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return InvalidPort;
+    const auto requiredType = attr == 1003 ? PortOutDevice : PortInDevice;
+    if (found->second.type != requiredType) return InvalidArgument;
+    Fail(__func__, "device attribute backend is not implemented");
 }
 
 int APS5_VABI sceVoiceReadFromOPort(uint32_t output_port_id, void* data, uint32_t* size) {
@@ -231,53 +257,72 @@ int APS5_VABI sceVoiceGetMuteFlag(uint32_t port_id, bool* muted) {
 }
 
 int APS5_VABI sceVoiceGetResourceInfo(VoiceResourceInfo* info) {
-    if (info == nullptr) APS5_INVALID_ARG_EX;
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) Fail(__func__, "library not initialized");
-    info->max_voice_input_ports = 7;
-    info->max_voice_output_ports = 7;
-    info->max_device_input_ports = 1;
-    info->max_device_output_ports = 1;
-    info->max_ports = 64;
+    if (!voice.initialized) return NotInitialized;
+    if (info == nullptr) return InvalidArgument;
+    switch (voice.appType) {
+    case 4:
+        *info = {0, 0, 4, 5};
+        break;
+    case 0x08000000:
+    case 0x10000000:
+        *info = {15, 4, 4, 4};
+        break;
+    case 0x20000000:
+        *info = {7, 4, 4, 4};
+        break;
+    default:
+        Fail(__func__, "unsupported initialization mode");
+    }
     return 0;
 }
 
 int APS5_VABI sceVoiceEnableChat(void) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) Fail(__func__, "library not initialized");
-    voice.chatEnabled = true;
+    if (!voice.initialized) return NotInitialized;
+    Fail(__func__, "audio chat backend is not implemented");
+}
+
+int APS5_VABI sceVoiceResetPort(std::uint32_t portId) {
+    auto& voice = State();
+    std::lock_guard lock(voice.mutex);
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    if (voice.started && (found->second.type == PortInDevice || found->second.type == PortOutDevice)) Fail(__func__, "device reset backend is not implemented");
     return 0;
 }
 
-int APS5_VABI sceVoiceResetPort(uint32_t port_id) {
+int APS5_VABI sceVoicePausePort(std::uint32_t portId) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__);
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    found->second.paused = true;
     return 0;
 }
 
-int APS5_VABI sceVoicePausePort(uint32_t port_id) {
+int APS5_VABI sceVoiceResumePort(std::uint32_t portId) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__);
-    return 0;
-}
-
-int APS5_VABI sceVoiceResumePort(uint32_t port_id) {
-    auto& voice = State();
-    std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__);
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    found->second.paused = false;
     return 0;
 }
 
 int APS5_VABI sceVoiceDisableChat(void) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) Fail(__func__, "library not initialized");
-    voice.chatEnabled = false;
-    return 0;
+    if (!voice.initialized) return NotInitialized;
+    Fail(__func__, "audio chat backend is not implemented");
 }
 
 int APS5_VABI sceVoiceInitHQ(void) {

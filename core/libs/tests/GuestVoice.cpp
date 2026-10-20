@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <stdexcept>
 
 extern "C" {
@@ -78,27 +79,35 @@ std::uint32_t CreatePort(std::int32_t type, float volume) {
 
 int main() {
     TestNotInitialized();
-    RequireThrows([] { sceVoiceResetPort(0); });
-    RequireThrows([] { sceVoicePausePort(0); });
-    RequireThrows([] { sceVoiceResumePort(0); });
-    RequireThrows([] { VoiceResourceInfo info{}; sceVoiceGetResourceInfo(&info); });
+    constexpr auto notInitialized = static_cast<std::int32_t>(0x804e0801u);
+    constexpr auto invalidPort = static_cast<std::int32_t>(0x804e0804u);
+    constexpr auto invalidArgument = static_cast<std::int32_t>(0x804e0805u);
+    constexpr auto portNotFound = static_cast<std::int32_t>(0x804e0807u);
+    Require(sceVoiceResetPort(0) == notInitialized);
+    Require(sceVoicePausePort(0) == notInitialized);
+    Require(sceVoiceResumePort(0) == notInitialized);
+    Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
+    Require(sceVoiceEnableChat() == notInitialized);
+    Require(sceVoiceDisableChat() == notInitialized);
+    VoiceInitParam init{};
+    init.app_type = 0x10000000;
+    VoiceStartParam start{};
+    Require(sceVoiceInit(&init, 100) == 0);
+    Require(sceVoiceInit(&init, 100) == AlreadyInitialized);
+    Require(sceVoiceStart(&start) == 0);
+    Require(sceVoiceGetResourceInfo(nullptr) == invalidArgument);
+    struct ResourceOutput {
+        VoiceResourceInfo info;
+        std::uint32_t guard;
+    } resourceOutput{{}, 0xa5a5a5a5u};
+    Require(sceVoiceGetResourceInfo(&resourceOutput.info) == 0);
+    Require(resourceOutput.info.maxVoiceInputPorts == 15);
+    Require(resourceOutput.info.maxVoiceOutputPorts == 4);
+    Require(resourceOutput.info.maxDeviceInputPorts == 4);
+    Require(resourceOutput.info.maxDeviceOutputPorts == 4);
+    Require(resourceOutput.guard == 0xa5a5a5a5u);
     RequireThrows([] { sceVoiceEnableChat(); });
     RequireThrows([] { sceVoiceDisableChat(); });
-    VoiceInitParam init{};
-    VoiceStartParam start{};
-    Require(sceVoiceInit(&init, 0) == 0);
-    Require(sceVoiceInit(&init, 0) == AlreadyInitialized);
-    Require(sceVoiceStart(&start) == 0);
-    RequireThrows([] { sceVoiceGetResourceInfo(nullptr); });
-    VoiceResourceInfo resourceInfo{};
-    Require(sceVoiceGetResourceInfo(&resourceInfo) == 0);
-    Require(resourceInfo.max_voice_input_ports == 7);
-    Require(resourceInfo.max_voice_output_ports == 7);
-    Require(resourceInfo.max_device_input_ports == 1);
-    Require(resourceInfo.max_device_output_ports == 1);
-    Require(resourceInfo.max_ports == 64);
-    Require(sceVoiceEnableChat() == 0);
-    Require(sceVoiceDisableChat() == 0);
     const auto input = CreatePort(2, 0.5f);
     const auto output = CreatePort(3, 0.25f);
     Require(sceVoiceConnectIPortToOPort(input, output) == 0);
@@ -108,13 +117,16 @@ int main() {
 
     Require(sceVoiceResetPort(input) == 0);
     Require(sceVoiceResetPort(output) == 0);
-    RequireThrows([&] { sceVoiceResetPort(output + 1); });
+    Require(sceVoiceResetPort(output + 1) == portNotFound);
+    Require(sceVoiceResetPort(128) == invalidPort);
 
+    Require(sceVoicePausePort(input) == 0);
     Require(sceVoicePausePort(input) == 0);
     Require(sceVoicePausePort(output) == 0);
     VoicePortInfo paused{};
     Require(sceVoiceGetPortInfo(input, &paused) == 0);
     Require(paused.port_type == before.port_type && paused.state == before.state && paused.frame_size == before.frame_size);
+    Require(sceVoiceResumePort(input) == 0);
     Require(sceVoiceResumePort(input) == 0);
     Require(sceVoiceResumePort(output) == 0);
     Require(sceVoicePausePortAll() == 0);
@@ -123,8 +135,10 @@ int main() {
     Require(paused.port_type == before.port_type && paused.state == before.state && paused.frame_size == before.frame_size);
     Require(sceVoiceResumePortAll() == 0);
     Require(sceVoiceResumePortAll() == 0);
-    RequireThrows([&] { sceVoicePausePort(output + 1); });
-    RequireThrows([&] { sceVoiceResumePort(output + 1); });
+    Require(sceVoicePausePort(output + 1) == portNotFound);
+    Require(sceVoicePausePort(128) == invalidPort);
+    Require(sceVoiceResumePort(output + 1) == portNotFound);
+    Require(sceVoiceResumePort(128) == invalidPort);
 
     VoicePortInfo after{};
     Require(sceVoiceGetPortInfo(input, &after) == 0);
@@ -139,14 +153,26 @@ int main() {
     Require(sceVoiceDisconnectIPortFromOPort(input, output) == 0);
 
     Require(sceVoiceDeletePort(input) == 0);
-    RequireThrows([&] { sceVoiceResetPort(input); });
-    RequireThrows([&] { sceVoicePausePort(input); });
+    Require(sceVoiceResetPort(input) == portNotFound);
+    Require(sceVoicePausePort(input) == portNotFound);
     Require(sceVoiceResetPort(output) == 0);
     Require(sceVoiceEnd_nid_postfix() == 0);
     TestNotInitialized();
-    RequireThrows([&] { sceVoiceResetPort(output); });
-    RequireThrows([&] { sceVoiceResumePort(output); });
-    RequireThrows([] { VoiceResourceInfo info{}; sceVoiceGetResourceInfo(&info); });
-    RequireThrows([] { sceVoiceEnableChat(); });
-    RequireThrows([] { sceVoiceDisableChat(); });
+    Require(sceVoiceResetPort(output) == notInitialized);
+    Require(sceVoiceResumePort(output) == notInitialized);
+    Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
+    Require(sceVoiceEnableChat() == notInitialized);
+    Require(sceVoiceDisableChat() == notInitialized);
+    for (const auto mode : {4, 0x08000000, 0x10000000, 0x20000000}) {
+        init.app_type = mode;
+        Require(sceVoiceInit(&init, 100) == 0);
+        Require(sceVoiceGetResourceInfo(&resourceOutput.info) == 0);
+        Require(resourceOutput.info.maxVoiceInputPorts == (mode == 4 ? 0 : mode == 0x20000000 ? 7 : 15));
+        Require(resourceOutput.info.maxVoiceOutputPorts == (mode == 4 ? 0 : 4));
+        Require(resourceOutput.info.maxDeviceInputPorts == 4);
+        Require(resourceOutput.info.maxDeviceOutputPorts == (mode == 4 ? 5 : 4));
+        Require(resourceOutput.guard == 0xa5a5a5a5u);
+        Require(sceVoiceEnd_nid_postfix() == 0);
+    }
+
 }
