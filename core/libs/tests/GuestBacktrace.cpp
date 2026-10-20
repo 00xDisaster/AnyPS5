@@ -4,13 +4,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <string>
 #include <vector>
 
 extern "C" {
 int APS5_VABI sceLibcBacktraceGetBufferSize_nid_postfix(int, int*, std::size_t*);
 int APS5_VABI sceLibcBacktraceSelf_nid_postfix(int, void*, std::size_t, int*);
+#if defined(_WIN32)
+std::string BacktraceModulePath_nid_no_patch(HMODULE, std::size_t);
+#endif
 }
 
 namespace {
@@ -66,10 +73,21 @@ std::size_t Used(const std::vector<Record>& records) {
 }
 
 [[gnu::noinline]] void CheckBacktrace() {
+#if defined(_WIN32)
+    HMODULE handle = nullptr;
+    Require(GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCSTR>(&CheckBacktrace), &handle) != 0 && handle != nullptr,
+            "GetModuleHandleExA of the test failed");
+    std::string executable = BacktraceModulePath_nid_no_patch(handle, 1);
+    const auto slash = executable.find_last_of("/\\");
+    Require(!executable.empty() && slash != std::string::npos, "BacktraceModulePath of the test failed");
+    executable.erase(0, slash + 1);
+#else
     Dl_info self{};
     Require(dladdr(reinterpret_cast<void*>(&CheckBacktrace), &self) != 0 && self.dli_fname != nullptr && self.dli_saddr != nullptr, "dladdr of the test failed");
     std::string executable = self.dli_fname;
     executable.erase(0, executable.find_last_of('/') + 1);
+#endif
 
     int count = -1;
     std::size_t size = 0;
@@ -85,9 +103,17 @@ std::size_t Used(const std::vector<Record>& records) {
     for (std::size_t index = size; index < buffer.size(); ++index) Require(buffer[index] == Fill, "Self wrote past the buffer size");
     for (const auto& record : records) Require(record.reserved == 0 && !record.module.empty(), "record has a nonzero reserved word or no module");
     Require(records.front().module == executable, "first frame is not in the calling module");
+#if defined(_WIN32)
+    HMODULE callerHandle = nullptr;
+    const auto address = reinterpret_cast<std::uintptr_t>(handle) + records.front().offset;
+    Require(GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCSTR>(address), &callerHandle) != 0 && callerHandle == handle,
+            "first frame is not the caller");
+#else
     Dl_info caller{};
     const auto address = reinterpret_cast<std::uintptr_t>(self.dli_fbase) + records.front().offset;
     Require(dladdr(reinterpret_cast<void*>(address), &caller) != 0 && caller.dli_saddr == self.dli_saddr, "first frame is not the caller");
+#endif
 
     for (const int limit : {0, 1, 2}) {
         Require(sceLibcBacktraceGetBufferSize_nid_postfix(limit, &count, &size) == 0 && count == limit, "GetBufferSize ignored the frame limit");
