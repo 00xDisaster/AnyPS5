@@ -69,13 +69,8 @@ int Fail(int error) { *__error_nid_postfix() = error; return -1; }
 constexpr int GuestPeek = 0x2;
 constexpr int GuestDontWait = 0x80;
 constexpr int GuestNoSignal = 0x20000;
-#ifdef _WIN32
-constexpr int GuestSendFlags = GuestNoSignal;
-constexpr int GuestReceiveFlags = GuestPeek;
-#else
 constexpr int GuestSendFlags = GuestNoSignal | GuestDontWait;
 constexpr int GuestReceiveFlags = GuestPeek | GuestDontWait;
-#endif
 int NativeSendFlags(int flags) {
 #ifdef _WIN32
     static_cast<void>(flags);
@@ -228,12 +223,15 @@ std::shared_ptr<Socket> Lookup(int descriptor) {
     std::lock_guard lock(socketsMutex);
     const auto found = sockets.find(descriptor);
     if (found != sockets.end()) return found->second;
-    Fail(9);
+    Fail(descriptor >= 0 && DescriptorIsOpen_nid_no_patch(descriptor) ? 38 : 9);
     return {};
 }
 bool Address(const void* input, std::uint32_t length, sockaddr_storage& native, socklen_t& size) {
-    if (!input || length < 2) { Fail(14); return false; }
+    if (length > 255) { Fail(63); return false; }
+    if (length < 2) { Fail(22); return false; }
+    if (!input) { Fail(14); return false; }
     const auto* bytes = static_cast<const unsigned char*>(input);
+    if ((bytes[1] == 2 && length < 16) || (bytes[1] == 28 && length < 28)) { Fail(22); return false; }
     if (bytes[1] == 2 && length >= 16) {
         auto& v4 = reinterpret_cast<sockaddr_in&>(native);
         v4.sin_family = AF_INET;
@@ -631,7 +629,16 @@ int SocketSendFlags(Socket& socket, int flags) {
     return NativeSendFlags(socket.options.noSignal ? flags | GuestNoSignal : flags);
 }
 int WaitForTransfer(Socket& socket, bool send, int flags) {
-    if ((flags & GuestDontWait) != 0) return 0;
+    if ((flags & GuestDontWait) != 0) {
+#ifdef _WIN32
+        NativePollDescriptor entry{};
+        entry.fd = socket.value;
+        entry.events = static_cast<short>(send ? POLLWRNORM : POLLRDNORM);
+        return WSAPoll(&entry, 1, 0) == 0 ? 35 : 0;
+#else
+        return 0;
+#endif
+    }
     std::int64_t timeout;
     {
         std::lock_guard lock(socket.modeMutex);
@@ -1077,6 +1084,11 @@ int APS5_VABI socketpair_nid_postfix(int family, int type, int protocol, int* de
             GuestSockets::Close(firstDescriptor);
             return Fail(error);
         }
+        if ((type & GuestCloseOnExec) != 0) {
+            std::lock_guard registry(socketsMutex);
+            closeOnExecDescriptors.insert(firstDescriptor);
+            closeOnExecDescriptors.insert(secondDescriptor);
+        }
         descriptors[0] = firstDescriptor;
         descriptors[1] = secondDescriptor;
         return 0;
@@ -1109,7 +1121,9 @@ int APS5_VABI listen_nid_postfix(int descriptor, int backlog) {
     const auto socket = Lookup(descriptor);
     if (!socket) return -1;
     if (socket->type != 1) return Fail(45);
-    return ::listen(socket->value, backlog) ? Fail(NativeError()) : 0;
+    if (::listen(socket->value, backlog) == 0) return 0;
+    const int error = NativeError();
+    return Fail(error == 56 ? 22 : error);
 }
 int APS5_VABI accept_nid_postfix(int descriptor, void* address, std::uint32_t* length) {
     const auto listener = Lookup(descriptor);
@@ -1177,7 +1191,7 @@ int APS5_VABI bind_nid_postfix(int descriptor, const void* address, std::uint32_
 }
 int APS5_VABI shutdown_nid_postfix(int descriptor, int how) {
     const auto socket = Lookup(descriptor);
-    if (!socket) return Fail(9);
+    if (!socket) return -1;
     if (how < 0 || how > 2) return Fail(22);
     if (::shutdown(socket->value, how)) return Fail(NativeError());
     std::lock_guard lock(socket->modeMutex);
@@ -1217,6 +1231,7 @@ int APS5_VABI getpeername_nid_postfix(int descriptor, void* address, std::uint32
 }
 int APS5_VABI ioctl_nid_postfix(int descriptor, std::uint64_t request, void* argument) {
     if (!GuestSockets::IsOpen(descriptor)) return File::Ioctl(descriptor, request, argument);
+    if (File::IoctlRequestMalformed(request)) return Fail(25);
     const auto socket = Lookup(descriptor);
     if (!socket) return -1;
     if (!argument) return Fail(14);
