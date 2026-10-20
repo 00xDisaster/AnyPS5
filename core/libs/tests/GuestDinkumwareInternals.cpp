@@ -1,5 +1,6 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -7,16 +8,16 @@
 
 extern "C" {
 int* APS5_VABI __error_nid_postfix();
-double APS5_VABI _Stod_nid_postfix(const char* text, char** end, long pten);
+double APS5_VABI _Stod_nid_postfix(const char* text, char** end, std::int64_t pten);
 long long APS5_VABI _Stoll_nid_postfix(const char* text, char** end, int base);
-double APS5_VABI _Stodx_nid_postfix(const char* text, char** end, long pten, int* error);
-float APS5_VABI _Stofx_nid_postfix(const char* text, char** end, long pten, int* error);
-long double APS5_VABI _Stoldx_nid_postfix(const char* text, char** end, long pten, int* error);
-float APS5_VABI _Stof_nid_postfix(const char* text, char** end, long pten);
-long double APS5_VABI _Stold_nid_postfix(const char* text, char** end, long pten);
+double APS5_VABI _Stodx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+float APS5_VABI _Stofx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+long double APS5_VABI _Stoldx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+float APS5_VABI _Stof_nid_postfix(const char* text, char** end, std::int64_t pten);
+long double APS5_VABI _Stold_nid_postfix(const char* text, char** end, std::int64_t pten);
 long long APS5_VABI _Stollx_nid_postfix(const char* text, char** end, int base, int* error);
-long APS5_VABI _Stolx_nid_postfix(const char* text, char** end, int base, int* error);
-unsigned long APS5_VABI _Stoulx_nid_postfix(const char* text, char** end, int base, int* error);
+std::int64_t APS5_VABI _Stolx_nid_postfix(const char* text, char** end, int base, int* error);
+std::uint64_t APS5_VABI _Stoulx_nid_postfix(const char* text, char** end, int base, int* error);
 unsigned long long APS5_VABI _Stoullx_nid_postfix(const char* text, char** end, int base, int* error);
 double APS5_VABI _Sin_nid_postfix(double x, unsigned int quadrant);
 float APS5_VABI _FSin_nid_postfix(float x, unsigned int quadrant);
@@ -37,7 +38,7 @@ void Require(bool condition, const char* message) {
     }
 }
 
-void CheckStod(const char* text, long pten, double expected, long consumed, int error, const char* message) {
+void CheckStod(const char* text, std::int64_t pten, double expected, long consumed, int error, const char* message) {
     *__error_nid_postfix() = 0;
     char* end = nullptr;
     const double value = _Stod_nid_postfix(text, &end, pten);
@@ -56,6 +57,9 @@ void TestStod() {
     CheckStod("1e300", 8, 1e308, 5, 0, "a scale up to the largest decades");
     CheckStod("5e-324", -1, 0.0, 6, RangeError, "a scale that underflows to zero");
     CheckStod("1", 2147483647, HUGE_VAL, 1, RangeError, "the largest scale");
+    CheckStod("5", std::int64_t{1} << 40, HUGE_VAL, 1, RangeError, "a scale above 32 bits");
+    CheckStod("1e400", -100, 1e300, 5, 0, "an overflowing text scaled back into range");
+    CheckStod("0.01e41", -2, 1e37, 7, 0, "a negative scale from leading fraction zeros");
     CheckStod("1e-2147483648", -1, 0.0, 13, RangeError, "the smallest exponent and scale");
     CheckStod("-0", 5, -0.0, 2, 0, "negative zero keeps its sign");
     CheckStod("infinity", 3, HUGE_VAL, 8, 0, "infinity is not scaled");
@@ -102,6 +106,11 @@ void TestFloatErrors() {
     Require(_Stofx_nid_postfix("2.5e-1", &end, 3, &error) == 250.0f && error == 0 && *__error_nid_postfix() == 0, "_Stofx scaled");
     error = 99;
     *__error_nid_postfix() = 0;
+    Require(_Stofx_nid_postfix("1e39", &end, -1, &error) == 1e38f && error == 0 && *__error_nid_postfix() == 0, "_Stofx overflow scaled back into range");
+    error = 99;
+    Require(_Stodx_nid_postfix("1e400", &end, -100, &error) == 1e300 && error == 0 && *__error_nid_postfix() == 0, "_Stodx overflow scaled back into range");
+    error = 99;
+    *__error_nid_postfix() = 0;
     Require(_Stoldx_nid_postfix("1e400", &end, 0, &error) == 1e400L && error == 0 && *__error_nid_postfix() == 0, "_Stoldx uses the extended range");
     Require(_Stof_nid_postfix("1.5", &end, 1) == 15.0f, "_Stof");
     Require(_Stold_nid_postfix("1.5", &end, -1) == 0.15L, "_Stold");
@@ -126,12 +135,12 @@ void TestIntegerErrors() {
     Require(_Stoll_nid_postfix(text, &end, 1) == 0 && end == text && *__error_nid_postfix() == 5, "_Stoll invalid base");
     error = 99;
     *__error_nid_postfix() = 0;
-    Require(_Stolx_nid_postfix("9223372036854775808", &end, 0, &error) == 9223372036854775807l && error == RangeError && *__error_nid_postfix() == 0, "_Stolx overflow inside the unsigned range");
-    Require(_Stolx_nid_postfix("-18446744073709551615", &end, 10, &error) == (-9223372036854775807l - 1) && error == RangeError && *__error_nid_postfix() == 0, "_Stolx negative overflow inside the unsigned range");
-    Require(_Stolx_nid_postfix("18446744073709551616", &end, 10, &error) == 9223372036854775807l && error == RangeError && *__error_nid_postfix() == RangeError, "_Stolx overflow past the unsigned range");
+    Require(_Stolx_nid_postfix("9223372036854775808", &end, 0, &error) == 9223372036854775807ll && error == RangeError && *__error_nid_postfix() == 0, "_Stolx overflow inside the unsigned range");
+    Require(_Stolx_nid_postfix("-18446744073709551615", &end, 10, &error) == (-9223372036854775807ll - 1) && error == RangeError && *__error_nid_postfix() == 0, "_Stolx negative overflow inside the unsigned range");
+    Require(_Stolx_nid_postfix("18446744073709551616", &end, 10, &error) == 9223372036854775807ll && error == RangeError && *__error_nid_postfix() == RangeError, "_Stolx overflow past the unsigned range");
     error = 99;
     *__error_nid_postfix() = 0;
-    Require(_Stoulx_nid_postfix("-1", &end, 0, &error) == 18446744073709551615ul && error == 0, "_Stoulx wraps a negative value");
+    Require(_Stoulx_nid_postfix("-1", &end, 0, &error) == 18446744073709551615ull && error == 0, "_Stoulx wraps a negative value");
     Require(_Stoullx_nid_postfix("-18446744073709551615", &end, 10, &error) == 1 && error == 0 && *__error_nid_postfix() == 0, "_Stoullx wraps a negated maximum");
     Require(_Stoullx_nid_postfix("18446744073709551616", &end, 10, &error) == 18446744073709551615ull && error == RangeError && *__error_nid_postfix() == RangeError, "_Stoullx overflow");
 }
