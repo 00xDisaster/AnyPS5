@@ -8,13 +8,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <barrier>
+#include <algorithm>
 
 extern "C" {
 int APS5_VABI shm_open_nid_postfix(const char*, int, int);
@@ -348,12 +352,229 @@ void Run() {
     RequireError(shm_open_nid_postfix("relative", ReadWrite, 0), 22, "relative name did not return EINVAL");
     std::puts("Windows named shared-memory lifecycle checks passed");
 }
+
+bool EnvironmentEntryHasKey(const std::wstring& entry, const wchar_t* key) {
+    const auto separator = entry.find(L'=');
+    return separator != std::wstring::npos && separator == std::wcslen(key) &&
+        ::CompareStringOrdinal(entry.data(), static_cast<int>(separator), key, static_cast<int>(separator), TRUE) == CSTR_EQUAL;
+}
+
+std::vector<wchar_t> EnvironmentWithTempPath(const std::wstring& path) {
+    std::vector<std::wstring> entries;
+    LPWCH environment = ::GetEnvironmentStringsW();
+    if (environment == nullptr) throw std::runtime_error("reading the Windows environment failed");
+    try {
+        for (const wchar_t* current = environment; *current != L'\0'; current += std::wcslen(current) + 1) {
+            std::wstring entry(current);
+            if (!EnvironmentEntryHasKey(entry, L"TMP") && !EnvironmentEntryHasKey(entry, L"TEMP"))
+                entries.push_back(std::move(entry));
+        }
+    } catch (...) {
+        ::FreeEnvironmentStringsW(environment);
+        throw;
+    }
+    ::FreeEnvironmentStringsW(environment);
+    entries.push_back(L"TMP=" + path);
+    entries.push_back(L"TEMP=" + path);
+    std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+        return ::CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+    });
+    std::vector<wchar_t> block;
+    for (const auto& entry : entries) {
+        block.insert(block.end(), entry.begin(), entry.end());
+        block.push_back(L'\0');
+    }
+    block.push_back(L'\0');
+    return block;
+}
+
+bool SameDirectory(HANDLE left, HANDLE right) {
+    BY_HANDLE_FILE_INFORMATION leftInfo{}, rightInfo{};
+    return ::GetFileInformationByHandle(left, &leftInfo) && ::GetFileInformationByHandle(right, &rightInfo) &&
+        leftInfo.dwVolumeSerialNumber == rightInfo.dwVolumeSerialNumber &&
+        leftInfo.nFileIndexHigh == rightInfo.nFileIndexHigh && leftInfo.nFileIndexLow == rightInfo.nFileIndexLow;
+}
+
+std::filesystem::path ExtendedPath(const std::filesystem::path& path) {
+    wchar_t fullPath[32768]{};
+    const DWORD length = ::GetFullPathNameW(path.c_str(), static_cast<DWORD>(std::size(fullPath)), fullPath, nullptr);
+    if (length == 0 || length >= std::size(fullPath))
+        throw std::runtime_error("getting the full private temporary path failed");
+    std::wstring full(fullPath, length);
+    if (full.starts_with(L"\\\\?\\")) return full;
+    if (full.starts_with(L"\\\\")) return L"\\\\?\\UNC\\" + full.substr(2);
+    return L"\\\\?\\" + full;
+}
+
+std::filesystem::path DosPath(const std::filesystem::path& path) {
+    const auto& native = path.native();
+    if (native.starts_with(L"\\\\?\\UNC\\")) return L"\\\\" + native.substr(8);
+    if (native.starts_with(L"\\\\?\\")) return native.substr(4);
+    return path;
+}
+
+void RemovePrivateDirectory(const std::filesystem::path& directory) {
+    WIN32_FIND_DATAW entry{};
+    const HANDLE search = ::FindFirstFileW((directory / L"*").c_str(), &entry);
+    if (search == INVALID_HANDLE_VALUE) {
+        if (::GetLastError() != ERROR_FILE_NOT_FOUND)
+            throw std::runtime_error("enumerating the private temporary directory for cleanup failed");
+    } else {
+        try {
+            do {
+                if (std::wcscmp(entry.cFileName, L".") == 0 || std::wcscmp(entry.cFileName, L"..") == 0) continue;
+                if (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                    throw std::runtime_error("the private temporary directory contains a reparse point");
+                const auto child = directory / entry.cFileName;
+                if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) RemovePrivateDirectory(child);
+                else if (!::DeleteFileW(child.c_str()))
+                    throw std::runtime_error("removing a private temporary file failed");
+            } while (::FindNextFileW(search, &entry));
+            if (::GetLastError() != ERROR_NO_MORE_FILES)
+                throw std::runtime_error("enumerating the private temporary directory for cleanup failed");
+        } catch (...) {
+            ::FindClose(search);
+            throw;
+        }
+        ::FindClose(search);
+    }
+    if (!::RemoveDirectoryW(directory.c_str()))
+        throw std::runtime_error("removing the private temporary directory failed");
+}
+
+int RunWithShortTempPath(bool longPath) {
+    wchar_t tempBuffer[32768]{};
+    const DWORD tempLength = ::GetTempPathW(static_cast<DWORD>(std::size(tempBuffer)), tempBuffer);
+    if (tempLength == 0 || tempLength >= std::size(tempBuffer))
+        throw std::runtime_error("locating the Windows temporary directory failed");
+    const std::filesystem::path parent(std::wstring(tempBuffer, tempLength));
+    std::filesystem::path baseRoot;
+    bool created = false;
+    for (unsigned attempt = 0; attempt < 16; ++attempt) {
+        baseRoot = parent / (L"AnyPS5-Temp-Regression-" + std::to_wstring(::GetCurrentProcessId()) + L"-" +
+            std::to_wstring(::GetTickCount64()) + L"-" + std::to_wstring(attempt));
+        if (::CreateDirectoryW(baseRoot.c_str(), nullptr)) {
+            created = true;
+            break;
+        }
+        if (::GetLastError() != ERROR_ALREADY_EXISTS) throw std::runtime_error("creating a private temporary directory failed");
+    }
+    if (!created) throw std::runtime_error("creating a unique private temporary directory failed");
+    const auto cleanupRoot = ExtendedPath(baseRoot);
+    std::filesystem::path longRoot = cleanupRoot;
+    const auto cleanup = [&] {
+        RemovePrivateDirectory(cleanupRoot);
+    };
+
+    try {
+        std::vector<wchar_t> shortBuffer(32768);
+        DWORD shortLength = ::GetShortPathNameW(longRoot.c_str(), shortBuffer.data(), static_cast<DWORD>(shortBuffer.size()));
+        if (shortLength == 0)
+            throw std::runtime_error("GetShortPathNameW failed (Win32 error " + std::to_string(::GetLastError()) + ")");
+        if (shortLength >= shortBuffer.size())
+            throw std::runtime_error("GetShortPathNameW required a buffer of " + std::to_string(shortLength) + " characters");
+        std::filesystem::path shortRoot(std::wstring(shortBuffer.data(), shortLength));
+        if (longPath) {
+            bool aliasAvailable = true;
+            bool longAliasReady = false;
+            for (unsigned level = 0; level < 80; ++level) {
+                longRoot /= L"LongSharedMemoryTempDirectoryRegressionSegment";
+                if (!::CreateDirectoryW(longRoot.c_str(), nullptr))
+                    throw std::runtime_error("creating the nested long temporary directory failed (Win32 error " + std::to_string(::GetLastError()) + ")");
+                shortLength = ::GetShortPathNameW(longRoot.c_str(), shortBuffer.data(), static_cast<DWORD>(shortBuffer.size()));
+                if (shortLength == 0)
+                    throw std::runtime_error("GetShortPathNameW failed for nested path (Win32 error " + std::to_string(::GetLastError()) + ")");
+                if (shortLength >= shortBuffer.size())
+                    throw std::runtime_error("GetShortPathNameW required a buffer of " + std::to_string(shortLength) + " characters");
+                shortRoot = std::filesystem::path(std::wstring(shortBuffer.data(), shortLength));
+                if (::CompareStringOrdinal(longRoot.filename().c_str(), -1, shortRoot.filename().c_str(), -1, TRUE) == CSTR_EQUAL) {
+                    aliasAvailable = false;
+                    break;
+                }
+                if (DosPath(longRoot).native().size() > MAX_PATH + 64 && DosPath(shortRoot).native().size() < MAX_PATH - 64) {
+                    longAliasReady = true;
+                    break;
+                }
+            }
+            if (!aliasAvailable) {
+                std::puts("long-short-temp regression skipped: this volume did not create an 8.3 alias for the nested directory");
+                cleanup();
+                return 77;
+            }
+            if (!longAliasReady)
+                throw std::runtime_error("nested private path did not exceed MAX_PATH with a usable short alias");
+        }
+        if (::CompareStringOrdinal(longRoot.filename().c_str(), -1, shortRoot.filename().c_str(), -1, TRUE) == CSTR_EQUAL) {
+            std::puts("short-temp regression skipped: this volume did not create an 8.3 alias for the private directory");
+            cleanup();
+            return 77;
+        }
+        const HANDLE longHandle = ::CreateFileW(longRoot.c_str(), FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (longHandle == INVALID_HANDLE_VALUE) throw std::runtime_error("opening the long temporary path failed");
+        const HANDLE shortHandle = ::CreateFileW(shortRoot.c_str(), FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (shortHandle == INVALID_HANDLE_VALUE) {
+            ::CloseHandle(longHandle);
+            throw std::runtime_error("opening the 8.3 temporary alias failed");
+        }
+        const bool isSameDirectory = SameDirectory(longHandle, shortHandle);
+        ::CloseHandle(shortHandle);
+        ::CloseHandle(longHandle);
+        if (!isSameDirectory) throw std::runtime_error("the short temporary path did not identify the created directory");
+        std::wprintf(L"%ls regression verified 8.3 directory alias (%llu/%llu characters):\n%ls\n%ls\n",
+            longPath ? L"long-short-temp" : L"short-temp",
+            static_cast<unsigned long long>(longRoot.native().size()),
+            static_cast<unsigned long long>(shortRoot.native().size()), longRoot.c_str(), shortRoot.c_str());
+        std::fflush(stdout);
+
+        wchar_t executable[32768]{};
+        const DWORD executableLength = ::GetModuleFileNameW(nullptr, executable, static_cast<DWORD>(std::size(executable)));
+        if (executableLength == 0 || executableLength >= std::size(executable))
+            throw std::runtime_error("locating the Windows shared-memory test executable failed");
+        std::wstring command = L"\"" + std::wstring(executable, executableLength) + L"\" --short-temp-child";
+        auto environment = EnvironmentWithTempPath(DosPath(shortRoot).native());
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+        if (!::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
+                CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment.data(), nullptr, &startup, &process))
+            throw std::runtime_error("starting the short temporary path child failed");
+        const DWORD wait = ::WaitForSingleObject(process.hProcess, 16000);
+        DWORD exitCode = 1;
+        const bool childSucceeded = wait == WAIT_OBJECT_0 && ::GetExitCodeProcess(process.hProcess, &exitCode) && exitCode == 0;
+        if (wait != WAIT_OBJECT_0) {
+            ::TerminateProcess(process.hProcess, 1);
+            ::WaitForSingleObject(process.hProcess, 1000);
+        }
+        if (!childSucceeded)
+            std::fprintf(stderr, "%s child failed: wait=%lu exit=%lu\n", longPath ? "long-short-temp" : "short-temp",
+                static_cast<unsigned long>(wait), static_cast<unsigned long>(exitCode));
+        ::CloseHandle(process.hThread);
+        ::CloseHandle(process.hProcess);
+        cleanup();
+        return childSucceeded ? 0 : 1;
+    } catch (...) {
+        cleanup();
+        throw;
+    }
+}
 }
 
 int main(int argumentCount, char** arguments) {
     try {
         if (argumentCount == 3 && std::string_view(arguments[1]) == "--race")
             return RunResizeWriteRace(arguments[2]) ? 0 : 1;
+        if (argumentCount == 2 && std::string_view(arguments[1]) == "--short-temp")
+            return RunWithShortTempPath(false);
+        if (argumentCount == 2 && std::string_view(arguments[1]) == "--long-short-temp")
+            return RunWithShortTempPath(true);
+        if (argumentCount == 2 && std::string_view(arguments[1]) == "--short-temp-child") {
+            Run();
+            return 0;
+        }
         Run();
         return 0;
     } catch (const std::exception& error) {

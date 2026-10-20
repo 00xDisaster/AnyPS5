@@ -50,9 +50,19 @@ std::unordered_map<int, bool> sharedDescriptorAccess;
 
 const std::wstring& WindowsNamedRoot() {
     static const std::wstring root = [] {
-        auto value = std::filesystem::absolute(std::filesystem::temp_directory_path() / L"AnyPS5" / L"shm").lexically_normal().wstring();
-        while (!value.empty() && (value.back() == L'\\' || value.back() == L'/')) value.pop_back();
-        return value;
+        const auto directory = std::filesystem::temp_directory_path();
+        std::vector<wchar_t> pathBuffer(32768);
+        const HANDLE handle = ::CreateFileW(directory.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+            throw std::system_error(static_cast<int>(::GetLastError()), std::system_category(), "opening the named shared-memory temporary root");
+        const DWORD length = ::GetFinalPathNameByHandleW(handle, pathBuffer.data(), static_cast<DWORD>(pathBuffer.size()),
+            FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        const DWORD error = length == 0 ? ::GetLastError() : length >= pathBuffer.size() ? ERROR_FILENAME_EXCED_RANGE : ERROR_SUCCESS;
+        ::CloseHandle(handle);
+        if (error != ERROR_SUCCESS)
+            throw std::system_error(static_cast<int>(error), std::system_category(), "resolving the named shared-memory temporary root");
+        return (std::filesystem::path(std::wstring(pathBuffer.data(), length)) / L"AnyPS5" / L"shm").wstring();
     }();
     return root;
 }
@@ -84,7 +94,6 @@ bool IsHostSharedMemoryDescriptor(int descriptor) {
     const DWORD length = ::GetFinalPathNameByHandleW(handle, pathBuffer.data(), static_cast<DWORD>(pathBuffer.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
     if (length == 0 || length >= pathBuffer.size()) return false;
     std::wstring objectPath(pathBuffer.data(), length);
-    if (objectPath.starts_with(L"\\\\?\\")) objectPath.erase(0, 4);
     std::wstring_view root;
     try {
         root = WindowsNamedRoot();
@@ -548,7 +557,6 @@ std::filesystem::path SharedMemoryDescriptorPath(int descriptor) {
             static_cast<DWORD>(path.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
         if (length > 4 && length < path.size()) {
             std::wstring value(path.data(), length);
-            if (value.starts_with(L"\\\\?\\")) value.erase(0, 4);
             finalPath = std::filesystem::path(std::move(value));
         }
     }
