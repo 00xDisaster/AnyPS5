@@ -1,6 +1,6 @@
 # libSceRazorCpu technical debt
 
-### Functional
+### Silent stubs
 
 - [libSceRazorCpu](../../../core/libs/prx/libSceRazorCpu/Export.cpp): capture-controller registration, thread-local capture storage, marker serialization and flushing are not implemented. The host implements only the confirmed uninitialized-profiler path: markers return zero without reading labels, and `sceRazorCpuFlushOccurred` returns false without writing its optional output.
 
