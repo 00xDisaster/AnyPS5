@@ -145,7 +145,7 @@ void APS5_VABI _ZN3sce4Json5Array8iteratorC1ERKS2_(Iterator*, const Iterator*);
 Iterator* APS5_VABI _ZN3sce4Json5Array8iterator7advanceEm(Iterator*, std::size_t);
 void APS5_VABI _ZN3sce4Json6Object8iteratorC1ERKS2_(Iterator*, const Iterator*);
 Iterator* APS5_VABI _ZN3sce4Json6Object8iterator7advanceEm(Iterator*, std::size_t);
-std::size_t APS5_VABI _ZN3sce4Json6Object5eraseERKNS0_6StringE(Object*, const String*);
+void APS5_VABI _ZN3sce4Json6Object5eraseERKNS0_6StringE(Object*, const String*);
 }
 
 static void Check(bool value, int line) {
@@ -697,9 +697,10 @@ static void ObjectOperations() {
     _ZN3sce4Json6Object8iteratorD1Ev(&copy);
 
     Require(_ZNK3sce4Json6Object4sizeEv(&object) == 3);
-    Require(_ZN3sce4Json6Object5eraseERKNS0_6StringE(&object, &k2) == 1);
+    _ZN3sce4Json6Object5eraseERKNS0_6StringE(&object, &k2);
     Require(_ZNK3sce4Json6Object4sizeEv(&object) == 2);
-    Require(_ZN3sce4Json6Object5eraseERKNS0_6StringE(&object, &k2) == 0);
+    _ZN3sce4Json6Object5eraseERKNS0_6StringE(&object, &k2);
+    Require(_ZNK3sce4Json6Object4sizeEv(&object) == 2);
 
     Iterator findResult{}, end{};
     _ZNK3sce4Json6Object4findERKNS0_6StringE(&findResult, &object, &k2);
