@@ -778,12 +778,12 @@ int APS5_VABI sceNetCtlApCpStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlApAppStartWithRetryPid(void) {
+int APS5_VABI sceNetCtlApAppStartWithRetryPid(std::int32_t processId, const char* passcode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlApAppStartWithRetry(void) {
+int APS5_VABI sceNetCtlApAppStartWithRetry(const char* passcode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -810,7 +810,7 @@ int APS5_VABI sceNetCtlApAppInitWpaKey(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlApAppInitWpaKeyForQa(void) {
+int APS5_VABI sceNetCtlApAppInitWpaKeyForQa(std::uint8_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
