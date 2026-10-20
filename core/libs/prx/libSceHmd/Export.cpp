@@ -120,8 +120,7 @@ int APS5_VABI sceHmdInternalGetDebugTextMode(void) {
 }
 
 int APS5_VABI sceHmdDistortionGetWorkMemoryAlign(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x400;
 }
 
 int APS5_VABI sceHmdInternalRegisterEventCallback(void) {
@@ -130,8 +129,7 @@ int APS5_VABI sceHmdInternalRegisterEventCallback(void) {
 }
 
 int APS5_VABI sceHmdDistortionGetWorkMemorySize(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x20000;
 }
 
 int APS5_VABI sceHmdReprojectionStartWideNear(void) {
@@ -340,8 +338,7 @@ int APS5_VABI sceHmdDistortionGetCorrectionCommand(void) {
 }
 
 int APS5_VABI sceHmdReprojectionQueryOnionBuffAlign(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x100;
 }
 
 int APS5_VABI sceHmdInternalGetDebugMode(void) {
@@ -450,8 +447,7 @@ int APS5_VABI sceHmdInternalDfuClose(void) {
 }
 
 int APS5_VABI sceHmdReprojectionQueryGarlicBuffAlign(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x100;
 }
 
 int APS5_VABI sceHmdInternalSetHmuPowerControl(void) {
@@ -680,8 +676,7 @@ int APS5_VABI sceHmdInternalResetLedForVrTracker(void) {
 }
 
 int APS5_VABI sceHmdReprojectionQueryOnionBuffSize(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x810;
 }
 
 int APS5_VABI sceHmdReprojectionStartWithOverlay(void) {
@@ -855,8 +850,7 @@ int APS5_VABI sceHmdInternalGetPuRevision(void) {
 }
 
 int APS5_VABI sceHmdReprojectionQueryGarlicBuffSize(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return 0x100000;
 }
 
 int APS5_VABI sceHmdGet2dVrCommand(void) {

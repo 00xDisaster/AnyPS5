@@ -22,6 +22,15 @@ void CheckDisconnected() {
     Require(sceHmdInternalMmapIsConnect() == 0, "connection reported present");
 }
 
+void CheckBufferQueries() {
+    Require(sceHmdDistortionGetWorkMemoryAlign() == 0x400, "distortion work memory alignment");
+    Require(sceHmdDistortionGetWorkMemorySize() == 0x20000, "distortion work memory size");
+    Require(sceHmdReprojectionQueryGarlicBuffAlign() == 0x100, "reprojection garlic buffer alignment");
+    Require(sceHmdReprojectionQueryGarlicBuffSize() == 0x100000, "reprojection garlic buffer size");
+    Require(sceHmdReprojectionQueryOnionBuffAlign() == 0x100, "reprojection onion buffer alignment");
+    Require(sceHmdReprojectionQueryOnionBuffSize() == 0x810, "reprojection onion buffer size");
+}
+
 }
 
 int main() {
@@ -31,6 +40,7 @@ int main() {
     const auto untouched = info;
 
     CheckDisconnected();
+    CheckBufferQueries();
     Require(sceHmdTerminate() == Hmd::NotInitialized, "terminate before initialize");
     Require(sceHmdOpen(1, 0, 0, nullptr) == Hmd::NotInitialized, "open before initialize");
     Require(sceHmdClose(0) == Hmd::NotInitialized, "close before initialize");
