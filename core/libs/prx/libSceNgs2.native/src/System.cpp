@@ -92,9 +92,30 @@ bool Ngs2RenderingElsewhere(const Ngs2System& system) {
     return system.renderer != std::thread::id{} && system.renderer != std::this_thread::get_id();
 }
 
-bool Ngs2RackLockedElsewhere(const Ngs2System& system) {
-    const auto self = std::this_thread::get_id();
-    return std::any_of(system.racks.begin(), system.racks.end(), [&](const Ngs2Rack* rack) { return rack->lockDepth != 0 && rack->lockOwner != self; });
+struct ExclusiveState {
+    std::thread::id owner;
+    std::uint32_t depth = 0;
+};
+
+static ExclusiveState& Exclusive() {
+    static ExclusiveState state;
+    return state;
+}
+
+bool Ngs2ExclusiveElsewhere() {
+    return Exclusive().depth != 0 && Exclusive().owner != std::this_thread::get_id();
+}
+
+void Ngs2EnterExclusive() {
+    Exclusive().owner = std::this_thread::get_id();
+    ++Exclusive().depth;
+}
+
+void Ngs2LeaveExclusive(std::uint32_t depth) {
+    Exclusive().depth -= depth;
+    if (Exclusive().depth != 0) return;
+    Exclusive().owner = {};
+    Ngs2NotifyWaiters();
 }
 
 void Ngs2WaitOnce() {
@@ -363,7 +384,7 @@ int APS5_VABI sceNgs2SystemUnlock(uintptr_t system_handle) {
 int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBufferInfo* buffer_info, uint32_t num_buffer_info) {
     const Ngs2Lock lock;
     auto* system = Ngs2FindSystem(system_handle);
-    while (system != nullptr && Ngs2RackLockedElsewhere(*system)) {
+    while (system != nullptr && Ngs2ExclusiveElsewhere()) {
         Ngs2WaitOnce();
         system = Ngs2FindSystem(system_handle);
     }
@@ -382,12 +403,14 @@ int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBuffe
         found.depth++;
         state = &found;
     }
+    Ngs2EnterExclusive();
     struct Release {
         SystemLockState* state;
         Ngs2System* system;
         std::thread::id renderer;
         ~Release() {
             system->renderer = renderer;
+            Ngs2LeaveExclusive();
             Ngs2NotifyWaiters();
             std::lock_guard locks(SystemLockMutex());
             ReleaseSystemLock(*state);

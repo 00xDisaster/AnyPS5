@@ -1023,6 +1023,94 @@ static void TestRackLockWaitsForRender() {
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
+struct CrossSystemCallback {
+    uintptr_t otherRack = 0;
+    std::atomic<bool>* entered = nullptr;
+    const std::atomic<bool>* awaited = nullptr;
+};
+
+static void APS5_VABI LockAnotherSystem(const Ngs2VoiceCallbackInfo* info) {
+    auto& callback = *reinterpret_cast<CrossSystemCallback*>(info->callback_data);
+    *callback.entered = true;
+    static_cast<void>(AnsweredWithin(*callback.awaited, std::chrono::milliseconds(200)));
+    Require(sceNgs2RackLock(callback.otherRack) == SCE_NGS2_OK);
+    Require(sceNgs2RackUnlock(callback.otherRack) == SCE_NGS2_OK);
+}
+
+static uintptr_t CallbackSampler(uintptr_t system, CrossSystemCallback& callback, uintptr_t* rack) {
+    static const std::vector<std::int16_t> pcm(Grain / 2, 1000);
+    const auto sampler = Sampler(system, pcm, 0, rack);
+    Patch(sampler, Mastering(system, 1));
+    Control(sampler, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{{}, LockAnotherSystem, reinterpret_cast<std::uintptr_t>(&callback), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+    Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+    return sampler;
+}
+
+static void TestCallbacksLockEachOthersSystem() {
+    const auto first = CreateSystem();
+    const auto second = CreateSystem();
+    std::atomic<bool> firstEntered = false;
+    std::atomic<bool> secondEntered = false;
+    CrossSystemCallback firstCallback{0, &firstEntered, &secondEntered};
+    CrossSystemCallback secondCallback{0, &secondEntered, &firstEntered};
+    uintptr_t firstRack = 0;
+    uintptr_t secondRack = 0;
+    CallbackSampler(first, firstCallback, &firstRack);
+    CallbackSampler(second, secondCallback, &secondRack);
+    firstCallback.otherRack = secondRack;
+    secondCallback.otherRack = firstRack;
+    std::atomic<bool> firstRendered = false;
+    std::atomic<bool> secondRendered = false;
+    std::thread firstRender([&] {
+        RenderI16(first);
+        firstRendered = true;
+    });
+    std::thread secondRender([&] {
+        RenderI16(second);
+        secondRendered = true;
+    });
+    Require(AnsweredWithin(firstRendered) && AnsweredWithin(secondRendered));
+    firstRender.join();
+    secondRender.join();
+    Require(firstEntered && secondEntered);
+    Require(sceNgs2SystemDestroy(first, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(second, nullptr) == SCE_NGS2_OK);
+}
+
+static void TestRackLocksAcrossSystemsAndRender() {
+    const auto first = CreateSystem();
+    const auto second = CreateSystem();
+    const auto heldRack = CreateRack(second, SCE_NGS2_RACK_ID_SAMPLER);
+    std::atomic<bool> entered = false;
+    const std::atomic<bool> never = false;
+    CrossSystemCallback callback{heldRack, &entered, &never};
+    uintptr_t renderedRack = 0;
+    CallbackSampler(first, callback, &renderedRack);
+    std::atomic<bool> holding = false;
+    std::atomic<bool> released = false;
+    std::thread locker([&] {
+        Require(sceNgs2RackLock(heldRack) == SCE_NGS2_OK);
+        holding = true;
+        static_cast<void>(AnsweredWithin(entered, std::chrono::milliseconds(200)));
+        Require(sceNgs2RackLock(renderedRack) == SCE_NGS2_OK);
+        Require(sceNgs2RackUnlock(renderedRack) == SCE_NGS2_OK);
+        Require(sceNgs2RackUnlock(heldRack) == SCE_NGS2_OK);
+        released = true;
+    });
+    Require(AnsweredWithin(holding));
+    std::atomic<bool> rendered = false;
+    std::thread render([&] {
+        RenderI16(first);
+        rendered = true;
+    });
+    Require(AnsweredWithin(released) && AnsweredWithin(rendered));
+    locker.join();
+    render.join();
+    Require(entered);
+    Require(sceNgs2SystemDestroy(first, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(second, nullptr) == SCE_NGS2_OK);
+}
+
 static void TestLock() {
     const auto system = CreateSystem();
     const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
@@ -1287,6 +1375,8 @@ int main() {
     TestRackLockLeavesQueries();
     TestVoiceCallbackLeavesQueries();
     TestRackLockWaitsForRender();
+    TestCallbacksLockEachOthersSystem();
+    TestRackLocksAcrossSystemsAndRender();
     TestDefaultChannelMap();
     TestUnsetMatrix();
     TestRenderCapacity<float>(SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1);

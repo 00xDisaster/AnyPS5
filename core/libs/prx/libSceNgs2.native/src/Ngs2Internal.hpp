@@ -204,7 +204,9 @@ private:
 };
 
 bool Ngs2RenderingElsewhere(const Ngs2System& system);
-bool Ngs2RackLockedElsewhere(const Ngs2System& system);
+bool Ngs2ExclusiveElsewhere();
+void Ngs2EnterExclusive();
+void Ngs2LeaveExclusive(std::uint32_t depth = 1);
 void Ngs2WaitOnce();
 void Ngs2NotifyWaiters();
 Ngs2System* Ngs2FindSystem(Ngs2Handle handle);
