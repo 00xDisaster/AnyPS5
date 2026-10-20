@@ -8,6 +8,12 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 }
 
 
+
+struct LncDaemonEvent;
+struct LncShellUiEvent;
+struct LncLocalProcessStatus;
+struct LncCoredumpState;
+struct LncVideoFinalizeState;
 struct LncLocalProcessParam;
 struct LncAppStatus;
 struct LncShellUiAppStatus;
@@ -190,37 +196,37 @@ int APS5_VABI sceLncUtilGetAppTitleId(std::int32_t appId, char* titleId) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppType() {
+int APS5_VABI sceLncUtilGetAppType(std::int32_t appId, std::uint32_t* type) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetCdlgExec() {
+int APS5_VABI sceLncUtilGetCdlgExec(std::int32_t appId, bool* executing) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetCdlgType() {
+int APS5_VABI sceLncUtilGetCdlgType(std::int32_t appId, std::uint32_t* type) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetCoredumpState() {
+int APS5_VABI sceLncUtilGetCoredumpState(std::int32_t appId, std::int32_t processId, LncCoredumpState* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetDbgExecutablePath() {
+int APS5_VABI sceLncUtilGetDbgExecutablePath(char* path, std::uint64_t selector) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetEventForDaemon() {
+int APS5_VABI sceLncUtilGetEventForDaemon(LncDaemonEvent* event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetEventForShellUI() {
+int APS5_VABI sceLncUtilGetEventForShellUI(LncShellUiEvent* event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -230,7 +236,7 @@ int APS5_VABI sceLncUtilGetGpuCrashFullDumpAppStatus() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetLocalProcessStatusList() {
+int APS5_VABI sceLncUtilGetLocalProcessStatusList(LncLocalProcessStatus* statuses, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -240,17 +246,17 @@ int APS5_VABI sceLncUtilGetParentSocket() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetResultKillApp() {
+int APS5_VABI sceLncUtilGetResultKillApp(std::uint32_t requestId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetResultLaunchAppByTitleId() {
+int APS5_VABI sceLncUtilGetResultLaunchAppByTitleId(std::uint32_t requestId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetVideoFinalizeState() {
+int APS5_VABI sceLncUtilGetVideoFinalizeState(std::int32_t appId, std::int32_t processId, LncVideoFinalizeState* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -260,17 +266,17 @@ int APS5_VABI sceLncUtilInitialize() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsActiveCdlg() {
+int APS5_VABI sceLncUtilIsActiveCdlg(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsAppLaunched() {
+int APS5_VABI sceLncUtilIsAppLaunched(const char* titleId, bool* launched) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsAppSuspended() {
+int APS5_VABI sceLncUtilIsAppSuspended(std::int32_t appId, bool* suspended) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -280,22 +286,22 @@ int APS5_VABI sceLncUtilIsCdlgActivated() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsCpuBudgetOfExtraAudioDevicesAvailable() {
+bool APS5_VABI sceLncUtilIsCpuBudgetOfExtraAudioDevicesAvailable() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsHostBoot() {
+int APS5_VABI sceLncUtilIsHostBoot(std::int32_t appId, bool* hostBoot) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsPs2Emu() {
+int APS5_VABI sceLncUtilIsPs2Emu(bool* emulated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsShellUiFgAndGameBgCpuMode() {
+bool APS5_VABI sceLncUtilIsShellUiFgAndGameBgCpuMode() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
