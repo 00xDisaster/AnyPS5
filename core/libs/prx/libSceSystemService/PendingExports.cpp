@@ -1196,12 +1196,12 @@ int APS5_VABI sceShellCoreUtilNavigateToLaunchedApp(std::uint32_t target) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotificationCancelForIDU() {
+int APS5_VABI sceShellCoreUtilNotificationCancelForIDU(std::int64_t notificationId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotificationRequestedForIDU() {
+int APS5_VABI sceShellCoreUtilNotificationRequestedForIDU(std::int64_t notificationId, const char* text, std::uint32_t type) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1211,12 +1211,12 @@ int APS5_VABI sceShellCoreUtilNotifyBgmCoreTermination() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotifyFsReadError() {
+int APS5_VABI sceShellCoreUtilNotifyFsReadError(std::int32_t first, std::int32_t second, std::int32_t third, const char* detail) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotifyImeStatusChanged() {
+int APS5_VABI sceShellCoreUtilNotifyImeStatusChanged(std::int32_t appId, std::uint8_t status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1226,7 +1226,7 @@ int APS5_VABI sceShellCoreUtilNotifyPsnAccountInfoReceived() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNotifySystemSuspendTelemetryInfo() {
+int APS5_VABI sceShellCoreUtilNotifySystemSuspendTelemetryInfo(std::uint32_t info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1236,22 +1236,22 @@ int APS5_VABI sceShellCoreUtilPfAuthClientConsoleTokenClearCache() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilPostActivityForPsNow() {
+int APS5_VABI sceShellCoreUtilPostActivityForPsNow(std::int32_t type, const char* activity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilPostErrorLog() {
+int APS5_VABI sceShellCoreUtilPostErrorLog(const char* firstText, std::uint32_t firstValue, const char* secondText, const char* thirdText, std::uint32_t secondValue, const char* fourthText) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilPostLaunchConfirmResult() {
+int APS5_VABI sceShellCoreUtilPostLaunchConfirmResult(std::uint32_t first, std::uint32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilPostPsmEventToShellUI() {
+int APS5_VABI sceShellCoreUtilPostPsmEventToShellUI(std::int32_t eventId, const char* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1286,12 +1286,12 @@ int APS5_VABI sceShellCoreUtilReleaseSharePlayCpuBudget() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilReportSessionErrorToGaikaiController() {
+int APS5_VABI sceShellCoreUtilReportSessionErrorToGaikaiController(std::int32_t error, const char* detail) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilReportUnexpectedFatalErrorToSystemTelemetry() {
+int APS5_VABI sceShellCoreUtilReportUnexpectedFatalErrorToSystemTelemetry(std::int32_t error, const char* detail) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1301,17 +1301,17 @@ int APS5_VABI sceShellCoreUtilRequestCameraCalibration() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilRequestEjectDevice() {
+int APS5_VABI sceShellCoreUtilRequestEjectDevice(const char* path) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilRequestRebootApp() {
+int APS5_VABI sceShellCoreUtilRequestRebootApp(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilRequestShutdown() {
+int APS5_VABI sceShellCoreUtilRequestShutdown(std::int32_t reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
