@@ -369,7 +369,7 @@ bool APS5_VABI sceHmdInternalIsCommonDlgMiniAppVr2d(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalMmapGetSensorCalibrationData(void) {
+int APS5_VABI sceHmdInternalMmapGetSensorCalibrationData(void* buffer, std::uint32_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
