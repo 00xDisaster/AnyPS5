@@ -31,7 +31,7 @@ int APS5_VABI sceMbusAddHandle() {
     return 0;
 }
 
-int APS5_VABI sceMbusAddHandleByDeviceId() {
+int APS5_VABI sceMbusAddHandleByDeviceId(std::uint32_t deviceClass, std::int32_t handle, std::uint64_t deviceId, std::uint32_t first, std::uint32_t second, std::uint32_t third) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -516,7 +516,7 @@ int APS5_VABI sceMbusSetTestFlag() {
     return 0;
 }
 
-int APS5_VABI sceMbusSetThreadParam() {
+int APS5_VABI sceMbusSetThreadParam(std::int32_t priority, std::uint64_t affinityMask, std::uint64_t reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

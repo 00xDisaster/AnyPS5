@@ -6,12 +6,20 @@
 #include <cstdlib>
 #include <stdexcept>
 
+struct DeviceServiceThreadParam;
+struct DeviceServiceInitParam {
+    std::uint32_t size;
+    std::uint32_t reserved;
+    const DeviceServiceThreadParam* threadParam;
+};
+struct DeviceServiceUsageFilter;
+
 extern "C" {
-std::int32_t APS5_VABI sceDeviceServiceInitialize(std::int32_t mode, std::int32_t flags);
+std::int32_t APS5_VABI sceDeviceServiceInitialize(std::int32_t mode, const DeviceServiceInitParam* param);
 std::int32_t APS5_VABI sceDeviceServiceTerminate();
-std::int32_t APS5_VABI sceDeviceServiceGetEventState(std::int32_t deviceType);
+std::int32_t APS5_VABI sceDeviceServiceGetEventState(std::int32_t clear);
+std::int32_t APS5_VABI sceDeviceServiceQueryDeviceInfo_(std::int32_t deviceClass, const DeviceServiceUsageFilter* filter, std::int32_t arg2, void* infos, std::int32_t maxInfos, std::int32_t* count, std::int32_t* reserved, std::uint32_t infoSize);
 std::int32_t APS5_VABI sceDeviceServiceGetGeneration();
-std::int32_t APS5_VABI sceDeviceServiceQueryDeviceInfo_(std::int32_t deviceClass, std::int32_t arg1, std::int32_t arg2, void* infos, std::int32_t maxInfos, std::int32_t* count, std::int32_t* reserved, std::uint64_t infoSize);
 }
 
 namespace {
@@ -26,6 +34,14 @@ void Require(bool condition, const char* message) {
 }
 
 int main() {
+    DeviceServiceInitParam param{};
+    constexpr auto invalidArgument = static_cast<std::int32_t>(0x809B0080u);
+    Require(sceDeviceServiceInitialize(3, &param) == invalidArgument, "invalid parameter size accepted");
+    param.size = 16;
+    param.reserved = 1;
+    Require(sceDeviceServiceInitialize(3, &param) == invalidArgument, "reserved field accepted");
+    param.reserved = 0;
+    Require(sceDeviceServiceInitialize(3, &param) == 0, "default parameter initialization failed");
     Require(sceDeviceServiceInitialize(3, 0) == 0, "initialization failed");
     Require(sceDeviceServiceGetGeneration() == 0, "the device set started at another generation");
     Require(sceDeviceServiceGetEventState(1) == 0, "a device event was reported");
