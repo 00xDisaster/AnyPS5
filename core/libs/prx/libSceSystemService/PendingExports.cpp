@@ -1805,7 +1805,7 @@ int APS5_VABI sceSystemServiceGetAppId() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppIdListOfBigApp() {
+int APS5_VABI sceSystemServiceGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1900,7 +1900,7 @@ int APS5_VABI sceSystemServiceGetRecentLotusPushedButton(std::uint32_t timeout, 
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetRemoteplayStatus() {
+int APS5_VABI sceSystemServiceGetRemoteplayStatus(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1925,7 +1925,7 @@ int APS5_VABI sceSystemServiceGetTitleWorkaroundInfo(SystemServiceTitleWorkaroun
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetUIStatus() {
+int APS5_VABI sceSystemServiceGetUIStatus(std::uint64_t* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1950,7 +1950,7 @@ int APS5_VABI sceSystemServiceIsAppSuspended(std::int32_t appId, bool* suspended
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsBgmCpuBudgetAvailable() {
+bool APS5_VABI sceSystemServiceIsBgmCpuBudgetAvailable() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1965,17 +1965,17 @@ int APS5_VABI sceSystemServiceIsEyeToEyeDistanceAdjusted() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsGameLiveStreamingOnAir() {
+bool APS5_VABI sceSystemServiceIsGameLiveStreamingOnAir() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsScreenSaverOn() {
+bool APS5_VABI sceSystemServiceIsScreenSaverOn() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsShellUiFgAndGameBgCpuMode() {
+bool APS5_VABI sceSystemServiceIsShellUiFgAndGameBgCpuMode() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2028,7 +2028,7 @@ int APS5_VABI sceSystemServiceLoadExecVideoServiceWebApp() {
     return SystemServiceUnavailable;
 }
 
-int APS5_VABI sceSystemServiceNavigateToAnotherApp() {
+int APS5_VABI sceSystemServiceNavigateToAnotherApp(std::uint32_t target) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2038,12 +2038,12 @@ int APS5_VABI sceSystemServiceNavigateToGoBack() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceNavigateToGoBackWithValue() {
+int APS5_VABI sceSystemServiceNavigateToGoBackWithValue(const char* value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceNavigateToGoHome() {
+int APS5_VABI sceSystemServiceNavigateToGoHome(std::uint32_t target) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2109,7 +2109,7 @@ int APS5_VABI sceSystemServiceSaveVideoToken() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSetControllerFocusPermission() {
+int APS5_VABI sceSystemServiceSetControllerFocusPermission(std::uint8_t permission) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
