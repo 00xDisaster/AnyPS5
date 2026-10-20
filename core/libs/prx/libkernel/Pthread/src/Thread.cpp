@@ -134,8 +134,19 @@ static void ReleaseFinishedStack(const FinishedStack& stack) {
     DoMunmap(stack.address, stack.bytes);
 }
 
+static bool DiscardFinishedStackPages(const FinishedStack& stack) {
+    auto* usable = static_cast<std::byte*>(stack.address) + GUEST_STACK_GUARD;
+    const auto bytes = stack.bytes - GUEST_STACK_GUARD;
+    return madvise(usable, bytes, MADV_DONTNEED) == 0;
+}
+
 static void CollectFinishedStack(void* address, std::size_t bytes) {
     UnregisterGuestStackMapping(address);
+    const FinishedStack finished{address, bytes};
+    if (!DiscardFinishedStackPages(finished)) {
+        ReleaseFinishedStack(finished);
+        return;
+    }
     std::vector<FinishedStack> release;
     {
         std::lock_guard lock(retiredStacksLock);
