@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/input-mapper.yml'
+      - 'tools/input-mapper/**'
+      - 'core/libs/prx/libScePad/include/**'
+      - 'core/libs/prx/libSceVideoOut/src/InputMapping.cpp'
 
 permissions:
   contents: read

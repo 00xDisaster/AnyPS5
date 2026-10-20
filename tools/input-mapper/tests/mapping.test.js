@@ -14,7 +14,8 @@ test('action names and pad button categories agree with the current native parse
     assert.deepEqual([...actions].sort(), definitions.map(match => match[1]).sort());
     assert.deepEqual([...padButtons].sort(), definitions.filter(match => match[2] === 'Button').map(match => match[1]).sort());
     assert.match(source, /SDL_GetScancodeFromName\(keyName\.c_str\(\)\)/u);
-    assert.match(source, /if \(action\.control == Pad::InputControl::ToggleFullscreen\)/u);
+    const keyboardOnly = [...source.matchAll(/if \(action\.control == Pad::InputControl::(\w+)\) \{\s*throw std::runtime_error\("\w+ can only use a keyboard key"\);/gu)].map(match => match[1]);
+    assert.deepEqual(actions.filter(action => typesForAction(action).length === 1).sort(), keyboardOnly.sort());
     assert.match(source, /if \(action\.control != Pad::InputControl::Button\)/u);
 });
 
@@ -65,7 +66,7 @@ test('all exportable SDL names validate and unsafe comment names are rejected', 
 test('mouse values and action restrictions match the current INI format', () => {
     for (const action of actions) {
         for (const value of mouseValues) {
-            assert.equal(validate([binding(action, 'MOUSE', value)]).errors.length === 0, action !== 'ToggleFullscreen');
+            assert.equal(validate([binding(action, 'MOUSE', value)]).errors.length === 0, !['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot'].includes(action));
         }
     }
     assert.ok(validate([binding('Cross', 'MOUSE', 'Button1')]).errors.length);
@@ -79,6 +80,27 @@ test('wheel directions only map to pad buttons', () => {
         assert.deepEqual(typesForAction(action).includes('WHEEL'), padButtons.has(action));
     }
     assert.ok(validate([binding('Cross', 'WHEEL', 'Left')]).errors.length);
+});
+
+test('new utility actions import and round trip without accepting unsupported sources', () => {
+    const source = 'StickModifier = MOUSE:X2\nShake = MOUSE:Left\nTogglePerformanceOverlay = KEY:F9\nScreenshot = KEY:F8\n';
+    const imported = parseIni(source);
+    assert.deepEqual(imported.errors, []);
+    assert.equal(serialize(imported.entries), source);
+    for (const action of ['StickModifier', 'Shake', 'TogglePerformanceOverlay', 'Screenshot']) {
+        assert.ok(validate([binding(action, 'WHEEL', 'Up')]).errors.length);
+    }
+    for (const action of ['TogglePerformanceOverlay', 'Screenshot']) {
+        assert.deepEqual(parseIni(`${action} = MOUSE:Left`).errors.map(error => error.line), [1]);
+    }
+});
+
+test('updated built-in inputs warn until their owning action is overridden', () => {
+    for (const [action, type, value] of [['L2', 'KEY', 'R'], ['L2', 'MOUSE', 'X1'], ['ToggleMouse', 'KEY', 'F7'], ['Shake', 'KEY', 'X'], ['Screenshot', 'KEY', 'F12'], ['TogglePerformanceOverlay', 'KEY', 'F10']]) {
+        const input = binding('Cross', type, value);
+        assert.ok(validate([input]).warnings.some(warning => warning.message.includes(`${action} (built-in)`)));
+        assert.equal(validate([input, binding(action, 'KEY', 'J')]).warnings.length, 0);
+    }
 });
 
 test('conflicts warn without blocking, including omitted built-in actions', () => {
