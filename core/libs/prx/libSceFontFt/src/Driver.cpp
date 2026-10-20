@@ -6,10 +6,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -196,30 +198,29 @@ int APS5_VABI LibrarySupport(FontLibNative* library, std::uint32_t formats) {
 }
 
 #ifdef _WIN32
-unsigned long ReadWideFile(FT_Stream stream, unsigned long offset, unsigned char* buffer, unsigned long count) {
-    auto* file = static_cast<std::FILE*>(stream->descriptor.pointer);
-    if (_fseeki64(file, static_cast<long long>(offset), SEEK_SET) != 0) return count == 0 ? 1 : 0;
-    return count == 0 ? 0 : static_cast<unsigned long>(std::fread(buffer, 1, count, file));
-}
-
-void CloseWideFile(FT_Stream stream) {
-    std::fclose(static_cast<std::FILE*>(stream->descriptor.pointer));
+void CloseMappedFile(FT_Stream stream) {
+    UnmapViewOfFile(stream->base);
     delete stream;
 }
 
 FT_Error OpenFileFace(FT_Library library, const char* path, FT_Long subFontIndex, FT_Face* face) {
-    std::FILE* file = _wfopen(std::filesystem::path(reinterpret_cast<const char8_t*>(path)).c_str(), L"rb");
-    if (!file) return FT_Err_Cannot_Open_Resource;
-    const long long size = _fseeki64(file, 0, SEEK_END) == 0 ? _ftelli64(file) : -1;
-    if (size < 0 || static_cast<unsigned long long>(size) > std::numeric_limits<unsigned long>::max()) {
-        std::fclose(file);
+    const HANDLE file = CreateFileW(std::filesystem::path(reinterpret_cast<const char8_t*>(path)).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return FT_Err_Cannot_Open_Resource;
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart <= 0 || size.QuadPart > std::numeric_limits<long>::max()) {
+        CloseHandle(file);
         return FT_Err_Cannot_Open_Stream;
     }
+    const HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    CloseHandle(file);
+    if (!mapping) return FT_Err_Cannot_Open_Stream;
+    void* view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(mapping);
+    if (!view) return FT_Err_Cannot_Open_Stream;
     auto* stream = new FT_StreamRec{};
-    stream->size = static_cast<unsigned long>(size);
-    stream->descriptor.pointer = file;
-    stream->read = &ReadWideFile;
-    stream->close = &CloseWideFile;
+    stream->base = static_cast<unsigned char*>(view);
+    stream->size = static_cast<unsigned long>(size.QuadPart);
+    stream->close = &CloseMappedFile;
     FT_Open_Args args{};
     args.flags = FT_OPEN_STREAM;
     args.stream = stream;

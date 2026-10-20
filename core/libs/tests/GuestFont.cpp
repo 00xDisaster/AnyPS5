@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <map>
 #include <random>
@@ -274,6 +275,17 @@ int main() {
     Require(sceFontOpenFontMemory(library, notAFont, sizeof(notAFont), nullptr, &font) == SCE_FONT_ERROR_NO_SUPPORT_FORMAT && font == nullptr);
 
     const std::vector<unsigned char> fontData = EmptyGlyphFont();
+    const auto fileFont = fontRoot / std::filesystem::path(u8"external-a\u00e7\u00e3o-\u65e5\u672c") / "font.ttf";
+    std::filesystem::create_directories(fileFont.parent_path());
+    {
+        std::ofstream file(fileFont, std::ios::binary);
+        file.write(reinterpret_cast<const char*>(fontData.data()), static_cast<std::streamsize>(fontData.size()));
+        Require(static_cast<bool>(file));
+    }
+    const std::u8string fileFontText = fileFont.u8string();
+    FontHandle fileHandle = nullptr;
+    Require(sceFontOpenFontFile(library, reinterpret_cast<const char*>(fileFontText.c_str()), 1, nullptr, &fileHandle) == SCE_FONT_OK && fileHandle != nullptr);
+    Require(sceFontCloseFont(fileHandle) == SCE_FONT_OK);
     Require(sceFontOpenFontMemory(library, fontData.data(), static_cast<std::uint32_t>(fontData.size()), nullptr, &font) == SCE_FONT_OK && font != nullptr);
     int setting = -1;
     Require(sceFontGetScriptLanguage(font, 3, &setting) == SCE_FONT_OK && setting == 0);
