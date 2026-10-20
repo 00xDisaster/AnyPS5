@@ -454,6 +454,9 @@ if(BUILD_TESTING)
         add_test(NAME guest_none_relocations COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_none_relocations.py $<TARGET_FILE:relinker>)
         set_tests_properties(guest_none_relocations PROPERTIES TIMEOUT 20)
+        add_test(NAME interpreter_in_code COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_interpreter_in_code.py $<TARGET_FILE:relinker>)
+        set_tests_properties(interpreter_in_code PROPERTIES TIMEOUT 20)
         add_test(NAME guest_relative_section_symbols COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_relative_section_symbols.py $<TARGET_FILE:relinker>)
         set_tests_properties(guest_relative_section_symbols PROPERTIES TIMEOUT 20)
@@ -522,6 +525,8 @@ if(BUILD_TESTING)
         set_tests_properties(windows_runpath PROPERTIES TIMEOUT 30)
         add_test(NAME windows_trace_imports COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_trace_imports.py $<TARGET_FILE:relinker>)
+        add_test(NAME linux_trace_imports COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_trace_imports.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_address_space COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_address_space.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_tls_thread_pointer COMMAND ${Python3_EXECUTABLE}
@@ -735,6 +740,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/io/include
     )
     add_test(NAME windows_icon_resource COMMAND windows_icon_resource_tests)
+
+    add_test_executable(windows_trampoline_builder_tests ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/WindowsTrampolineBuilderTests.cpp)
+    target_link_libraries(windows_trampoline_builder_tests PRIVATE relinker_core)
+    add_test(NAME windows_trampoline_builder COMMAND windows_trampoline_builder_tests)
 
     add_test_executable(entry_stub_tests ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/tests/EntryStubTests.cpp)
     target_link_libraries(entry_stub_tests PRIVATE relinker_core)
