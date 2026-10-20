@@ -24,7 +24,7 @@
 - [sceHttpDbgEnableProfile](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgSetPrintf](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgShowStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpGetMemoryPoolStats](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
+- [sceHttpGetMemoryPoolStats](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - not measured on a console. The signature (`int httpCtxId`, stats) and the layout (pool size, peak use, current use, 32-bit reserved) follow [SharpProspero](https://github.com/SvenGDK/SharpProspero/blob/5dfdb4b0b166e83dc9ae275001afb695f12c7174/src/SharpProspero/Interop/Net/Http.cs#L744-L746), [struct](https://github.com/SvenGDK/SharpProspero/blob/5dfdb4b0b166e83dc9ae275001afb695f12c7174/src/SharpProspero/Interop/Net/Http.cs#L398-L413). The pool size is the one given to `sceHttpInit`. The library takes nothing from that pool, so peak use, current use and reserved are 0, where a console already holds bytes for a live context (0x1640 for Http2, see libSceNet). No live context returns `BEFORE_INIT` (0x80431001) and an unknown or terminated id `INVALID_ID` (0x80431100), as in `sceHttpCookieFlush`, with the output untouched; both codes are unmeasured. A null output throws, as its error code is unknown
 - [sceHttpDbgShowConnectionStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgShowRequestStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgShowMemoryPoolStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
