@@ -7,6 +7,13 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+struct ShellCorePbtcUserInfoList;
+struct ShellCorePrivacyEventData;
+struct ShellCorePsnAccountInfoFirst;
+struct ShellCorePsnAccountInfoSecond;
+struct ShellCorePsnAccountInfoThird;
+struct ShellCorePsnAccountInfoFourth;
+struct ShellCorePsnAccountInfoFifth;
 struct ShellCoreAppLaunchTypeInfo;
 struct LncLaunchParam;
 struct LncDaemonEvent;
@@ -876,12 +883,12 @@ int APS5_VABI sceShellCoreUtilGetPapcGamePcl() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPbtcUserInfoList() {
+int APS5_VABI sceShellCoreUtilGetPbtcUserInfoList(ShellCorePbtcUserInfoList* info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPlatformPrivacyDefinitionEventData() {
+int APS5_VABI sceShellCoreUtilGetPlatformPrivacyDefinitionEventData(const char* firstKey, const char* secondKey, ShellCorePrivacyEventData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -896,32 +903,32 @@ int APS5_VABI sceShellCoreUtilGetProgressOfFsck() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPs4AppCategoryDefaultsListId() {
+int APS5_VABI sceShellCoreUtilGetPs4AppCategoryDefaultsListId(void* data, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPs4AppCategoryForTitleId() {
+int APS5_VABI sceShellCoreUtilGetPs4AppCategoryForTitleId(const char* titleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPsStoreIconLayout() {
+int APS5_VABI sceShellCoreUtilGetPsStoreIconLayout(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPsStoreIconState() {
+int APS5_VABI sceShellCoreUtilGetPsStoreIconState(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetPsnAccountInfo() {
+int APS5_VABI sceShellCoreUtilGetPsnAccountInfo(ShellCorePsnAccountInfoFirst* first, ShellCorePsnAccountInfoSecond* second, ShellCorePsnAccountInfoThird* third, ShellCorePsnAccountInfoFourth* fourth, ShellCorePsnAccountInfoFifth* fifth) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetRemotePlayStatus() {
+int APS5_VABI sceShellCoreUtilGetRemotePlayStatus(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -931,37 +938,37 @@ int APS5_VABI sceShellCoreUtilGetRunLevel() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSharePlayStatus() {
+int APS5_VABI sceShellCoreUtilGetSharePlayStatus(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSocialScreenStatus() {
+int APS5_VABI sceShellCoreUtilGetSocialScreenStatus(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSplashScreenState() {
+int APS5_VABI sceShellCoreUtilGetSplashScreenState(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSupportSiteURL() {
+int APS5_VABI sceShellCoreUtilGetSupportSiteURL(std::uint32_t first, std::uint32_t second, char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSuspendConfirmationDialogFlag() {
+int APS5_VABI sceShellCoreUtilGetSuspendConfirmationDialogFlag(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSystemBGState() {
+int APS5_VABI sceShellCoreUtilGetSystemBGState(std::int32_t appId, std::uint32_t* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSystemBGWaveColor() {
+int APS5_VABI sceShellCoreUtilGetSystemBGWaveColor(std::int32_t appId, std::uint32_t* color) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
