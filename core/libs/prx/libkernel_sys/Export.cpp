@@ -273,18 +273,18 @@ int APS5_VABI fstatfs_nid_postfix(int d, void* buf) {
 }
 
 std::int64_t APS5_VABI readlink_nid_postfix(const char* path, char* buffer, std::size_t size) {
+    if (size > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) return Fail(GuestEinval);
     if (path == nullptr) return Fail(GuestEfault);
     if (*path == '\0') return Fail(GuestEnoent);
-    if (size > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) return Fail(GuestEinval);
     std::filesystem::path native;
     if (const int error = ResolvePathError_nid_no_patch(path, native)) return Fail(error);
     return ReadNativeLink(native, buffer, size);
 }
 
 std::int64_t APS5_VABI readlinkat_nid_postfix(int fd, const char* path, char* buffer, std::size_t size) {
+    if (size > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) return Fail(GuestEinval);
     if (path == nullptr) return Fail(GuestEfault);
     if (*path == '\0') return Fail(GuestEnoent);
-    if (size > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max())) return Fail(GuestEinval);
     if (fd == GuestAtFdcwd || *path == '/') return readlink_nid_postfix(path, buffer, size);
     int error = 0;
     const char* base = GetDirectoryDescriptorPath_nid_no_patch(fd, &error);
@@ -540,6 +540,19 @@ int APS5_VABI fchown_nid_postfix(int fd, std::uint32_t uid, std::uint32_t gid) {
     struct stat status{};
     if (::fstat(fd, &status) != 0) return static_cast<int>(Fail(GuestEbadf));
 #endif
+    return 0;
+}
+
+int APS5_VABI stat_nid_postfix(const char* path, FileStat* sb);
+int APS5_VABI lstat_nid_postfix(const char* path, FileStat* sb);
+
+int APS5_VABI fstatat_nid_postfix(int fd, const char* path, FileStat* sb, int flag) {
+    if (flag & ~GuestAtSymlinkNofollow) return static_cast<int>(Fail(GuestEinval));
+    if (path == nullptr) return static_cast<int>(Fail(GuestEfault));
+    if (*path == '\0') return static_cast<int>(Fail(GuestEnoent));
+    if (fd == GuestAtFdcwd || *path == '/') return flag ? lstat_nid_postfix(path, sb) : stat_nid_postfix(path, sb);
+    const int result = StatInDirectory_nid_no_patch(fd, path, sb, flag == 0);
+    if (result < 0) return static_cast<int>(Fail(result & 0xffff));
     return 0;
 }
 
