@@ -126,9 +126,19 @@ int APS5_VABI ExtNoop(const ImeKeycode*, std::uint16_t*, std::uint32_t*, void*) 
 }
 
 bool g_sawCaptureInsideFilter = false;
+int g_setInsideRc = -1;
 
 int32_t APS5_VABI LockingFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
     g_sawCaptureInsideFilter = ImeCapturesKeyboard_nid_postfix();
+    for (uint32_t i = 0; i < sourceTextLength; ++i) {
+        outText[i] = sourceText[i];
+    }
+    *outTextLength = sourceTextLength;
+    return 0;
+}
+
+int32_t APS5_VABI SetInsideFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
+    g_setInsideRc = sceImeSetText(u"zz", 2);
     for (uint32_t i = 0; i < sourceTextLength; ++i) {
         outText[i] = sourceText[i];
     }
@@ -470,6 +480,20 @@ void CheckTextFilter() {
     RequireText(Drain().at(0), EventUpdateText, u"c", 1, 0, 1);
     Require(g_sawCaptureInsideFilter, "the filter can call back into sceIme*");
     Require(sceImeClose_nid_postfix() == 0, "close the locking session");
+
+    buffers = Buffers{};
+    param = MakeParam(buffers, 8);
+    std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
+    param.filter = reinterpret_cast<ImeTextFilter>(&SetInsideFilter);
+    Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a filter that sets the text");
+    Drain();
+    g_setInsideRc = -1;
+    Publish(ImeHostInputKind::Text, "c");
+    Require(Drain().empty(), "an edit whose filter set the text sends no event");
+    Require(g_setInsideRc == 0, "sceImeSetText inside the filter returns 0");
+    Require(std::u16string(buffers.text) == u"zz", "the setText inside the filter wins");
+    Require(std::u16string(reinterpret_cast<const char16_t*>(buffers.work)) == u"zz", "the setText inside the filter wins in the work copy");
+    Require(sceImeClose_nid_postfix() == 0, "close the set-inside session");
 }
 
 void CheckHostEvents() {

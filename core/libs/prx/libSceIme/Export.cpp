@@ -66,6 +66,7 @@ struct Session {
     std::deque<ImeEvent> events;
     std::deque<ImeHostInput> hostInputs;
     std::uint64_t id = 0;
+    std::uint64_t revision = 0;
 };
 
 struct DeferredFilter {
@@ -478,6 +479,7 @@ int APS5_VABI sceImeSetCaret(const Caret* caret) {
     if (!caret) return ErrorInvalidAddress;
     if (caret->index > g_session->text.size()) return ErrorInvalidParam;
     g_session->caret = caret->index;
+    ++g_session->revision;
     return 0;
 }
 
@@ -495,6 +497,7 @@ int APS5_VABI sceImeSetText(const char16_t* text, uint32_t length) {
     const std::size_t count = TextLength(text, std::min(length, session.param.max_text_length));
     if (!ValidText(text, count, (session.param.option & OptionMultiline) != 0)) return ErrorInvalidText;
     session.text.assign(text, count);
+    ++session.revision;
     if (session.caret > session.text.size()) session.caret = static_cast<uint32_t>(session.text.size());
     SyncBuffers(session);
     return 0;
@@ -521,6 +524,7 @@ int APS5_VABI sceImeUpdate(EventHandler handler) {
         std::uint32_t filterMaxLength = 0;
         bool filterMultiline = false;
         std::uint64_t sessionId = 0;
+        std::uint64_t sessionRevision = 0;
         {
             std::lock_guard lock(g_imeMutex);
             if (!g_session || g_session->param.handler != handler) return 0;
@@ -535,6 +539,7 @@ int APS5_VABI sceImeUpdate(EventHandler handler) {
                     filterMaxLength = g_session->param.max_text_length;
                     filterMultiline = (g_session->param.option & OptionMultiline) != 0;
                     sessionId = g_session->id;
+                    sessionRevision = g_session->revision;
                 }
             } else if (!g_session->events.empty()) {
                 event = g_session->events.front();
@@ -549,7 +554,7 @@ int APS5_VABI sceImeUpdate(EventHandler handler) {
             std::u16string filtered;
             const bool accepted = RunTextFilter(filter, filterText, filterMaxLength, filterMultiline, &filtered);
             std::lock_guard lock(g_imeMutex);
-            if (g_session && g_session->id == sessionId) {
+            if (g_session && g_session->id == sessionId && g_session->revision == sessionRevision) {
                 CommitFilteredEdit(*g_session, accepted ? &filtered : nullptr, filterOldText);
             }
             continue;
