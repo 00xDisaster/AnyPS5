@@ -37,6 +37,7 @@ std::uint32_t APS5_VABI __atomic_exchange_4_nid_postfix(volatile std::uint32_t*,
 int APS5_VABI __atomic_compare_exchange_1_nid_postfix(volatile std::uint8_t*, std::uint8_t*, std::uint8_t, int, int);
 int APS5_VABI __atomic_compare_exchange_8_nid_postfix(volatile std::uint64_t*, std::uint64_t*, std::uint64_t, int, int);
 std::uint16_t APS5_VABI __atomic_fetch_add_2_nid_postfix(volatile std::uint16_t*, std::uint16_t, int);
+std::uint64_t APS5_VABI __atomic_exchange_8_nid_postfix(volatile std::uint64_t*, std::uint64_t, int);
 std::uint64_t APS5_VABI __atomic_fetch_add_8_nid_postfix(volatile std::uint64_t*, std::uint64_t, int);
 std::uint32_t APS5_VABI __atomic_fetch_sub_4_nid_postfix(volatile std::uint32_t*, std::uint32_t, int);
 std::uint8_t APS5_VABI __atomic_fetch_and_1_nid_postfix(volatile std::uint8_t*, std::uint8_t, int);
@@ -145,6 +146,9 @@ static void CheckSized() {
     Require(__atomic_fetch_xor_8_nid_postfix(&wide, 0xffffffff00000000ull, SeqCst) == 0x0123456789abcdefull && wide == 0xfedcba9889abcdefull);
     std::uint64_t expectedWide = 0xfedcba9889abcdefull;
     Require(__atomic_compare_exchange_8_nid_postfix(&wide, &expectedWide, 1, SeqCst, SeqCst) == 1 && wide == 1);
+    Require(__atomic_exchange_8_nid_postfix(&wide, 2, 6) == 1 && wide == 2);
+    Require(__atomic_load_8_nid_postfix(&wide, Release) == 2 && __atomic_load_8_nid_postfix(&wide, AcqRel) == 2 && __atomic_load_8_nid_postfix(&wide, -1) == 2);
+    Require(__atomic_fetch_add_8_nid_postfix(&wide, 1, 7) == 2 && wide == 3);
 
     std::uint64_t counter = 0;
     std::thread threads[4];
