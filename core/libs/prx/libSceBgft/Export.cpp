@@ -337,4 +337,309 @@ int APS5_VABI sceBgftServiceIntUploadUnregisterTaskAll(void) {
     return 0;
 }
 
+int APS5_VABI sceBgftServiceDownloadQueryTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugDownloadCorruptPkg() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugDownloadRequest() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoClearSetFreeZone() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoGetPlayGoStatusString() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoIsPaused() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoIsSetFreeZone() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoResume() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoRevertToFullState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoRevertToInitialState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoRevertToSnapshot() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoSnapshotByTitleId() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDebugPlayGoSuspend() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadCheckPatchUpdateState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadClearStats() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadDebugDeleteBgftEnvFile() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadDebugDownloadBgftEnvFile() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadDebugGetBgftEnvInfoString() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadDebugGetStat() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadGetApplicationDataSize() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadGetExtUsbUserStorageSize() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadGetPatchGoProgress() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadGetUserStorageSize() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadHideTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadPauseTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadQueryTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadRegisterTaskByStorage() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadRestartTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadResumeTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadSetResumeState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadSetStartState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadStartTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadStopTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntDownloadUnregisterTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntExtUsbCheckActiveDownloadTasks() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntGetTaskInfoValueInt() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntGetTaskInfoValueString() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntGetTaskInfoValueStringIndex() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoCheckDiscIniChunksInstall() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoFindTaskId() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoGetDiscIniChunksInstallProgress() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoIsPaused() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoResume() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntPlayGoStartDataDiscInstall() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntSetTaskVisible() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntTerm() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadGetAvailableTaskCount() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadGetProgress() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadGetTaskInfo() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadHideTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadQueryTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadRegisterTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadRestartTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadSetStartState() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadSetUploadError() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadStartTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadStartTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadStopTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadStopTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadUnregisterTask() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceBgftServiceIntUploadUnregisterTaskAll() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 }
