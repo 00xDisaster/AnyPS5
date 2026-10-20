@@ -88,7 +88,8 @@ struct NameMatch {
 };
 
 std::string_view NameStem(std::string_view name) {
-    return name.substr(0, name.find('.'));
+    const auto dot = name.rfind('.');
+    return dot == std::string_view::npos || dot == 0 ? name : name.substr(0, dot);
 }
 
 bool SameRelinkedStem(std::string_view filename, std::string_view name) {
