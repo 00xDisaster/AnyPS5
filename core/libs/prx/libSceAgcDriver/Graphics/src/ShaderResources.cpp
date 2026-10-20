@@ -120,7 +120,10 @@ struct CachedTexture {
     // write watch; zero when none was taken.
     std::array<std::uint64_t, 4> untracked{};
     std::vector<std::byte> carried;
+    std::uint64_t carriedPresent = 0;
 };
+
+constexpr std::uint64_t CarriedBufferMaxPresents = 16;
 
 // Entries in use order (front = most recent) with a hash index by key: a lookup is O(1) and the
 // eviction takes the back. APS5_NO_TEXTURE_HASH=1 finds entries by scanning the list (the index is
@@ -776,6 +779,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     std::vector<std::byte> recycled;
     if (auto it = findTexture(cache, key); it != cache.entries.end()) {
         if (it->source != nullptr) {
+            if (!it->carried.empty() && Recorder::Presents() - it->carriedPresent > CarriedBufferMaxPresents) it->carried = std::vector<std::byte>{};
             // The view follows the storage image, whatever the GPU wrote to it since; guest memory
             // written meanwhile is taken in by refreshing the image. A fast clear the image cannot
             // see (keys, and no pending results to prefer) ends the view: a snapshot holds the clear.
@@ -820,12 +824,15 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
             }
         }
         if (it->bytes.size() == bytes) recycled = std::move(it->bytes);
-        else if (it->carried.size() == bytes) recycled = std::move(it->carried);
+        else if (it->carried.size() == bytes && Recorder::Presents() - it->carriedPresent <= CarriedBufferMaxPresents) recycled = std::move(it->carried);
         eraseTexture(cache, it);
         ++cache.counts.stale;
     }
     CachedTexture entry{key, address, source != nullptr ? std::vector<std::byte>{} : (recycled.empty() ? std::vector<std::byte>(bytes) : std::move(recycled)), nullptr, *keys, snapshotGeneration};
-    if (source != nullptr) entry.carried = std::move(recycled);
+    if (source != nullptr) {
+        entry.carried = std::move(recycled);
+        entry.carriedPresent = Recorder::Presents();
+    }
     entry.committed = std::move(committed);
     if (source != nullptr) {
         entry.source = source;
