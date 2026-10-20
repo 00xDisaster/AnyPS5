@@ -6,6 +6,7 @@
 
 // Peer-to-peer signaling needs the network: contexts exist, but sessions never activate.
 static constexpr int SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT = static_cast<int>(0x80553303);
+static constexpr int SCE_NP_SESSION_SIGNALING_ERROR_GROUP_NOT_FOUND = static_cast<int>(0x8055330A);
 static constexpr int SCE_NP_SESSION_SIGNALING_ERROR_CONN_NOT_FOUND = static_cast<int>(0x8055330C);
 static constexpr int SCE_NP_SESSION_SIGNALING_ERROR_UNAVAILABLE = static_cast<int>(0x80552D06);
 static std::atomic<uint32_t> g_nextContext{1};
@@ -50,8 +51,11 @@ int APS5_VABI sceNpSessionSignalingActivateUser(void) {
     return SCE_NP_SESSION_SIGNALING_ERROR_UNAVAILABLE;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress2(void) {
-    return SCE_NP_SESSION_SIGNALING_ERROR_UNAVAILABLE;
+int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress2(int32_t context_id, int32_t group_id, const void* peer_address, int32_t* connection_id) {
+    (void)context_id;
+    (void)group_id;
+    if (!peer_address || !connection_id) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_GROUP_NOT_FOUND;
 }
 
 int APS5_VABI sceNpSessionSignalingTerminate(void) {
@@ -89,24 +93,32 @@ int APS5_VABI sceNpSessionSignalingGetConnectionStatistics(void) {
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress(int32_t context_id, const void* peer_address, int32_t* connection_id) {
+    (void)context_id;
+    if (!peer_address || !connection_id) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_CONN_NOT_FOUND;
 }
 
-int APS5_VABI sceNpSessionSignalingGetGroupFromSessionId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpSessionSignalingGetGroupFromSessionId(int32_t context_id, const void* session_id, int32_t* group_id) {
+    (void)context_id;
+    if (!session_id || !group_id) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_GROUP_NOT_FOUND;
 }
 
-int APS5_VABI sceNpSessionSignalingGetGroupInfo() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpSessionSignalingGetGroupInfo(int32_t context_id, int32_t group_id, void* info) {
+    (void)context_id;
+    (void)group_id;
+    if (!info) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_GROUP_NOT_FOUND;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress2() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress2(int32_t context_id, int32_t group_id, uint32_t address, uint16_t port, int32_t* connection_id) {
+    (void)context_id;
+    (void)group_id;
+    (void)address;
+    (void)port;
+    if (!connection_id) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_GROUP_NOT_FOUND;
 }
 
 int APS5_VABI sceNpSessionSignalingCreateJoinActivate() {
@@ -114,9 +126,12 @@ int APS5_VABI sceNpSessionSignalingCreateJoinActivate() {
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress(int32_t context_id, uint32_t address, uint16_t port, int32_t* connection_id) {
+    (void)context_id;
+    (void)address;
+    (void)port;
+    if (!connection_id) return SCE_NP_SESSION_SIGNALING_ERROR_INVALID_ARGUMENT;
+    return SCE_NP_SESSION_SIGNALING_ERROR_CONN_NOT_FOUND;
 }
 
 int APS5_VABI sceNpSessionSignalingGetCustomProperty() {
