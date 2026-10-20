@@ -195,6 +195,43 @@ static void TestCalcBlock() {
     Require(sceNgs2CalcWaveformBlock(&silent, 0, 1, &block) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
 }
 
+static void TestFrameInfo() {
+    const Ngs2WaveformFormat supported[] = {
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, Config, 7, 9},
+    };
+    const Ngs2WaveformFormat rejected[] = {
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 2, 48000, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 0, 48000, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 9, 48000, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 44100, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 0, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 192001, Config, 0, 0},
+        {SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, 0, 0, 0},
+    };
+    for (const auto& format : supported) {
+        Ngs2WaveformBlock block{};
+        Require(sceNgs2CalcWaveformBlock(&format, 0, SuperframeSamples, &block) == SCE_NGS2_OK && block.data_size == SuperframeBytes);
+        Require(FrameInfoThrows(format));
+    }
+    for (const auto& format : rejected) {
+        Ngs2WaveformBlock block{};
+        const int calc = sceNgs2CalcWaveformBlock(&format, 0, SuperframeSamples, &block);
+        Require(calc == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
+        std::uint32_t values[4] = {0xa1, 0xa2, 0xa3, 0xa4};
+        Require(sceNgs2GetWaveformFrameInfo(&format, &values[0], &values[1], &values[2], &values[3]) == calc);
+        Require(values[0] == 0xa1 && values[1] == 0xa2 && values[2] == 0xa3 && values[3] == 0xa4);
+    }
+    std::uint32_t values[4] = {0xa1, 0xa2, 0xa3, 0xa4};
+    Require(sceNgs2GetWaveformFrameInfo(nullptr, &values[0], &values[1], &values[2], &values[3]) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
+    Require(sceNgs2GetWaveformFrameInfo(&supported[0], nullptr, &values[1], &values[2], &values[3]) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
+    Require(sceNgs2GetWaveformFrameInfo(&supported[0], &values[0], nullptr, &values[2], &values[3]) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
+    Require(sceNgs2GetWaveformFrameInfo(&supported[0], &values[0], &values[1], nullptr, &values[3]) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
+    Require(sceNgs2GetWaveformFrameInfo(&supported[0], &values[0], &values[1], &values[2], nullptr) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
+    Require(sceNgs2GetWaveformFrameInfo(nullptr, nullptr, nullptr, nullptr, nullptr) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
+    Require(values[0] == 0xa1 && values[1] == 0xa2 && values[2] == 0xa3 && values[3] == 0xa4);
+}
+
 static void Set32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t value) {
     for (int i = 0; i < 4; ++i) bytes[offset + i] = static_cast<std::uint8_t>(value >> (i * 8));
 }
@@ -504,6 +541,7 @@ int main() {
     TestParseLoops();
     TestMalformedLoops();
     TestCalcBlock();
+    TestFrameInfo();
     TestCorruptSuperframeAtPageEnd();
     TestStreamPartitions();
     TestRefill(reference);
