@@ -249,6 +249,9 @@ static void CheckTableCalls() {
     }
     Require(slice(0xf40c0606u, 0xf4280210u).empty());
     Require(slice(0xf40c0606u, 0xf428020du).empty());
+    Require(slice(0xf40c0686u, 0xf428020eu).empty());
+    Require(slice(0xf40c0686u, 0xf428020cu).empty());
+    Require(slice(0xf40c0586u, 0xf428020eu).empty());
     auto readsLane = caller;
     readsLane.insert(readsLane.begin(), {0xd4c2000bu, 0x00020300u});
     const auto readsLaneProgram = RdnaInstructionDecoder{}.Decode(readsLane);
