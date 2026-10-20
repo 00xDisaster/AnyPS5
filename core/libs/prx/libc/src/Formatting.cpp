@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 #include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <memory>
 #include <climits>
@@ -32,6 +33,13 @@ int __isoc99_vfscanf(std::FILE*, const char*, std::va_list);
 #endif
 
 namespace {
+
+bool SizeOverflowsInt(char* buffer, size_t size) {
+    if (size == 0 || size - 1 <= static_cast<size_t>(INT_MAX)) return false;
+    errno = 84;
+    if (buffer != nullptr) *buffer = '\0';
+    return true;
+}
 
 #ifndef _WIN32
 bool RequiresGuestFormatting(const char* format) {
@@ -402,6 +410,7 @@ int APS5_VABI libc_printf_nid_postfix(const char* format, ...) {
 }
 
 int APS5_VABI snprintf_nid_postfix(char* buffer, size_t size, const char* format, ...) {
+    if (SizeOverflowsInt(buffer, size)) return -1;
     __builtin_sysv_va_list args;
     __builtin_sysv_va_start(args, format);
     const int result = LibcDetail::FormatWindows(buffer, size, format, args);
@@ -438,6 +447,7 @@ int APS5_VABI libc_printf_nid_postfix(const char* format, ...) {
 }
 
 int APS5_VABI snprintf_nid_postfix(char* buffer, size_t size, const char* format, ...) {
+    if (SizeOverflowsInt(buffer, size)) return -1;
     std::va_list args;
     va_start(args, format);
     const int result = RequiresGuestFormatting(format) ? LibcDetail::FormatWindows(buffer, size, format, args) : std::vsnprintf(buffer, size, format, args);
@@ -540,6 +550,7 @@ int APS5_VABI vsprintf_nid_postfix(char* str, const char* format, VaList* args) 
 }
 
 int APS5_VABI vsnprintf_nid_postfix(char* str, size_t size, const char* format, VaList* c) {
+    if (SizeOverflowsInt(str, size)) return -1;
 #ifdef _WIN32
     return LibcDetail::FormatWindows(str, size, format, c);
 #else
