@@ -145,10 +145,6 @@ int APS5_VABI sceNpAppLaunchLinkIntInitialize() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceNpBandwidthTestInitStart() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 int APS5_VABI sceNpBandwidthTestShutdownWithDetailedInfo() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -161,23 +157,7 @@ int APS5_VABI sceNpLookupCreateAsyncRequest() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceNpLookupCreateRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpLookupCreateTitleCtx() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 int APS5_VABI sceNpLookupCreateTitleCtxA() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpLookupDeleteRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpLookupDeleteTitleCtx() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -242,10 +222,6 @@ int APS5_VABI sceNpLookupNetSetTimeout() {
     return 0;
 }
 int APS5_VABI sceNpLookupNetTerm() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpLookupNpId() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -353,43 +329,7 @@ int APS5_VABI sceNpUtilityTerm() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceNpWordFilterAbortRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterCensorComment() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterCreateAsyncRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterCreateRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterCreateTitleCtx() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 int APS5_VABI sceNpWordFilterCreateTitleCtxA() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterDeleteRequest() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterDeleteTitleCtx() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterPollAsync() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpWordFilterSanitizeComment() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
