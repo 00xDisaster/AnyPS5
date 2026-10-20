@@ -236,6 +236,20 @@ class ImportAuditTests(unittest.TestCase):
                 self.assertEqual(data["library_mismatch"], 0)
                 self.assertEqual(data["imports"][0]["providers"], ["libSceA.prx"])
 
+    def test_windows_suffix_lookup_matches_provider_case_insensitively(self):
+        work = self.work
+        (work.libs / "LibSceA.prx").write_bytes(build_pe(["AAAAAAAAAAA"]))
+        (work.modules / "guest.so").write_bytes(build_elf([], ["libscea.sprx"]))
+        registry, result = work.root / "game.registry.json", work.root / "audit.json"
+        write_registry(registry, [("AAAAAAAAAAA", "libscea.sprx")])
+        registry.with_name("game.needed.json").write_text(json.dumps(["libscea.sprx"]))
+        code, _, err = work.run(registry, "--strict-providers", "--json", str(result))
+        self.assertEqual((code, err), (0, ""))
+        data = json.loads(result.read_text())
+        self.assertEqual(data["missing_libraries"], {})
+        self.assertEqual(data["library_mismatch"], 0)
+        self.assertEqual(data["imports"][0]["providers"], ["LibSceA.prx"])
+
     def test_elf_guest_dependencies_keep_literal_host_names(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(exporting("AAAAAAAAAAA"))

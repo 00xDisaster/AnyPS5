@@ -568,13 +568,20 @@ def classify(nid, library, providers, stubs, modules):
 
 
 def audit(imports, exports, stubs, libraries, modules, module_imports=None, module_exports=None, *, needed_libraries=(), windows_libraries=()):
+    windows_names = {}
+    for library in windows_libraries:
+        windows_names.setdefault(library.casefold(), set()).add(library)
+
     def system_library(name):
         if name:
             for suffix in (".sprx", ".suprx", ".debug_prx"):
                 if name.endswith(suffix):
                     normalized = name.removesuffix(suffix) + ".prx"
-                    if normalized in windows_libraries:
+                    candidates = windows_names.get(normalized.casefold(), ())
+                    if normalized in candidates:
                         return normalized
+                    if len(candidates) == 1:
+                        return next(iter(candidates))
         return name
 
     def available(name):
