@@ -345,6 +345,21 @@ std::list<Pair>::iterator ObjectPosition(const Object& object, const std::string
     return std::find_if(object.items->begin(), object.items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key.c_str()) >= 0; });
 }
 
+Value& ObjectEntry(Object& object, const std::string& key) {
+    auto position = ObjectPosition(object, key);
+    if (position != object.items->end() && std::strcmp(position->key.text->c_str(), key.c_str()) == 0) return position->value;
+    Pair pair{};
+    Construct(pair.key, key);
+    try {
+        Construct(pair.value);
+        return object.items->insert(position, pair)->value;
+    } catch (...) {
+        Destroy(pair.value);
+        Destroy(pair.key);
+        throw;
+    }
+}
+
 class Parser {
 public:
     Parser(const char* text, std::size_t size, const Handlers& handlers) : _text(text), _end(text + size), _handlers(handlers) {}
@@ -514,11 +529,10 @@ private:
                     if (_text >= _end || *_text != ':') return false;
                     ++_text;
                     skip();
-                    auto& pair = *out.object.items->emplace(ObjectPosition(out.object, key));
-                    Construct(pair.key, key);
-                    Construct(pair.value);
-                    pair.value.node->handlers = _handlers;
-                    if (!value(*pair.value.node)) return false;
+                    Value& entry = ObjectEntry(out.object, key);
+                    Clear(*entry.node);
+                    entry.node->handlers = _handlers;
+                    if (!value(*entry.node)) return false;
                     skip();
                     if (_text < _end && *_text == ',') { ++_text; continue; }
                     if (_text < _end && *_text == '}') { ++_text; --_depth; return true; }
@@ -542,20 +556,6 @@ void* const JsonMemAllocatorVtable[] = {
     reinterpret_cast<void*>(&JsonMemAllocatorPureVirtual), reinterpret_cast<void*>(&JsonMemAllocatorPureVirtual),
 };
 
-Value& ObjectEntry(Object& object, const std::string& key) {
-    auto position = ObjectPosition(object, key);
-    if (position != object.items->end() && std::strcmp(position->key.text->c_str(), key.c_str()) == 0) return position->value;
-    Pair pair{};
-    Construct(pair.key, key);
-    try {
-        Construct(pair.value);
-        return object.items->insert(position, pair)->value;
-    } catch (...) {
-        Destroy(pair.value);
-        Destroy(pair.key);
-        throw;
-    }
-}
 
 }
 

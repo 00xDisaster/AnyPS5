@@ -626,6 +626,17 @@ static void ObjectKeyOrder() {
     _ZN3sce4Json6ObjectD1Ev(&object);
 }
 
+static void ParseDuplicateKeys() {
+    Value root{};
+    _ZN3sce4Json5ValueC1Ev(&root);
+    for (const char* text : {R"({"a":1,"a":2})", R"({"a":[1,2],"a":2})", R"({"a":{"old":true},"a":2})", R"({"a":1,"a\u0000suffix":2})"}) {
+        Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, text, std::strlen(text)) == 0);
+        Require(_ZNK3sce4Json5Value5countEv(&root) == 1);
+        Require(Serialize(root) == R"({"a":2})");
+    }
+    _ZN3sce4Json5ValueD1Ev(&root);
+}
+
 static void StringComparison() {
     String left{}, right{};
     _ZN3sce4Json6StringC1EPKc(&left, "a");
@@ -1303,6 +1314,7 @@ int main() {
     AllocatorNotifyError();
     StringMethods();
     StringComparison();
+    ParseDuplicateKeys();
     ValueSwap();
     ArrayIteratorAdvance();
     ObjectOperations();
