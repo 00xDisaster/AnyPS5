@@ -9,6 +9,8 @@
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/State.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
+#include "prx/libc/include/GuestArena.hpp"
+#include "prx/libc/include/GuestWriteWatch.hpp"
 #include "Recompiler.hpp"
 #include "Optimization/ResourceProgram.hpp"
 #include "VulkanTestDevice.hpp"
@@ -17,6 +19,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#else
+#include <sys/mman.h>
 #endif
 #include <algorithm>
 #include <array>
@@ -120,11 +124,27 @@ constexpr std::array<std::array<float, 4>, 3> Triangle{{
 alignas(256) std::array<std::uint32_t, Threads * Words> Buffer{};
 
 struct Block {
-    explicit Block(std::size_t bytes) : bytes(bytes) {
+    explicit Block(std::size_t bytes, bool watched = false) : bytes(bytes), watched(watched) {
 #ifdef _WIN32
-        data = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+        if (watched) {
+            data = static_cast<std::uint8_t*>(GuestArena::GuestArenaAllocate_nid_postfix(bytes, BlockBytes));
+            if (data != nullptr) GuestArena::GuestArenaCommit_nid_postfix(data, bytes, PAGE_READWRITE, bytes);
+        } else {
+            data = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+        }
 #else
-        data = static_cast<std::uint8_t*>(std::aligned_alloc(BlockBytes, bytes));
+        if (watched) {
+            void* mapped = mmap(nullptr, bytes + BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            Require(mapped != MAP_FAILED, "cannot map the watched multisampled color target");
+            const auto begin = reinterpret_cast<std::uintptr_t>(mapped);
+            const auto aligned = (begin + BlockBytes - 1u) & ~(static_cast<std::uintptr_t>(BlockBytes) - 1u);
+            if (aligned != begin) munmap(mapped, aligned - begin);
+            if (aligned != begin + BlockBytes) munmap(reinterpret_cast<void*>(aligned + bytes), begin + BlockBytes - aligned);
+            data = reinterpret_cast<std::uint8_t*>(aligned);
+            GuestWriteWatch::GuestWriteWatchRegister_nid_postfix(data, bytes);
+        } else {
+            data = static_cast<std::uint8_t*>(std::aligned_alloc(BlockBytes, bytes));
+        }
 #endif
         Require(data != nullptr, "cannot allocate the multisampled color target");
         std::memset(data, 0, bytes);
@@ -137,15 +157,26 @@ struct Block {
             mutation.Remove(data);
         }
 #ifdef _WIN32
-        VirtualFree(data, 0, MEM_RELEASE);
+        if (watched) {
+            GuestArena::GuestArenaReset_nid_postfix(data, bytes);
+            GuestArena::GuestArenaRelease_nid_postfix(data, bytes);
+        } else {
+            VirtualFree(data, 0, MEM_RELEASE);
+        }
 #else
-        std::free(data);
+        if (watched) {
+            munmap(data, bytes);
+            GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(data, bytes);
+        } else {
+            std::free(data);
+        }
 #endif
     }
     Block(const Block&) = delete;
     Block& operator=(const Block&) = delete;
     std::uint64_t Address() const { return reinterpret_cast<std::uintptr_t>(data); }
     std::size_t bytes;
+    bool watched;
     std::uint8_t* data = nullptr;
 };
 
@@ -509,6 +540,42 @@ void CheckNativeIndices(AgcDriver::VulkanDevice& device, const Block& source, co
     Require(missed == 0, "native indices missed " + std::to_string(missed) + " resident-image refusals");
 }
 
+void CheckOverwrittenTarget(AgcDriver::VulkanDevice& device) {
+    Block reused(4u * BlockBytes, true);
+    if (!AgcDriver::GuestMemory::Watched(reused.Address(), reused.bytes)) {
+        std::puts("overwritten target retirement not tested: the guest block is not write-watched");
+        return;
+    }
+    const auto color = DecodeTarget(reused);
+    const auto state = TargetState(color);
+    Draw(device, state);
+    device.WaitIdle();
+    CheckSamples(state, LoadSamples(device, reused), {});
+    const auto colorBytes = AgcDriver::Graphics::MultisampledColorBytes(color);
+    Require(colorBytes >= 2u * 256u && colorBytes <= reused.bytes, "the watched 4x target's color memory does not fit its block");
+    std::string refusal;
+    try {
+        AgcDriver::Graphics::RequireNoMultisampleTarget(reused.Address(), 64u, "a read of a drawn target the title has not written");
+    } catch (const std::exception& error) {
+        refusal = error.what();
+    }
+    Require(refusal.find("whose samples are only on the host") != std::string::npos, "a drawn target in watched memory is not guarded");
+    const auto written = reused.Address() + colorBytes / 2u;
+    std::memset(reused.data + colorBytes / 2u, 0x5a, 256u);
+    AgcDriver::Graphics::RequireNoMultisampleTarget(written, 256u, "a read of target memory the title wrote over");
+    AgcDriver::Graphics::RequireNoMultisampleTarget(reused.Address(), 64u, "a read of the rest of a target the title wrote over");
+    Draw(device, state);
+    device.WaitIdle();
+    refusal.clear();
+    try {
+        AgcDriver::Graphics::RequireNoMultisampleTarget(written, 256u, "a read of a target drawn again over memory the title wrote");
+    } catch (const std::exception& error) {
+        refusal = error.what();
+    }
+    Require(refusal.find("whose samples are only on the host") != std::string::npos, "a target drawn again after the title wrote over it is not guarded");
+    std::puts("a drawn 4x target in watched memory stays guarded until the title writes over its color memory; the next guarded read then retires it, and a later draw guards the new target");
+}
+
 void StoreWords(const Block& block, std::uint64_t bytes, std::uint32_t word) {
     for (std::uint64_t offset = 0; offset < bytes; offset += sizeof(word)) std::memcpy(block.data + offset, &word, sizeof(word));
 }
@@ -660,6 +727,7 @@ int main(int argc, char** argv) {
         }
         Draw(*device, state);
         CheckSamples(state, LoadSamples(*device, block), {});
+        CheckOverwrittenTarget(*device);
         const auto colorBytes = AgcDriver::Graphics::MultisampledColorBytes(color);
         Require(colorBytes != 0 && colorBytes <= block.bytes, "the 4x target's color memory does not fit its block");
         AgcDriver::Graphics::NoteColorMetadataFill(block.Address(), static_cast<std::size_t>(colorBytes), FillOnes);
