@@ -55,9 +55,11 @@ public:
     bool CalibrateClock(double& gpuNs, std::chrono::steady_clock::time_point& cpu) const;
     ShaderRecompiler::SpirvTarget Target() const;
     std::optional<ShaderRecompiler::GeometryStageLimits> GeometryLimits() const;
+    std::uint32_t MaxFragmentInputComponents() const;
     const std::uint32_t* WorkGroupCountLimit() const;
     std::uint32_t VendorId() const;
     ShaderRecompiler::SpirvTarget ComputeTarget(std::uint32_t waveSize) const;
+    bool ComputeFullSubgroups() const;
     // Distinguishes this device from every earlier one in the process (a memo keyed by the device
     // cannot rely on the pointer, which a replacement may reuse).
     std::uint64_t Serial() const { return serial; }
@@ -165,6 +167,7 @@ public:
     };
     using CopyWriterNote = std::function<void(std::span<const std::byte> value, std::uint64_t generation)>;
     CopyOutcome CopyBuffer(std::uint64_t destination, std::uint64_t source, std::size_t bytes, std::size_t cpuMax, std::size_t gpuMax, std::size_t knownMax, std::uint64_t programAddress, std::uint32_t queue, const CopyWriterNote& noteWriter);
+    bool GpuCopyPossible(std::uint64_t destination, std::uint64_t source, std::size_t bytes) const;
     // APS5_COPY_VERIFY=1 totals: CPU copies verified, whose source bytes changed over the sync (a
     // producer the rule missed), whose destination bytes were overwritten (a store the rule
     // missed), and whose destination an unsignaled batch read in place (the rule's own answer
@@ -184,6 +187,10 @@ public:
         std::uint64_t created, underGpuMutex;
     };
     static ComputePipelineCreation ComputePipelineCounts();
+    struct DispatchMoveCount {
+        std::uint64_t checked, exact, moved, refused, filtered, rebuilt, kept, served;
+    };
+    static DispatchMoveCount DispatchMoveCounts();
     void ResolveMemory(std::uint64_t address, std::size_t bytes, bool writable);
     void* Window() const;
     void Resize(std::uint32_t width, std::uint32_t height);
@@ -243,6 +250,10 @@ public:
         double gpuBusyMs, gpuGapMs, lastSubmitAfterFlipMs, blitSubmitAfterFlipMs;
     };
     static PresentStatistics PresentCounts();
+    struct PresyncStatistics {
+        std::uint64_t checked, presyncs, keyChecks, keyWaits;
+    };
+    static PresyncStatistics PresyncCounts();
     // Stage A of a dispatch's resource build, run WITHOUT GuestMemory::GpuMutex before Dispatch or
     // DispatchIndirect: the binding plan, data buffers, imports already serving the guest buffers,
     // read-only copies and the descriptor set (see ShaderResources). The dispatch completes it
@@ -321,21 +332,27 @@ public:
     void EnqueueDraw(const Graphics::State& graphics, const Pm4::DrawParameters& draw, std::span<const Graphics::CompiledShader> shaders, std::span<const Graphics::GuestMemorySnapshot> snapshots = {});
     bool PrebuildGraphicsLibraries(const Graphics::ShaderStages& stages, std::span<const Graphics::CompiledShader> shaders);
 
-private:
-    VulkanDevice(const PresentationWindow* window, bool compileOnly);
-    friend struct VulkanDeviceTestAccess;
+public:
     // The device's Graphics::Context: a copy of the one built at setup (its instance functions
     // resolved then, its function table filled then), or with APS5_NO_CONTEXT_CACHE=1 built anew.
     Graphics::Context graphicsContext() const;
     VkPipelineCreateFlags computePipelineFlags() const;
     std::uint32_t computeSubgroupSize(const ShaderRecompiler::RecompileResult& shader) const;
+    VkPipelineShaderStageCreateFlags computeStageFlags(const ShaderRecompiler::RecompileResult& shader) const;
     std::shared_ptr<ComputePipelineObjects> createComputePipeline(const Graphics::Context& context, const ShaderRecompiler::RecompileResult& shader, VkDescriptorSetLayout setLayout, std::span<const std::uint32_t> layoutKey, VkShaderStageFlags pushStages, std::uint64_t programAddress);
+    bool completionStoresOver(std::uint64_t address, std::size_t bytes) const;
+    bool copyWaitsOnCompletions(std::uint64_t address, std::size_t bytes) const;
+
+private:
+    VulkanDevice(const PresentationWindow* window, bool compileOnly);
+    friend struct VulkanDeviceTestAccess;
+    VkPipeline splitComputePipeline(const Graphics::Context& context, const ShaderRecompiler::RecompileResult& shader, ComputePipelineObjects& objects, const std::array<std::uint32_t, 3>& base);
     ShaderRecompiler::SpirvTarget buildTarget() const;
     Graphics::Context buildContext() const;
     // Body of Dispatch and DispatchIndirect: `arguments` 0 dispatches x, y, z groups.
     IndirectOutcome dispatch(const ShaderRecompiler::RecompileResult& shader, std::uint32_t x, std::uint32_t y, std::uint32_t z, std::uint64_t arguments, std::span<const Graphics::GuestMemorySnapshot> snapshots, std::uint64_t programAddress, std::shared_ptr<PreparedDispatch> prepared, std::shared_ptr<const Recipe>* recipe);
     // The stage-A pre-sync over `surfaces` (see PrepareDispatch): the serial waited for, 0 none.
-    std::uint64_t presync(std::span<const std::pair<std::uint64_t, std::uint64_t>> surfaces);
+    std::uint64_t presync(std::span<const Graphics::PresyncSurface> surfaces);
     std::shared_ptr<ComputePipelineObjects> computePipeline(const Graphics::Context& context, const ShaderRecompiler::RecompileResult& shader, VkDescriptorSetLayout setLayout, std::span<const std::uint32_t> layoutKey, VkShaderStageFlags pushStages, std::uint64_t programAddress);
     // A DISPATCH_INDIRECT's argument path (see DispatchIndirect): GPU-side from the host import, or
     // the counts read on the CPU (the record then continues as a direct dispatch).
