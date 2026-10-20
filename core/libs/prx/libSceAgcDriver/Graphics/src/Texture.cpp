@@ -335,6 +335,7 @@ Texture::Texture(const Context& context, TextureDetiler& detiler, const GuestTex
         imageInfo.format = vkFormat;
         imageInfo.extent = {descriptor.width, descriptor.height, geometry.imageDepth};
         imageInfo.mipLevels = descriptor.mipCount;
+        Require(geometry.imageLayers <= context.limits.maxImageArrayLayers, "a texture array with more layers than maxImageArrayLayers is not implemented");
         imageInfo.arrayLayers = geometry.imageLayers;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -525,7 +526,7 @@ Texture::Texture(const Context& context, TextureDetiler& detiler, const GuestTex
         const auto viewLevelCount = std::min(descriptor.lastLevel, descriptor.mipCount - 1u) - descriptor.baseLevel + 1u;
         const auto viewLayerCount = geometry.imageLayers - descriptor.baseArray;
         if (descriptor.dimension == TextureDimension::kCube) {
-            Require(viewLayerCount % 6u == 0, "guest cube texture view does not contain a multiple of 6 array slices");
+            Require(viewLayerCount >= 6u, "guest cube texture view holds fewer than 6 array slices");
         }
 
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -632,7 +633,7 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         const auto viewLevelCount = std::min(descriptor.lastLevel, descriptor.mipCount - 1u) - descriptor.baseLevel + 1u;
         const auto viewLayerCount = geometry.imageLayers - descriptor.baseArray;
         if (descriptor.dimension == TextureDimension::kCube) {
-            Require(viewLayerCount % 6u == 0, "guest cube texture view does not contain a multiple of 6 array slices");
+            Require(viewLayerCount >= 6u, "guest cube texture view holds fewer than 6 array slices");
         }
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = image;
@@ -747,7 +748,7 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         const auto viewLevelCount = std::min(descriptor.lastLevel, descriptor.mipCount - 1u) - descriptor.baseLevel + 1u;
         const auto viewLayerCount = geometry.imageLayers - descriptor.baseArray;
         if (descriptor.dimension == TextureDimension::kCube) {
-            Require(viewLayerCount % 6u == 0, "guest cube texture view does not contain a multiple of 6 array slices");
+            Require(viewLayerCount >= 6u, "guest cube texture view holds fewer than 6 array slices");
         }
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = image;
@@ -1014,7 +1015,7 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         const auto viewLevelCount = std::min(descriptor.lastLevel, descriptor.mipCount - 1u) - descriptor.baseLevel + 1u;
         const auto viewLayerCount = std::min(geometry.imageLayers, source->ImageLayers()) - descriptor.baseArray;
         if (descriptor.dimension == TextureDimension::kCube) {
-            Require(viewLayerCount % 6u == 0, "guest cube texture view does not contain a multiple of 6 array slices");
+            Require(viewLayerCount >= 6u, "guest cube texture view holds fewer than 6 array slices");
         }
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = source->Image();
@@ -1373,7 +1374,7 @@ StorageTexture::StorageTexture(const Context& context, TextureDetiler& detiler, 
         const bool layered = geometry.layers >= 2 && !geometry.thick && geometry.imageDepth == 1 && geometry.layers == geometry.imageLayers && geometry.layerBytes * geometry.layers == guestBytes && geometry.layerBytes % 65536 == 0 && descriptor.baseAddress % 65536 == 0;
         // Tile blocks divide the stamp blocks, so at an aligned base every unit is whole tile blocks
         // of its (layer, mip) slices (sliceWindows).
-        blockUnits = LayerTrackingEnabled() && BlockTrackingEnabled() && TracksBlockUnits(descriptor, geometry);
+        blockUnits = LayerTrackingEnabled() && BlockTrackingEnabled() && !geometry.thick && descriptor.tileMode != TextureTileMode::kLinear && descriptor.baseAddress % 65536 == 0;
         trackedLayers = blockUnits ? static_cast<std::uint32_t>((guestBytes + 65535) / 65536) : layered && LayerTrackingEnabled() ? geometry.layers : 1u;
         trackedLayerBytes = blockUnits ? 65536 : guestBytes / trackedLayers;
         layerGeneration.assign(trackedLayers, 0);
@@ -1390,6 +1391,7 @@ StorageTexture::StorageTexture(const Context& context, TextureDetiler& detiler, 
         imageInfo.format = vkFormat;
         imageInfo.extent = {descriptor.width, descriptor.height, geometry.imageDepth};
         imageInfo.mipLevels = descriptor.mipCount;
+        Require(geometry.imageLayers <= context.limits.maxImageArrayLayers, "a texture array with more layers than maxImageArrayLayers is not implemented");
         imageInfo.arrayLayers = geometry.imageLayers;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
