@@ -27,6 +27,16 @@ struct HmdEyeOffset {
     float z;
 };
 
+struct HmdDfuData {
+    const void* data;
+    std::uint32_t size;
+    std::uint32_t mode;
+};
+
+static_assert(sizeof(HmdDfuData) == 16);
+static_assert(offsetof(HmdDfuData, size) == 8);
+static_assert(offsetof(HmdDfuData, mode) == 12);
+
 struct HmdScreenData {
     const void* data;
     std::int32_t size;
@@ -546,7 +556,7 @@ int APS5_VABI sceHmdDistortionInitialize(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalDfuSetMode(void) {
+int APS5_VABI sceHmdInternalDfuSetMode(std::uint32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -556,7 +566,7 @@ int APS5_VABI sceHmdInternalSetForcedCrash(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalDfuCheckPartialUpdateAvailable(void) {
+int APS5_VABI sceHmdInternalDfuCheckPartialUpdateAvailable(bool* available) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -646,7 +656,7 @@ int APS5_VABI sceHmdDistortionGet2dVrCommand(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalDfuSendSize(void) {
+int APS5_VABI sceHmdInternalDfuSendSize(std::int32_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -730,7 +740,7 @@ int APS5_VABI sceHmdGetDistortionParams(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalDfuSend(void) {
+int APS5_VABI sceHmdInternalDfuSend(const HmdDfuData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
