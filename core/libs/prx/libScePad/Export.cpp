@@ -48,6 +48,19 @@ struct PadLeonardoData;
 struct PadLeonardoUniqueData;
 struct PadHistoryData;
 struct PadUpdateParameter;
+struct PadVirtualDeviceParameter;
+struct PadVirtualDeviceId;
+struct PadVirtualDeviceComponentInformation;
+
+struct PadVirtualTriggerInternalState {
+    std::uint32_t states[2];
+    std::uint8_t mode;
+    std::uint8_t flags[2];
+};
+
+static_assert(sizeof(PadVirtualTriggerInternalState) == 12);
+static_assert(offsetof(PadVirtualTriggerInternalState, mode) == 8);
+static_assert(offsetof(PadVirtualTriggerInternalState, flags) == 9);
 
 struct PadLightBarBlinkingParameter {
     std::uint8_t values[3];
@@ -668,7 +681,7 @@ int APS5_VABI scePadGetProfileHunt(std::int32_t handle, std::int32_t profileId, 
     return 0;
 }
 
-int APS5_VABI scePadSetProfileHunt(void) {
+int APS5_VABI scePadSetProfileHunt(std::int32_t handle, std::int32_t profileId, PadHuntProfile* profile, std::uint32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -738,7 +751,7 @@ int APS5_VABI scePadGetProfileLeonardo(std::int32_t handle, std::int32_t profile
     return 0;
 }
 
-int APS5_VABI scePadSetProfileLeonardo(void) {
+int APS5_VABI scePadSetProfileLeonardo(std::int32_t handle, std::int32_t profileId, PadLeonardoProfile* profile, std::uint32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -953,12 +966,12 @@ int APS5_VABI scePadSetProcessFocus(const PadProcessFocusParameter* parameter) {
     return 0;
 }
 
-int APS5_VABI scePadVertualDeviceAddDevice(void) {
+int APS5_VABI scePadVertualDeviceAddDevice(const PadVirtualDeviceParameter* parameter, PadVirtualDeviceId* deviceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI scePadVirtualDeviceAddDevice(void) {
+int APS5_VABI scePadVirtualDeviceAddDevice(const PadVirtualDeviceParameter* parameter, PadVirtualDeviceId* deviceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -968,12 +981,12 @@ int APS5_VABI scePadVirtualDeviceDeleteDevice(std::int32_t deviceId) {
     return 0;
 }
 
-int APS5_VABI scePadVirtualDeviceInsertData(void) {
+int APS5_VABI scePadVirtualDeviceInsertData(std::int32_t deviceId, const PadData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI scePadVirtualDeviceInsertTriggerInternalState(void) {
+int APS5_VABI scePadVirtualDeviceInsertTriggerInternalState(std::int32_t deviceId, const PadVirtualTriggerInternalState* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1003,7 +1016,7 @@ int APS5_VABI scePadSetPS4BcVibrationMode(std::uint8_t mode) {
     return 0;
 }
 
-int APS5_VABI scePadSetVirtualDeviceComponentInformation(void) {
+int APS5_VABI scePadSetVirtualDeviceComponentInformation(std::int32_t deviceId, const PadVirtualDeviceComponentInformation* info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
