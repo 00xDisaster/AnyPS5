@@ -294,12 +294,17 @@ void testWorkloadStreams() {
     check(sceAgcDriverRegisterWorkloadStream(1, record) == 0, "workload stream registration failed");
     Storage registered;
     registered.words.fill(0xdeadbeefu);
-    const auto untouched = registered.words;
-    expectFailure([&] { sceAgcDcbSetWorkloadStreamInactive(&registered.buffer, 1); });
-    expectFailure([&] { sceAgcAcbSetWorkloadsActive(&registered.buffer, 1, ids, 2); });
-    expectFailure([&] { sceAgcAcbSetWorkloadComplete(&registered.buffer, 1, 3); });
-    expectFailure([&] { sceAgcAcbSetWorkloadStreamInactive(&registered.buffer, 1); });
-    check(registered.words == untouched && registered.buffer.cursor_up == registered.words.data(), "a workload call that threw modified the buffer");
+    const auto* inactive = sceAgcDcbSetWorkloadStreamInactive(&registered.buffer, 1);
+    check(inactive == registered.words.data() && inactive[0] == Agc::Command::Header(0x10, 9, 0) && inactive[1] == 1, "DCB workload stream inactive packet");
+    for (std::uint32_t word = 2; word < 9; ++word) check(inactive[word] == 0, "DCB workload stream inactive packet tail is not zero");
+    check(registered.buffer.cursor_up == registered.words.data() + 9, "DCB workload stream inactive cursor advance");
+    Storage dcb;
+    Storage acb;
+    check(sceAgcDcbSetWorkloadsActive(&dcb.buffer, 1, ids, 2) != nullptr && sceAgcAcbSetWorkloadsActive(&acb.buffer, 1, ids, 2) == acb.words.data(), "ACB workloads active packet");
+    check(sceAgcDcbSetWorkloadComplete(&dcb.buffer, 1, 3) != nullptr && sceAgcAcbSetWorkloadComplete(&acb.buffer, 1, 3) == acb.words.data() + 18, "ACB workload complete packet");
+    check(sceAgcDcbSetWorkloadStreamInactive(&dcb.buffer, 1) != nullptr && sceAgcAcbSetWorkloadStreamInactive(&acb.buffer, 1) == acb.words.data() + 30, "ACB workload stream inactive packet");
+    check(acb.buffer.cursor_up == acb.words.data() + 39 && dcb.words == acb.words, "ACB workload packets differ from the DCB ones");
+    check(sceAgcAcbSetWorkloadsActive(&acb.buffer, 1, ids, 0) == nullptr && sceAgcAcbSetWorkloadComplete(&acb.buffer, 1, 64) == nullptr, "ACB workload argument checks");
     check(sceAgcDcbSetWorkloadStreamInactive(nullptr, 1) == nullptr && sceAgcAcbSetWorkloadsActive(nullptr, 1, ids, 2) == nullptr &&
         sceAgcAcbSetWorkloadComplete(nullptr, 1, 3) == nullptr && sceAgcAcbSetWorkloadStreamInactive(nullptr, 1) == nullptr,
         "a workload call with a null command buffer for a registered stream returned a packet");
