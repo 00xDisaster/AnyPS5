@@ -480,12 +480,18 @@ void ReplaceGzipFile() {
     AgcDriver::TraceFile::ReplaceGzip(path, "{\"first\":1}\n");
     AgcDriver::TraceFile::ReplaceGzip(path, "{\"second\":2}\n");
     Check(ReadGzip(path) == "{\"second\":2}\n" && !std::filesystem::exists(temporary), "the benchmark file was not replaced");
-    std::filesystem::create_directory(temporary);
+    const auto blocked = directory / "aps5-bench-blocked.json.gz";
+    auto blockedTemporary = blocked;
+    blockedTemporary += ".tmp";
+    std::filesystem::create_directory(blocked);
     bool failed = false;
-    try { AgcDriver::TraceFile::ReplaceGzip(path, "{\"third\":3}\n"); } catch (const std::exception&) { failed = true; }
+    try { AgcDriver::TraceFile::ReplaceGzip(blocked, "{\"third\":3}\n"); } catch (const std::system_error&) { failed = true; }
+    const bool blockedKept = std::filesystem::is_directory(blocked);
+    const bool temporaryLeft = std::filesystem::exists(blockedTemporary);
     const auto kept = ReadGzip(path);
     std::filesystem::remove_all(directory);
-    Check(failed && kept == "{\"second\":2}\n", "a failed rewrite damaged the previous benchmark file");
+    Check(failed && blockedKept && !temporaryLeft, "a replace that could not move its file over the destination did not fail cleanly or left its temporary file");
+    Check(kept == "{\"second\":2}\n", "a failed replace of another file damaged the benchmark file");
 }
 
 void BenchSwitch() {

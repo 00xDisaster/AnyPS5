@@ -58,11 +58,16 @@ void TraceFile::ReplaceGzip(const std::filesystem::path& path, std::string_view 
     auto temporary = path;
     temporary += ".tmp";
     WriteGzip(temporary, text);
+    std::error_code error;
 #ifdef _WIN32
-    if (::MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0) throw std::system_error(static_cast<int>(::GetLastError()), std::system_category(), "MoveFileExW " + temporary.string());
+    if (::MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0) error = std::error_code(static_cast<int>(::GetLastError()), std::system_category());
 #else
-    std::filesystem::rename(temporary, path);
+    std::filesystem::rename(temporary, path, error);
 #endif
+    if (!error) return;
+    std::error_code removeError;
+    std::filesystem::remove(temporary, removeError);
+    throw std::system_error(error, "replacing " + path.string());
 }
 
 void TraceFile::AppendLine(const std::filesystem::path& path, std::string_view line) {
