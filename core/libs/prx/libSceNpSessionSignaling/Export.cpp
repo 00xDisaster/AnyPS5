@@ -79,7 +79,7 @@ int APS5_VABI sceNpSessionSignalingRequestPrepare(uint32_t contextId, uint32_t* 
  return SCE_NP_SESSION_SIGNALING_ERROR_UNAVAILABLE;
 }
 
-int APS5_VABI sceNpSessionSignalingGetMemoryInfo(void) {
+int APS5_VABI sceNpSessionSignalingGetMemoryInfo(void* memoryInfo) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -89,22 +89,22 @@ int APS5_VABI sceNpSessionSignalingGetConnectionStatistics(void) {
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress(void) {
+int APS5_VABI sceNpSessionSignalingGetConnectionFromPeerAddress(std::uint32_t contextId, const void* peerAddress, void* connectionId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetGroupFromSessionId(void) {
+int APS5_VABI sceNpSessionSignalingGetGroupFromSessionId(std::uint32_t contextId, const void* sessionId, void* groupId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetGroupInfo() {
+int APS5_VABI sceNpSessionSignalingGetGroupInfo(std::uint32_t contextId, std::uint32_t groupId, void* groupInfo) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress2() {
+int APS5_VABI sceNpSessionSignalingGetConnectionFromNetAddress2(std::uint32_t contextId, std::uint32_t addressType, std::uint32_t address, std::uint16_t port, void* connectionId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
