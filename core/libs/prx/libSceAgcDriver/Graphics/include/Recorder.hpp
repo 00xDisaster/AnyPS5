@@ -69,6 +69,7 @@ public:
     };
     DrawPassStart StartDrawPass(std::uint64_t key, bool forced, bool fenced, const PassAccess& access);
     void LeaveRenderPassOpen(std::uint64_t key, std::uint32_t timing, bool fenced, const PassAccess& access, std::function<void(VkCommandBuffer)> afterPass = {});
+    void SealPassWriteOnly();
     // DCC "uncompressed" key stores (DccMetadata.cpp StoreUncompressedOnGpu): queued on the open
     // batch and recorded as one run (one barrier pair for every queued fill) at Submit, before a
     // label store (RecordStore), or before a command that writes or reads a queued range (the
@@ -807,6 +808,8 @@ private:
     VkSemaphore timeline = VK_NULL_HANDLE;
     VkSemaphore submitHold = VK_NULL_HANDLE;
     std::uint64_t submitHoldValue = 0;
+    struct ProgressWatcher;
+    std::unique_ptr<ProgressWatcher> progressWatcher;
     // Identity for a thread that released the mutex around a wait (syncThroughUnlocked): the
     // recorder may have been torn down meanwhile, so it is looked up by this id, not by pointer.
     std::uint64_t id = 0;

@@ -85,8 +85,8 @@ namespace ShaderRecompiler::ShaderDiskCache {
 
 #if defined(__linux__) && defined(__x86_64__) && defined(__GLIBCXX__)
 static_assert(sizeof(CompiledShaderArtifact) == 280, "CompiledShaderArtifact changed: update the artifact encoder");
-static_assert(sizeof(ShaderInvocation) == 208, "ShaderInvocation changed: update the invocation encoder");
-static_assert(sizeof(RecompileResult) == 520, "RecompileResult changed: update EncodeResult and DecodeResult");
+static_assert(sizeof(ShaderInvocation) == 216, "ShaderInvocation changed: update the invocation encoder");
+static_assert(sizeof(RecompileResult) == 528, "RecompileResult changed: update EncodeResult and DecodeResult");
 static_assert(sizeof(DescriptorBinding) == 656, "DescriptorBinding changed: update the binding encoder");
 static_assert(sizeof(VertexAttribute) == 32, "VertexAttribute changed: update the attribute encoder");
 static_assert(sizeof(VertexInput) == 16, "VertexInput changed: update the vertex input encoder");
@@ -105,7 +105,7 @@ static_assert(sizeof(BindingAllocationResult) == 184, "BindingAllocationResult c
 static_assert(sizeof(CompiledBindingLayout) == 88, "CompiledBindingLayout changed: update the allocation encoder");
 static_assert(sizeof(BindingLayout) == 16, "BindingLayout changed: update BuildKey");
 static_assert(sizeof(IrResourcePlan) == 728, "IrResourcePlan changed: update EncodePlan and DecodePlan");
-static_assert(sizeof(IrValue) == 152, "IrValue changed: update the plan value encoder");
+static_assert(sizeof(IrValue) == 128, "IrValue changed: update the plan value encoder");
 static_assert(sizeof(GuestRegister) == 8, "GuestRegister changed: update the plan value encoder");
 static_assert(sizeof(MemoryInfo) == 80, "MemoryInfo changed: update the plan encoder");
 static_assert(sizeof(DescriptorSource) == 192, "DescriptorSource changed: update the plan encoder");
@@ -602,6 +602,7 @@ void encodeInvocation(Writer& writer, const ShaderInvocation& invocation) {
         out.Value(attribute.fetchIndex);
         out.Value(attribute.formatComponents);
     });
+    writer.Value(invocation.userDataRegisterReads);
     writer.Value(invocation.poisonedSrtReads);
     writer.List(invocation.imageTablePoison, [](Writer& out, const ImageTableEntryPoison& poison) {
         for (const auto word : poison.words) out.Value(word);
@@ -642,6 +643,7 @@ void decodeInvocation(Reader& reader, ShaderInvocation& invocation) {
         in.Value(attribute.fetchIndex);
         in.Value(attribute.formatComponents);
     });
+    reader.Value(invocation.userDataRegisterReads);
     reader.Value(invocation.poisonedSrtReads);
     reader.List(invocation.imageTablePoison, 44, [](Reader& in, ImageTableEntryPoison& poison) {
         for (auto& word : poison.words) in.Value(word);

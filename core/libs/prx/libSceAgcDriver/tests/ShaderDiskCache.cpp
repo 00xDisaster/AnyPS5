@@ -169,6 +169,7 @@ void requireSameResult(const RecompileResult& left, const RecompileResult& right
     require(left.shaderDataUserWords == right.shaderDataUserWords, prefix + "shader-data user words differ");
     require(left.imageTableRanges == right.imageTableRanges && left.imageTableShader == right.imageTableShader && left.imageTableFaults == right.imageTableFaults && left.imageTablePoison.size() == right.imageTablePoison.size(), prefix + "image table invocation data differs");
     require(left.imageTableReadRanges == right.imageTableReadRanges, prefix + "image table read ranges differ");
+    require(left.userDataRegisterReads == right.userDataRegisterReads, prefix + "user data register read mask differs");
     for (std::size_t i = 0; i < left.imageTablePoison.size(); ++i) {
         const auto& a = left.imageTablePoison[i];
         const auto& b = right.imageTablePoison[i];
@@ -269,6 +270,7 @@ RecompileResult sampleResult() {
     result.imageTableReadRanges = {{{0x1000u, 32u}, {0x1040u, 32u}}, {}, {{0x5000000000ull, 16u}}};
     result.imageTableShader = 0x80003aa700ull;
     result.imageTableFaults = 3u;
+    result.userDataRegisterReads = (std::uint64_t{1} << 63u) | (std::uint64_t{1} << 32u) | 0x25u;
     return result;
 }
 
@@ -830,6 +832,13 @@ int runLargeFileWrite() {
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     std::filesystem::create_directories(directory, error);
+    struct Cleanup {
+        std::filesystem::path directory;
+        ~Cleanup() {
+            std::error_code error;
+            std::filesystem::remove_all(directory, error);
+        }
+    } cleanup{directory};
     const auto space = std::filesystem::space(directory, error);
     if (error || space.available < size + (std::uintmax_t{1} << 30u)) {
         std::cout << "skipping: not enough free disk space for a file of more than 2 GiB\n";
@@ -856,6 +865,8 @@ int runLargeFileWrite() {
     }).detach();
     if (result.wait_for(std::chrono::seconds(200)) != std::future_status::ready) {
         std::cerr << "WriteFileAtomically did not return within 200 s for a file of more than 2 GiB\n";
+        std::filesystem::remove_all(directory, error);
+        if (error) std::cerr << "cannot remove the large file test directory: " << error.message() << '\n';
         std::cerr.flush();
         std::_Exit(1);
     }
