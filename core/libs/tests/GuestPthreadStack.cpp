@@ -1,6 +1,7 @@
 #include "SceTypes.hpp"
 #ifdef __linux__
 #include "prx/libc/include/GuestAllocations.hpp"
+#include <cerrno>
 #include <atomic>
 #include <cstdio>
 #include <chrono>
@@ -169,9 +170,12 @@ int main() {
             const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
             const auto pageCount = (lastGuestStackSize + pageSize - 1) / pageSize;
             std::vector<unsigned char> residency(pageCount);
-            Require(mincore(lastGuestStack, lastGuestStackSize, residency.data()) == 0);
-            for (std::size_t page = 1; page < pageCount; ++page)
-                Require((residency[page] & 1u) == 0);
+            if (mincore(lastGuestStack, lastGuestStackSize, residency.data()) == 0) {
+                for (std::size_t page = 1; page < pageCount; ++page)
+                    Require((residency[page] & 1u) == 0);
+            } else {
+                Require(errno == ENOMEM);
+            }
         }
 #endif
     }
