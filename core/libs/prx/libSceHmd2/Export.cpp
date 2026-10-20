@@ -59,9 +59,22 @@ struct MirroringOption {
 static_assert(sizeof(MirroringParameter) == 16);
 static_assert(sizeof(MirroringOption) == 32);
 
-struct GazeResultParameter;
+struct GazeResultParameter {
+    std::uint32_t size;
+    std::int32_t handle;
+    std::uint8_t reserved[8];
+};
 struct GazeResult;
-struct FoveatedRenderingResult;
+struct FoveatedRenderingResult {
+    std::uint32_t size;
+    std::int32_t status;
+    float direction[3];
+    std::uint8_t reserved[4];
+};
+
+static_assert(sizeof(GazeResultParameter) == 16);
+static_assert(sizeof(FoveatedRenderingResult) == 24);
+static_assert(offsetof(FoveatedRenderingResult, direction) == 8);
 struct GazeCalibrationData {
     void* data;
     std::int32_t size;
