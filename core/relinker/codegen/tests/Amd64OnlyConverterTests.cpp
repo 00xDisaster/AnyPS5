@@ -21,6 +21,7 @@
 #include <elfpatcher/general/SegmentFilter.hpp>
 #include <elfpatcher/linux/LinuxElfPatcher.hpp>
 #include <io/ByteWriter.hpp>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
