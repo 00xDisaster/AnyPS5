@@ -12,6 +12,7 @@
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -73,14 +74,24 @@ ShaderRecompiler::ShaderVertexStageInfo Decode(std::vector<AgcDriver::Graphics::
 
 struct Gate {
     std::atomic<bool> release{false};
-    ~Gate() { release.store(true, std::memory_order_release); }
 };
 
-void Hold(Gate& gate, const void* range, std::size_t bytes, std::function<void()> store) {
-    DrawPipeline::Queue0().Enqueue([&gate, store = std::move(store)] {
-        while (!gate.release.load(std::memory_order_acquire)) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+std::vector<std::shared_ptr<Gate>> Gates;
+
+std::shared_ptr<Gate> Hold(const void* range, std::size_t bytes, std::function<void()> store) {
+    auto gate = Gates.emplace_back(std::make_shared<Gate>());
+    DrawPipeline::Queue0().Enqueue([gate, store = std::move(store)] {
+        while (!gate->release.load(std::memory_order_acquire)) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         store();
     }, {{Address(range), Address(range) + bytes}});
+    return gate;
+}
+
+void StopQueue() {
+    AgcDriver::GuestMemory::SetReadGuard(nullptr);
+    for (const auto& gate : Gates) gate->release.store(true, std::memory_order_release);
+    DrawPipeline::Active() = false;
+    DrawPipeline::Queue0().Stop();
 }
 
 void WaitEmpty() {
@@ -91,7 +102,7 @@ void WaitEmpty() {
     }
 }
 
-Gate* completeAtBufferRead = nullptr;
+std::shared_ptr<Gate> completeAtBufferRead;
 
 void CompleteQueuedStoreAtBufferRead(std::uint64_t address, std::size_t) {
     if (address != Address(BufferTable.data()) || completeAtBufferRead == nullptr) return;
@@ -101,11 +112,10 @@ void CompleteQueuedStoreAtBufferRead(std::uint64_t address, std::size_t) {
 
 ShaderRecompiler::ShaderVertexStageInfo DecodeBehindQueuedStore(const void* range, std::size_t bytes, std::function<void()> store, std::vector<AgcDriver::Graphics::DecodeRead>& reads) {
     WaitEmpty();
-    Gate gate;
-    Hold(gate, range, bytes, std::move(store));
-    std::thread releaser([&gate] {
+    auto gate = Hold(range, bytes, std::move(store));
+    std::thread releaser([gate] {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        gate.release.store(true, std::memory_order_release);
+        gate->release.store(true, std::memory_order_release);
     });
     ShaderRecompiler::ShaderVertexStageInfo info;
     try {
@@ -142,35 +152,27 @@ int main() {
         check(reads.size() == 2 && reads[0].address == Address(AttribTable.data()) && reads[1].address == Address(BufferTable.data()), "the decode did not read the stored attribute word and the V# it names");
 
         WaitEmpty();
-        Gate gate;
-        Hold(gate, Elsewhere.data(), sizeof(Elsewhere), [] {});
+        auto gate = Hold(Elsewhere.data(), sizeof(Elsewhere), [] {});
         info = Decode(reads);
         check(info.resources[0].fields[0] == 0x1000u, "the decode next to an unrelated queued store changed");
         check(DrawPipeline::QueuedItems() == 1, "a decode that overlaps nothing queued drained the pipeline");
-        gate.release.store(true, std::memory_order_release);
+        gate->release.store(true, std::memory_order_release);
         WaitEmpty();
 
-        Gate completing;
-        Hold(completing, AttribTable.data(), 4, [] { AttribTable[0] = (0x2cu << 5u) | 1u; });
-        completeAtBufferRead = &completing;
+        completeAtBufferRead = Hold(AttribTable.data(), 4, [] { AttribTable[0] = (0x2cu << 5u) | 1u; });
         AgcDriver::GuestMemory::SetReadGuard(&CompleteQueuedStoreAtBufferRead);
-        try {
-            info = Decode(reads);
-        } catch (...) {
-            AgcDriver::GuestMemory::SetReadGuard(nullptr);
-            throw;
-        }
+        info = Decode(reads);
         AgcDriver::GuestMemory::SetReadGuard(nullptr);
         check(completeAtBufferRead == nullptr, "the queued attribute store did not complete during the decode");
         check(info.resources[0].fields[0] == 0x9000u && info.resources[0].fields[2] == 128u, "the decode kept the vertex buffer of an attribute word that a queued store replaced during the decode");
         check(reads.size() == 2 && reads[1].address == Address(BufferTable.data() + 4), "the recorded reads are not the stored attribute word and the V# it names");
 
-        DrawPipeline::Active() = false;
-        DrawPipeline::Queue0().Stop();
+        StopQueue();
         std::puts("vertex table read order tests passed");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
+        try { StopQueue(); } catch (...) {}
         return 1;
     }
 }
