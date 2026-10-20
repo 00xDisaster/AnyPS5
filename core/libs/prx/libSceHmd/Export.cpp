@@ -116,6 +116,12 @@ static_assert(offsetof(HmdScreenData, size) == 8);
 static_assert(sizeof(HmdEyeDistances) == 8);
 static_assert(sizeof(HmdEyeOffset) == 12);
 
+struct HmdLedData {
+    std::uint8_t values[9];
+};
+
+static_assert(sizeof(HmdLedData) == 9);
+
 extern "C" {
 
 std::int32_t APS5_VABI sceHmdInitialize(const Hmd::InitializeParam* param) {
@@ -859,7 +865,7 @@ int APS5_VABI sceHmdInternalMmapGetCount(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetDefaultLedData(void) {
+int APS5_VABI sceHmdInternalSetDefaultLedData(std::int32_t handle, std::uint32_t mask, const HmdLedData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
