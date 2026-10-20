@@ -724,7 +724,9 @@ int* APS5_VABI sceNetErrnoLoc(void) {
 }
 
 int APS5_VABI sceNetShowNetstat(void) {
-    return 0;
+    std::lock_guard lock(g_mutex);
+    if (!g_net_inited) return fail(NET_ENOTINIT);
+    throw std::runtime_error(__func__);
 }
 
 int PollSockets(KernelSocketPoll::Entry* entries, int count, int timeoutMilliseconds) {
@@ -2110,7 +2112,9 @@ int APS5_VABI sceNetResolverAbort(int rid, int flags) {
 }
 
 int APS5_VABI sceNetShowIfconfig() {
-    return 0;
+    std::lock_guard lock(g_mutex);
+    if (!g_net_inited) return fail(NET_ENOTINIT);
+    throw std::runtime_error(__func__);
 }
 
 extern const std::uint8_t in6addr_any_nid_postfix[16] = {};

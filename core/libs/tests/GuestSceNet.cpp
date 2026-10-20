@@ -239,8 +239,15 @@ static std::string CaptureNetstat(int pool) {
 }
 
 static void CheckNetstat() {
-    Require(sceNetShowNetstat() == 0);
-    Require(sceNetShowIfconfig() == 0);
+    for (const auto diagnostic : {sceNetShowNetstat, sceNetShowIfconfig}) {
+        bool unsupported = false;
+        try {
+            diagnostic();
+        } catch (const std::runtime_error&) {
+            unsupported = true;
+        }
+        Require(unsupported);
+    }
     Require(sceNetShowRoute() == 0);
     Require(sceNetShowRoute6() == 0);
     Require(Failed(sceNetShowNetstatWithMemory(-1), 9));
@@ -1457,6 +1464,8 @@ int main() {
     Require(Failed(sceNetGetRandom(nullptr), 200));
     Require(Failed(sceNetUsleep(0), 200));
     Require(Failed(sceNetUsleep(-1), 200));
+    Require(Failed(sceNetShowNetstat(), 200));
+    Require(Failed(sceNetShowIfconfig(), 200));
     Require(sceNetInit_nid_postfix() == 0);
     CheckEpollWritable();
     CheckSocketHostErrors();
