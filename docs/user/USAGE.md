@@ -255,6 +255,10 @@ When a dump has neither `sce_sys/playgo-chunk.dat` nor `sce_sys/playgo-scenario.
 
 Leave the variable unset to keep the explicit error. Any other value also stops with an error. Dumps that include PlayGo metadata are unaffected. These title-specific results come from emulator runs and have not been verified against a console.
 
+### Screenshots
+
+Press F12 in the game window to save the next displayed frame as a PNG at the resolution of the game's display buffer, without the window's scaling, letterbox or [performance overlay](#performance-overlay). A BT.2100 PQ display buffer is saved converted to SDR, also while it is shown through [HDR output](#hdr-output). Files are named `<title ID>-<YYYYMMDD-HHMMSS>.png` and written to an `anyps5-screenshots/` directory beside the output executable, which is created when needed; set `ANYPS5_SCREENSHOTS` to use another directory. The saved path is printed to stderr. Presses while the previous screenshot is still being written are merged into one. The key is the `Screenshot` action of the [input mapping](INPUT_MAPPING.md). A screenshot that cannot be written stops the game with the error.
+
 ### GPU selection
 
 The game runs on the first Vulkan 1.1 device with graphics and compute queues and swapchain presentation, preferring a discrete GPU over an integrated one. Set `ANYPS5_GPU` to a part of a device name, compared without regard to case, to run on another device; the names are printed at start-up in the `Physical device candidate` lines. When no usable device contains the text, the start fails and the error lists the device names.
@@ -278,7 +282,7 @@ HDR output is available on Windows only. Titles see it when the monitor showing 
 
 ### Shader cache
 
-Recompiled shaders and the Vulkan pipeline cache are kept in a `shader_cache/` directory beside the output executable, so later runs skip recompilation. Set `ANYPS5_SHADER_CACHE_DIR` to use another directory, or set `ANYPS5_NO_SHADER_CACHE` to any non-empty value other than `0` to disable both caches. Shaders are stored in a subdirectory named after the recompiler's source version; subdirectories of other versions unused for 14 days are removed the first time a run looks up a shader. The pipeline cache is one `vk-pipelines-*.bin` file per GPU and driver version. Entries of the current version are never removed and the directory has no size limit, so a title that compiles many shaders can add several GB within minutes. Deleting the directory is safe: it is rebuilt on the next run.
+Recompiled shaders and the Vulkan pipeline cache are kept in a `shader_cache/` directory beside the output executable, so later runs skip recompilation. Set `ANYPS5_SHADER_CACHE_DIR` to use another directory, or set `ANYPS5_NO_SHADER_CACHE` to any non-empty value other than `0` to disable both caches. Shaders are stored in a subdirectory named after the recompiler's source version; subdirectories of other versions unused for 14 days are removed the first time a run looks up a shader. The pipeline cache is one `vk-pipelines-*.bin` file per GPU and driver version in the same subdirectory, so it goes with the shaders it was built from. Entries of the current version are never removed and the directory has no size limit, so a title that compiles many shaders can add several GB within minutes. Deleting the directory is safe: it is rebuilt on the next run.
 
 ### Pipeline journal
 
@@ -295,6 +299,10 @@ A fixed budget above the automatic one can exceed what the card holds next to th
 GPU results in storage images and render targets stay on the GPU until something reads their memory. A title that frees such an image after waiting for its GPU work and reuses the memory can have its new data overwritten when the results are stored later ([TechnicalDebt](../dev/TechnicalDebt.md)). `APS5_STORE_AT_FLIP=1` stores every pending result when a display buffer is flipped, at the cost of one write-back per pending image and frame. Any other value stops the title at its first flip.
 
 A title's own CPU reads of that memory are not seen, so a title that waits for a GPU label and then reads the results reads stale memory. `APS5_STORE_AT_LABEL=1` stores every pending result before each label the GPU writes (`RELEASE_MEM`, `WRITE_DATA`, `DMA_DATA`), at the cost of a write-back of every pending image per label. Any other value stops the title at its first label.
+
+### Benchmark reports
+
+To measure how a title runs on a machine, start it with `APS5_TRACE_SUMMARY_EVERY=30 APS5_TRACE_BENCH=1`, play the scene for a few minutes and quit. Every 30 seconds the runtime rewrites `aps5-bench-<commit>-<pid>.json.gz` in `APS5_TRACE_DIR` or the working directory and appends a line to `aps5-summary.jsonl`. The file holds the time between every two presents, the commit, GPU, driver, OS, CPU name, thread count and physical memory, and, when `app0/sce_sys/param.json` is present, the title ID, name and content version. It holds no game data. The first interval includes shader compilation; compare later intervals. The interval still open when the title exits is not written. The fields are described under [summaries for a long session](../dev/BUILD.md#summaries-for-a-long-session).
 
 ### Tracing system library calls
 
@@ -337,6 +345,8 @@ When a register points at readable memory that starts with at least four printab
 Set `APS5_CRASH_INDIRECT_MEMORY=1` before launching the executable to include up to 64 bytes from each pointer found in the register memory dump. The report labels each block with its register, pointer offset and target address. Inaccessible, incomplete and executable targets are skipped. This additional dump is disabled when the variable is unset or empty.
 
 Set `APS5_CRASH_STACK_BYTES=<n>` to print, after the stack return address candidates, the faulting thread's stack words from `rsp` for `n` bytes (at most 1048576, decimal or `0x` hexadecimal), four words per line with their offset from `rsp`. Below them the report prints eight words at every distinct stack word that points at readable, non-executable memory outside the thread's stack, labelled with the word's offset and the address it holds, up to 256 addresses. This shows the objects the caller frames kept, such as the `this` of a destructor or the buffer of a container. The dump stops at the first unreadable stack page, and nothing is printed when the variable is unset, empty or 0.
+
+The report lists every other thread of the process with its `rip`, `rsp`, `rbp` and the return addresses of its `rbp` frame chain. A thread whose chain yields fewer than two frames, such as one waiting inside `ntdll.dll` or in code built without frame pointers, also gets up to 24 stack return address candidates: the words in the 32 KiB above its `rsp` that point at executable memory, read while the thread is suspended. Like the candidates of the faulting thread they are a scan, not an unwind, so stale return addresses of finished calls can appear among them.
 
 ### GPU submission rings and stall dumps
 
