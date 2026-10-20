@@ -623,8 +623,8 @@ int APS5_VABI sceRtcFormatRFC2822(char* dateTime, const RtcTick* utc, int timeZo
     }
     if (timeZoneMinutes < -1439 || timeZoneMinutes > 1439) return SCE_RTC_ERROR_INVALID_VALUE;
     const RtcTick local{utc->tick + static_cast<std::uint64_t>(static_cast<std::int64_t>(timeZoneMinutes) * TICKS_PER_MINUTE)};
-    if (static_cast<std::int64_t>(local.tick) < 0) return SCE_RTC_ERROR_INVALID_VALUE;
-    if (local.tick > MAX_TICK) return SCE_RTC_ERROR_INVALID_YEAR;
+    if (static_cast<std::int64_t>(local.tick) > static_cast<std::int64_t>(MAX_TICK)) return SCE_RTC_ERROR_INVALID_YEAR;
+    if (static_cast<std::int64_t>(utc->tick) < 0 || static_cast<std::int64_t>(local.tick) < 0) return SCE_RTC_ERROR_INVALID_VALUE;
     const RtcDateTime time = fromTick(local.tick);
     const int offset = timeZoneMinutes < 0 ? -timeZoneMinutes : timeZoneMinutes;
     std::snprintf(dateTime, 32, "%s, %02u %s %04u %02u:%02u:%02u %c%02d%02d", WEEKDAY_NAMES[(local.tick / TICKS_PER_DAY + 1) % 7], time.day,

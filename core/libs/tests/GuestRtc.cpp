@@ -295,6 +295,12 @@ int main() {
     Require(sceRtcFormatRFC3339(text, &edge, -1) == invalidYear);
     edge.tick = 60000000;
     Require(sceRtcFormatRFC3339(text, &edge, -1) == 0 && std::strcmp(text, "0001-01-01T00:00:00.00-00:01") == 0);
+    edge.tick = std::numeric_limits<std::uint64_t>::max();
+    Require(sceRtcFormatRFC3339(text, &edge, 1) == 0 && std::strcmp(text, "0001-01-01T00:00:59.99+00:01") == 0);
+    edge.tick = 1ull << 63;
+    Require(sceRtcFormatRFC3339(text, &edge, -1) == invalidYear);
+    edge.tick = maxTick + 1;
+    Require(sceRtcFormatRFC3339(text, &edge, -1) == 0 && std::strcmp(text, "9999-12-31T23:59:00.00-00:01") == 0);
     Require(sceRtcFormatRFC3339(nullptr, &tick, 1440) == invalidPointer);
     Require(sceRtcFormatRFC3339(text, nullptr, 1440) == invalidValue);
     {
@@ -805,6 +811,14 @@ int main() {
     Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == invalidYear);
     tick.tick = std::numeric_limits<std::uint64_t>::max();
     Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == invalidValue);
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 1) == invalidValue);
+    tick.tick = 0ull - 60000000ull;
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 1) == invalidValue);
+    tick.tick = 1ull << 63;
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, 0) == invalidValue);
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, -1) == invalidYear);
+    tick.tick = maxTick + 1;
+    Require(sceRtcFormatRFC2822(rfc2822, &tick, -1) == 0 && std::strcmp(rfc2822, "Fri, 31 Dec 9999 23:59:00 -0001") == 0);
     tick.tick = leapDayTick;
     for (int offset : {1440, -1440, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
         std::memset(rfc2822, 'x', sizeof(rfc2822));
