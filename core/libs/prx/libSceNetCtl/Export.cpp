@@ -522,32 +522,32 @@ int APS5_VABI sceNetCtlUnregisterCallbackV6(int cid) {
     return UnregisterCallback(g_callbacksV6, cid);
 }
 
-int APS5_VABI sceNetCtlRegisterCallbackForNpToolkit(void) {
+int APS5_VABI sceNetCtlRegisterCallbackForNpToolkit(NetCtlCallback callback, void* argument, int* callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlRegisterCallbackIpcInt(void) {
+int APS5_VABI sceNetCtlRegisterCallbackIpcInt(NetCtlCallback callback, void* argument, int* callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlRegisterCallbackForLibIpcInt(void) {
+int APS5_VABI sceNetCtlRegisterCallbackForLibIpcInt(NetCtlCallback callback, void* argument, int* callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlUnregisterCallbackForNpToolkit(void) {
+int APS5_VABI sceNetCtlUnregisterCallbackForNpToolkit(int callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlUnregisterCallbackIpcInt(void) {
+int APS5_VABI sceNetCtlUnregisterCallbackIpcInt(int callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlUnregisterCallbackForLibIpcInt(void) {
+int APS5_VABI sceNetCtlUnregisterCallbackForLibIpcInt(int callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -562,17 +562,17 @@ int APS5_VABI sceNetCtlCheckCallbackForLibIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlClearEventIpcInt(void) {
+int APS5_VABI sceNetCtlClearEventIpcInt(int event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlClearEventForNpToolkit(void) {
+int APS5_VABI sceNetCtlClearEventForNpToolkit(int event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlClearEventForLibIpcInt(void) {
+int APS5_VABI sceNetCtlClearEventForLibIpcInt(int event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -662,12 +662,12 @@ int APS5_VABI sceNetCtlSetErrorNotificationEnabledIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlRegisterCallbackV6IpcInt(void) {
+int APS5_VABI sceNetCtlRegisterCallbackV6IpcInt(NetCtlCallback callback, void* argument, int* callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlUnregisterCallbackV6IpcInt(void) {
+int APS5_VABI sceNetCtlUnregisterCallbackV6IpcInt(int callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -825,17 +825,17 @@ int APS5_VABI sceNetBweCheckCallbackIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetBweClearEventIpcInt(void) {
+int APS5_VABI sceNetBweClearEventIpcInt(int event) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetBweRegisterCallbackIpcInt(void) {
+int APS5_VABI sceNetBweRegisterCallbackIpcInt(NetCtlCallback callback, void* argument, int* callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetBweUnregisterCallbackIpcInt(void) {
+int APS5_VABI sceNetBweUnregisterCallbackIpcInt(int callbackId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
