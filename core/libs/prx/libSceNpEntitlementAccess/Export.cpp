@@ -23,12 +23,14 @@ static constexpr uint32_t SKU_FLAG_FULL = 3;
 
 namespace {
 
-std::filesystem::path EntitlementsPath() {
 #ifdef _WIN32
-    if (const wchar_t* configured = _wgetenv(L"ANYPS5_ENTITLEMENTS"); configured != nullptr && configured[0] != 0) return configured;
+const wchar_t* ConfiguredEntitlements() { return _wgetenv(L"ANYPS5_ENTITLEMENTS"); }
 #else
-    if (const char* configured = std::getenv("ANYPS5_ENTITLEMENTS"); configured != nullptr && configured[0] != '\0') return configured;
+const char* ConfiguredEntitlements() { return std::getenv("ANYPS5_ENTITLEMENTS"); }
 #endif
+
+std::filesystem::path EntitlementsPath() {
+    if (const auto* configured = ConfiguredEntitlements(); configured != nullptr && configured[0] != 0) return configured;
 #ifdef _WIN32
     wchar_t module[MAX_PATH];
     const auto length = GetModuleFileNameW(nullptr, module, MAX_PATH);
@@ -54,7 +56,7 @@ const std::vector<NpEntitlementAccessAddcontEntitlementInfo>& OwnedAddons() {
         const auto path = EntitlementsPath();
         std::ifstream file(path);
         if (!file) {
-            if (std::getenv("ANYPS5_ENTITLEMENTS") != nullptr || std::filesystem::exists(path)) throw std::runtime_error("NpEntitlementAccess: cannot read " + path.string());
+            if (ConfiguredEntitlements() != nullptr || std::filesystem::exists(path)) throw std::runtime_error("NpEntitlementAccess: cannot read " + path.string());
             return addons;
         }
         std::string line;

@@ -383,8 +383,9 @@ if(BUILD_TESTING)
     target_link_libraries(guest_entitlements_tests PRIVATE libSceNpEntitlementAccess libc)
     configure_windows_unwind(guest_entitlements_tests)
     add_test(NAME guest_entitlements COMMAND guest_entitlements_tests)
+    add_test(NAME guest_entitlements_missing COMMAND guest_entitlements_tests missing)
     if(WIN32)
-        set_tests_properties(guest_entitlements PROPERTIES ENVIRONMENT_MODIFICATION
+        set_tests_properties(guest_entitlements guest_entitlements_missing PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpEntitlementAccess>")
     endif()
 
