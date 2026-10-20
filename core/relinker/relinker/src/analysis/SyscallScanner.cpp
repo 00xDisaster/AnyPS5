@@ -10,7 +10,9 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
+#include <tuple>
 
 namespace Relinker {
 
@@ -175,18 +177,37 @@ static std::optional<std::uint32_t> ConstantSyscallNumber(const std::vector<std:
     return std::nullopt;
 }
 
-static std::optional<std::uint32_t> ConstantRaxSetEndingAt(const std::vector<std::uint8_t>& code, const std::size_t end) {
-    std::uint32_t value = 0;
-    if (end >= 5 && code[end - 5] == 0xB8) {
-        std::memcpy(&value, code.data() + end - 4, sizeof(value));
+static std::optional<std::uint64_t> ConstantRaxSetEndingAt(const std::vector<std::uint8_t>& code, const std::size_t end) {
+    if (end >= 10 && code[end - 10] == 0x48 && code[end - 9] == 0xB8) {
+        std::uint64_t value = 0;
+        std::memcpy(&value, code.data() + end - 8, sizeof(value));
         return value;
     }
+    std::uint32_t immediate = 0;
     if (end >= 7 && code[end - 7] == 0x48 && code[end - 6] == 0xC7 && code[end - 5] == 0xC0) {
-        std::memcpy(&value, code.data() + end - 4, sizeof(value));
-        return value;
+        std::memcpy(&immediate, code.data() + end - 4, sizeof(immediate));
+        return static_cast<std::uint64_t>(static_cast<std::int64_t>(static_cast<std::int32_t>(immediate)));
+    }
+    if (end >= 5 && code[end - 5] == 0xB8) {
+        std::memcpy(&immediate, code.data() + end - 4, sizeof(immediate));
+        return immediate;
     }
     if (end >= 2 && (code[end - 2] == 0x31 || code[end - 2] == 0x33) && code[end - 1] == 0xC0)
-        return value;
+        return 0;
+    return std::nullopt;
+}
+
+struct LowRaxWrite {
+    std::size_t Length;
+    std::uint64_t Mask;
+    std::uint64_t Value;
+};
+
+static std::optional<LowRaxWrite> ImmediateLowRaxWriteEndingAt(const std::vector<std::uint8_t>& code, const std::size_t end) {
+    if (end >= 2 && code[end - 2] == 0xB0)
+        return LowRaxWrite{2, 0xFF, code[end - 1]};
+    if (end >= 4 && code[end - 4] == 0x66 && code[end - 3] == 0xB8)
+        return LowRaxWrite{4, 0xFFFF, static_cast<std::uint64_t>(code[end - 2]) | static_cast<std::uint64_t>(code[end - 1]) << 8};
     return std::nullopt;
 }
 
@@ -206,15 +227,25 @@ static bool MovesOtherRegisterThanRax(const std::uint8_t* bytes, const std::size
     return written != 0;
 }
 
-static std::optional<std::uint32_t> ConstantSyscallNumberInBytes(const std::vector<std::uint8_t>& code, const std::size_t end, const std::size_t steps) {
-    if (const auto value = ConstantRaxSetEndingAt(code, end))
-        return value;
-    if (steps == 0)
-        return std::nullopt;
-    for (const std::size_t length : {std::size_t{2}, std::size_t{3}})
-        if (end >= length && MovesOtherRegisterThanRax(code.data() + end - length, length))
-            if (const auto value = ConstantSyscallNumberInBytes(code, end - length, steps - 1))
-                return value;
+static std::optional<std::uint64_t> ConstantSyscallNumberInBytes(const std::vector<std::uint8_t>& code, const std::size_t syscall) {
+    using Step = std::tuple<std::size_t, std::uint64_t, std::uint64_t>;
+    std::vector<Step> pending{{syscall, 0, 0}};
+    std::set<Step> seen(pending.begin(), pending.end());
+    const auto visit = [&](const Step& step) {
+        if (seen.insert(step).second)
+            pending.push_back(step);
+    };
+    while (!pending.empty()) {
+        const auto [end, mask, low] = pending.back();
+        pending.pop_back();
+        if (const auto value = ConstantRaxSetEndingAt(code, end))
+            return (*value & ~mask) | low;
+        if (const auto write = ImmediateLowRaxWriteEndingAt(code, end))
+            visit({end - write->Length, mask | write->Mask, low | (write->Value & ~mask)});
+        for (const std::size_t length : {std::size_t{2}, std::size_t{3}})
+            if (end >= length && MovesOtherRegisterThanRax(code.data() + end - length, length))
+                visit({end - length, mask, low});
+    }
     return std::nullopt;
 }
 
@@ -268,10 +299,12 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
             return;
         }
 
-        auto number = kind == ForbiddenInstruction::Invocation ? ConstantSyscallNumber(codeSection, codeSectionOffset, recent) : std::nullopt;
+        std::optional<std::uint64_t> number;
+        if (kind == ForbiddenInstruction::Invocation)
+            number = ConstantSyscallNumber(codeSection, codeSectionOffset, recent);
         if (!functions.empty() && !number && !insideFunction(start)) {
             if (kind == ForbiddenInstruction::Invocation)
-                number = ConstantSyscallNumberInBytes(codeSection, opcode, SYSCALL_NUMBER_LOOKBACK - 1);
+                number = ConstantSyscallNumberInBytes(codeSection, opcode);
             if (!number) {
                 ++skipped;
                 if (!firstSkipped) firstSkipped = match.Offset;
