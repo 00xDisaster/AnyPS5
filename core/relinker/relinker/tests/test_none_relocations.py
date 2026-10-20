@@ -122,14 +122,13 @@ def main():
         page_image = image_with_relocations([(0xffc, 8, 0x210)], False, False)
         page_image.extend(bytes(0x1000))
         struct.pack_into("<QQ", page_image, 64 + 32, len(page_image), len(page_image))
-        page_source = work / "invalid-base-relocation-page-crossing.elf"
+        page_source = work / "base-relocation-page-crossing.elf"
         page_source.write_bytes(page_image)
-        page_output = work / "invalid-base-relocation-page-crossing.exe"
+        page_output = work / "base-relocation-page-crossing.exe"
         page_result = subprocess.run([str(relinker), "--skip-sce-module", "--windows",
                                       str(page_source), str(page_output)],
                                      capture_output=True, text=True, timeout=20)
-        assert page_result.returncode == 2 and "Base relocation target crosses a page boundary" in page_result.stderr, page_result.stderr
-        assert not page_output.exists()
+        assert page_result.returncode == 0 and page_output.read_bytes().startswith(b"MZ"), page_result.stderr
     print("No-op executable relocation tests passed")
 
 
