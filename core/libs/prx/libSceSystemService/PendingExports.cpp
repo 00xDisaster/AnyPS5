@@ -31,6 +31,7 @@ struct SystemServiceStoreParam {
 
 static_assert(sizeof(SystemServiceStoreParam) == 4);
 
+struct SystemServiceCpuPstateParam;
 struct SystemServiceLocalProcessParam;
 struct SystemServiceJvmProcessParam;
 struct SystemServicePs2ProcessParam;
@@ -890,7 +891,7 @@ int APS5_VABI sceShellCoreUtilGetIDUMode(std::uint8_t* mode) {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetImposeMenuFlagForPs2Emu() {
+bool APS5_VABI sceShellCoreUtilGetImposeMenuFlagForPs2Emu(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -930,12 +931,12 @@ int APS5_VABI sceShellCoreUtilGetPlatformPrivacyDefinitionEventData(const char* 
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetProgressOfFormatExternalHdd() {
+float APS5_VABI sceShellCoreUtilGetProgressOfFormatExternalHdd() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetProgressOfFsck() {
+float APS5_VABI sceShellCoreUtilGetProgressOfFsck() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -995,7 +996,7 @@ int APS5_VABI sceShellCoreUtilGetSupportSiteURL(std::uint32_t first, std::uint32
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSuspendConfirmationDialogFlag(std::int32_t appId) {
+bool APS5_VABI sceShellCoreUtilGetSuspendConfirmationDialogFlag(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1075,7 +1076,7 @@ int APS5_VABI sceShellCoreUtilIncrementVersionNumberOfCameraCalibrationData() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsAccessibilityZoomLocked() {
+bool APS5_VABI sceShellCoreUtilIsAccessibilityZoomLocked(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1120,7 +1121,7 @@ bool APS5_VABI sceShellCoreUtilIsImposeScreenOverlaid() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsInSystemSuspendBlackList() {
+bool APS5_VABI sceShellCoreUtilIsInSystemSuspendBlackList(std::uint32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1703,7 +1704,7 @@ int APS5_VABI sceSystemServiceChangeAcpClock() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceChangeClock() {
+int APS5_VABI sceSystemServiceChangeClock(const char* clock, std::uint32_t value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1712,7 +1713,7 @@ int APS5_VABI sceSystemServiceChangeCpuClock() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceChangeCpuPstate() {
+int APS5_VABI sceSystemServiceChangeCpuPstate(const SystemServiceCpuPstateParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1721,7 +1722,7 @@ int APS5_VABI sceSystemServiceChangeGpuClock() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceChangeMemPstate() {
+int APS5_VABI sceSystemServiceChangeMemPstate(std::uint32_t state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
