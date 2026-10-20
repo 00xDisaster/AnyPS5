@@ -53,14 +53,29 @@ std::int32_t APS5_VABI sceDeviceServiceGetEventState(std::int32_t clear) {
 }
 
 std::int32_t APS5_VABI sceDeviceServiceQueryDeviceInfo_(std::int32_t deviceClass, const DeviceServiceUsageFilter* filter, std::int32_t arg2, void* infos, std::int32_t maxInfos, std::int32_t* count, std::int32_t* reserved, std::uint32_t infoSize) {
-    (void)deviceClass;
-    (void)filter;
     (void)arg2;
-    (void)infos;
     (void)reserved;
-    (void)infoSize;
-    if (count == nullptr || maxInfos < 0) throw std::invalid_argument(std::string(__func__) + ": invalid argument");
-    *count = 0;
+    constexpr auto invalidArgument = static_cast<std::int32_t>(0x809B0080u);
+    switch (deviceClass) {
+    case 0x1001:
+    case 0x2001:
+    case 0x3001:
+    case 0x4001:
+    case 0x4002:
+    case 0x5001:
+    case 0x6001:
+    case 0x7001:
+    case 0x9001:
+        if (filter != nullptr) return invalidArgument;
+        break;
+    case 0x8001:
+        if (filter == nullptr || filter->minimumUsage > filter->maximumUsage) return invalidArgument;
+        break;
+    default:
+        return invalidArgument;
+    }
+    if (infoSize != 112 || maxInfos < 0 || (maxInfos != 0 && infos == nullptr)) return invalidArgument;
+    if (count != nullptr) *count = 0;
     return 0;
 }
 
