@@ -98,6 +98,7 @@ void APS5_VABI _ZN3sce4Json5ValueC1ERKNS0_6ObjectE(Value*, const Object*);
 void APS5_VABI _ZN3sce4Json5ValueD1Ev(Value*);
 void APS5_VABI _ZN3sce4Json5Value5clearEv(Value*);
 int APS5_VABI _ZN3sce4Json5Value3setEl(Value*, std::int64_t);
+int APS5_VABI _ZN3sce4Json5Value3setEm(Value*, std::uint64_t);
 int APS5_VABI _ZN3sce4Json5Value3setEPKc(Value*, const char*);
 std::int32_t APS5_VABI _ZNK3sce4Json5Value7getTypeEv(const Value*);
 const bool* APS5_VABI _ZNK3sce4Json5Value10getBooleanEv(const Value*);
@@ -1189,6 +1190,32 @@ static void ValueOperatorBool() {
     _ZN3sce4Json5ValueC1Eb(&boolTrue, true);
     Require(_ZNK3sce4Json5ValuecvbEv(&boolTrue));
     _ZN3sce4Json5ValueD1Ev(&boolTrue);
+
+    Value scalar{};
+    _ZN3sce4Json5ValueC1Ev(&scalar);
+    for (std::int64_t value : {std::int64_t{0}, std::int64_t{1}, std::int64_t{-1}}) {
+        Require(_ZN3sce4Json5Value3setEl(&scalar, value) == 0);
+        Require(_ZNK3sce4Json5ValuecvbEv(&scalar) == (value != 0));
+    }
+    for (std::uint64_t value : {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{0xffffffffffffffff}}) {
+        Require(_ZN3sce4Json5Value3setEm(&scalar, value) == 0);
+        Require(_ZNK3sce4Json5ValuecvbEv(&scalar) == (value != 0));
+    }
+    for (double value : {0.0, -0.0, 1.0, -1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+        Require(_ZN3sce4Json5Value3setEd(&scalar, value) == 0);
+        Require(_ZNK3sce4Json5ValuecvbEv(&scalar) == (value != 0.0));
+    }
+    for (const char* text : {"", "0", "false", " "}) {
+        Require(_ZN3sce4Json5Value3setEPKc(&scalar, text) == 0);
+        Require(_ZNK3sce4Json5ValuecvbEv(&scalar) == (*text != 0));
+    }
+    _ZN3sce4Json5ValueD1Ev(&scalar);
+    for (std::int32_t type : {TypeArray, TypeObject}) {
+        Value container{};
+        _ZN3sce4Json5ValueC1ENS0_9ValueTypeE(&container, type);
+        Require(_ZNK3sce4Json5ValuecvbEv(&container));
+        _ZN3sce4Json5ValueD1Ev(&container);
+    }
 
     Value cleared{};
     _ZN3sce4Json5ValueC1Eb(&cleared, true);
