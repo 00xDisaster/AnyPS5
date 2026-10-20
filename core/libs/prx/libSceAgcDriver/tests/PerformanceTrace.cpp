@@ -489,9 +489,22 @@ void ReplaceGzipFile() {
     const bool blockedKept = std::filesystem::is_directory(blocked);
     const bool temporaryLeft = std::filesystem::exists(blockedTemporary);
     const auto kept = ReadGzip(path);
+#ifndef _WIN32
+    // A directory at <name>.tmp makes the write itself fail, which is the case ReplaceGzip exists
+    // for: the previous file must survive, so an in-place rewrite fails this check. The failure is
+    // a std::ios_base::failure thrown inside libstdc++'s ofstream, which MinGW builds could not
+    // unwind to this catch, so the case runs on the other platforms only.
+    std::filesystem::create_directory(temporary);
+    bool writeFailed = false;
+    try { AgcDriver::TraceFile::ReplaceGzip(path, "{\"third\":3}\n"); } catch (const std::exception&) { writeFailed = true; }
+    const auto keptAfterWrite = ReadGzip(path);
+#endif
     std::filesystem::remove_all(directory);
     Check(failed && blockedKept && !temporaryLeft, "a replace that could not move its file over the destination did not fail cleanly or left its temporary file");
     Check(kept == "{\"second\":2}\n", "a failed replace of another file damaged the benchmark file");
+#ifndef _WIN32
+    Check(writeFailed && keptAfterWrite == "{\"second\":2}\n", "a failed rewrite damaged the previous benchmark file");
+#endif
 }
 
 void BenchSwitch() {
