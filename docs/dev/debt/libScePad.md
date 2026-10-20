@@ -2,6 +2,8 @@
 
 ### Unknown function info
 
+- [libScePad report and tracking exports](../../../core/libs/prx/libScePad/Export.cpp) - read, extended-read, tracker, UI, VR-controller and report argument registers are recovered. Feature reports use a byte report ID and 64-bit byte count, capped at 64. VR trigger effects consume a 56-byte record; the dual-controller call uses two handles and a mask with records at offsets 8 and 64. Remaining payload field layouts use incomplete declarations, including extended samples and kernel-owned extension reports.
+
 - [scePadUnknown_n3kSX62fgNo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad, NID `n3kSX62fgNo`) - the name is unknown, and the 0 returned after `scePadInit` is inferred, not measured. In the OS 10.01 system module the function takes no arguments, returns `0x80920005` before `scePadInit`, and otherwise sends a per-process value of 1 to ShellCore over Mbus, returning `0x809200ff` if that call fails and 0 if it succeeds, with or without an open handle. The #3177 probe measured `0x809200ff` in a process that is not a game; a game process is assumed to get 0. The ShellCore setting it changes is unknown and not modelled
 - [scePadSetAngularVelocityDeadbandState](../../../core/libs/prx/libScePad/src/PadState.cpp) (libScePad) - with the deadband on, each angular velocity axis whose magnitude is below 0.017453292 rad/s (1 degree per second) reads as 0, before the orientation is integrated; it starts off. Threshold, per-axis test and default follow [duaLib](https://github.com/WujekFoliarz/duaLib/blob/03bad1bea2a36561b520846776f2a07ced6773e0/src/source/duaLib.cpp#L44), which reimplements the PC `libScePad.dll`; the console's threshold is not measured, and the deadband is kept per library rather than per handle since one pad handle exists
 - [scePadOpen and scePadOpenExt](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - special ports (type 2) return `DEVICE_NOT_CONNECTED` (0x80920007) because the host has no special controller, and `scePadGetHandle` has no handle for them; whether the console opens a handle and reports the device as disconnected later is unknown. scePadOpenExt handles only special ports. PPSA01317 passes a 16-byte param that names the device by vendor and product id (`b7 0e 04 0e ...` for 0x0eb7:0x0e04) and skips the user on any negative result. Other port types throw
@@ -11,11 +13,7 @@
 - [scePadIsRemoteController](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - the name hashes to NID `fCWdlnmB1Ks`; the signature `(int handle, bool* remote)` comes from PPSA16064, which zeroes a byte, passes its address after `scePadGetControllerInformation` and ignores the result. The error codes follow the other pad calls. Controllers are local devices, so the answer is always false
 - [scePadSetAngularVelocityBiasCorrectionState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - inferred signature `(int handle, bool enabled)` follows `scePadSetTiltCorrectionState` and `scePadSetAngularVelocityDeadbandState`; an invalid handle returns `PAD_ERROR_INVALID_HANDLE`, disabling is a no-op, and enabling throws because bias correction is not modelled
 - [scePadGetAccessibilityControllerState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - the value a console reports for a DualSense is not measured; the emulated pad, which is not an Access controller, reports 0. The name hashes to NID `zBsgF0q8DIM`. In the OS 10.01 system module the `(int handle, uint32_t* state)` function returns `0x80920005` before `scePadInit`, then `INVALID_ARG` for a NULL `state` and `INVALID_HANDLE` for a bad handle, and otherwise asks the pad driver for a per-device value of the device behind the handle: 0 when no device is behind it, 1 when the driver has no answer, else the driver's value. What the values mean is unknown
-- [scePadSetTriggerEffectExt](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadLastLotusButtonData](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadReadStateExt](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadSetExtensionReport](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadGetExtensionUnitInfo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadOpenExt2](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadDeviceOpen](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetDataInternal](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
@@ -24,10 +22,7 @@
 - [scePadShareOutputDataWithFunctionType](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetVersionInfo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadSetButtonRemappingInfo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadGetTriggerEffectInternalState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetUsbDetectionState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadUiReadState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadUiReadStateForTuning](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadSetStickTuningParam](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadSetTriggerTuningParam](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetProfileHunt](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
@@ -44,9 +39,6 @@
 - [scePadResetLeonardo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetTelemetryInfo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetInfoByPortType](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadReadForTracker](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadReadBlasterForTracker](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadReadAstonForTracker](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetDeviceInfo](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadSetProcessFocus](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadVertualDeviceAddDevice](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
