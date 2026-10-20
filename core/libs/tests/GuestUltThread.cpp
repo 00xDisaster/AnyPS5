@@ -8,6 +8,9 @@
 #include <thread>
 #include <stdexcept>
 
+struct UltConditionVariableInfo;
+struct UltWaitingThreadInfo;
+
 extern "C" {
 int APS5_VABI sceUltInitialize();
 int APS5_VABI sceUltFinalize();
@@ -38,7 +41,8 @@ int APS5_VABI sceUltSemaphoreDestroy(void*);
 int APS5_VABI sceUltQueueDestroy(void*);
 int APS5_VABI sceUltQueueDataResourcePoolDestroy(void*);
 int APS5_VABI sceUltConditionVariableDestroy(void*);
-int APS5_VABI sceUltGetConditionVariableInfo();
+int APS5_VABI sceUltReaderWriterLockDestroy(void*);
+int APS5_VABI sceUltGetConditionVariableInfo(void*, UltConditionVariableInfo*, UltWaitingThreadInfo*, std::uint32_t);
 }
 
 static constexpr int Ok = 0;
@@ -110,9 +114,10 @@ static void Validation() {
     CHECK(sceUltFinalize() == Ok);
     CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(1, 1) == 256u + 16u * 1024u);
     CHECK(sceUltConditionVariableDestroy(nullptr) == -2139029503);
+    CHECK(sceUltReaderWriterLockDestroy(nullptr) == ULT_ERROR_NULL);
     bool threwInfo = false;
     try {
-        sceUltGetConditionVariableInfo();
+        sceUltGetConditionVariableInfo(nullptr, nullptr, nullptr, 0);
     } catch (const std::runtime_error&) {
         threwInfo = true;
     }
