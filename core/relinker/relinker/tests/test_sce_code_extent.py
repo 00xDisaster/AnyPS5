@@ -77,7 +77,7 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
 
     for begin, size in functions:
         image[begin:begin + size] = b"\xc3" + b"\x90" * (size - 1)
-    last_func = LATER_FUNCTION if gap_embedded_data else FUNCTION
+    last_func = LATER_FUNCTION if has_gap_embedded else FUNCTION
     image[last_func + FUNCTION_SIZE:plt] = b"\x90" * gap
     image[plt:plt + 2] = b"\xff\x35"
     struct.pack_into("<i", image, plt + 2, GOT + plt_push_offset - (plt + 6))
@@ -103,12 +103,21 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
         image[entry:entry + len(UNSUPPORTED_TLS)] = UNSUPPORTED_TLS
     if function_tls:
         image[FUNCTION:FUNCTION + len(UNSUPPORTED_TLS)] = UNSUPPORTED_TLS
-    if gap_embedded_data:
+    if gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable:
         table = FUNCTION + FUNCTION_SIZE + 0x10
         image[FUNCTION:FUNCTION + 3] = b"\x48\x8d\x05"
         struct.pack_into("<iB", image, FUNCTION + 3, table - (FUNCTION + 7), 0xC3)
         image[FUNCTION + FUNCTION_SIZE:table] = b"\xcc" * 0x10
-        image[table:LATER_FUNCTION] = b"\x0f\x78\x33\x1e" * ((LATER_FUNCTION - table) // 4)
+        if gap_data_then_syscall:
+            image[table:table + 6] = b"\x0f\x78\x11\x22\x33\x44"
+            image[table + 6:table + 16] = b"\xcc" * 10
+            image[table + 16:table + 24] = b"\xb8\x3b\x00\x00\x00\x0f\x05\xc3"
+            image[table + 24:LATER_FUNCTION] = b"\x90" * (LATER_FUNCTION - (table + 24))
+        elif gap_callback_syscall_undecodable:
+            image[table:table + 14] = b"\xb8\x3b\x00\x00\x00\x0f\x05\x0f\x78\x11\x22\x33\x44\xc3"
+            image[table + 14:LATER_FUNCTION] = b"\x90" * (LATER_FUNCTION - (table + 14))
+        else:
+            image[table:LATER_FUNCTION] = b"\x0f\x78\x33\x1e" * ((LATER_FUNCTION - table) // 4)
         image[data:data + 0x30] = b"\x90" * 0x30
 
     cie = EH_FRAME
@@ -229,6 +238,12 @@ def main():
                 "Unsupported " + ("Windows" if target == "windows" else "macOS") + " guest TLS instruction", target)
             run(relinker, work, "sce-gap-embedded-data-" + target,
                 fixture(sce_block=True, gap_embedded_data=True), target=target)
+            run(relinker, work, "sysv-gap-embedded-data-" + target,
+                fixture(sce_block=False, gap_embedded_data=True), target=target)
+            run(relinker, work, "gap-data-then-syscall-" + target,
+                fixture(sce_block=False, gap_data_then_syscall=True), "Forbidden syscall instruction", target=target)
+            run(relinker, work, "gap-callback-syscall-" + target,
+                fixture(sce_block=False, gap_callback_syscall_undecodable=True), "Forbidden syscall instruction", target=target)
         run(relinker, work, "sce-tls-rewrite-over-lea-target", entry_overlap_fixture(),
             "TLS rewrite would overwrite an executable entry point (offset 0x304)")
     print("SCE code extent tests passed")
