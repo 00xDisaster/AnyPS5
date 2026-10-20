@@ -32,6 +32,7 @@ struct NetCtlDefaultRoute {
 #endif
 
 extern "C" {
+int APS5_VABI sceNetCtlInit(void);
 int APS5_VABI sceNetCtlCheckCallback(void);
 int APS5_VABI sceNetCtlGetInfo(int, NetCtlInfo*);
 int APS5_VABI sceNetCtlGetNatInfo(NetCtlNatInfo*);
@@ -141,13 +142,19 @@ void CheckCallbacks() {
     Require(sceNetCtlRegisterCallback(RecordSecond, &secondProbe, &second) == 0 && second == 1);
     sceNetCtlTerm();
     Require(sceNetCtlCheckCallback() == 0);
-    Require(g_first.calls == 1 && g_second.calls == 1);
+    Require(g_first.calls == 1 && g_second.calls == 2);
+    Require(sceNetCtlInit() == 0);
+    Require(sceNetCtlUnregisterCallback(first) == 0);
+    Require(sceNetCtlUnregisterCallback(second) == 0);
+    Require(sceNetCtlUnregisterCallbackV6(v6) == 0);
+    Require(sceNetCtlUnregisterCallback(first) == static_cast<int>(0x80412104));
+    Require(sceNetCtlUnregisterCallbackV6(v6) == static_cast<int>(0x80412104));
 
     Require(sceNetCtlRegisterCallbackV6(RecordV6, &v6Probe, &v6) == 0 && v6 == 0);
     Require(sceNetCtlRegisterCallback(RecordFirst, &secondProbe, &first) == 0 && first == 0);
     Require(sceNetCtlCheckCallback() == 0);
     Require(g_first.calls == 2 && g_first.event == event && g_first.arg == &secondProbe);
-    Require(g_second.calls == 1 && g_self.calls == 1 && g_v6.calls == 0);
+    Require(g_second.calls == 2 && g_self.calls == 1 && g_v6.calls == 0);
     Require(sceNetCtlUnregisterCallback(first) == 0);
     Require(sceNetCtlUnregisterCallbackV6(v6) == 0);
 }
@@ -263,6 +270,20 @@ int main() {
 #ifdef __APPLE__
     CheckDefaultRoutes();
 #endif
+    constexpr int notInitialized = static_cast<int>(0x80412101);
+    Require(sceNetCtlCheckCallback() == notInitialized);
+    Require(sceNetCtlGetState(nullptr) == notInitialized);
+    Require(sceNetCtlGetStateV6(nullptr) == notInitialized);
+    Require(sceNetCtlGetInfo(0, nullptr) == notInitialized);
+    Require(sceNetCtlGetResult(0, nullptr) == notInitialized);
+    Require(sceNetCtlGetNatInfo(nullptr) == notInitialized);
+    Require(sceNetCtlRegisterCallback(nullptr, nullptr, nullptr) == notInitialized);
+    Require(sceNetCtlRegisterCallbackV6(nullptr, nullptr, nullptr) == notInitialized);
+    Require(sceNetCtlUnregisterCallback(-1) == notInitialized);
+    Require(sceNetCtlUnregisterCallbackV6(-1) == notInitialized);
+    sceNetCtlTerm();
+    Require(sceNetCtlCheckCallback() == notInitialized);
+    Require(sceNetCtlInit() == 0);
     CheckCallbacks();
 
     Require(sceNetCtlGetStateV6(nullptr) == kErrInvalidAddr);
@@ -271,7 +292,13 @@ int main() {
     Require(stateV6 == 0 || stateV6 == kStateIpObtained);
     Require(sceNetCtlGetResult(0, nullptr) == kErrInvalidAddr);
     int errorCode = -1;
-    Require(sceNetCtlGetResult(0, &errorCode) == 0 && errorCode == 0);
+    bool resultUnsupported = false;
+    try {
+        sceNetCtlGetResult(0, &errorCode);
+    } catch (const std::logic_error&) {
+        resultUnsupported = true;
+    }
+    Require(resultUnsupported && errorCode == -1);
     Require(sceNetCtlGetResultV6(kEventIpObtained, nullptr) == kErrInvalidAddr);
     for (const int eventType : {kEventDisconnected, 2, kEventIpObtained}) {
         int errorCodeV6 = -1;
@@ -335,6 +362,19 @@ int main() {
     }
 
     Require(sceNetCtlGetNatInfo(nullptr) == kErrInvalidAddr);
-    NetCtlNatInfo nat_info{};
-    Require(sceNetCtlGetNatInfo(&nat_info) == kErrNotConnected);
+    NetCtlNatInfo natInfo{};
+    for (const auto size : {0u, 15u, 17u, 128u, 0xffffffffu}) {
+        natInfo.size = size;
+        Require(sceNetCtlGetNatInfo(&natInfo) == static_cast<int>(0x80412111));
+    }
+    natInfo.size = sizeof(natInfo);
+    std::memset(natInfo.opaque, kFill, sizeof(natInfo.opaque));
+    bool natUnsupported = false;
+    try {
+        sceNetCtlGetNatInfo(&natInfo);
+    } catch (const std::logic_error&) {
+        natUnsupported = true;
+    }
+    Require(natUnsupported && natInfo.size == sizeof(natInfo));
+    for (const auto value : natInfo.opaque) Require(value == kFill);
 }

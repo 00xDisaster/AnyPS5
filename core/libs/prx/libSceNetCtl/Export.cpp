@@ -19,6 +19,7 @@
 #include <sys/sysctl.h>
 #endif
 #endif
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -45,6 +46,9 @@ struct NetCtlNetEvConfiguration;
 struct NetBweInfo;
 struct NetCtlWifiInfo;
 
+static constexpr int SCE_NET_CTL_ERROR_NOT_INITIALIZED = static_cast<int>(0x80412101);
+static constexpr int SCE_NET_CTL_ERROR_ID_NOT_FOUND = static_cast<int>(0x80412104);
+static constexpr int SCE_NET_CTL_ERROR_INVALID_SIZE = static_cast<int>(0x80412111);
 static constexpr int SCE_NET_CTL_ERROR_CALLBACK_MAX = static_cast<int>(0x80412103);
 static constexpr int SCE_NET_CTL_ERROR_INVALID_ID = static_cast<int>(0x80412105);
 static constexpr int SCE_NET_CTL_ERROR_INVALID_CODE = static_cast<int>(0x80412106);
@@ -91,11 +95,13 @@ struct CallbackSlot {
     int lastEvent = 0;
 };
 
+static std::atomic_bool g_initialized{false};
 static std::mutex g_callbackLock;
 static CallbackSlot g_callbacks[MAX_CALLBACKS] = {};
 static CallbackSlot g_callbacksV6[MAX_CALLBACKS] = {};
 
 static int RegisterCallback(CallbackSlot (&callbacks)[MAX_CALLBACKS], NetCtlCallback func, void* arg, int* cid) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!func || !cid) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     std::lock_guard lock(g_callbackLock);
     for (int index = 0; index < MAX_CALLBACKS; ++index) {
@@ -109,8 +115,10 @@ static int RegisterCallback(CallbackSlot (&callbacks)[MAX_CALLBACKS], NetCtlCall
 }
 
 static int UnregisterCallback(CallbackSlot (&callbacks)[MAX_CALLBACKS], int cid) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (cid < 0 || cid >= MAX_CALLBACKS) return SCE_NET_CTL_ERROR_INVALID_ID;
     std::lock_guard lock(g_callbackLock);
+    if (!callbacks[cid].func) return SCE_NET_CTL_ERROR_ID_NOT_FOUND;
     callbacks[cid] = {};
     return 0;
 }
@@ -420,6 +428,7 @@ static void HostTraffic(std::uint64_t& sent, std::uint64_t& received) {
 extern "C" {
 
 int APS5_VABI sceNetCtlCheckCallback(void) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!HasIpv4Callback()) return 0;
     const int event = HostHasAddress(AF_UNSPEC) ? NET_CTL_EVENT_IPOBTAINED : NET_CTL_EVENT_DISCONNECTED;
     CallbackSlot due[MAX_CALLBACKS];
@@ -437,6 +446,7 @@ int APS5_VABI sceNetCtlCheckCallback(void) {
 }
 
 int APS5_VABI sceNetCtlGetIfStat(NetCtlIfStat* stat) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!stat) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     if (!HostHasAddress(AF_UNSPEC)) return SCE_NET_CTL_ERROR_NOT_CONNECTED;
     *stat = {};
@@ -445,6 +455,7 @@ int APS5_VABI sceNetCtlGetIfStat(NetCtlIfStat* stat) {
 }
 
 int APS5_VABI sceNetCtlGetInfo(int code, NetCtlInfo* info) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!info) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     if (code < NET_CTL_INFO_DEVICE || code > NET_CTL_INFO_HTTP_PROXY_PORT) return SCE_NET_CTL_ERROR_INVALID_CODE;
     HostIpv4Interface host;
@@ -476,31 +487,35 @@ int APS5_VABI sceNetCtlGetInfo(int code, NetCtlInfo* info) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetNatInfo(NetCtlNatInfo* nat_info) {
-    if (!nat_info) return SCE_NET_CTL_ERROR_INVALID_ADDR;
-    return SCE_NET_CTL_ERROR_NOT_CONNECTED;
+int APS5_VABI sceNetCtlGetNatInfo(NetCtlNatInfo* info) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
+    if (!info) return SCE_NET_CTL_ERROR_INVALID_ADDR;
+    if (info->size != sizeof(NetCtlNatInfo)) return SCE_NET_CTL_ERROR_INVALID_SIZE;
+    throw std::logic_error("sceNetCtlGetNatInfo: NAT discovery is not implemented");
 }
 
-int APS5_VABI sceNetCtlGetResult(int event_type, int* error_code) {
-    (void)event_type;
-    if (!error_code) return SCE_NET_CTL_ERROR_INVALID_ADDR;
-    *error_code = 0;
-    return 0;
+int APS5_VABI sceNetCtlGetResult(int event, int* result) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
+    if (!result) return SCE_NET_CTL_ERROR_INVALID_ADDR;
+    throw std::logic_error("sceNetCtlGetResult: service event results are not implemented");
 }
 
 int APS5_VABI sceNetCtlGetState(int* state) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!state) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     *state = HostHasAddress(AF_UNSPEC) ? NET_CTL_STATE_IPOBTAINED : NET_CTL_STATE_DISCONNECTED;
     return 0;
 }
 
 int APS5_VABI sceNetCtlGetStateV6(int* state) {
+    if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!state) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     *state = HostHasAddress(AF_INET6) ? NET_CTL_STATE_IPOBTAINED : NET_CTL_STATE_DISCONNECTED;
     return 0;
 }
 
 int APS5_VABI sceNetCtlInit(void) {
+    g_initialized.store(true);
     return 0;
 }
 
@@ -520,9 +535,6 @@ int APS5_VABI sceNetCtlGetInfoV6(int code, void* info) {
 }
 
 void APS5_VABI sceNetCtlTerm(void) {
-    std::lock_guard lock(g_callbackLock);
-    for (auto& slot : g_callbacks) slot = {};
-    for (auto& slot : g_callbacksV6) slot = {};
 }
 
 int APS5_VABI sceNetCtlUnregisterCallback(int cid) {

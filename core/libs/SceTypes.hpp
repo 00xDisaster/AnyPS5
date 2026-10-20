@@ -1334,7 +1334,12 @@ struct NetEpollEvent {
     NetEpollData data;
 };
 
-struct NetCtlNatInfo { std::uint8_t opaque[128]; };
+struct NetCtlNatInfo {
+    std::uint32_t size;
+    std::uint8_t opaque[12];
+};
+
+static_assert(sizeof(NetCtlNatInfo) == 16);
 
 union NetCtlInfo { std::uint8_t opaque[256]; };
 
