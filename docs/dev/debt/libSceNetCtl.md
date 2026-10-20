@@ -32,9 +32,7 @@
 - [sceNetCtlApRpStartWithRetry](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
 - [sceNetCtlApRpStartConf](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
 - [sceNetCtlApRpStop](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
-- [sceNetCtlApRestart](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
 - [sceNetBweGetInfoIpcInt](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
-- [sceNetBweSetInternetConnectionTestResultIpcInt](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
 - [sceNetCtlGetWifiInfoIpcInt](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - unknown signature
 
 ### Functional
