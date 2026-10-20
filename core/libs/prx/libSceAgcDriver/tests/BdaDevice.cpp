@@ -55,6 +55,10 @@ std::optional<std::size_t> selectDevice(std::span<const VkPhysicalDeviceProperti
     return selected;
 }
 
+bool canSkipVulkanFailure(const char* requestedName, const char* requireVulkan) {
+    return (requestedName == nullptr || *requestedName == '\0') && requireVulkan == nullptr;
+}
+
 void deviceSelectionTests() {
     const auto properties = [](const char* name, VkPhysicalDeviceType type) {
         VkPhysicalDeviceProperties result{};
@@ -73,6 +77,10 @@ void deviceSelectionTests() {
     Require(selectDevice(devices, "aMd rAdEoN") == 0u, "GPU name matching was not case-insensitive");
     Require(selectDevice(devices, "RTX 5080") == 1u, "partial GPU name matching failed");
     Require(!selectDevice(devices, "missing device").has_value(), "an unmatched GPU request selected another device");
+    Require(canSkipVulkanFailure(nullptr, nullptr), "an optional Vulkan test without a device request cannot skip");
+    Require(canSkipVulkanFailure("", nullptr), "an empty GPU request prevents an optional Vulkan skip");
+    Require(!canSkipVulkanFailure("missing device", nullptr), "an unmatched GPU request can be reported as a skip");
+    Require(!canSkipVulkanFailure(nullptr, "1"), "a required Vulkan test can be reported as a skip");
     devices[0].apiVersion = VK_API_VERSION_1_0;
     Require(!selectDevice(devices, "AMD").has_value(), "a GPU without Vulkan 1.1 matched the request");
     std::cout << "BDA device selection CPU tests passed\n";
@@ -202,6 +210,7 @@ private:
 int main(int argc, char** argv) {
     try {
         deviceSelectionTests();
+        if (argc == 2 && std::string_view(argv[1]) == "--device-selection-cpu") return 0;
         RunBdaContractTests();
         if (argc == 2) {
             const auto shader = MakeBdaTestShader(0x7fff12340000ULL, 32);
@@ -214,7 +223,7 @@ int main(int argc, char** argv) {
         try {
             device = std::make_unique<Device>();
         } catch (const std::exception& error) {
-            if (std::getenv("ANYPS5_REQUIRE_VULKAN") != nullptr) throw;
+            if (!canSkipVulkanFailure(std::getenv("ANYPS5_GPU"), std::getenv("ANYPS5_REQUIRE_VULKAN"))) throw;
             std::cout << "skipped, no usable Vulkan device: " << error.what() << '\n';
             return 77;
         }
