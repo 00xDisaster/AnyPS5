@@ -115,8 +115,6 @@
 - [scePadIsMoveReproductionModel](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadReadAstonForTracker](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadGetAstonModel](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadMbusInit](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
-- [scePadMbusTerm](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadConnectPort](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadDisconnectPort](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
 - [scePadDisconnectDevice](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - unknown signature
