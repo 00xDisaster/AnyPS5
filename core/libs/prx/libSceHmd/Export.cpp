@@ -27,6 +27,18 @@ struct HmdEyeOffset {
     float z;
 };
 
+struct HmdMirroringAspect {
+    std::uint16_t reserved0;
+    std::int16_t aspect;
+    std::uint16_t reserved1;
+    std::uint16_t reserved2;
+};
+
+static_assert(sizeof(HmdMirroringAspect) == 8);
+static_assert(offsetof(HmdMirroringAspect, aspect) == 2);
+
+using HmdEventCallback = void (APS5_VABI *)(std::uint32_t events);
+
 struct HmdDfuData {
     const void* data;
     std::uint32_t size;
@@ -154,7 +166,7 @@ int APS5_VABI sceHmdDistortionGetWorkMemoryAlign(void) {
     return 0x400;
 }
 
-int APS5_VABI sceHmdInternalRegisterEventCallback(void) {
+int APS5_VABI sceHmdInternalRegisterEventCallback(HmdEventCallback callback) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -188,7 +200,7 @@ int APS5_VABI sceHmdInternalSetIPD(std::int32_t mode, HmdEyeDistances distances)
     return 0;
 }
 
-int APS5_VABI sceHmdInternalMirroringModeSetAspect(void) {
+int APS5_VABI sceHmdInternalMirroringModeSetAspect(const HmdMirroringAspect* aspect) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -427,7 +439,7 @@ int APS5_VABI sceHmdInternalSetLedOn(std::int32_t handle, std::uint32_t ledMask)
     return 0;
 }
 
-int APS5_VABI sceHmdInternal3dAudioSendData(void) {
+int APS5_VABI sceHmdInternal3dAudioSendData(std::int32_t port, const void* data, std::int32_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -646,7 +658,7 @@ int APS5_VABI sceHmdInternalSeparateModeOpen(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalMmapGetModeId(void) {
+int APS5_VABI sceHmdInternalMmapGetModeId(std::uint32_t* modeId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -802,7 +814,7 @@ int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, void* data, std::
     return initialized.load() ? Hmd::InvalidHandle : Hmd::NotInitialized;
 }
 
-int APS5_VABI sceHmdInternal3dAudioClose(void) {
+int APS5_VABI sceHmdInternal3dAudioClose(std::int32_t port) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -852,7 +864,7 @@ int APS5_VABI sceHmdInternalAnotherScreenGetVideoStatus(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternal3dAudioOpen(void) {
+int APS5_VABI sceHmdInternal3dAudioOpen(std::int32_t port) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
