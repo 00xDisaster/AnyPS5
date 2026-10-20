@@ -39,6 +39,7 @@ static void Split(int standard) {
     Require(::_pipe(capture, 65536, _O_BINARY) == 0);
     const int original = ::_dup(standard);
     Require(original >= 0 && ::_dup2(capture[1], standard) == 0);
+    Require(std::fputs("host-before\n", standard == 1 ? stdout : stderr) >= 0);
 
     int guest[2]{-1, -1};
     Require(pipe_nid_postfix(guest) == 0);
@@ -49,6 +50,7 @@ static void Split(int standard) {
     host.back() = '\n';
     Require(std::fputs(host.c_str(), stream) >= 0);
     Require(std::fflush(stream) == 0);
+    host.insert(0, "host-before\n");
     Require(write_nid_postfix(standard, "guest", 5) == 5);
 
     char guestBytes[8]{};
