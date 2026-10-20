@@ -17,6 +17,8 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <system_error>
+#include <tuple>
 #include <vector>
 
 #ifdef _WIN32
@@ -64,6 +66,7 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
     options.WindowsFixedBase = mainExecutable ? args.windowsFixedBase : std::nullopt;
     options.WindowsDiagnostics = args.windowsDiagnostics && mainExecutable;
     options.LinuxFixedBase = args.linuxFixedBase;
+    options.MacosFixedBase = args.macosFixedBase;
     options.ExcludedModules = args.excludedSceModules;
     options.Patches = patches;
     options.TargetName = targetName;
@@ -73,8 +76,6 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
     auto converted = Relinker::Conversion(progress).Convert(std::move(input), options);
     return {inputPath, absPath, std::move(converted.Analysis), std::move(converted.Modules), std::move(converted.Executable), std::move(converted.WindowsDiagnostics), std::move(converted.AppliedPatches)};
 }
-
-#ifdef _WIN32
 
 class OutputIdentityDirectory {
 public:
@@ -105,11 +106,9 @@ public:
         }
     }
 
-    std::filesystem::path GetPath() const { return directory / "file"; }
     const std::filesystem::path& GetDirectory() const { return directory; }
 
     void Remove() {
-        std::filesystem::remove(GetPath());
         std::filesystem::remove(directory);
         directory.clear();
     }
@@ -118,28 +117,26 @@ private:
     std::filesystem::path directory;
 };
 
+#ifdef _WIN32
+std::tuple<DWORD, DWORD, DWORD> FileIdentity(const std::filesystem::path& path) {
+    const auto handle = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        throw std::filesystem::filesystem_error("Cannot open file identity", path, std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+    BY_HANDLE_FILE_INFORMATION information{};
+    const bool read = GetFileInformationByHandle(handle, &information) != 0;
+    const auto error = GetLastError();
+    CloseHandle(handle);
+    if (!read) throw std::filesystem::filesystem_error("Cannot read file identity", path, std::error_code(static_cast<int>(error), std::system_category()));
+    return {information.dwVolumeSerialNumber, information.nFileIndexHigh, information.nFileIndexLow};
+}
 #endif
 
 bool SameOutputFile(const std::filesystem::path& first, const std::filesystem::path& second) {
-    if (std::filesystem::equivalent(first, second)) return true;
 #ifdef _WIN32
-    if (std::filesystem::status(first).permissions() != std::filesystem::status(second).permissions() &&
-        std::filesystem::hard_link_count(first) > 1 && std::filesystem::hard_link_count(second) > 1) {
-        for (const auto& path : {first, second}) {
-            if ((std::filesystem::status(path).permissions() & std::filesystem::perms::owner_write) == std::filesystem::perms::none)
-                throw Domain::RelinkerException("Cannot compare read-only output identities: " + Io::Utf8Path(path));
-        }
-        OutputIdentityDirectory firstDirectory(first.parent_path());
-        OutputIdentityDirectory secondDirectory(second.parent_path());
-        std::filesystem::create_hard_link(first, firstDirectory.GetPath());
-        std::filesystem::create_hard_link(second, secondDirectory.GetPath());
-        const bool same = std::filesystem::equivalent(firstDirectory.GetPath(), secondDirectory.GetPath());
-        secondDirectory.Remove();
-        firstDirectory.Remove();
-        return same;
-    }
+    return FileIdentity(first) == FileIdentity(second);
+#else
+    return std::filesystem::equivalent(first, second);
 #endif
-    return false;
 }
 
 bool SameOutputDestination(const std::filesystem::path& first, const std::filesystem::path& second) {
@@ -160,6 +157,18 @@ bool SameOutputDestination(const std::filesystem::path& first, const std::filesy
             if (character >= 'a' && character <= 'z') character = static_cast<char>(character - ('a' - 'A'));
         const auto alternate = firstPath.parent_path() / Io::NativePath(alternateName);
         const bool same = std::filesystem::exists(alternate) && std::filesystem::equivalent(probe.GetDirectory(), alternate);
+        probe.Remove();
+        return same;
+    }
+#else
+    if (std::filesystem::exists(firstPath.parent_path()) && std::filesystem::exists(secondPath.parent_path()) &&
+        std::filesystem::equivalent(firstPath.parent_path(), secondPath.parent_path())) {
+        OutputIdentityDirectory probe(firstPath.parent_path());
+        const auto name = probe.GetDirectory() / firstPath.filename();
+        const auto alternate = probe.GetDirectory() / secondPath.filename();
+        std::filesystem::create_directory(name);
+        const bool same = std::filesystem::exists(alternate) && std::filesystem::equivalent(name, alternate);
+        std::filesystem::remove(name);
         probe.Remove();
         return same;
     }

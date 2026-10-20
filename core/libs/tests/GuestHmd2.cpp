@@ -8,7 +8,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 
+extern "C" {
+int APS5_VABI sceHmd2GazeActivateGazeTracking();
+int APS5_VABI sceHmd2ReprojectionGetCurrentOutput();
+int APS5_VABI sceHmd2SetFieldOfView();
+}
 namespace {
 
 alignas(16) std::array<std::byte, 0x40> process{};
@@ -57,10 +63,43 @@ void TestWithoutHeadset() {
 
 }
 
+void SizeQueriesReturnTheConsoleSizes() {
+    const auto display = sceHmd2ReprojectionQueryDisplayBufferSizeAlign();
+    Require(display.size == 0x6000000 && display.align == 0x10000, "display buffer size");
+    const auto seeThrough = sceHmd2ReprojectionQuerySeeThroughBufferSizeAlign();
+    Require(seeThrough.size == 0x1106000 && seeThrough.align == 0x100, "see-through buffer size");
+    const auto mirroring = sceHmd2ReprojectionGetMirroringDisplayBufferSizeAlign();
+    Require(mirroring.size == 0x5FA0000 && mirroring.align == 0x10000, "mirroring display buffer size");
+    const auto work = sceHmd2ReprojectionGetMirroringWorkMemorySizeAlign();
+    Require(work.size == 0x4000 && work.align == 0x100, "mirroring work memory size");
+}
+
 int main() {
+    SizeQueriesReturnTheConsoleSizes();
     InstallProcessParameters();
     TestBeforeInitialize();
     TestWithoutHeadset();
+    bool threw = false;
+    try {
+        sceHmd2GazeActivateGazeTracking();
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw, "gaze activation did not throw");
+    threw = false;
+    try {
+        sceHmd2ReprojectionGetCurrentOutput();
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw, "reprojection get current output did not throw");
+    threw = false;
+    try {
+        sceHmd2SetFieldOfView();
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw, "set field of view did not throw");
     std::puts("HMD2 tests passed");
     return 0;
 }

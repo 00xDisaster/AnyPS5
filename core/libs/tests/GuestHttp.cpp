@@ -27,6 +27,8 @@ int APS5_VABI sceHttpWaitRequest(HttpEpollHandle, HttpNBEvent*, int, int);
 int APS5_VABI sceHttpAbortWaitRequest(HttpEpollHandle);
 int APS5_VABI sceHttpInit_nid_postfix(int, int, std::uint64_t);
 int APS5_VABI sceHttpTerm_nid_postfix(int);
+int APS5_VABI sceHttpAuthCacheFlush(int);
+int APS5_VABI sceHttpCookieFlush(int);
 int APS5_VABI sceHttpReadData(int, void*, std::size_t);
 int APS5_VABI sceHttpCreateRequest2(int, const char*, const char*, std::uint64_t);
 int APS5_VABI sceHttpsEnableOption(int, std::uint32_t);
@@ -47,6 +49,27 @@ int APS5_VABI sceHttpParseStatusLine(const char*, std::size_t, std::int32_t*, st
 static void Require(bool value) { if (!value) std::abort(); }
 
 static bool Equal(const char* left, const char* right) { return std::strcmp(left, right) == 0; }
+
+static void CheckUriParseCharacters() {
+    char pool[256];
+    SceHttpUriElement element{};
+    Require(sceHttpUriParse(&element, "HtTpS://AZaz09-._/path", pool, nullptr, sizeof(pool)) == 0);
+    Require(Equal(element.scheme, "HtTpS") && Equal(element.hostname, "AZaz09-._") && element.port == 443);
+    Require(sceHttpUriParse(&element, "aZ09+.-://host/", pool, nullptr, sizeof(pool)) == 0);
+    Require(Equal(element.scheme, "aZ09+.-") && element.port == 0);
+    for (unsigned value = 128; value <= 255; ++value) {
+        const std::string byte(1, static_cast<char>(value));
+        const std::string urls[] = {
+            "http://" + byte + "/", "http://[" + byte + "]/", byte + "://host/",
+            "a" + byte + "://host/", "http://host:" + byte + "/"
+        };
+        for (const auto& url : urls) {
+            std::size_t required = 0;
+            Require(sceHttpUriParse(nullptr, url.c_str(), nullptr, &required, 0) == static_cast<int>(0x80433060));
+            Require(sceHttpUriParse(&element, url.c_str(), pool, nullptr, sizeof(pool)) == static_cast<int>(0x80433060));
+        }
+    }
+}
 
 static void CheckUriEscapeBytes() {
     constexpr char unreserved[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
@@ -161,13 +184,22 @@ int main() {
     Require(sceHttpUriEscape(escaped, nullptr, sizeof(escaped), "a b/~\xC3\xA9") == 0);
     Require(Equal(escaped, "a%20b%2F~%C3%A9"));
     Require(sceHttpUriEscape(escaped, nullptr, sizeof(escaped), nullptr) == invalidValue);
-    CheckUriEscapeBytes();
-#ifdef _WIN32
     const std::string previousCtype = std::setlocale(LC_CTYPE, nullptr);
+    Require(std::setlocale(LC_CTYPE, "C") != nullptr);
+    CheckUriEscapeBytes();
+    CheckUriParseCharacters();
+#ifdef _WIN32
     Require(std::setlocale(LC_CTYPE, ".1252") != nullptr);
     CheckUriEscapeBytes();
-    Require(std::setlocale(LC_CTYPE, previousCtype.c_str()) != nullptr);
+    CheckUriParseCharacters();
+#else
+    for (const char* locale : {"en_US.ISO8859-1", "en_US.iso88591", "en_US.UTF-8"}) {
+        if (!std::setlocale(LC_CTYPE, locale)) continue;
+        CheckUriEscapeBytes();
+        CheckUriParseCharacters();
+    }
 #endif
+    Require(std::setlocale(LC_CTYPE, previousCtype.c_str()) != nullptr);
 
     constexpr const char* unescapeCases[][2] = {
         {"", ""}, {"plain+text", "plain+text"}, {"a%20b%2F~%c3%a9", "a b/~\xC3\xA9"},
@@ -254,6 +286,13 @@ int main() {
     constexpr int beforeInit = static_cast<int>(0x80431001);
     constexpr int aborted = static_cast<int>(0x80431080);
     constexpr int invalidId = static_cast<int>(0x80431100);
+    const auto flushCaches = [](int id, int expected) {
+        Require(sceHttpAuthCacheFlush(id) == expected);
+        Require(sceHttpCookieFlush(id) == expected);
+    };
+    flushCaches(0, beforeInit);
+    flushCaches(-1, beforeInit);
+    flushCaches(request, beforeInit);
     HttpEpollHandle epoll = nullptr;
     HttpNBEvent events[2]{};
     Require(sceHttpCreateEpoll(1, &epoll) == beforeInit);
@@ -261,6 +300,12 @@ int main() {
     Require(sceHttpTerm_nid_postfix(1) == beforeInit);
     const int context = sceHttpInit_nid_postfix(0, 0, 0x10000);
     Require(context > 0);
+    flushCaches(context, 0);
+    flushCaches(context, 0);
+    flushCaches(0, invalidId);
+    flushCaches(-1, invalidId);
+    flushCaches(INT32_MAX, invalidId);
+    flushCaches(request, invalidId);
     Require(sceHttpCreateEpoll(-1, &epoll) == invalidId);
     Require(sceHttpCreateEpoll(context, nullptr) == invalidValue);
     Require(sceHttpCreateEpoll(context, &epoll) == 0 && epoll != nullptr);
@@ -304,12 +349,23 @@ int main() {
     Require(sceHttpCreateEpoll(context, &epoll) == 0);
     const int otherContext = sceHttpInit_nid_postfix(0, 0, 0x10000);
     Require(otherContext > 0 && otherContext != context);
+    flushCaches(otherContext, 0);
     Require(sceHttpTerm_nid_postfix(otherContext) == 0);
+    flushCaches(otherContext, invalidId);
+    flushCaches(context, 0);
     Require(sceHttpTerm_nid_postfix(otherContext) == invalidId);
     Require(sceHttpWaitRequest(epoll, events, 2, 0) == 0);
     Require(waitWokenBy([&] { Require(sceHttpTerm_nid_postfix(context) == 0); }) == 0);
     Require(sceHttpWaitRequest(epoll, events, 2, 0) == beforeInit);
     Require(sceHttpTerm_nid_postfix(context) == beforeInit);
+    flushCaches(context, beforeInit);
+    const int newContext = sceHttpInit_nid_postfix(0, 0, 0x10000);
+    Require(newContext > 0 && newContext != context && newContext != otherContext);
+    flushCaches(context, invalidId);
+    flushCaches(otherContext, invalidId);
+    flushCaches(newContext, 0);
+    Require(sceHttpTerm_nid_postfix(newContext) == 0);
+    flushCaches(newContext, beforeInit);
 
     char data[16];
     Require(sceHttpReadData(1, data, sizeof(data)) == network);
