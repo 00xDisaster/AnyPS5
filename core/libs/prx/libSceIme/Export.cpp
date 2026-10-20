@@ -610,7 +610,7 @@ int APS5_VABI sceImeKeyboardUpdate(EventHandler handler) {
     return 0;
 }
 
-int APS5_VABI sceImeVshUpdate(void) {
+int APS5_VABI sceImeVshUpdate(ImeVshContext* context) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -694,7 +694,7 @@ int APS5_VABI sceImeForTestFunction(void) {
     return ErrorInternal;
 }
 
-int APS5_VABI sceImeVshInformConfirmdString2(void) {
+int APS5_VABI sceImeVshInformConfirmdString2(ImeVshContext* context, const char16_t* text, std::int32_t firstParameter, std::int32_t secondParameter, std::int32_t thirdParameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -734,7 +734,7 @@ int APS5_VABI sceImeVshSendTextInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshInformConfirmdString(void) {
+int APS5_VABI sceImeVshInformConfirmdString(ImeVshContext* context, const char16_t* text, std::int32_t parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -749,17 +749,17 @@ int APS5_VABI sceImeVshNotifyCurrentTextInfoForReconvertText(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshNotifyDeleteText(void) {
+int APS5_VABI sceImeVshNotifyDeleteText(ImeVshContext* context, const char16_t* text, std::int32_t length, std::int32_t parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshNotifyUpdateCaretText(void) {
+int APS5_VABI sceImeVshNotifyUpdateCaretText(ImeVshContext* context, const char16_t* text, std::int32_t length, std::int32_t parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshCheckAutoReConvertingPreeditText(void) {
+int APS5_VABI sceImeVshCheckAutoReConvertingPreeditText(ImeVshContext* context, const char16_t* text) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
