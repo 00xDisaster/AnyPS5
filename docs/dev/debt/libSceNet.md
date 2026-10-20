@@ -27,7 +27,6 @@
 - [sceNetGetIfListEx](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetGetIfListOnce](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetGetIfName](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - the `(uint32_t index)` signature and the table of ten interface names (`lo0`, `eth0`, `eth1`, `dbg0`, `wlan0`, `wlan1`, `gbe0`, `bt0`, `phone0`, `pppoe0`) follow [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/d5ba5fd06c49af29b8ec9200cad70bca676a9cd4/src/core/libraries/net/net.cpp); an index past the table sets `EINVAL` and returns an empty string. Whether the console has more names, or returns null, is unverified on hardware
-- [sceNetGetIfnameNumList](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetGetRandom](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - the `(uint32_t* output)` signature and the `EINVAL` failure for a null output follow [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/d5ba5fd06c49af29b8ec9200cad70bca676a9cd4/src/core/libraries/net/net.cpp); the value comes from the host's `std::random_device`, as `kern.rng_pseudo` in libkernel does. Unverified on hardware
 - [sceNetGetRouteInfo](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetGetSystemTime](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unverified on PS5 hardware: the `void(uint64_t*)` signature, process-relative microseconds and ignored null output follow [shadPS4 net.cpp](https://github.com/shadps4-emu/shadPS4/blob/d615b3887ba29025a59242e1a26f5b68bb176158/src/core/libraries/net/net.cpp#L1654-L1659). The clock is the same as `sceKernelGetProcessTime`, including `APS5_TIME_SCALE`
@@ -38,7 +37,6 @@
 - [sceNetMemoryFree](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - the `(void* memory)` signature follows [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/d5ba5fd06c49af29b8ec9200cad70bca676a9cd4/src/core/libraries/net/net.cpp); the block returns to the guest heap and a null pointer is ignored. Unverified on hardware
 - [sceNetThreadCreate](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetThreadExit](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
-- [sceNetThreadJoin](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetUsleep](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - the `(int microseconds)` signature and the `EINVAL` failure for a negative count follow [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/net/net.cpp); other counts sleep through libkernel's `sceKernelUsleep`, a cancellation point, and return 0. Whether the console takes the count as signed, and what it returns, is unverified on hardware
 - [sceNetConfigCleanUpAllInterfaces](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
 - [sceNetConfigAddIfaddr](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) - unknown signature
