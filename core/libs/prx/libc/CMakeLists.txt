@@ -89,8 +89,6 @@ target_sources(libc PRIVATE
 
 target_sources(libc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/BinaryWordIo.cpp)
 
-
-
 target_include_directories(libc PRIVATE
         ${LIBS_INCLUDE_DIR}
 )

@@ -75,7 +75,7 @@ static_assert(sizeof(FrameRecord) == NameOffset);
     TraceState state{addresses, MaxFrames, 0};
     _Unwind_Backtrace_nid_postfix(traceCallback, &state);
     int captured = state.count;
-    if (captured == 0) {
+    if (captured <= 2) {
         captured = static_cast<int>(RtlCaptureStackBackTrace(0, MaxFrames, addresses, nullptr));
     }
 #endif

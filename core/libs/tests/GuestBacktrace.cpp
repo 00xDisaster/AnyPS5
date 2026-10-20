@@ -70,6 +70,11 @@ std::size_t Used(const std::vector<Record>& records) {
     return total;
 }
 
+[[gnu::noinline]] std::uintptr_t CurrentIp() {
+    asm volatile("" ::: "memory");
+    return reinterpret_cast<std::uintptr_t>(__builtin_return_address(0));
+}
+
 }
 
 [[gnu::noinline]] void CheckBacktrace() {
@@ -96,7 +101,10 @@ std::size_t Used(const std::vector<Record>& records) {
 
     std::vector<unsigned char> buffer(size + 64, Fill);
     int written = -1;
-    Require(sceLibcBacktraceSelf_nid_postfix(-1, buffer.data(), size, &written) == 0, "Self failed");
+    const auto before = CurrentIp();
+    const int selfStatus = sceLibcBacktraceSelf_nid_postfix(-1, buffer.data(), size, &written);
+    const auto after = CurrentIp();
+    Require(selfStatus == 0, "Self failed");
     Require(written == count, "Self wrote a different count than GetBufferSize reported");
     const auto records = Parse(buffer, size, written);
     Require(Used(records) == size, "Self used a different size than GetBufferSize reported");
@@ -104,11 +112,10 @@ std::size_t Used(const std::vector<Record>& records) {
     for (const auto& record : records) Require(record.reserved == 0 && !record.module.empty(), "record has a nonzero reserved word or no module");
     Require(records.front().module == executable, "first frame is not in the calling module");
 #if defined(_WIN32)
-    HMODULE callerHandle = nullptr;
     const auto address = reinterpret_cast<std::uintptr_t>(handle) + records.front().offset;
-    Require(GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               reinterpret_cast<LPCSTR>(address), &callerHandle) != 0 && callerHandle == handle,
-            "first frame is not the caller");
+    const auto callerReturn = reinterpret_cast<std::uintptr_t>(handle) + records[1].offset;
+    Require(address > before && address < after, "first frame is not the caller");
+    Require(callerReturn == reinterpret_cast<std::uintptr_t>(__builtin_return_address(0)), "second frame is not the caller of CheckBacktrace");
 #else
     Dl_info caller{};
     const auto address = reinterpret_cast<std::uintptr_t>(self.dli_fbase) + records.front().offset;
