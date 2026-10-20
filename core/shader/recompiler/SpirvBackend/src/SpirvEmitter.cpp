@@ -126,7 +126,7 @@ std::uint32_t SpirvValueEmitContext::Ballot(const IrValue* predicate) {
     const auto lowWord = state.module.AllocateId();
     const auto highWord = state.module.AllocateId();
     const auto ballot = state.module.AllocateId();
-    state.module.AddFunction(spv::OpGroupNonUniformBallot, ballotType, high, scope, half == 1u ? Def(predicate) : otherHalf->Def(predicate));
+    state.module.AddSubgroupBallot(ballotType, high, scope, half == 1u ? Def(predicate) : otherHalf->Def(predicate));
     state.module.AddFunction(spv::OpCompositeExtract, TypeU32(state), lowWord, low, 0u);
     state.module.AddFunction(spv::OpCompositeExtract, TypeU32(state), highWord, high, 0u);
     state.module.AddFunction(spv::OpCompositeConstruct, ballotType, ballot, lowWord, highWord, ConstantU32(state, 0u), ConstantU32(state, 0u));
@@ -260,6 +260,13 @@ std::vector<std::uint32_t> SpirvEmitter::Emit(const IrProgram& program, const Sh
     state.depthRangeRemap = target.depthRangeRemap;
     state.registrationModules = target.registrationModules;
     state.fragmentDescriptorSet = target.fragmentDescriptorSet;
+    state.meshBarycentricPixel = target.meshBarycentricPixel;
+    state.meshBarycentricVertex = target.meshBarycentricVertex;
+    state.barycentricSmoothLocation = target.barycentricSmoothLocation;
+    state.barycentricLinearLocation = target.barycentricLinearLocation;
+    state.barycentricPositionsLocation = target.barycentricPositionsLocation;
+    state.meshExportedLocations = target.meshExportedLocations;
+    state.meshPerVertexLocations = target.meshPerVertexLocations;
     state.float16DenormPreserve = target.float16DenormPreserve;
     state.robustBufferAccess2 = target.robustBufferAccess2;
     state.float32FlushToZero = target.float32FlushToZero;

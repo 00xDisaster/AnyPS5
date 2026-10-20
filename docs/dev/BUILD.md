@@ -12,7 +12,7 @@ ctest --test-dir build-relinker --output-on-failure
 
 Python must be found during CMake configuration for Python tests to be registered. List registered tests with `ctest --test-dir build-relinker -N` and look for `input_magic`, a Python-backed relinker test. If automatic discovery fails, add `-DPython3_EXECUTABLE="C:/path/to/python.exe"` to the configure command, using the path to your Python interpreter, then list the tests again.
 
-This mode builds the conversion tool and its tests on Linux, Windows and macOS, including Apple Silicon. macOS uses AppleClang from the Xcode command-line tools; Windows uses the MinGW-w64 toolchain below. The executable is `build-relinker/core/relinker/relinker` (`relinker.exe` on Windows with Ninja).
+This mode builds the conversion tool and its tests on Linux, Windows and macOS, including Apple Silicon. macOS uses AppleClang from the Xcode command-line tools. Windows uses MinGW-w64 GCC with C++20 support and accepts distributions with static or shared runtimes; the WinLibs requirement below applies to the full build. The executable is `build-relinker/core/relinker/relinker` (`relinker.exe` on Windows with Ninja).
 
 The output is x86-64: Linux ELF by default, Windows PE with `--windows` or Mach-O with `--macos` ([usage](../user/USAGE.md#input-and-conversion)). Converted games need system libraries built for the target OS and a compatible x86-64 host. This mode does not build those libraries, and releases ship them for Linux and Windows only. Tests inspect all three output formats; execution checks run only on their compatible hosts.
 
@@ -35,6 +35,14 @@ git submodule update --init --recursive
 - Bitdefender Advanced Threat Defense hooks Windows calls that `sceKernelRaiseException` makes while its target thread is suspended. When the target is suspended inside ntdll's exception dispatch while it holds an ntdll lock, the hook waits for that lock and `guest_raise_exception` hangs until its timeout. A scanning exception for the build directory does not prevent it; add `guest_raise_exception_tests.exe` to the Advanced Threat Defense exceptions.
 - FFmpeg binaries are downloaded during configuration unless `FFMPEG_PREBUILT_DIR` is set. With the WinLibs CMake, the download fails with status 60 (`SSL peer certificate or SSH remote key was not OK`) unless `SSL_CERT_FILE` names a CA bundle, for example `C:\Program Files\Git\ucrt64\etc\ssl\certs\ca-bundle.crt` from Git for Windows 2.56 and later (`mingw64` instead of `ucrt64` before 2.56), as in CI.
 
+## Web converter releases
+
+The Release workflow builds the web converter and the Linux and Windows libraries from the same commit. It tests the converter and publishes its frontend and WASM files as `web-<tag>.zip`, with the tag and commit recorded in `web-release.json`.
+
+Pages downloads the converter and both library archives from one release selected through GitHub's latest-release API. `release.json` records the same tag and commit. Missing, corrupt or mismatched assets fail the Pages job before deployment. Releases made before the web asset was added need a new release; Pages does not combine them with a converter built from `main`.
+
+Changes to the converter or its frontend reach Pages through a release. Progress reports still come from `main`. For local development, build `relinker_web` with Emscripten and run `python3 tools/test_web.py --build build-wasm`. To stage a complete published release without compiling, run `python3 tools/build_web.py --build build-wasm --release`; `--libraries` is an alias for this mode.
+
 ## Commands
 
 ```sh
@@ -51,6 +59,35 @@ files from `build/core/libs/libs`; running a title after a library change withou
 therefore tests the previous binaries and can show no effect at all.
 
 [Relinker usage and runtime layout](../user/USAGE.md).
+
+## Windows setup and troubleshooting
+
+The full build also requires Python 3 for glslang and Git for Windows with Bash for libusb's version-header generation. A minimal Git installation without Bash is insufficient for the full build.
+
+In PowerShell, prepend the supported WinLibs toolchain and Git for Windows to the current session's `PATH`. Adjust the paths for the installed locations; a Portable Git installation can be used in place of `C:\Program Files\Git`.
+
+```powershell
+$env:PATH = "C:\tools\winlibs\mingw64\bin;C:\Program Files\Git\cmd;C:\Program Files\Git\usr\bin;$env:PATH"
+```
+
+If configuration reports `Could NOT find Python3` or selects an unusable interpreter, pass the absolute path to a working Python 3 executable:
+
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DPython3_EXECUTABLE="C:/path/to/python.exe"
+```
+
+If `gen-describe.ps1` fails while generating libusb's `version_describe.h`, check the Bash path printed in the build output. A WindowsApps or System32 `bash.exe` can launch WSL and fail with `WSL_E_DEFAULT_DISTRO_NOT_FOUND` when no distribution is installed. Install Git for Windows with Bash, or use Portable Git, and put its `cmd` and `usr\bin` directories on `PATH` before retrying the build. Use Bash and `cygpath.exe` from the same Git installation.
+
+After `cmake --build build --target libs --parallel` succeeds, copy the toolchain's runtime DLLs beside the patched libraries:
+
+```powershell
+$toolchainBin = "C:\tools\winlibs\mingw64\bin"
+foreach ($runtimeName in @("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
+    Copy-Item -LiteralPath (Join-Path $toolchainBin $runtimeName) -Destination "build/core/libs/libs"
+}
+```
+
+When preparing a title's `libs/` directory, copy these DLLs with the patched `.prx` files. The Windows runtime loader does not search `PATH` for these dependencies; missing DLLs can cause error 126 even when the `.prx` is present. See [runtime layout](../user/USAGE.md#runtime-layout).
 
 ## CMake flags
 
@@ -83,6 +120,16 @@ Build configuration parameters:
 SDL and FreeType settings forced by the root `CMakeLists.txt` cannot be overridden with `-D`.
 
 With `ANYPS5_USE_SYSTEM_DEPS=ON` those libraries come from the system (on Debian and Ubuntu: `libsdl2-dev`, `libfreetype-dev`, `libvulkan-dev`, `spirv-headers`, `glslang-dev`, `glslang-tools` and `spirv-tools`). A missing package, Vulkan-Headers older than 1.4.310 (the agc driver uses `VK_KHR_maintenance8`), or an SDL2 without the HIDAPI joystick driver (sdl2-compat over SDL3, or a build with HIDAPI disabled, which breaks the pad and disk-audio tests), fails the configure with an error and never falls back to the submodule. The forced SDL and FreeType settings from the root `CMakeLists.txt` do not apply with the flag ON: the system SDL2 comes with whatever its distribution enabled. The prx libraries are shared objects, so SDL2 is linked from the system as a shared library; the default build keeps its own static SDL2. `ffmpeg-core`, `libjpeg-turbo`, `stb`, `VulkanMemoryAllocator` and `LibAtrac9` always stay bundled and still need `git submodule update --init`.
+
+## Quick syntax checks
+
+After configuring a build directory, use `tools/check_compile.py` to check the given source files. The tool reads their compile commands from `compile_commands.json` or Ninja, preserving compilation options while dropping object and dependency output options. It handles `-MF`, `-MT`, `-MQ` and `-MJ` with separate or attached values so that unused output options do not cause false failures under `-Werror`.
+
+```sh
+python3 tools/check_compile.py --build build-relinker core/relinker/main.cpp
+```
+
+Real compile errors still fail. Syntax checks do not replace a full build and test run.
 
 ## Write watch tests
 
