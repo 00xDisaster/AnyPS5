@@ -120,12 +120,8 @@ struct CachedTexture {
     // The untrackedKey the snapshot was last read or compared equal at, for a surface outside the
     // write watch; zero when none was taken.
     std::array<std::uint64_t, 4> untracked{};
-    std::vector<std::byte> carried;
-    std::uint64_t carriedPresent = 0;
     std::uint64_t surfaceBytes = 0;
 };
-
-constexpr std::uint64_t CarriedBufferMaxPresents = 16;
 
 // Entries in use order (front = most recent) with a hash index by key: a lookup is O(1) and the
 // eviction takes the back. APS5_NO_TEXTURE_HASH=1 finds entries by scanning the list (the index is
@@ -135,6 +131,8 @@ struct TextureCache {
     std::list<CachedTexture> entries;
     std::unordered_map<TextureKey, std::list<CachedTexture>::iterator, TextureKeyHash> index;
     std::unordered_multimap<const StorageTexture*, std::list<CachedTexture>::iterator> views;
+    std::vector<std::vector<std::byte>> spare;
+    std::uint64_t spareBytes = 0;
     std::uint64_t bytes = 0;
     std::size_t passed = 0;
     std::chrono::steady_clock::time_point passedSince{};
@@ -267,6 +265,33 @@ void dropUncachedViews(TextureCache& cache) {
 void touchTexture(TextureCache& cache, std::list<CachedTexture>::iterator it) {
     cache.entries.splice(cache.entries.begin(), cache.entries, it);
     it->present = Recorder::Presents();
+}
+
+constexpr std::uint64_t SpareSnapshotBytes = 512ull << 20;
+
+void parkSnapshot(TextureCache& cache, std::vector<std::byte>& bytes) {
+    const auto size = bytes.size();
+    if (size == 0) return;
+    while (!cache.spare.empty() && cache.spareBytes + size > SpareSnapshotBytes) {
+        cache.spareBytes -= cache.spare.front().size();
+        cache.spare.erase(cache.spare.begin());
+    }
+    if (cache.spareBytes + size <= SpareSnapshotBytes) {
+        cache.spareBytes += size;
+        cache.spare.push_back(std::move(bytes));
+    }
+    bytes = std::vector<std::byte>{};
+}
+
+std::vector<std::byte> spareSnapshot(TextureCache& cache, std::size_t bytes) {
+    for (auto spare = cache.spare.begin(); spare != cache.spare.end(); ++spare) {
+        if (spare->size() != bytes) continue;
+        cache.spareBytes -= bytes;
+        std::vector<std::byte> taken = std::move(*spare);
+        cache.spare.erase(spare);
+        return taken;
+    }
+    return {};
 }
 
 bool admitTexture(TextureCache& cache, const TextureKey& key, std::uint64_t incoming, std::uint64_t budget) {
@@ -857,7 +882,6 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
     std::vector<std::byte> recycled;
     if (auto it = findTexture(cache, key); it != cache.entries.end()) {
         if (it->source != nullptr) {
-            if (!it->carried.empty() && Recorder::Presents() - it->carriedPresent > CarriedBufferMaxPresents) it->carried = std::vector<std::byte>{};
             // The view follows the storage image, whatever the GPU wrote to it since; guest memory
             // written meanwhile is taken in by refreshing the image. A fast clear the image cannot
             // see (keys, and no pending results to prefer) ends the view: a snapshot holds the clear.
@@ -903,15 +927,13 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
             }
         }
         if (it->bytes.size() == bytes) recycled = std::move(it->bytes);
-        else if (it->carried.size() == bytes && Recorder::Presents() - it->carriedPresent <= CarriedBufferMaxPresents) recycled = std::move(it->carried);
+        else parkSnapshot(cache, it->bytes);
         eraseTexture(cache, it);
         ++cache.counts.stale;
     }
+    if (source != nullptr) parkSnapshot(cache, recycled);
+    else if (recycled.empty()) recycled = spareSnapshot(cache, bytes);
     CachedTexture entry{key, address, source != nullptr ? std::vector<std::byte>{} : (recycled.empty() ? std::vector<std::byte>(bytes) : std::move(recycled)), nullptr, *keys, snapshotGeneration};
-    if (source != nullptr) {
-        entry.carried = std::move(recycled);
-        entry.carriedPresent = Recorder::Presents();
-    }
     entry.committed = std::move(committed);
     entry.surfaceBytes = bytes;
     if (source != nullptr) {
@@ -949,7 +971,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
         entry.texture = std::make_shared<Texture>(context, *context.detiler, resource, components, entry.bytes, depthCompare);
         entry.accounted = entry.texture->AllocationBytes();
         constexpr std::size_t SnapshotCompareBytes = 256u << 10u;
-        if (entry.bytes.size() > SnapshotCompareBytes && (entry.generation != 0 || entry.untracked[0] != 0)) std::vector<std::byte>().swap(entry.bytes);
+        if (entry.bytes.size() > SnapshotCompareBytes && (entry.generation != 0 || entry.untracked[0] != 0)) parkSnapshot(cache, entry.bytes);
         counters.snapshots.fetch_add(1, std::memory_order_relaxed);
     }
     const auto budget = sampledBudget(context, cache);
@@ -1301,6 +1323,8 @@ void ClearCachedTextures(VkDevice device) {
             if (it->key.device == device) eraseTexture(sampled, it++);
             else ++it;
         }
+        sampled.spare.clear();
+        sampled.spareBytes = 0;
     }
     auto& storage = StorageTextures();
     std::vector<std::shared_ptr<StorageTexture>> cleared;
