@@ -7,6 +7,7 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+struct ShellCoreLaunchByUriParam;
 struct ShellCoreTelemetryToken;
 struct ShellCoreUmmStatus;
 struct ShellCorePbtcUserInfoList;
@@ -1080,7 +1081,7 @@ int APS5_VABI sceShellCoreUtilIsIDUState() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsImposeScreenOverlaid() {
+bool APS5_VABI sceShellCoreUtilIsImposeScreenOverlaid() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1095,7 +1096,7 @@ int APS5_VABI sceShellCoreUtilIsInternalKratosUser() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsKilledOrSuspendedByLogout() {
+int APS5_VABI sceShellCoreUtilIsKilledOrSuspendedByLogout(std::int32_t first, std::int32_t second, std::uint8_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1105,22 +1106,22 @@ int APS5_VABI sceShellCoreUtilIsNeededCrashReport() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsPowerSaveAlertRequested() {
+bool APS5_VABI sceShellCoreUtilIsPowerSaveAlertRequested() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsRemotePlayCpuBudgetAcquired() {
+bool APS5_VABI sceShellCoreUtilIsRemotePlayCpuBudgetAcquired() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsScreenSaverOn() {
+bool APS5_VABI sceShellCoreUtilIsScreenSaverOn() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsSharePlayCpuBudgetAcquired() {
+bool APS5_VABI sceShellCoreUtilIsSharePlayCpuBudgetAcquired() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1135,17 +1136,17 @@ int APS5_VABI sceShellCoreUtilIsTemperatureDanger() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsTitleWorkaroundEnabled() {
+int APS5_VABI sceShellCoreUtilIsTitleWorkaroundEnabled(std::int32_t selector, const char* key) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsUsbMassStorageMounted() {
+bool APS5_VABI sceShellCoreUtilIsUsbMassStorageMounted(std::uint32_t deviceIndex) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilLaunchByUri() {
+int APS5_VABI sceShellCoreUtilLaunchByUri(const char* uri, const ShellCoreLaunchByUriParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1160,12 +1161,12 @@ int APS5_VABI sceShellCoreUtilMakeManifestFile() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilMountAppRight() {
+int APS5_VABI sceShellCoreUtilMountAppRight(const char* key) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilMountDownloadDataForShellUI() {
+int APS5_VABI sceShellCoreUtilMountDownloadDataForShellUI(const char* key) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1180,17 +1181,17 @@ int APS5_VABI sceShellCoreUtilMountHddForRestore() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNavigateToAnotherApp() {
+int APS5_VABI sceShellCoreUtilNavigateToAnotherApp(std::uint32_t target) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNavigateToGoHome() {
+int APS5_VABI sceShellCoreUtilNavigateToGoHome(std::uint32_t target) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilNavigateToLaunchedApp() {
+int APS5_VABI sceShellCoreUtilNavigateToLaunchedApp(std::uint32_t target) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
