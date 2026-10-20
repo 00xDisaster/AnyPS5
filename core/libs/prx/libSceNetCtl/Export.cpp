@@ -577,17 +577,17 @@ int APS5_VABI sceNetCtlClearEventForLibIpcInt(int event) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetResultIpcInt(void) {
+int APS5_VABI sceNetCtlGetResultIpcInt(int event, int* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetStateIpcInt(void) {
+int APS5_VABI sceNetCtlGetStateIpcInt(int* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetState2IpcInt(void) {
+int APS5_VABI sceNetCtlGetState2IpcInt(int* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -597,12 +597,12 @@ int APS5_VABI sceNetCtlGetInfoIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetEtherLinkMode(void) {
+int APS5_VABI sceNetCtlGetEtherLinkMode(int* mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetWifiType(void) {
+int APS5_VABI sceNetCtlGetWifiType(int* type) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -657,7 +657,7 @@ int APS5_VABI sceNetCtlGetScanInfoForSsidListScanIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlSetErrorNotificationEnabledIpcInt(void) {
+int APS5_VABI sceNetCtlSetErrorNotificationEnabledIpcInt(int enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -681,12 +681,12 @@ int APS5_VABI sceNetCtlGetResultV6(int event_type, int* error_code) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetResultV6IpcInt(void) {
+int APS5_VABI sceNetCtlGetResultV6IpcInt(int event, int* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetStateV6IpcInt(void) {
+int APS5_VABI sceNetCtlGetStateV6IpcInt(int* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -736,7 +736,7 @@ int APS5_VABI sceNetCtlGetNetEvConfigInfoIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlGetConnectionElapsedTimeIpcInt(void) {
+int APS5_VABI sceNetCtlGetConnectionElapsedTimeIpcInt(std::uint64_t* elapsedTime) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
