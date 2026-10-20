@@ -203,6 +203,7 @@ private:
 };
 
 bool Ngs2ExclusiveElsewhere();
+bool Ngs2RenderingHere(const Ngs2System& system);
 void Ngs2EnterExclusive();
 void Ngs2LeaveExclusive(std::uint32_t depth = 1);
 void Ngs2WaitOnce();

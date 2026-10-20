@@ -9,6 +9,7 @@
 #include <iterator>
 #include <numbers>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -1127,6 +1128,37 @@ static void TestRackDestroyWaitsForLock() {
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
+struct DestroyInCallback {
+    uintptr_t handle = 0;
+    bool system = false;
+};
+
+static void APS5_VABI DestroyFromCallback(const Ngs2VoiceCallbackInfo* info) {
+    const auto& destroy = *reinterpret_cast<const DestroyInCallback*>(info->callback_data);
+    static_cast<void>(destroy.system ? sceNgs2SystemDestroy(destroy.handle, nullptr) : sceNgs2RackDestroy(destroy.handle, nullptr));
+}
+
+static void TestDestroyDuringOwnRenderThrows() {
+    for (const bool destroySystem : {false, true}) {
+        const auto system = CreateSystem();
+        uintptr_t rack = 0;
+        const std::vector<std::int16_t> pcm(Grain / 2, 1000);
+        const auto sampler = Sampler(system, pcm, 0, &rack);
+        Patch(sampler, Mastering(system, 1));
+        const DestroyInCallback destroy{destroySystem ? system : rack, destroySystem};
+        Control(sampler, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{{}, DestroyFromCallback, reinterpret_cast<std::uintptr_t>(&destroy), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+        Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+        bool refused = false;
+        try {
+            RenderI16(system);
+        } catch (const std::runtime_error& error) {
+            refused = std::string(error.what()).find("is not implemented") != std::string::npos;
+        }
+        Require(refused);
+        Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    }
+}
+
 static void TestLock() {
     const auto system = CreateSystem();
     const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
@@ -1394,6 +1426,7 @@ int main() {
     TestCallbacksLockEachOthersSystem();
     TestRackLocksAcrossSystemsAndRender();
     TestRackDestroyWaitsForLock();
+    TestDestroyDuringOwnRenderThrows();
     TestDefaultChannelMap();
     TestUnsetMatrix();
     TestRenderCapacity<float>(SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1);
