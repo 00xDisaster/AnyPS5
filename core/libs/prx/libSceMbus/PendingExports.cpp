@@ -5,6 +5,7 @@ struct MbusDeviceInfo;
 struct MbusSimulatedHandleStatus;
 struct MbusSparkState;
 struct MbusDriverCallbacks;
+struct MbusUsbPowerEntry;
 struct MbusEvent;
 struct MbusEventCallbacks;
 struct MbusProcessInfo;
@@ -466,27 +467,27 @@ int APS5_VABI sceMbusResolveByDeviceId(std::int32_t deviceClass, std::uint64_t d
     return 0;
 }
 
-int APS5_VABI sceMbusResolveByHandle() {
+int APS5_VABI sceMbusResolveByHandle(std::int32_t deviceClass, std::int32_t handle, std::int32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusResolveByPlayerId() {
+int APS5_VABI sceMbusResolveByPlayerId(std::uint32_t deviceClass, std::uint32_t playerId, std::uint32_t first, std::uint32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusResolveByUserId() {
+int APS5_VABI sceMbusResolveByUserId(std::uint32_t deviceClass, std::int32_t userId, std::uint32_t first, std::uint32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetAutoLoginMode() {
+int APS5_VABI sceMbusSetAutoLoginMode(std::uint32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetCameraAppModuleFocus() {
+int APS5_VABI sceMbusSetCameraAppModuleFocus(std::int32_t moduleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -496,37 +497,37 @@ int APS5_VABI sceMbusSetDeviceFunctionState() {
     return 0;
 }
 
-int APS5_VABI sceMbusSetDuckingSetting() {
+int APS5_VABI sceMbusSetDuckingSetting(std::int32_t setting) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetProxy() {
+int APS5_VABI sceMbusSetProxy(std::int32_t processId, std::int32_t first, std::int32_t second, std::int32_t third, std::uint64_t deviceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetRoutingMode() {
+int APS5_VABI sceMbusSetRoutingMode(std::int32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetScratchData() {
+int APS5_VABI sceMbusSetScratchData(std::uint64_t deviceId, std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetScratchDataUpdatedEventMask() {
+int APS5_VABI sceMbusSetScratchDataUpdatedEventMask(std::uint32_t mask) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetSocialScreenAudioMode() {
+int APS5_VABI sceMbusSetSocialScreenAudioMode(std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetTestFlag() {
+int APS5_VABI sceMbusSetTestFlag(std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -536,17 +537,17 @@ int APS5_VABI sceMbusSetThreadParam(std::int32_t priority, std::uint64_t affinit
     return 0;
 }
 
-int APS5_VABI sceMbusSetUsbPowerBlackList() {
+int APS5_VABI sceMbusSetUsbPowerBlackList(std::int32_t first, std::uint8_t count, const MbusUsbPowerEntry* entries) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetUserMuteStatus() {
+int APS5_VABI sceMbusSetUserMuteStatus(std::int32_t userId, std::int32_t status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusSetVolumeDown() {
+int APS5_VABI sceMbusSetVolumeDown(std::uint32_t deviceClass, std::uint8_t volume) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -556,7 +557,7 @@ int APS5_VABI sceMbusStartAudioOutAuxBroadcast() {
     return 0;
 }
 
-int APS5_VABI sceMbusStartAudioOutSharePlay() {
+int APS5_VABI sceMbusStartAudioOutSharePlay(std::int32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -575,17 +576,17 @@ int APS5_VABI sceMbusTerm() {
     return 0;
 }
 
-int APS5_VABI sceMbusUnregisterDriver() {
+int APS5_VABI sceMbusUnregisterDriver(std::int32_t driverId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusUserLogin() {
+int APS5_VABI sceMbusUserLogin(std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusUserLogout() {
+int APS5_VABI sceMbusUserLogout(std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
