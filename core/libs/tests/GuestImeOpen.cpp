@@ -73,7 +73,7 @@ void APS5_VABI Other(void*, const ImeEvent*) {
     std::abort();
 }
 
-int32_t UpperFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
+int32_t APS5_VABI UpperFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
     for (uint32_t i = 0; i < sourceTextLength; ++i) {
         const char16_t unit = sourceText[i];
         outText[i] = unit >= u'a' && unit <= u'z' ? static_cast<char16_t>(unit - u'a' + u'A') : unit;
@@ -82,11 +82,11 @@ int32_t UpperFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* 
     return 0;
 }
 
-int32_t FailingFilter(char16_t*, uint32_t*, const char16_t*, uint32_t) {
+int32_t APS5_VABI FailingFilter(char16_t*, uint32_t*, const char16_t*, uint32_t) {
     return 1;
 }
 
-int32_t StripXFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
+int32_t APS5_VABI StripXFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
     uint32_t length = 0;
     for (uint32_t i = 0; i < sourceTextLength; ++i) {
         if (sourceText[i] != u'x') outText[length++] = sourceText[i];
@@ -95,24 +95,24 @@ int32_t StripXFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*
     return 0;
 }
 
-int32_t InvalidOutputFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
+int32_t APS5_VABI InvalidOutputFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
     outText[0] = 0xdc00;
     *outTextLength = 1;
     return 0;
 }
 
-int32_t TooLongFilter(char16_t*, uint32_t* outTextLength, const char16_t*, uint32_t) {
+int32_t APS5_VABI TooLongFilter(char16_t*, uint32_t* outTextLength, const char16_t*, uint32_t) {
     *outTextLength = 9;
     return 0;
 }
 
-int32_t ShortenFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
+int32_t APS5_VABI ShortenFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
     outText[0] = u'a';
     *outTextLength = 1;
     return 0;
 }
 
-int32_t PairAtCaretFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
+int32_t APS5_VABI PairAtCaretFilter(char16_t* outText, uint32_t* outTextLength, const char16_t*, uint32_t) {
     outText[0] = u'a';
     outText[1] = u'b';
     outText[2] = 0xd83d;
@@ -121,7 +121,18 @@ int32_t PairAtCaretFilter(char16_t* outText, uint32_t* outTextLength, const char
     return 0;
 }
 
-int ExtNoop(const ImeKeycode*, std::uint16_t*, std::uint32_t*, void*) {
+int APS5_VABI ExtNoop(const ImeKeycode*, std::uint16_t*, std::uint32_t*, void*) {
+    return 0;
+}
+
+bool g_sawCaptureInsideFilter = false;
+
+int32_t APS5_VABI LockingFilter(char16_t* outText, uint32_t* outTextLength, const char16_t* sourceText, uint32_t sourceTextLength) {
+    g_sawCaptureInsideFilter = ImeCapturesKeyboard_nid_postfix();
+    for (uint32_t i = 0; i < sourceTextLength; ++i) {
+        outText[i] = sourceText[i];
+    }
+    *outTextLength = sourceTextLength;
     return 0;
 }
 
@@ -226,14 +237,14 @@ void CheckValidation() {
     Require(sceImeClose_nid_postfix() == 0, "close after over-2K open");
 
     param = MakeParam(buffers, 16);
-    param.filter = &UpperFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&UpperFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a text filter");
     Require(ImeCapturesKeyboard_nid_postfix(), "text filter session not open");
     Require(sceImeClose_nid_postfix() == 0, "close the text filter session");
 
     param = MakeParam(buffers, 16);
     ExtendedParam extFilters{};
-    extFilters.ext_keyboard_filter = &ExtNoop;
+    extFilters.ext_keyboard_filter = reinterpret_cast<ImeExtKeyboardFilter>(&ExtNoop);
     Require(sceImeOpen_nid_postfix(&param, &extFilters) == 0, "open with an external keyboard filter");
     Require(ImeCapturesKeyboard_nid_postfix(), "external keyboard filter session not open");
     Require(sceImeClose_nid_postfix() == 0, "close the external keyboard filter session");
@@ -362,9 +373,9 @@ void CheckTextFilter() {
     Buffers buffers;
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
     Param param = MakeParam(buffers, 8);
-    param.filter = &UpperFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&UpperFilter);
     ExtendedParam extFilters{};
-    extFilters.ext_keyboard_filter = &ExtNoop;
+    extFilters.ext_keyboard_filter = reinterpret_cast<ImeExtKeyboardFilter>(&ExtNoop);
     Require(sceImeOpen_nid_postfix(&param, &extFilters) == 0, "open with both filters");
     Drain();
 
@@ -388,7 +399,7 @@ void CheckTextFilter() {
 
     buffers = Buffers{};
     param = MakeParam(buffers, 8);
-    param.filter = &StripXFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&StripXFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a stripping filter");
     Drain();
     Publish(ImeHostInputKind::Text, "x");
@@ -403,7 +414,7 @@ void CheckTextFilter() {
 
     param = MakeParam(buffers, 8);
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
-    param.filter = &FailingFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&FailingFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a failing filter");
     Drain();
     Publish(ImeHostInputKind::Text, "c");
@@ -413,7 +424,7 @@ void CheckTextFilter() {
 
     param = MakeParam(buffers, 8);
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
-    param.filter = &InvalidOutputFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&InvalidOutputFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with an invalid-output filter");
     Drain();
     Publish(ImeHostInputKind::Text, "c");
@@ -423,7 +434,7 @@ void CheckTextFilter() {
 
     param = MakeParam(buffers, 8);
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
-    param.filter = &TooLongFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&TooLongFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a too-long filter");
     Drain();
     Publish(ImeHostInputKind::Text, "c");
@@ -433,7 +444,7 @@ void CheckTextFilter() {
 
     param = MakeParam(buffers, 8);
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
-    param.filter = &ShortenFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&ShortenFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a shortening filter");
     Drain();
     Publish(ImeHostInputKind::Text, "c");
@@ -442,12 +453,23 @@ void CheckTextFilter() {
 
     param = MakeParam(buffers, 8);
     std::memcpy(buffers.text, u"ab", sizeof(u"ab"));
-    param.filter = &PairAtCaretFilter;
+    param.filter = reinterpret_cast<ImeTextFilter>(&PairAtCaretFilter);
     Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a pair filter");
     Drain();
     Publish(ImeHostInputKind::Text, "c");
     RequireText(Drain().at(0), EventUpdateText, u"ab\U0001F600", 4, 2, 2);
     Require(sceImeClose_nid_postfix() == 0, "close the pair session");
+
+    buffers = Buffers{};
+    param = MakeParam(buffers, 8);
+    param.filter = reinterpret_cast<ImeTextFilter>(&LockingFilter);
+    Require(sceImeOpen_nid_postfix(&param, nullptr) == 0, "open with a filter that calls sceIme*");
+    Drain();
+    g_sawCaptureInsideFilter = false;
+    Publish(ImeHostInputKind::Text, "c");
+    RequireText(Drain().at(0), EventUpdateText, u"c", 1, 0, 1);
+    Require(g_sawCaptureInsideFilter, "the filter can call back into sceIme*");
+    Require(sceImeClose_nid_postfix() == 0, "close the locking session");
 }
 
 void CheckHostEvents() {
