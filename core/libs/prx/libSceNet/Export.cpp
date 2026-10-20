@@ -2400,12 +2400,12 @@ int APS5_VABI sceNetShowNetstatExForBuffer(char* buffer, std::int32_t bufferSize
     return 0;
 }
 
-int APS5_VABI sceNetInetNtopWithScopeId(void) {
+const char* APS5_VABI sceNetInetNtopWithScopeId(std::int32_t family, const void* address, char* text, std::uint32_t size, std::uint32_t scopeId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetInetPtonWithScopeId(void) {
+int APS5_VABI sceNetInetPtonWithScopeId(std::int32_t family, const char* text, void* address, std::uint32_t* scopeId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2465,7 +2465,7 @@ int APS5_VABI sceNetConfigSetIfaddr(int interfaceId, const std::uint32_t* addres
     return 0;
 }
 
-int APS5_VABI sceNetConfigSetIfLinkLocalAddr6(void) {
+int APS5_VABI sceNetConfigSetIfLinkLocalAddr6(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2485,12 +2485,12 @@ int APS5_VABI sceNetConfigCleanUpAllInterfaces(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigFlushRoute(void) {
+int APS5_VABI sceNetConfigFlushRoute(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigFlushRoute6(void) {
+int APS5_VABI sceNetConfigFlushRoute6(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2690,7 +2690,7 @@ int APS5_VABI sceNetDuplicateIpStop(int interfaceId) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanAdhocClearWakeOnWlan(void) {
+int APS5_VABI sceNetConfigWlanAdhocClearWakeOnWlan(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2715,7 +2715,7 @@ int APS5_VABI sceNetConfigWlanAdhocLeave(int interfaceId) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanAdhocPspEmuClearWakeOnWlan(void) {
+int APS5_VABI sceNetConfigWlanAdhocPspEmuClearWakeOnWlan(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2820,7 +2820,7 @@ int APS5_VABI sceNetConfigEtherGetLinkMode(std::uint32_t interfaceId, int* mode)
     return 0;
 }
 
-int APS5_VABI sceNetConfigEtherPostPlugInOutEvent(void) {
+int APS5_VABI sceNetConfigEtherPostPlugInOutEvent(std::uint32_t interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
