@@ -37,6 +37,7 @@ int APS5_VABI FT_Load_Glyph_nid_postfix(GuestFaceRec*, std::uint32_t, std::int32
 int APS5_VABI FT_Load_Char_nid_postfix(GuestFaceRec*, std::uint64_t, std::int32_t);
 int APS5_VABI FT_Render_Glyph_nid_postfix(GuestGlyphSlotRec*, std::int32_t);
 int APS5_VABI FT_Set_Char_Size_nid_postfix(GuestFaceRec*, std::int64_t, std::int64_t, std::uint32_t, std::uint32_t);
+int APS5_VABI FT_Get_Kerning_nid_postfix(GuestFaceRec*, std::uint32_t, std::uint32_t, std::uint32_t, GuestVector*);
 }
 
 static void Check(bool value, int line) {
@@ -54,6 +55,69 @@ template <typename TCall> static bool ThrowsWith(TCall call, const std::string& 
         return std::string(error.what()).rfind(prefix, 0) == 0;
     }
     return false;
+}
+
+static void Put16(std::vector<unsigned char>& out, std::uint32_t value) {
+    out.push_back(static_cast<unsigned char>(value >> 8));
+    out.push_back(static_cast<unsigned char>(value));
+}
+
+static void Put32(std::vector<unsigned char>& out, std::uint32_t value) {
+    Put16(out, value >> 16);
+    Put16(out, value & 0xFFFFu);
+}
+
+static void PutAll16(std::vector<unsigned char>& out, std::initializer_list<int> values) {
+    for (const int value : values) Put16(out, static_cast<std::uint32_t>(static_cast<std::uint16_t>(value)));
+}
+
+static std::vector<unsigned char> SquareGlyphFont(std::uint32_t codepoint, int width, bool withKerning = false) {
+    std::vector<unsigned char> head;
+    Put32(head, 0x00010000u);
+    Put32(head, 0x00010000u);
+    Put32(head, 0);
+    Put32(head, 0x5F0F3CF5u);
+    PutAll16(head, {0x000B, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, width, 800, 0, 8, 2, 0, 0});
+    std::vector<unsigned char> hhea;
+    Put32(hhea, 0x00010000u);
+    PutAll16(hhea, {800, -200, 0, width, 0, 0, width, 1, 0, 0, 0, 0, 0, 0, 0, 2});
+    std::vector<unsigned char> maxp;
+    Put32(maxp, 0x00010000u);
+    PutAll16(maxp, {2, 4, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0});
+    std::vector<unsigned char> hmtx;
+    PutAll16(hmtx, {width, 0, width, 100});
+    std::vector<unsigned char> glyf;
+    PutAll16(glyf, {1, 100, 0, width - 100, 700, 3, 0});
+    glyf.insert(glyf.end(), {1, 1, 1, 1});
+    PutAll16(glyf, {100, 0, width - 200, 0, 0, 700, 0, -700});
+    std::vector<unsigned char> loca;
+    PutAll16(loca, {0, 0, static_cast<int>(glyf.size() / 2)});
+    std::vector<unsigned char> cmap;
+    PutAll16(cmap, {0, 1, 3, 1});
+    Put32(cmap, 12);
+    PutAll16(cmap, {4, 32, 0, 4, 4, 1, 0, static_cast<int>(codepoint), 0xFFFF, 0, static_cast<int>(codepoint), 0xFFFF, 1 - static_cast<int>(codepoint), 1, 0, 0});
+    std::vector<unsigned char> kern;
+    PutAll16(kern, {0, 1, 0, 20, 1, 1, 6, 0, 0, 1, 1, -73});
+    std::vector<std::pair<const char*, const std::vector<unsigned char>*>> tables = {
+        {"cmap", &cmap}, {"glyf", &glyf}, {"head", &head}, {"hhea", &hhea}, {"hmtx", &hmtx}, {"loca", &loca}, {"maxp", &maxp}};
+    if (withKerning) tables.insert(tables.begin() + 5, {"kern", &kern});
+    std::vector<unsigned char> font;
+    Put32(font, 0x00010000u);
+    const int searchRange = withKerning ? 128 : 64;
+    PutAll16(font, {static_cast<int>(tables.size()), searchRange, withKerning ? 3 : 2, static_cast<int>(tables.size()) * 16 - searchRange});
+    std::uint32_t offset = 12 + static_cast<std::uint32_t>(tables.size()) * 16;
+    for (const auto& [tag, data] : tables) {
+        font.insert(font.end(), tag, tag + 4);
+        Put32(font, 0);
+        Put32(font, offset);
+        Put32(font, static_cast<std::uint32_t>(data->size()));
+        offset += (static_cast<std::uint32_t>(data->size()) + 3u) & ~3u;
+    }
+    for (const auto& [tag, data] : tables) {
+        font.insert(font.end(), data->begin(), data->end());
+        font.resize((font.size() + 3u) & ~std::size_t{3});
+    }
+    return font;
 }
 
 static void FaceMatches(const GuestFaceRec* face, FT_Face host, const void* library) {
@@ -579,6 +643,47 @@ int main() {
         Require(FT_Set_Pixel_Sizes_nid_postfix(face, 0, 100) == 0 && FT_Set_Pixel_Sizes(host, 0, 100) == 0);
         std::printf("FT_Set_Char_Size: %zu native request comparisons, %zu successes, %zu errors\n", requests.size(), successes, failures);
     }
+    GuestVector kerning{123, 456};
+    Require(FT_Get_Kerning_nid_postfix(nullptr, 1, 1, FT_KERNING_DEFAULT, &kerning) == FT_Err_Invalid_Face_Handle);
+    Require(kerning.x == 123 && kerning.y == 456);
+    Require(FT_Get_Kerning_nid_postfix(nullptr, 1, 1, FT_KERNING_DEFAULT, nullptr) == FT_Err_Invalid_Face_Handle);
+    Require(FT_Get_Kerning_nid_postfix(face, 1, 1, FT_KERNING_DEFAULT, nullptr) == FT_Err_Invalid_Argument);
+    Require(FT_Get_Kerning_nid_postfix(face, 1, 1, FT_KERNING_DEFAULT, &kerning) == 0);
+    Require(kerning.x == 0 && kerning.y == 0);
+
+    const auto kernFont = SquareGlyphFont('A', 700, true);
+    {
+        std::ofstream file(root / "app0" / "kern.ttf", std::ios::binary);
+        file.write(reinterpret_cast<const char*>(kernFont.data()), static_cast<std::streamsize>(kernFont.size()));
+    }
+    FT_Face kernHost = nullptr;
+    GuestFaceRec* kernFace = nullptr;
+    Require(FT_New_Memory_Face(hostLibrary, kernFont.data(), static_cast<FT_Long>(kernFont.size()), 0, &kernHost) == 0);
+    Require(FT_New_Face_nid_postfix(library, "/app0/kern.ttf", 0, &kernFace) == 0);
+    Require(FT_HAS_KERNING(kernHost));
+    const unsigned modes[] = {FT_KERNING_DEFAULT, FT_KERNING_UNFITTED, FT_KERNING_UNSCALED, 99};
+    for (const unsigned size : {100u, 12u}) {
+        Require(FT_Set_Pixel_Sizes_nid_postfix(kernFace, 0, size) == 0 && FT_Set_Pixel_Sizes(kernHost, 0, size) == 0);
+        for (const unsigned mode : modes) {
+            FT_Vector expected{};
+            Require(FT_Get_Kerning(kernHost, 1, 1, mode, &expected) == 0);
+            kerning = {123, 456};
+            Require(FT_Get_Kerning_nid_postfix(kernFace, 1, 1, mode, &kerning) == 0);
+            Require(kerning.x == expected.x && kerning.y == expected.y && kerning.y == 0);
+            if (mode == FT_KERNING_UNSCALED) Require(kerning.x == -73);
+            if (size == 100 && mode == FT_KERNING_DEFAULT) Require(kerning.x == -448);
+            if (size == 100 && mode == FT_KERNING_UNFITTED) Require(kerning.x == -467);
+        }
+    }
+    for (const unsigned glyph : {0u, 2u, 0xFFFFFFFFu}) {
+        kerning = {123, 456};
+        Require(FT_Get_Kerning_nid_postfix(kernFace, glyph, 1, FT_KERNING_UNSCALED, &kerning) == 0);
+        Require(kerning.x == 0 && kerning.y == 0);
+        kerning = {123, 456};
+        Require(FT_Get_Kerning_nid_postfix(kernFace, 1, glyph, FT_KERNING_UNSCALED, &kerning) == 0);
+        Require(kerning.x == 0 && kerning.y == 0);
+    }
+    FT_Done_Face(kernHost);
 
     Finalizers nativeDone;
     Finalizers guestDone;
