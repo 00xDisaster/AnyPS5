@@ -262,9 +262,11 @@ int APS5_VABI sceHmdReprojectionInitializeCapture(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGet2DEyeOffset(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceHmdGet2DEyeOffset(std::int32_t handle, void* leftOffset, void* rightOffset) {
+    (void)handle;
+    (void)leftOffset;
+    (void)rightOffset;
+    return initialized.load() ? Hmd::InvalidHandle : Hmd::NotInitialized;
 }
 
 int APS5_VABI sceHmdInternalSetDebugSocialScreenMode(void) {
@@ -376,9 +378,10 @@ int APS5_VABI sceHmdInternalSetM2LedOn(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetFieldOfView(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceHmdGetFieldOfView(std::int32_t handle, void* fieldOfView) {
+    (void)handle;
+    if (!fieldOfView) return Hmd::ParameterNull;
+    return initialized.load() ? Hmd::InvalidHandle : Hmd::NotInitialized;
 }
 
 int APS5_VABI sceHmdReprojectionAddDisplayBuffer(void) {
@@ -764,9 +767,11 @@ int APS5_VABI sceHmdInternalSetDefaultLedData(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGetInertialSensorData(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, void* data, std::int32_t count) {
+    (void)handle;
+    (void)data;
+    (void)count;
+    return initialized.load() ? Hmd::InvalidHandle : Hmd::NotInitialized;
 }
 
 int APS5_VABI sceHmdInternal3dAudioClose(void) {

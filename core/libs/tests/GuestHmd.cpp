@@ -31,6 +31,28 @@ void CheckBufferQueries() {
     Require(sceHmdReprojectionQueryOnionBuffSize() == 0x810, "reprojection onion buffer size");
 }
 
+void CheckHandleQueries(std::int32_t expected) {
+    unsigned char left[16];
+    unsigned char right[16];
+    unsigned char fieldOfView[16];
+    unsigned char sensor[64];
+    std::memset(left, 0x5a, sizeof(left));
+    std::memset(right, 0x5a, sizeof(right));
+    std::memset(fieldOfView, 0x5a, sizeof(fieldOfView));
+    std::memset(sensor, 0x5a, sizeof(sensor));
+    for (const auto handle : {0, -1, 1, 0x0f000000}) {
+        Require(sceHmdGetFieldOfView(handle, nullptr) == Hmd::ParameterNull, "null field of view accepted");
+        Require(sceHmdGetFieldOfView(handle, fieldOfView) == expected, "field of view without a headset");
+        Require(sceHmdGet2DEyeOffset(handle, left, right) == expected, "eye offset without a headset");
+        Require(sceHmdGet2DEyeOffset(handle, nullptr, nullptr) == expected, "eye offset with null outputs");
+        Require(sceHmdGetInertialSensorData(handle, sensor, 1) == expected, "sensor data without a headset");
+    }
+    for (const auto* bytes : {left, right, fieldOfView}) {
+        for (std::size_t index = 0; index < 16; ++index) Require(bytes[index] == 0x5a, "a refused query wrote its output");
+    }
+    for (const auto byte : sensor) Require(byte == 0x5a, "a refused sensor query wrote its output");
+}
+
 }
 
 int main() {
@@ -47,6 +69,7 @@ int main() {
     Require(sceHmdGetDeviceInformation(nullptr) == Hmd::ParameterNull, "null information");
     Require(sceHmdGetDeviceInformation(&info) == Hmd::NotInitialized, "query before initialize");
     Require(std::memcmp(&info, &untouched, sizeof(info)) == 0, "failed query modified output");
+    CheckHandleQueries(Hmd::NotInitialized);
     Require(sceHmdGetDeviceInformationByHandle(0, &info) == Hmd::NotInitialized,
             "handle query before initialize");
     Require(sceHmdInitialize(nullptr) == Hmd::ParameterNull, "null initialize");
@@ -83,6 +106,7 @@ int main() {
                     "query accepted invalid handle");
             Require(std::memcmp(&info, &expected, sizeof(info)) == 0, "invalid handle modified output");
         }
+        CheckHandleQueries(Hmd::InvalidHandle);
         Require(sceHmdGetDeviceInformationByHandle(0, nullptr) == Hmd::InvalidHandle,
                 "null query accepted invalid handle");
         Require(sceHmdTerminate() == 0, "terminate failed");
