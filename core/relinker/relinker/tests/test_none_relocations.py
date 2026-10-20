@@ -120,6 +120,7 @@ def main():
         assert overflow_result.returncode == 2 and "Relocation target address overflow" in overflow_result.stderr, overflow_result.stderr
         assert not overflow_output.exists()
         page_image = image_with_relocations([(0xffc, 8, 0x210)], False, False)
+        page_image[0x200:0x206] = b"\xff\x25" + struct.pack("<i", 0xffc - 0x206)
         page_image.extend(bytes(0x1000))
         struct.pack_into("<QQ", page_image, 64 + 32, len(page_image), len(page_image))
         page_source = work / "base-relocation-page-crossing.elf"
@@ -129,6 +130,9 @@ def main():
                                       str(page_source), str(page_output)],
                                      capture_output=True, text=True, timeout=20)
         assert page_result.returncode == 0 and page_output.read_bytes().startswith(b"MZ"), page_result.stderr
+        if os.name == "nt":
+            run = subprocess.run([str(page_output)], capture_output=True, timeout=20)
+            assert run.returncode == 42, ("page-crossing relocation", run.returncode, run.stderr)
     print("No-op executable relocation tests passed")
 
 
