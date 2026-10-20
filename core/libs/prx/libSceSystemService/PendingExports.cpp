@@ -9,6 +9,8 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 
 
+
+struct LncLaunchParam;
 struct LncDaemonEvent;
 struct LncShellUiEvent;
 struct LncLocalProcessStatus;
@@ -306,37 +308,37 @@ bool APS5_VABI sceLncUtilIsShellUiFgAndGameBgCpuMode() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsSpeculativeLaunch() {
+int APS5_VABI sceLncUtilIsSpeculativeLaunch(std::int32_t appId, bool* speculative) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilKickCoredumpOnlyProcMem() {
+int APS5_VABI sceLncUtilKickCoredumpOnlyProcMem(std::int32_t appId, std::int32_t processId, const char* first, const char* second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilKillLocalProcess() {
+int APS5_VABI sceLncUtilKillLocalProcess(std::int32_t appId, std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilLaunchApp() {
+int APS5_VABI sceLncUtilLaunchApp(const char* titleId, const char* const* argv, const LncLaunchParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilLoadExec() {
+int APS5_VABI sceLncUtilLoadExec(const char* path, const char* const* argv) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilNotifyCoredumpRequestEnd() {
+int APS5_VABI sceLncUtilNotifyCoredumpRequestEnd(std::int32_t appId, std::int32_t processId, std::int32_t result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilNotifyCoredumpRequestProgress() {
+int APS5_VABI sceLncUtilNotifyCoredumpRequestProgress(std::int32_t appId, std::int32_t processId, std::int32_t progress) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -346,12 +348,12 @@ int APS5_VABI sceLncUtilNotifyVshReady() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilRaiseException() {
+int APS5_VABI sceLncUtilRaiseException(std::int32_t appId, std::uint64_t exception) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilRaiseExceptionLocalProcess() {
+int APS5_VABI sceLncUtilRaiseExceptionLocalProcess(std::int32_t appId, std::int32_t processId, std::uint64_t exception) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -386,57 +388,57 @@ int APS5_VABI sceLncUtilReleaseCpuBudgetOfInGameStore() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilResumeApp() {
+int APS5_VABI sceLncUtilResumeApp(std::int32_t appId, std::uint64_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilResumeLocalProcess() {
+int APS5_VABI sceLncUtilResumeLocalProcess(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSetAppFocus() {
+int APS5_VABI sceLncUtilSetAppFocus(std::int32_t appId, std::uint64_t first, std::uint64_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSetCdlgExec() {
+int APS5_VABI sceLncUtilSetCdlgExec(std::int32_t appId, std::uint8_t executing) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSetControllerFocus() {
+int APS5_VABI sceLncUtilSetControllerFocus(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSetControllerFocusPermission() {
+int APS5_VABI sceLncUtilSetControllerFocusPermission(std::uint8_t permission) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilStartKillApp() {
+int APS5_VABI sceLncUtilStartKillApp(std::int32_t appId, std::uint32_t* requestId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilStartLaunchAppByTitleId() {
+int APS5_VABI sceLncUtilStartLaunchAppByTitleId(const char* titleId, const char* const* argv, const LncLaunchParam* param, std::uint32_t* requestId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSuspendApp() {
+int APS5_VABI sceLncUtilSuspendApp(std::int32_t appId, std::uint64_t flags, std::int32_t reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSuspendBackgroundApp() {
+int APS5_VABI sceLncUtilSuspendBackgroundApp(std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilSuspendLocalProcess() {
+int APS5_VABI sceLncUtilSuspendLocalProcess(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -446,12 +448,12 @@ int APS5_VABI sceLncUtilTerminate() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilTryBlockAppSuspend() {
+int APS5_VABI sceLncUtilTryBlockAppSuspend(const char* reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilUnblockAppSuspend() {
+int APS5_VABI sceLncUtilUnblockAppSuspend(const char* reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
