@@ -1556,12 +1556,12 @@ int APS5_VABI sceShellCoreutilGetCrashReportProcessInformation() {
     return 0;
 }
 
-int APS5_VABI sceSystemModalDialogClose() {
+int APS5_VABI sceSystemModalDialogClose(std::uint32_t dialogId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemModalDialogOpen() {
+int APS5_VABI sceSystemModalDialogOpen(const char* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1897,7 +1897,7 @@ int APS5_VABI sceSystemServiceGetPlatformPrivacyDefinitionVersion(const char* ke
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetPlatformPrivacySetting() {
+int APS5_VABI sceSystemServiceGetPlatformPrivacySetting(std::uint32_t* setting) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2315,7 +2315,7 @@ int APS5_VABI sceSystemStateMgrGetTriggerCode() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrIsBdDriveReady() {
+bool APS5_VABI sceSystemStateMgrIsBdDriveReady() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2325,12 +2325,12 @@ int APS5_VABI sceSystemStateMgrIsGpuPerformanceNormal() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrIsShellUIShutdownInProgress() {
+bool APS5_VABI sceSystemStateMgrIsShellUIShutdownInProgress() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrIsStandbyModeEnabled() {
+bool APS5_VABI sceSystemStateMgrIsStandbyModeEnabled() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2340,7 +2340,7 @@ int APS5_VABI sceSystemStateMgrLeaveMediaPlaybackMode() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrNotifySystemSuspendResumeProgress() {
+int APS5_VABI sceSystemStateMgrNotifySystemSuspendResumeProgress(const char* progress) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2350,7 +2350,7 @@ int APS5_VABI sceSystemStateMgrReboot() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrRequestToKeepMainOnStandby() {
+int APS5_VABI sceSystemStateMgrRequestToKeepMainOnStandby(const char* reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2360,7 +2360,7 @@ int APS5_VABI sceSystemStateMgrSendCecOneTouchPlayCommand() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrStartRebootTimer() {
+int APS5_VABI sceSystemStateMgrStartRebootTimer(std::int32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2405,7 +2405,7 @@ int APS5_VABI sceSystemStateMgrWaitVshAutoUpdateVerifyDone() {
     return 0;
 }
 
-int APS5_VABI sceSystemStateMgrWakeUp() {
+int APS5_VABI sceSystemStateMgrWakeUp(std::uint16_t trigger) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
