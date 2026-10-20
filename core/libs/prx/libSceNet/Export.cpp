@@ -2207,7 +2207,7 @@ int APS5_VABI sceNetGetRouteInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceNetGetsockoptEx(void) {
+int APS5_VABI sceNetGetsockoptEx(int socketId, int level, int option, void* value, std::uint32_t* valueSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2243,7 +2243,7 @@ int APS5_VABI sceNetInetPtonEx(int af, const char* src, void* dst, int) {
     return 1;
 }
 
-int APS5_VABI sceNetIoctl(void) {
+int APS5_VABI sceNetIoctl(int socketId, std::uint32_t command, void* argument) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2274,12 +2274,12 @@ int APS5_VABI sceNetSetDnsInfoToKernel(void) {
     return 0;
 }
 
-int APS5_VABI sceNetSetsockoptEx(void) {
+int APS5_VABI sceNetSetsockoptEx(int socketId, int level, int option, const void* value, std::uint32_t valueSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetSocketInternal(void) {
+int APS5_VABI sceNetSocketInternal(const char* name, int domain, int type, int protocol) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2309,7 +2309,7 @@ int APS5_VABI sceNetSyncWait(void) {
     return 0;
 }
 
-int APS5_VABI sceNetSysctl(void) {
+int APS5_VABI sceNetSysctl(const int* name, std::uint32_t nameLength, void* oldValue, std::size_t* oldSize, const void* newValue, std::size_t newSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2384,27 +2384,27 @@ int APS5_VABI sceNetShowRoute6ForBuffer(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigGetIfFlags(void) {
+int APS5_VABI sceNetConfigGetIfFlags(std::uint32_t interfaceId, std::uint32_t* flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigSetIfFlags(void) {
+int APS5_VABI sceNetConfigSetIfFlags(std::uint32_t interfaceId, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigUnsetIfFlags(void) {
+int APS5_VABI sceNetConfigUnsetIfFlags(std::uint32_t interfaceId, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigDelIfaddr(void) {
+int APS5_VABI sceNetConfigDelIfaddr(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigDownInterface(void) {
+int APS5_VABI sceNetConfigDownInterface(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2429,12 +2429,12 @@ int APS5_VABI sceNetConfigSetIfLinkLocalAddr6(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigUpInterface(void) {
+int APS5_VABI sceNetConfigUpInterface(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetConfigUpInterfaceWithFlags(void) {
+int APS5_VABI sceNetConfigUpInterfaceWithFlags(std::uint32_t interfaceId, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2464,7 +2464,7 @@ int APS5_VABI sceNetConfigGetIfaddr(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigSetIfmtu(void) {
+int APS5_VABI sceNetConfigSetIfmtu(std::uint32_t interfaceId, int mtu) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2549,7 +2549,7 @@ int APS5_VABI sceNetDhcpStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetDhcpStop(void) {
+int APS5_VABI sceNetDhcpStop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2609,7 +2609,7 @@ int APS5_VABI sceNetAddrConfig6Start(void) {
     return 0;
 }
 
-int APS5_VABI sceNetAddrConfig6Stop(void) {
+int APS5_VABI sceNetAddrConfig6Stop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2634,7 +2634,7 @@ int APS5_VABI sceNetDhcpdStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetDhcpdStop(void) {
+int APS5_VABI sceNetDhcpdStop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2644,7 +2644,7 @@ int APS5_VABI sceNetDuplicateIpStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetDuplicateIpStop(void) {
+int APS5_VABI sceNetDuplicateIpStop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2669,7 +2669,7 @@ int APS5_VABI sceNetConfigWlanAdhocJoin(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanAdhocLeave(void) {
+int APS5_VABI sceNetConfigWlanAdhocLeave(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2709,7 +2709,7 @@ int APS5_VABI sceNetConfigWlanApStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanApStop(void) {
+int APS5_VABI sceNetConfigWlanApStop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2724,7 +2724,7 @@ int APS5_VABI sceNetConfigWlanBackgroundScanStart(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanBackgroundScanStop(void) {
+int APS5_VABI sceNetConfigWlanBackgroundScanStop(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2754,7 +2754,7 @@ int APS5_VABI sceNetConfigWlanInfraGetRssiInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigWlanInfraLeave(void) {
+int APS5_VABI sceNetConfigWlanInfraLeave(int interfaceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2774,7 +2774,7 @@ int APS5_VABI sceNetConfigWlanSetDeviceConfig(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigEtherGetLinkMode(void) {
+int APS5_VABI sceNetConfigEtherGetLinkMode(std::uint32_t interfaceId, int* mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2784,7 +2784,7 @@ int APS5_VABI sceNetConfigEtherPostPlugInOutEvent(void) {
     return 0;
 }
 
-int APS5_VABI sceNetConfigEtherSetLinkMode(void) {
+int APS5_VABI sceNetConfigEtherSetLinkMode(std::uint32_t interfaceId, int mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
