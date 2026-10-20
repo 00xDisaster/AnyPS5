@@ -590,7 +590,7 @@ bool lookupChangedTests(Context context) {
     context.textureCache = &textures;
     if (context.hostImportAlignment == 0) {
         Require(std::getenv("ANYPS5_REQUIRE_VULKAN") == nullptr, "the lookup-changed test requires host imports");
-        std::puts("skipped, the lookup-changed test requires host imports");
+        std::puts("skipped, host imports are unavailable");
         return false;
     }
     WatchedSurface surface(context);
@@ -611,7 +611,7 @@ bool lookupChangedTests(Context context) {
     Require(first->Revalidate(shader, &report) && report.path == ShaderResources::ProofPath::Fast, "the proof right after an audit did not take the fast proof");
     if (HostImportFor(context, surface.Address(), SurfaceBytes) == nullptr) {
         Require(std::getenv("ANYPS5_REQUIRE_VULKAN") == nullptr, "the host import of the watched surface was refused");
-        std::puts("skipped, the host import of the watched surface was refused");
+        std::puts("skipped, host imports are unavailable");
         return false;
     }
     Require(!bound->Released(), "the snapshot left the cache without a lookup");
