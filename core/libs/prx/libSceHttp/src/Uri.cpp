@@ -228,34 +228,40 @@ int APS5_VABI sceHttpUriEscape(char* out, size_t* require, size_t prepare, const
     return copyOut(escaped, out, require, prepare);
 }
 
-int APS5_VABI sceHttpUriUnescape(char* out, size_t* require, size_t prepare, const char* in) {
-    if (!in || (!out && !require)) return ERROR_INVALID_VALUE;
+int APS5_VABI sceHttpUriUnescape(char* out, size_t* requiredSize, size_t capacity, const char* input) {
+    if (!input || (!out && !requiredSize)) return ERROR_INVALID_VALUE;
 
-    const auto hexDigit = [](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-        return -1;
+    const std::string_view source(input);
+    const auto decode = [](const char* digits, unsigned int& value) {
+        const auto result = std::from_chars(digits, digits + 2, value, 16);
+        return result.ec == std::errc{} && result.ptr == digits + 2;
     };
-    const std::string_view input(in);
-    std::string decoded;
-    for (size_t i = 0; i < input.size(); ++i) {
-        if (input[i] != '%') {
-            decoded.push_back(input[i]);
-            continue;
+    for (size_t index = 0; index < source.size(); ++index) {
+        if (source[index] != '%') continue;
+        unsigned int value = 0;
+        if (source.size() - index < 3 || !decode(source.data() + index + 1, value)) return ERROR_INVALID_URL;
+        index += 2;
+    }
+
+    size_t written = 0;
+    for (size_t index = 0; index < source.size(); ++index) {
+        if (out && written >= capacity) return ERROR_OUT_OF_MEMORY;
+        char value = source[index];
+        if (value == '%') {
+            unsigned int decoded = 0;
+            decode(source.data() + index + 1, decoded);
+            value = static_cast<char>(decoded);
+            index += 2;
         }
-        if (input.size() - i < 3) return ERROR_INVALID_URL;
-        const int high = hexDigit(input[i + 1]);
-        const int low = hexDigit(input[i + 2]);
-        if (high < 0 || low < 0) return ERROR_INVALID_URL;
-        decoded.push_back(static_cast<char>(high * 16 + low));
-        i += 2;
+        if (out) out[written] = value;
+        ++written;
     }
-    if (out && prepare < decoded.size() + 1) {
-        std::memcpy(out, decoded.data(), std::min(prepare, decoded.size()));
-        return ERROR_OUT_OF_MEMORY;
+    if (out) {
+        if (written >= capacity) return ERROR_OUT_OF_MEMORY;
+        out[written] = '\0';
     }
-    return copyOut(decoded, out, require, prepare);
+    if (requiredSize) *requiredSize = written + 1;
+    return 0;
 }
 
 int APS5_VABI sceHttpUriMerge(char* merged_url, const char* url, const char* relative_uri, size_t* require, size_t prepare, uint32_t option) {
