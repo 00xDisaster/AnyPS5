@@ -124,6 +124,10 @@ int APS5_VABI sceHttpAbortRequest(int request_id) {
     return 0;
 }
 
+int APS5_VABI sceHttpAbortRequestForce(int request_id) {
+    return sceHttpAbortRequest(request_id);
+}
+
 int APS5_VABI sceHttpAddRequestHeader(int id, const char* name, const char* value, uint32_t mode) {
     (void)id;
     (void)name;
@@ -672,11 +676,6 @@ int APS5_VABI sceHttpDbgGetRequestStat(void) {
     return 0;
 }
 
-int APS5_VABI sceHttpAbortRequestForce(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceHttpAddRequestHeaderRaw(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -757,16 +756,6 @@ int APS5_VABI sceHttpGetCookieStats(void) {
     return 0;
 }
 
-int APS5_VABI sceHttpsEnableOptionPrivate(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttpsDisableOptionPrivate(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceHttpSetPriorityOption(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -819,11 +808,6 @@ int APS5_VABI sceHttpAddQuery(void) {
 }
 
 int APS5_VABI sceHttpSetDelayBuildRequestEnabled(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttpCacheRedirectedConnectionEnabled(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
