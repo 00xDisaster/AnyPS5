@@ -141,6 +141,7 @@ ShaderStageInputInfo BuildShaderStageInputInfo(ShaderStageKind stage, const Gues
         pixelStorage.psDepthExportEnable = pixel.depthExportEnable;
         pixelStorage.psSampleMaskExportEnable = pixel.sampleMaskExportEnable;
         pixelStorage.psStencilRefExportEnable = pixel.stencilRefExportEnable;
+        pixelStorage.psStencilOperationValueExport = pixel.stencilOperationValueExport;
         pixelStorage.psSampleShading = pixel.sampleShading;
         pixelStorage.psEarlyZ = pixel.earlyZ;
         pixelStorage.psExecuteOnNoop = pixel.executeOnNoop;
@@ -205,6 +206,7 @@ ShaderStageInputInfo BuildShaderStageInputInfo(ShaderStageKind stage, const Gues
             target.breakAtInstance = tessellation->breakAtInstance;
             target.instancePatches = tessellation->instancePatches;
             target.drawParameters = tessellation->drawParameters;
+            target.mergedHull = tessellation->mergedHull;
         }
         if (stage == ShaderStageKind::Mesh) {
             if (mesh == nullptr) throw std::runtime_error("ShaderInputInfoBuilder: a mesh-stage program has no mesh configuration");
