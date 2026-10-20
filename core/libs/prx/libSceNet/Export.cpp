@@ -63,6 +63,19 @@ struct NetIpv6Address {
 
 static_assert(sizeof(NetIpv6Address) == 16);
 
+struct NetDnsInfo {
+    std::uint32_t primaryAddress;
+    std::uint32_t secondaryAddress;
+};
+
+struct NetDns6Info {
+    NetIpv6Address primaryAddress;
+    NetIpv6Address secondaryAddress;
+};
+
+static_assert(sizeof(NetDnsInfo) == 8);
+static_assert(sizeof(NetDns6Info) == 32);
+
 struct NetIpv6InterfaceAddress {
     NetIpv6Address address;
     std::uint8_t prefixLength;
@@ -2054,7 +2067,7 @@ int APS5_VABI sceNetGetInterfaceStats(void) {
     return 0;
 }
 
-int APS5_VABI sceNetSetDnsInfo(void) {
+int APS5_VABI sceNetSetDnsInfo(const NetDnsInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2108,7 +2121,7 @@ int APS5_VABI sceNetGetSockInfo6(void) {
     return 0;
 }
 
-int APS5_VABI sceNetSetDns6Info(void) {
+int APS5_VABI sceNetSetDns6Info(const NetDns6Info* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2177,7 +2190,7 @@ int APS5_VABI sceNetGetAppMemInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceNetGetDnsInfo(std::uint32_t* info, int flags) {
+int APS5_VABI sceNetGetDnsInfo(NetDnsInfo* info, std::uint32_t flags) {
     if (flags != 0) throw std::runtime_error("sceNetGetDnsInfo: flags " + std::to_string(flags) + " are not supported");
     if (!info) throw std::runtime_error("sceNetGetDnsInfo: a null info is not supported");
     std::array<std::uint32_t, 2> servers{};
@@ -2297,7 +2310,7 @@ void APS5_VABI sceNetMemoryFree(void* memory) {
     GuestHeap::GuestHeapFree_nid_postfix(memory);
 }
 
-int APS5_VABI sceNetSetDnsInfoToKernel(void) {
+int APS5_VABI sceNetSetDnsInfoToKernel(const NetDnsInfo* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2397,12 +2410,12 @@ int APS5_VABI sceNetInetPtonWithScopeId(void) {
     return 0;
 }
 
-int APS5_VABI sceNetGetDns6Info(void) {
+int APS5_VABI sceNetGetDns6Info(NetDns6Info* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetSetDns6InfoToKernel(void) {
+int APS5_VABI sceNetSetDns6InfoToKernel(const NetDns6Info* info, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
