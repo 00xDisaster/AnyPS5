@@ -16,6 +16,20 @@ std::int32_t Initialize(const Hmd::InitializeParam* param) {
 
 }
 
+struct HmdEyeDistances {
+    std::uint32_t left;
+    std::uint32_t right;
+};
+
+struct HmdEyeOffset {
+    float x;
+    float y;
+    float z;
+};
+
+static_assert(sizeof(HmdEyeDistances) == 8);
+static_assert(sizeof(HmdEyeOffset) == 12);
+
 extern "C" {
 
 std::int32_t APS5_VABI sceHmdInitialize(const Hmd::InitializeParam* param) {
@@ -147,12 +161,12 @@ int APS5_VABI sceHmdInternalGetDebugSocialScreenMode(std::uint8_t* mode) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetM2LedBrightness(void) {
+int APS5_VABI sceHmdInternalSetM2LedBrightness(std::int32_t handle, std::uint32_t ledMask, const std::uint8_t* brightness) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetIPD(void) {
+int APS5_VABI sceHmdInternalSetIPD(std::int32_t mode, HmdEyeDistances distances) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -226,12 +240,12 @@ int APS5_VABI sceHmdReprojectionClearUserEventEnd(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetIPD(void) {
+int APS5_VABI sceHmdInternalGetIPD(HmdEyeDistances* distances) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceHmdInternalSetVRMode(void) {
+int APS5_VABI sceHmdInternalSetVRMode(std::int32_t enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -261,7 +275,7 @@ int APS5_VABI sceHmdReprojectionInitializeCapture(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdGet2DEyeOffset(std::int32_t handle, void* leftOffset, void* rightOffset) {
+int APS5_VABI sceHmdGet2DEyeOffset(std::int32_t handle, HmdEyeOffset* leftOffset, HmdEyeOffset* rightOffset) {
     (void)handle;
     (void)leftOffset;
     (void)rightOffset;
@@ -302,7 +316,7 @@ int APS5_VABI sceHmdInternalMirroringModeSetAspectDebug(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetPuBuildNumber(void) {
+int APS5_VABI sceHmdInternalGetPuBuildNumber(std::uint32_t* buildNumber) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -311,7 +325,7 @@ int APS5_VABI sceHmdDistortionGetCompoundEyeCorrectionCommand(void) {
     return static_cast<int>(0x81110009);
 }
 
-int APS5_VABI sceHmdInternalSetS3dPassMode(void) {
+int APS5_VABI sceHmdInternalSetS3dPassMode(std::uint8_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -340,7 +354,7 @@ int APS5_VABI sceHmdReprojectionQueryOnionBuffAlign(void) {
     return 0x100;
 }
 
-int APS5_VABI sceHmdInternalGetDebugMode(void) {
+int APS5_VABI sceHmdInternalGetDebugMode(std::uint8_t* mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
