@@ -46,6 +46,24 @@
 
 // Guest socket descriptors retain PS5 semantics while their transport is backed by host sockets.
 
+struct NetResolverConnection;
+struct NetThreadParameter;
+struct NetInitializeParameter;
+struct NetInterfaceInfo;
+struct NetInterfaceStatistics;
+
+struct NetResolverConnectOption {
+    std::int32_t connectionTimeout;
+    std::int32_t resolverTimeout;
+    std::int32_t resolverRetryCount;
+    std::uint32_t reserved;
+};
+
+static_assert(sizeof(NetResolverConnectOption) == 16);
+static_assert(offsetof(NetResolverConnectOption, resolverTimeout) == 4);
+static_assert(offsetof(NetResolverConnectOption, resolverRetryCount) == 8);
+static_assert(offsetof(NetResolverConnectOption, reserved) == 12);
+
 struct NetSyncObject {
     void* mutex;
     void* condition;
@@ -2096,22 +2114,22 @@ int APS5_VABI sceNetShowRouteWithMemory(std::int32_t poolId) {
     return 0;
 }
 
-int APS5_VABI sceNetResolverConnectAbort(void) {
+int APS5_VABI sceNetResolverConnectAbort(NetResolverConnection* connection, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetResolverConnectCreate(void) {
+int APS5_VABI sceNetResolverConnectCreate(const char* name, std::int32_t socketType, NetResolverConnection* connection, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetResolverConnect(void) {
+int APS5_VABI sceNetResolverConnect(NetResolverConnection* connection, const char* hostname, std::uint16_t port, const NetResolverConnectOption* option) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetResolverConnectDestroy(void) {
+int APS5_VABI sceNetResolverConnectDestroy(NetResolverConnection* connection) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2199,17 +2217,17 @@ int APS5_VABI sceNetGetDnsInfo(NetDnsInfo* info, std::uint32_t flags) {
     return static_cast<int>(count);
 }
 
-int APS5_VABI sceNetGetIfList(void) {
+int APS5_VABI sceNetGetIfList(std::int32_t interfaceId, NetInterfaceInfo* interfaces, std::uint32_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetGetIfListEx(void) {
+int APS5_VABI sceNetGetIfListEx(std::int32_t interfaceId, NetInterfaceInfo* interfaces, std::uint32_t capacity, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceNetGetIfListOnce(void) {
+int APS5_VABI sceNetGetIfListOnce(std::int32_t interfaceId, NetInterfaceStatistics* statistics, std::uint32_t count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2263,7 +2281,7 @@ int APS5_VABI sceNetGetSystemMemInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceNetInitParam(void) {
+int APS5_VABI sceNetInitParam(const NetInitializeParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2356,7 +2374,7 @@ int APS5_VABI sceNetSysctl(const int* name, std::uint32_t nameLength, void* oldV
     return 0;
 }
 
-int APS5_VABI sceNetThreadCreate(void) {
+int APS5_VABI sceNetThreadCreate(Pthread* thread, const NetThreadParameter* parameter, const char* name) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
