@@ -81,6 +81,7 @@ struct CallbackSlot {
 static std::mutex g_callbackLock;
 static CallbackSlot g_callbacks[MAX_CALLBACKS] = {};
 static CallbackSlot g_callbacksV6[MAX_CALLBACKS] = {};
+static CallbackSlot g_callbacksNpToolkit[MAX_CALLBACKS] = {};
 
 static int RegisterCallback(CallbackSlot (&callbacks)[MAX_CALLBACKS], NetCtlCallback func, void* arg, int* cid) {
     if (!func || !cid) return SCE_NET_CTL_ERROR_INVALID_ADDR;
@@ -102,9 +103,9 @@ static int UnregisterCallback(CallbackSlot (&callbacks)[MAX_CALLBACKS], int cid)
     return 0;
 }
 
-static bool HasIpv4Callback() {
+static bool HasCallback(const CallbackSlot (&callbacks)[MAX_CALLBACKS]) {
     std::lock_guard lock(g_callbackLock);
-    for (const auto& slot : g_callbacks) {
+    for (const auto& slot : callbacks) {
         if (slot.func) return true;
     }
     return false;
@@ -397,16 +398,14 @@ static void HostTraffic(std::uint64_t& sent, std::uint64_t& received) {
 #endif
 }
 
-extern "C" {
-
-int APS5_VABI sceNetCtlCheckCallback(void) {
-    if (!HasIpv4Callback()) return 0;
+static int CheckCallbacks(CallbackSlot (&callbacks)[MAX_CALLBACKS]) {
+    if (!HasCallback(callbacks)) return 0;
     const int event = HostHasAddress(AF_UNSPEC) ? NET_CTL_EVENT_IPOBTAINED : NET_CTL_EVENT_DISCONNECTED;
     CallbackSlot due[MAX_CALLBACKS];
     int count = 0;
     {
         std::lock_guard lock(g_callbackLock);
-        for (auto& slot : g_callbacks) {
+        for (auto& slot : callbacks) {
             if (!slot.func || slot.lastEvent == event) continue;
             slot.lastEvent = event;
             due[count++] = slot;
@@ -414,6 +413,12 @@ int APS5_VABI sceNetCtlCheckCallback(void) {
     }
     for (int index = 0; index < count; ++index) due[index].func(event, due[index].arg);
     return 0;
+}
+
+extern "C" {
+
+int APS5_VABI sceNetCtlCheckCallback(void) {
+    return CheckCallbacks(g_callbacks);
 }
 
 int APS5_VABI sceNetCtlGetIfStat(NetCtlIfStat* stat) {
@@ -501,6 +506,7 @@ void APS5_VABI sceNetCtlTerm(void) {
     std::lock_guard lock(g_callbackLock);
     for (auto& slot : g_callbacks) slot = {};
     for (auto& slot : g_callbacksV6) slot = {};
+    for (auto& slot : g_callbacksNpToolkit) slot = {};
 }
 
 int APS5_VABI sceNetCtlUnregisterCallback(int cid) {
@@ -511,9 +517,8 @@ int APS5_VABI sceNetCtlUnregisterCallbackV6(int cid) {
     return UnregisterCallback(g_callbacksV6, cid);
 }
 
-int APS5_VABI sceNetCtlRegisterCallbackForNpToolkit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNetCtlRegisterCallbackForNpToolkit(NetCtlCallback func, void* arg, int* cid) {
+    return RegisterCallback(g_callbacksNpToolkit, func, arg, cid);
 }
 
 int APS5_VABI sceNetCtlRegisterCallbackIpcInt(void) {
@@ -526,9 +531,8 @@ int APS5_VABI sceNetCtlRegisterCallbackForLibIpcInt(void) {
     return 0;
 }
 
-int APS5_VABI sceNetCtlUnregisterCallbackForNpToolkit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNetCtlUnregisterCallbackForNpToolkit(int cid) {
+    return UnregisterCallback(g_callbacksNpToolkit, cid);
 }
 
 int APS5_VABI sceNetCtlUnregisterCallbackIpcInt(void) {
@@ -542,8 +546,7 @@ int APS5_VABI sceNetCtlUnregisterCallbackForLibIpcInt(void) {
 }
 
 int APS5_VABI sceNetCtlCheckCallbackForNpToolkit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return CheckCallbacks(g_callbacksNpToolkit);
 }
 
 int APS5_VABI sceNetCtlCheckCallbackForLibIpcInt(void) {
