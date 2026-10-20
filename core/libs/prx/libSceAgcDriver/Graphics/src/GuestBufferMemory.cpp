@@ -4217,7 +4217,14 @@ bool GuestBufferMemory::bindSparseMirror(Region& region, const GuestAllocations:
     const auto* range = containingRange(lease, region.begin, neededEnd);
     if (range == nullptr || !range->releasable) return false;
     std::vector<RefreshBlock> blocks;
-    auto mirror = acquireMirror(context, leasedRangeOwner(lease, range->address), blocks, true);
+    std::shared_ptr<ImageMirror> mirror;
+    try {
+        mirror = acquireMirror(context, leasedRangeOwner(lease, range->address), blocks, true);
+    } catch (const std::runtime_error& error) {
+        static std::atomic<int> reported{0};
+        if (reported.fetch_add(1, std::memory_order_relaxed) < 4) std::fprintf(stderr, "[gpu] %s; copying the sparse heap instead\n", error.what());
+        return false;
+    }
     if (mirror != nullptr && mirror->heap && !mirror->sparse) {
         std::vector<ImageMirror*> whole{mirror.get()};
         refreshHeapMirrors(whole, blocks);
