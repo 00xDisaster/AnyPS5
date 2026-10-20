@@ -504,6 +504,14 @@ int main() {
             if (mode == FT_KERNING_UNSCALED) Require(kerning.x == -73);
             if (size == 100 && mode == FT_KERNING_DEFAULT) Require(kerning.x == -448);
             if (size == 100 && mode == FT_KERNING_UNFITTED) Require(kerning.x == -467);
+            for (const unsigned leftGlyph : {0x10001u, 0x7FFF0001u}) {
+                kerning = {123, 456};
+                Require(FT_Get_Kerning_nid_postfix(kernFace, leftGlyph, 1, mode, &kerning) == 0);
+                Require(kerning.x == 0 && kerning.y == 0);
+            }
+            kerning = {123, 456};
+            Require(FT_Get_Kerning_nid_postfix(kernFace, 1, 0x10001u, mode, &kerning) == 0);
+            Require(kerning.x == expected.x && kerning.y == expected.y);
         }
     }
     for (const unsigned glyph : {0u, 2u, 0xFFFFFFFFu}) {
