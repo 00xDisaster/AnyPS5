@@ -275,7 +275,7 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:guest_module_fixture>" RESOURCE_LOCK guest_dynamic_loader_files)
     endif()
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/variant_names")
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/variant_names/guest_module_fixture.sprx.elf.GUEST.PRX" "not a module\n")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/variant_names/guest_module_fixture.sprx.GUEST.PRX" "not a module\n")
     add_custom_command(TARGET guest_module_fixture POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:guest_module_fixture>"
             "${CMAKE_CURRENT_BINARY_DIR}/variant_names/guest_module_fixture.elf.GUEST.PRX"
@@ -283,7 +283,7 @@ if(BUILD_TESTING)
     if(NOT WIN32)
         add_custom_command(TARGET guest_module_fixture POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E create_symlink missing.guest.prx
-                "${CMAKE_CURRENT_BINARY_DIR}/variant_names/guest_module_fixture.zprx.elf.GUEST.PRX"
+                "${CMAKE_CURRENT_BINARY_DIR}/variant_names/guest_module_fixture.zprx.GUEST.PRX"
             VERBATIM)
     endif()
     add_test_executable(guest_dynamic_loader_variants_tests ${LIBS_INCLUDE_DIR}/tests/GuestDynamicLoaderVariants.cpp)
