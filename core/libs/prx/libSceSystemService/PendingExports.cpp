@@ -7,6 +7,8 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+struct ShellCoreTelemetryToken;
+struct ShellCoreUmmStatus;
 struct ShellCorePbtcUserInfoList;
 struct ShellCorePrivacyEventData;
 struct ShellCorePsnAccountInfoFirst;
@@ -973,37 +975,37 @@ int APS5_VABI sceShellCoreUtilGetSystemBGWaveColor(std::int32_t appId, std::uint
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetSystemBGWaveState() {
+int APS5_VABI sceShellCoreUtilGetSystemBGWaveState(std::int32_t appId, std::uint32_t* state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetTelemetryToken() {
+int APS5_VABI sceShellCoreUtilGetTelemetryToken(ShellCoreTelemetryToken* token) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetTitleWorkaroundFileInfoString() {
+int APS5_VABI sceShellCoreUtilGetTitleWorkaroundFileInfoString(char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetTitleWorkaroundFileString() {
+int APS5_VABI sceShellCoreUtilGetTitleWorkaroundFileString(char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUIStatus() {
+int APS5_VABI sceShellCoreUtilGetUIStatus(std::uint64_t* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUmmStatus() {
+int APS5_VABI sceShellCoreUtilGetUmmStatus(std::uint32_t id, ShellCoreUmmStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUserFocus() {
+int APS5_VABI sceShellCoreUtilGetUserFocus(std::int32_t userId, std::int32_t* appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1013,7 +1015,7 @@ int APS5_VABI sceShellCoreUtilGetUserIdOfMorpheusUser() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetVMStatsForTelemetry() {
+int APS5_VABI sceShellCoreUtilGetVMStatsForTelemetry(char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1028,7 +1030,7 @@ int APS5_VABI sceShellCoreUtilGoBackToKratosCurrentSessionGame() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilHideBlocksFromUser() {
+int APS5_VABI sceShellCoreUtilHideBlocksFromUser(std::uint64_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1043,12 +1045,12 @@ int APS5_VABI sceShellCoreUtilIsAccessibilityZoomLocked() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsBgmCpuBudgetAcquired() {
+bool APS5_VABI sceShellCoreUtilIsBgmCpuBudgetAcquired() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsBgmCpuBudgetAvailable() {
+bool APS5_VABI sceShellCoreUtilIsBgmCpuBudgetAvailable() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1058,17 +1060,17 @@ int APS5_VABI sceShellCoreUtilIsBgmPlaying() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsExternalStorageAppMoveInProgress() {
+bool APS5_VABI sceShellCoreUtilIsExternalStorageAppMoveInProgress() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsEyeToEyeDistanceAdjusted() {
+int APS5_VABI sceShellCoreUtilIsEyeToEyeDistanceAdjusted(std::uint32_t userId, std::uint8_t* adjusted) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsGameLiveStreamingOnAir() {
+bool APS5_VABI sceShellCoreUtilIsGameLiveStreamingOnAir() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
