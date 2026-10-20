@@ -909,6 +909,7 @@ int APS5_VABI sceKernelFtruncate(int d, int64_t length) {
 }
 
 int64_t APS5_VABI lseek_nid_postfix(int d, int64_t offset, int whence) {
+    if (!GuestSockets::IsOpen(d) && !DescriptorIsOpen_nid_no_patch(d)) return PosixFailure(GUEST_EBADF);
     if (whence < 0 || whence > 2) return PosixFailure(GUEST_EINVAL);
     return PosixResult(sceKernelLseek(d, offset, whence));
 }
@@ -1101,8 +1102,7 @@ int APS5_VABI sceKernelGetdirentries(int fd, char* buf, int nbytes, int64_t* bas
     const GuestArena::HostWrite destination(buf, static_cast<std::size_t>(nbytes));
     const GuestArena::HostWrite baseDestination(basep, basep == nullptr ? 0 : sizeof(*basep));
     if (!destination.Open() || !baseDestination.Open()) return SceErrorFromErrno(GUEST_EFAULT);
-    if (basep != nullptr) *basep = 0;
-    return File::ReadDirectoryDescriptor(fd, buf, nbytes);
+    return File::ReadDirectoryDescriptor(fd, buf, nbytes, basep);
 }
 
 int APS5_VABI sceKernelGetdents(int fd, char* buf, int nbytes) {

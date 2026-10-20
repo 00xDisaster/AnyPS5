@@ -140,10 +140,11 @@ int TransferSocketForKernel(KernelSocketPoll::NativeOwner* owner, bool send, voi
 
 struct NativeSocketHandle : KernelSocketPoll::NativeOwner {
     NativeSocket value;
+    const bool stream;
     std::atomic<bool> nonblock{false};
     std::atomic<int> receiveTimeout{0};
     std::atomic<int> sendTimeout{0};
-    explicit NativeSocketHandle(NativeSocket socket) : value(socket) {
+    NativeSocketHandle(NativeSocket socket, bool stream) : value(socket), stream(stream) {
 #ifdef _WIN32
         transfer = &TransferSocketForKernel;
 #endif
@@ -305,6 +306,7 @@ int* errno_slot() {
 }
 
 extern "C" int* APS5_VABI __error_nid_postfix();
+extern "C" std::size_t NetCtlHostDnsServers_nid_no_patch(std::uint32_t* servers, std::size_t capacity);
 
 void set_errno(int err) {
     *errno_slot() = err;
@@ -450,21 +452,30 @@ bool message_flags_supported(int flags, int accepted) {
 }
 
 template <typename TOperation>
-auto native_transfer(const NativeSocketHandle& socket, int flags, bool send, TOperation operation, bool timed = true) {
+auto native_transfer(const NativeSocketHandle& socket, int flags, bool send, TOperation operation, bool timed = true, int length = 0) {
 #ifdef _WIN32
+    using Result = decltype(operation(0));
     const bool nonblocking = (flags & NET_MSG_DONTWAIT) != 0 || socket.nonblock.load();
+    const int completeLength = send && socket.stream && !nonblocking ? length : 0;
     const int timeout = timed ? (send ? socket.sendTimeout.load() : socket.receiveTimeout.load()) : 0;
     const auto deadline = timeout > 0 ? std::chrono::steady_clock::now() + std::chrono::microseconds(timeout)
         : std::chrono::steady_clock::time_point::max();
+    int transferred = 0;
     for (;;) {
-        const auto result = operation();
-        if (result != static_cast<decltype(operation())>(-1) || WSAGetLastError() != WSAEWOULDBLOCK || nonblocking) return result;
+        const auto result = operation(transferred);
+        if (result != static_cast<Result>(-1)) {
+            if (completeLength == 0) return result;
+            transferred += static_cast<int>(result);
+            if (transferred == completeLength || result == 0) return static_cast<Result>(transferred);
+        } else if (WSAGetLastError() != WSAEWOULDBLOCK || nonblocking) {
+            return transferred > 0 ? static_cast<Result>(transferred) : result;
+        }
         int milliseconds = 10;
         if (timeout > 0) {
             const auto remaining = deadline - std::chrono::steady_clock::now();
             if (remaining <= std::chrono::steady_clock::duration::zero()) {
-                WSASetLastError(WSAETIMEDOUT);
-                return result;
+                WSASetLastError(completeLength > 0 ? WSAEWOULDBLOCK : WSAETIMEDOUT);
+                return transferred > 0 ? static_cast<Result>(transferred) : static_cast<Result>(-1);
             }
             milliseconds = static_cast<int>(std::min<std::int64_t>(std::chrono::ceil<std::chrono::milliseconds>(remaining).count(), milliseconds));
         }
@@ -472,24 +483,25 @@ auto native_transfer(const NativeSocketHandle& socket, int flags, bool send, TOp
         descriptor.fd = socket.value;
         descriptor.events = send ? POLLWRNORM : POLLRDNORM;
         const int ready = WSAPoll(&descriptor, 1, milliseconds);
-        if (ready < 0) return static_cast<decltype(operation())>(-1);
+        if (ready < 0) return transferred > 0 ? static_cast<Result>(transferred) : static_cast<Result>(-1);
     }
 #else
     static_cast<void>(socket);
     static_cast<void>(flags);
     static_cast<void>(send);
     static_cast<void>(timed);
-    return operation();
+    static_cast<void>(length);
+    return operation(0);
 #endif
 }
 
 #ifdef _WIN32
 int TransferSocketForKernel(KernelSocketPoll::NativeOwner* owner, bool send, void* buffer, int length) {
     const auto* socket = static_cast<NativeSocketHandle*>(owner);
-    return native_transfer(*socket, 0, send, [&] {
-        return send ? ::send(socket->value, static_cast<const char*>(buffer), length, 0)
+    return native_transfer(*socket, 0, send, [&](int offset) {
+        return send ? ::send(socket->value, offset ? static_cast<const char*>(buffer) + offset : static_cast<const char*>(buffer), length - offset, 0)
             : ::recv(socket->value, static_cast<char*>(buffer), length, 0);
-    });
+    }, true, length);
 }
 #endif
 
@@ -803,7 +815,7 @@ int APS5_VABI sceNetSocket(const char* name, int family, int type, int protocol)
     }
     std::shared_ptr<NativeSocketHandle> handle;
     try {
-        handle = std::make_shared<NativeSocketHandle>(native);
+        handle = std::make_shared<NativeSocketHandle>(native, type == NET_SOCK_STREAM);
     } catch (const std::bad_alloc&) {
         close_socket(native);
         return fail(12);
@@ -921,7 +933,7 @@ int APS5_VABI sceNetAccept(int s, void* addr, uint32_t* addrlen) {
     if (addr && !addrlen) return fail(NET_EINVAL);
     sockaddr_storage peer{};
     NativeLength peer_length = sizeof(peer);
-    const NativeSocket accepted = native_transfer(*listener.native, 0, false, [&] {
+    const NativeSocket accepted = native_transfer(*listener.native, 0, false, [&](int) {
         peer_length = sizeof(peer);
         return ::accept(listener.native->value,
             addr ? reinterpret_cast<sockaddr*>(&peer) : nullptr, addr ? &peer_length : nullptr);
@@ -929,7 +941,7 @@ int APS5_VABI sceNetAccept(int s, void* addr, uint32_t* addrlen) {
     if (accepted == INVALID_NATIVE_SOCKET) return fail(native_error());
     std::shared_ptr<NativeSocketHandle> handle;
     try {
-        handle = std::make_shared<NativeSocketHandle>(accepted);
+        handle = std::make_shared<NativeSocketHandle>(accepted, true);
     } catch (const std::bad_alloc&) {
         close_socket(accepted);
         return fail(12);
@@ -1062,7 +1074,7 @@ int64_t APS5_VABI sceNetRecv(int s, void* buf, size_t len, int flags) {
     const GuestArena::HostWrite destination(len == 0 ? nullptr : buf, len);
     if (!destination.Open()) return fail(NET_EFAULT);
     const int native_flags = native_message_flags(flags);
-    const int result = native_transfer(*socket.native, flags, false, [&] {
+    const int result = native_transfer(*socket.native, flags, false, [&](int) {
         return ::recv(socket.native->value, static_cast<char*>(buf), static_cast<int>(len), native_flags);
     });
 #ifdef _WIN32
@@ -1101,7 +1113,7 @@ int64_t APS5_VABI sceNetRecvfrom(int s, void* buf, size_t len, int flags, void* 
     sockaddr_storage peer{};
     NativeLength peer_length = sizeof(peer);
     const int native_flags = native_message_flags(flags);
-    int result = native_transfer(*socket.native, flags, false, [&] {
+    int result = native_transfer(*socket.native, flags, false, [&](int) {
         peer_length = sizeof(peer);
         return ::recvfrom(socket.native->value, static_cast<char*>(buf), static_cast<int>(len),
             native_flags, from ? reinterpret_cast<sockaddr*>(&peer) : nullptr, from ? &peer_length : nullptr);
@@ -1125,9 +1137,9 @@ int64_t APS5_VABI sceNetSend(int s, const void* buf, size_t len, int flags) {
         if (it == g_socks.end()) return fail(NET_EBADF);
         socket = it->second;
     }
-    const int result = native_transfer(*socket.native, flags, true, [&] {
-        return ::send(socket.native->value, static_cast<const char*>(buf), static_cast<int>(len), NATIVE_SEND_FLAGS | native_message_flags(flags));
-    });
+    const int result = native_transfer(*socket.native, flags, true, [&](int offset) {
+        return ::send(socket.native->value, offset ? static_cast<const char*>(buf) + offset : static_cast<const char*>(buf), static_cast<int>(len) - offset, NATIVE_SEND_FLAGS | native_message_flags(flags));
+    }, true, static_cast<int>(len));
     return result >= 0 ? result : fail(native_error());
 }
 
@@ -1145,18 +1157,18 @@ int64_t APS5_VABI sceNetSendto(int s, const void* buf, size_t len, int flags, co
     int result;
     if (!to) {
         if (tolen != 0) return fail(NET_EINVAL);
-        result = native_transfer(*socket.native, flags, true, [&] {
-            return ::send(socket.native->value, static_cast<const char*>(buf), static_cast<int>(len), NATIVE_SEND_FLAGS | native_message_flags(flags));
-        });
+        result = native_transfer(*socket.native, flags, true, [&](int offset) {
+            return ::send(socket.native->value, offset ? static_cast<const char*>(buf) + offset : static_cast<const char*>(buf), static_cast<int>(len) - offset, NATIVE_SEND_FLAGS | native_message_flags(flags));
+        }, true, static_cast<int>(len));
     } else {
         sockaddr_storage destination{};
         NativeLength destination_length = 0;
         if (!guest_to_native_address(to, tolen, destination, destination_length)) return fail(NET_EINVAL);
         if (destination.ss_family != (socket.family == NET_AF_INET ? AF_INET : AF_INET6)) return fail(NET_EAFNOSUPPORT);
-        result = native_transfer(*socket.native, flags, true, [&] {
-            return ::sendto(socket.native->value, static_cast<const char*>(buf), static_cast<int>(len), NATIVE_SEND_FLAGS | native_message_flags(flags),
+        result = native_transfer(*socket.native, flags, true, [&](int offset) {
+            return ::sendto(socket.native->value, offset ? static_cast<const char*>(buf) + offset : static_cast<const char*>(buf), static_cast<int>(len) - offset, NATIVE_SEND_FLAGS | native_message_flags(flags),
                 reinterpret_cast<const sockaddr*>(&destination), destination_length);
-        });
+        }, true, static_cast<int>(len));
     }
     if (result < 0) return fail(native_error());
 #ifdef _WIN32
@@ -1220,7 +1232,7 @@ int64_t APS5_VABI sceNetRecvmsg(int s, NetMsghdr* msg, int flags) {
     }
     sockaddr_storage peer{};
     NativeLength peer_length = sizeof(peer);
-    std::int64_t received = native_transfer(*socket.native, flags, false, [&] {
+    std::int64_t received = native_transfer(*socket.native, flags, false, [&](int) {
         peer_length = sizeof(peer);
         return ::recvfrom(socket.native->value, buffer.data(), static_cast<int>(buffer.size()),
             native_message_flags(flags), reinterpret_cast<sockaddr*>(&peer), &peer_length);
@@ -2139,9 +2151,13 @@ int APS5_VABI sceNetGetAppMemInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceNetGetDnsInfo(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNetGetDnsInfo(std::uint32_t* info, int flags) {
+    if (flags != 0) throw std::runtime_error("sceNetGetDnsInfo: flags " + std::to_string(flags) + " are not supported");
+    if (!info) throw std::runtime_error("sceNetGetDnsInfo: a null info is not supported");
+    std::array<std::uint32_t, 2> servers{};
+    const std::size_t count = std::min(NetCtlHostDnsServers_nid_no_patch(servers.data(), servers.size()), servers.size());
+    std::memcpy(info, servers.data(), sizeof(servers));
+    return static_cast<int>(count);
 }
 
 int APS5_VABI sceNetGetIfList(void) {
