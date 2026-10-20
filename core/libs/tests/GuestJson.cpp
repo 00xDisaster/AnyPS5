@@ -400,7 +400,7 @@ static void ArrayIteratorCopies() {
     Iterator it{};
     std::memset(&it, 0x5a, sizeof(it));
     _ZN3sce4Json5Array8iteratorC1Ev(&it);
-    Require(it.position == nullptr);
+    Require(it.position != nullptr);
 
     Iterator begin{}, end{};
     _ZNK3sce4Json5Array5beginEv(&begin, &array);
@@ -411,6 +411,7 @@ static void ArrayIteratorCopies() {
     std::vector<std::int64_t> seen;
     Iterator previous{};
     while (_ZNK3sce4Json5Array8iteratorneERKS2_(&it, &end)) {
+        _ZN3sce4Json5Array8iteratorD1Ev(&previous);
         Require(_ZN3sce4Json5Array8iteratorppEi(&previous, &it, 0) == &previous);
         seen.push_back(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5Array8iteratordeEv(&previous)));
         Require(_ZNK3sce4Json5Array8iteratorneERKS2_(&previous, &it));
@@ -418,6 +419,11 @@ static void ArrayIteratorCopies() {
     Require((seen == std::vector<std::int64_t>{1, 2, 3}));
     Require(!_ZNK3sce4Json5Array8iteratorneERKS2_(&it, &end));
     Require(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5Array8iteratordeEv(&previous)) == 3);
+    Require(_ZN3sce4Json5Array8iteratoraSERKS2_(&it, &end) == &it);
+    Require(it.position == nullptr);
+    Require(_ZN3sce4Json5Array8iteratoraSERKS2_(&it, &begin) == &it);
+    Require(it.position == nullptr);
+    Require(!_ZNK3sce4Json5Array8iteratorneERKS2_(&it, &begin));
 
     _ZN3sce4Json5Array8iteratorD1Ev(&previous);
     _ZN3sce4Json5Array8iteratorD1Ev(&it);
@@ -742,6 +748,14 @@ static void ArrayIteratorAdvance() {
     _ZN3sce4Json5Array8iteratorC1ERKS2_(&copy, &begin);
     Require(_ZN3sce4Json5Array8iterator7advanceEm(&copy, 3) == &copy);
     Require(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5Array8iteratordeEv(&copy)) == 30);
+    Iterator end{};
+    _ZNK3sce4Json5Array3endEv(&end, &array);
+    _ZN3sce4Json5Array8iterator7advanceEm(&copy, std::numeric_limits<std::size_t>::max());
+    Require(!_ZNK3sce4Json5Array8iteratorneERKS2_(&copy, &end));
+    _ZN3sce4Json5Array8iteratorppEv(&copy);
+    Require(!_ZNK3sce4Json5Array8iteratorneERKS2_(&copy, &end));
+    Require(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5Array8iteratordeEv(&begin)) == 0);
+    _ZN3sce4Json5Array8iteratorD1Ev(&end);
     _ZN3sce4Json5Array8iteratorD1Ev(&begin);
     _ZN3sce4Json5Array8iteratorD1Ev(&copy);
     _ZN3sce4Json5ArrayD1Ev(&array);
