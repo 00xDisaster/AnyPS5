@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <fcntl.h>
 #include <fstream>
+#include <link.h>
 #include <pthread.h>
 #include <sstream>
 #include <sys/ioctl.h>
@@ -494,6 +495,26 @@ void ForgetInaccessiblePages(std::uintptr_t address, std::size_t bytes) {
     Pages().forgetInaccessible(address, bytes);
 }
 
+#ifdef __linux__
+int mainImageExtent(dl_phdr_info* info, std::size_t, void* data) {
+    constexpr auto mask = static_cast<std::uintptr_t>(PageBytes - 1);
+    auto& span = *static_cast<PageSpan*>(data);
+    std::uintptr_t first = std::numeric_limits<std::uintptr_t>::max();
+    std::uintptr_t last = 0;
+    for (int index = 0; index < info->dlpi_phnum; ++index) {
+        const auto& header = info->dlpi_phdr[index];
+        if (header.p_type != PT_LOAD || header.p_memsz == 0) continue;
+        first = std::min(first, static_cast<std::uintptr_t>(info->dlpi_addr + header.p_vaddr) & ~mask);
+        last = std::max(last, static_cast<std::uintptr_t>(info->dlpi_addr + header.p_vaddr + header.p_memsz + mask) & ~mask);
+    }
+    if (first < last) {
+        span.base = first;
+        span.size = static_cast<std::size_t>(last - first);
+    }
+    return 1;
+}
+#endif
+
 void PageStates::initialize() {
     if (ready.load(std::memory_order_acquire)) return;
     std::call_once(once, [&] {
@@ -514,6 +535,12 @@ void PageStates::initialize() {
             }
             image.base = start;
             image.size = cursor - start;
+            imageCached = image.allocate();
+        }
+#elif defined(__linux__)
+        static const bool noImageCache = std::getenv("APS5_NO_IMAGE_PAGE_CACHE") != nullptr;
+        if (!noImageCache) {
+            dl_iterate_phdr(mainImageExtent, &image);
             imageCached = image.allocate();
         }
 #endif
@@ -1265,9 +1292,14 @@ void stampWrittenRun(void* context, std::uintptr_t begin, std::uintptr_t end) {
 }
 
 #ifdef _WIN32
+std::atomic<FreshCollectHook> freshCollectHook{nullptr};
+
 bool collectWindowsWrites(StampRuns& runs, std::uint64_t first, std::uint64_t stop, bool armedOnly) {
     auto& tracker = runs.tracker;
     const bool fresh = runs.kind == StampKind::Fresh;
+    if (fresh) {
+        if (const auto hook = freshCollectHook.load(std::memory_order_acquire)) return hook(static_cast<std::uintptr_t>(first), static_cast<std::size_t>(stop - first), &stampWrittenRun, &runs);
+    }
     const auto collect = fresh ? &GuestArena::GuestArenaCollectFreshWrites_nid_postfix : armedOnly ? &GuestArena::GuestArenaCollectArmedWrites_nid_postfix : &GuestArena::GuestArenaCollectWrites_nid_postfix;
     static const bool singlePass = std::getenv("APS5_NO_SINGLE_PASS_COLLECT") == nullptr;
     const auto walk = [&](bool clear) {
@@ -1451,6 +1483,12 @@ void SetUnwatchHook(void (*hook)(std::uint64_t, std::size_t)) {
     unwatchHook.store(hook, std::memory_order_release);
 }
 
+#ifdef _WIN32
+void SetFreshCollectHook(FreshCollectHook hook) {
+    freshCollectHook.store(hook, std::memory_order_release);
+}
+#endif
+
 void Unwatch(std::uint64_t address, std::size_t bytes) {
     if (bytes == 0 || bytes > std::numeric_limits<std::uint64_t>::max() - address) return;
     beforeUnwatch(address, bytes);
@@ -1503,39 +1541,55 @@ bool ImportWatched(std::uint64_t address, std::size_t bytes, const std::function
     const auto first = address & ~(page - 1);
     const auto stop = (address + bytes + page - 1) & ~(page - 1);
     const bool covered = tracker.covers(first, static_cast<std::size_t>(stop - first));
-    std::vector<std::byte> saved;
-    std::vector<std::uint32_t> slots;
-    if (covered && staysWatched) {
-        const auto length = static_cast<std::size_t>(stop - first);
-        CheckRange(reinterpret_cast<const void*>(first), length, 1, false);
-        const auto* source = reinterpret_cast<const std::byte*>(first);
-        slots.resize(length / page);
-        std::size_t kept = 0;
-        for (std::size_t index = 0; index < slots.size(); ++index) {
-            const bool zero = std::memcmp(source + index * page, ZeroPage.data(), page) == 0;
-            slots[index] = zero ? WindowCopy::Zero : static_cast<std::uint32_t>(kept++);
-        }
-        saved.reserve(kept * page);
-        for (std::size_t index = 0; index < slots.size(); ++index) {
-            if (slots[index] != WindowCopy::Zero) saved.insert(saved.end(), source + index * page, source + (index + 1) * page);
-        }
-    }
-    const bool before = covered && walkWrites(tracker, first, stop, StampKind::Cpu, true);
-    bool imported = false;
-    {
+    const auto runImport = [&] {
 #ifdef __APPLE__
         const GuestArena::HostWrite open(reinterpret_cast<void*>(first), static_cast<std::size_t>(stop - first));
 #endif
-        imported = import();
-    }
-    if (!imported) return false;
+        return import();
+    };
     if (!staysWatched) {
+        const bool before = covered && walkWrites(tracker, first, stop, StampKind::Cpu, true);
+        if (!runImport()) return false;
         if (!before || !walkWrites(tracker, first, stop, StampKind::ImportWindow, true)) unwatchLocked(tracker, first, static_cast<std::size_t>(stop - first));
         unwatchLocked(tracker, address, bytes);
         return true;
     }
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> spans;
+    if (covered) spans.emplace_back(first, stop);
+    else {
+        for (auto begin = first; begin < stop;) {
+            const auto end = std::min<std::uint64_t>((begin / WriteBlockBytes + 1) * WriteBlockBytes, stop);
+            if (tracker.covers(begin, static_cast<std::size_t>(end - begin))) {
+                if (!spans.empty() && spans.back().second == begin) spans.back().second = end;
+                else spans.emplace_back(begin, end);
+            }
+            begin = end;
+        }
+    }
+    std::vector<std::uint32_t> slots(static_cast<std::size_t>((stop - first) / page), WindowCopy::Zero);
+    std::size_t kept = 0;
+    for (const auto& [begin, end] : spans) {
+        CheckRange(reinterpret_cast<const void*>(begin), static_cast<std::size_t>(end - begin), 1, false);
+        for (auto cursor = begin; cursor < end; cursor += page) {
+            if (std::memcmp(reinterpret_cast<const void*>(cursor), ZeroPage.data(), page) != 0) slots[static_cast<std::size_t>((cursor - first) / page)] = static_cast<std::uint32_t>(kept++);
+        }
+    }
+    std::vector<std::byte> saved;
+    saved.reserve(kept * page);
+    const auto* source = reinterpret_cast<const std::byte*>(first);
+    for (std::size_t index = 0; index < slots.size(); ++index) {
+        if (slots[index] != WindowCopy::Zero) saved.insert(saved.end(), source + index * page, source + (index + 1) * page);
+    }
+    std::erase_if(spans, [&](const auto& span) { return !walkWrites(tracker, span.first, span.second, StampKind::Cpu, true); });
+    if (!runImport()) return false;
     const WindowCopy window{first, saved, slots};
-    if (!before || !walkWrites(tracker, first, stop, StampKind::Cpu, true, &window)) unwatchLocked(tracker, first, static_cast<std::size_t>(stop - first));
+    auto unwatchedFrom = first;
+    for (const auto& [begin, end] : spans) {
+        if (!walkWrites(tracker, begin, end, StampKind::Cpu, true, &window)) continue;
+        if (unwatchedFrom < begin) unwatchLocked(tracker, unwatchedFrom, static_cast<std::size_t>(begin - unwatchedFrom));
+        unwatchedFrom = end;
+    }
+    if (unwatchedFrom < stop) unwatchLocked(tracker, unwatchedFrom, static_cast<std::size_t>(stop - unwatchedFrom));
     return true;
 }
 
@@ -1646,7 +1700,7 @@ std::uint64_t StoreOwnBytes(std::uint64_t address, std::span<const std::byte> so
 
 std::uint64_t MarkWritten(std::uint64_t address, std::size_t bytes) {
     auto& tracker = Tracker();
-    const auto lock = lockTracker(tracker);
+    auto lock = lockTracker(tracker);
     tracker.initialize();
     if (bytes == 0) return 0;
     ++tracker.generation;
@@ -1665,6 +1719,9 @@ std::uint64_t MarkWritten(std::uint64_t address, std::size_t bytes) {
         const bool complete = GuestWriteWatch::GuestWriteWatchCollectFresh_nid_postfix(static_cast<std::uintptr_t>(blockFirst), static_cast<std::size_t>(blockStop - blockFirst), &stampWrittenRun, &runs);
 #endif
         if (!complete) {
+            lock.unlock();
+            beforeUnwatch(blockFirst, static_cast<std::size_t>(blockStop - blockFirst));
+            lock.lock();
             unwatchLocked(tracker, blockFirst, static_cast<std::size_t>(blockStop - blockFirst));
             tracker.noteUnstampedStore(address, address + bytes);
             return 0;
