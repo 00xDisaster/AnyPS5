@@ -40,6 +40,22 @@ struct MfsrSharedResourcesParam {
  std::uint64_t reserved2;
 };
 
+struct Mfsr2SharedResourcesParam {
+ std::uint32_t type;
+ std::uint32_t reserved0;
+ const MfsrBlock* blocks;
+ std::uint64_t blockCount;
+ std::uint16_t width;
+ std::uint16_t height;
+ std::uint32_t reserved1;
+};
+
+static_assert(sizeof(Mfsr2SharedResourcesParam) == 32);
+static_assert(offsetof(Mfsr2SharedResourcesParam, blocks) == 8);
+static_assert(offsetof(Mfsr2SharedResourcesParam, blockCount) == 16);
+static_assert(offsetof(Mfsr2SharedResourcesParam, width) == 24);
+static_assert(offsetof(Mfsr2SharedResourcesParam, reserved1) == 28);
+
 struct MfsrContextParam {
  std::uint32_t reserved0[2];
  const MfsrBlock* blocks;
@@ -280,7 +296,7 @@ int APS5_VABI scePsmlMfsr2ReleaseSharedResources(void* sharedResources) {
     return 0;
 }
 
-int APS5_VABI scePsmlMfsr2GetSharedResourcesInitRequirement() {
+int APS5_VABI scePsmlMfsr2GetSharedResourcesInitRequirement(MfsrRequirement* requirement, const Mfsr2SharedResourcesParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -300,7 +316,7 @@ int APS5_VABI scePsmlMfsr2GetDispatchPacketsSizeInDwords() {
     return 0;
 }
 
-int APS5_VABI scePsmlMfsr2CreateSharedResources() {
+int APS5_VABI scePsmlMfsr2CreateSharedResources(void** sharedResources, const Mfsr2SharedResourcesParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
