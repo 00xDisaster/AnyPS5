@@ -85,6 +85,13 @@ FileStream* APS5_VABI freopen_nid_postfix(const char*, const char*, FileStream*)
 std::size_t APS5_VABI fread_nid_postfix(void*, std::size_t, std::size_t, FileStream*);
 int APS5_VABI fclose_nid_postfix(FileStream*);
 int APS5_VABI fgetc_nid_postfix(FileStream*);
+int APS5_VABI fileno_nid_postfix(FileStream*);
+char* APS5_VABI fgets_nid_postfix(char*, int, FileStream*);
+int APS5_VABI fscanf_nid_postfix(FileStream*, const char*, ...);
+int APS5_VABI fputc_nid_postfix(int, FileStream*);
+int APS5_VABI fseek_nid_postfix(FileStream*, std::int64_t, int);
+std::int64_t APS5_VABI ftell_nid_postfix(FileStream*);
+void APS5_VABI clearerr_nid_postfix(FileStream*);
 int APS5_VABI feof_nid_postfix(FileStream*);
 int APS5_VABI ferror_nid_postfix(FileStream*);
 int APS5_VABI setvbuf_nid_postfix(FileStream*, char*, int, std::size_t);
@@ -603,6 +610,45 @@ int main() {
     Require(mkdir_nid_postfix(root.string().c_str(), 0700) == -1 && *__error_nid_postfix() == 17);
     for (const char* openMode : {"w", "wb", "r+", "a"}) {
         Require(fopen_nid_postfix(root.string().c_str(), openMode) == nullptr && *__error_nid_postfix() == 21);
+    }
+    {
+        const auto listed = root / "listed.txt";
+        std::ofstream(listed, std::ios::binary) << "listed";
+        for (const char* openMode : {"r", "rb", "re"}) {
+            auto* directoryStream = fopen_nid_postfix(root.string().c_str(), openMode);
+            Require(directoryStream != nullptr);
+            const int directoryDescriptor = fileno_nid_postfix(directoryStream);
+            FileStat directoryStatus{};
+            Require(directoryDescriptor >= 0 && sceKernelFstat(directoryDescriptor, &directoryStatus) == 0 && (directoryStatus.st_mode & 0170000) == 0040000);
+            Require(feof_nid_postfix(directoryStream) == 0 && ferror_nid_postfix(directoryStream) == 0 && fflush_nid_postfix(directoryStream) == 0);
+            char unread[8] = {};
+            int scanned = 0;
+            *__error_nid_postfix() = 0;
+            Require(fread_nid_postfix(unread, 1, sizeof(unread), directoryStream) == 0 && *__error_nid_postfix() == 21);
+            Require(ferror_nid_postfix(directoryStream) != 0 && feof_nid_postfix(directoryStream) == 0);
+            clearerr_nid_postfix(directoryStream);
+            Require(ferror_nid_postfix(directoryStream) == 0);
+            *__error_nid_postfix() = 0;
+            Require(fgetc_nid_postfix(directoryStream) == -1 && *__error_nid_postfix() == 21 && ferror_nid_postfix(directoryStream) != 0);
+            clearerr_nid_postfix(directoryStream);
+            *__error_nid_postfix() = 0;
+            Require(fgets_nid_postfix(unread, sizeof(unread), directoryStream) == nullptr && *__error_nid_postfix() == 21 && ferror_nid_postfix(directoryStream) != 0);
+            clearerr_nid_postfix(directoryStream);
+            *__error_nid_postfix() = 0;
+            Require(fscanf_nid_postfix(directoryStream, "%d", &scanned) == -1 && *__error_nid_postfix() == 21 && ferror_nid_postfix(directoryStream) != 0);
+            clearerr_nid_postfix(directoryStream);
+            Require(fseek_nid_postfix(directoryStream, 0, 0) == 0 && ftell_nid_postfix(directoryStream) == 0);
+            *__error_nid_postfix() = 0;
+            Require(fputc_nid_postfix('x', directoryStream) == -1 && *__error_nid_postfix() == 9 && ferror_nid_postfix(directoryStream) != 0);
+            Require(fclose_nid_postfix(directoryStream) == 0);
+#ifdef _WIN32
+            const int reused = open_nid_postfix(listed.string().c_str(), 0, 0);
+            char text[6]{};
+            Require(reused == directoryDescriptor && read_nid_postfix(reused, text, sizeof(text)) == 6 && std::memcmp(text, "listed", 6) == 0);
+            Require(close_nid_postfix(reused) == 0);
+#endif
+        }
+        Require(std::filesystem::remove(listed));
     }
     Require(mkdir_nid_postfix((root / "missing" / "child").string().c_str(), 0700) == -1 && *__error_nid_postfix() == 2);
     Require(mkdir_nid_postfix(nullptr, 0700) == -1 && *__error_nid_postfix() == 14);
