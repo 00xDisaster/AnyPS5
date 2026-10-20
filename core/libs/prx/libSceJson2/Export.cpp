@@ -25,7 +25,7 @@ enum ValueType : std::int32_t {
     TypeObject = 7,
 };
 
-constexpr int JsonErrorParse = static_cast<int>(0x80920101);
+constexpr int JsonErrorParse = static_cast<int>(0x80848101);
 
 struct Node;
 struct Value { Node* node; };
@@ -945,7 +945,8 @@ int APS5_VABI _ZN3sce4Json6Parser5parseERNS0_5ValueEPFiRcPvES5_(Value* out, Pars
 }
 
 int APS5_VABI _ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(Value* out, const char* text, std::size_t size) {
-    if (text == nullptr || size == 0) return JsonErrorParse;
+    if (size == 0) return JsonErrorParse;
+    if (text == nullptr) throw std::invalid_argument("sce::Json::Parser::parse: null text");
     Node parsed{};
     parsed.handlers = NodeOf(*out).handlers;
     Parser parser(text, size, parsed.handlers);

@@ -158,7 +158,7 @@ static void Check(bool value, int line) {
 #define Require(value) Check((value), __LINE__)
 
 enum : std::int32_t { TypeNull, TypeBoolean, TypeInteger, TypeUInteger, TypeReal, TypeString, TypeArray, TypeObject };
-constexpr int JsonErrorParse = static_cast<int>(0x80920101);
+constexpr int JsonErrorParse = static_cast<int>(0x80848101);
 
 static Value fallback{};
 static int callbackCalls = 0;
@@ -241,11 +241,17 @@ static void ParseAndRoundTrip() {
     _ZN3sce4Json5ValueD1Ev(&reparsed);
 
     for (const char* invalid : {"{\"a\":}", "[1,]", "\"open", "tru", "{} x", "01"}) {
-        Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, invalid, std::strlen(invalid)) < 0);
+        Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, invalid, std::strlen(invalid)) == JsonErrorParse);
         Require(_ZNK3sce4Json5Value7getTypeEv(&root) == TypeObject && _ZNK3sce4Json5Value5countEv(&root) == 8);
     }
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, nullptr, 0) == JsonErrorParse);
-    Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, nullptr, 10) == JsonErrorParse);
+    bool nullTextRejected = false;
+    try {
+        _ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, nullptr, 10);
+    } catch (const std::invalid_argument&) {
+        nullTextRejected = true;
+    }
+    Require(nullTextRejected);
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, "", 0) == JsonErrorParse);
     Require(_ZNK3sce4Json5Value7getTypeEv(&root) == TypeObject && _ZNK3sce4Json5Value5countEv(&root) == 8);
     for (const char* overflow : {"1e309", "[-1e309]", "{\"a\":[1,1e400]}"}) {
