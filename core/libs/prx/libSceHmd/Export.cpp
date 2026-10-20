@@ -3,6 +3,12 @@
 
 #include <atomic>
 
+struct HmdReprojectionFrameParameter;
+struct HmdReprojectionWideNearParameter;
+struct HmdReprojection2dVrParameter;
+struct HmdReprojectionPose;
+struct HmdReprojectionOverlayParameter;
+struct HmdReprojectionSubmissionParameter;
 struct HmdReprojectionInitializeParameter;
 struct HmdReprojectionMultilayerParameter;
 struct HmdDeviceInformation;
@@ -214,7 +220,7 @@ int APS5_VABI sceHmdDistortionGetWorkMemorySize(void) {
     return 0x20000;
 }
 
-int APS5_VABI sceHmdReprojectionStartWideNear(void) {
+int APS5_VABI sceHmdReprojectionStartWideNear(const HmdReprojectionWideNearParameter* parameter, const HmdReprojectionPose* pose, std::uint64_t flipArg, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -293,7 +299,7 @@ int APS5_VABI sceHmdGetDistortionWorkMemoryAlign(void) {
     return 0x400;
 }
 
-int APS5_VABI sceHmdReprojectionStartMultilayer(void) {
+int APS5_VABI sceHmdReprojectionStartMultilayer(const HmdReprojectionMultilayerParameter* layers, std::uint32_t layerCount, const HmdReprojectionSubmissionParameter* submission, const HmdReprojectionPose* pose, std::uint64_t flipArg, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -647,7 +653,7 @@ int APS5_VABI sceHmdInternalGetVirtualDisplayHeight(std::uint8_t* height) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionStart(void) {
+int APS5_VABI sceHmdReprojectionStart(const HmdReprojectionFrameParameter* parameter, const HmdReprojectionPose* pose, std::uint64_t flipArg, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -717,7 +723,7 @@ int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionStartMultilayer2(const HmdReprojectionMultilayerParameter* parameter, std::int32_t mode) {
+int APS5_VABI sceHmdReprojectionStartMultilayer2(const HmdReprojectionMultilayerParameter* layers, std::uint32_t layerCount, const HmdReprojectionSubmissionParameter* submission, std::uint64_t flipArg, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -761,7 +767,7 @@ int APS5_VABI sceHmdReprojectionQueryOnionBuffSize(void) {
     return 0x810;
 }
 
-int APS5_VABI sceHmdReprojectionStartWithOverlay(void) {
+int APS5_VABI sceHmdReprojectionStartWithOverlay(const HmdReprojectionFrameParameter* parameter, const HmdReprojectionPose* pose, std::uint64_t flipArg, const HmdReprojectionOverlayParameter* overlay, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -781,7 +787,7 @@ int APS5_VABI sceHmdInternalSetDemoMode(std::uint8_t mode) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionStartWideNearWithOverlay(void) {
+int APS5_VABI sceHmdReprojectionStartWideNearWithOverlay(const HmdReprojectionWideNearParameter* parameter, const HmdReprojectionPose* pose, std::uint64_t flipArg, const HmdReprojectionOverlayParameter* overlay, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -831,7 +837,7 @@ int APS5_VABI sceHmdInternalDfuReset(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdReprojectionStart2dVr(void) {
+int APS5_VABI sceHmdReprojectionStart2dVr(const HmdReprojection2dVrParameter* parameter, std::uint64_t flipArg, const void* reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
