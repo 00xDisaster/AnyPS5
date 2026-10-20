@@ -99,6 +99,20 @@ struct NetThreadParameter;
 struct NetIpv4InterfaceAddress;
 struct NetStatisticsInfoInternal;
 struct NetInitializeParameter;
+struct NetDhcpStartParameter;
+struct NetAddress6StartParameter;
+
+using NetAddressCallback = void (APS5_VABI *)(void* userArg, std::int32_t event, std::int32_t error);
+
+struct NetInfoDumpParameter {
+    std::uint32_t flags;
+    std::uint32_t intervalSeconds;
+    char path[64];
+};
+
+static_assert(sizeof(NetInfoDumpParameter) == 72);
+static_assert(offsetof(NetInfoDumpParameter, path) == 8);
+
 struct NetInterfaceInfo;
 struct NetInterfaceStatistics;
 
@@ -2661,7 +2675,7 @@ int APS5_VABI sceNetDhcpGetInfoEx(std::int32_t interfaceId, std::int32_t type, N
     return 0;
 }
 
-int APS5_VABI sceNetDhcpStart(void) {
+int APS5_VABI sceNetDhcpStart(std::uint32_t interfaceId, NetAddressCallback callback, void* userArg, std::int32_t threadParameter1, std::int32_t threadParameter2, NetDhcpStartParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2721,7 +2735,7 @@ int APS5_VABI sceNetConfigAddRoute6(const NetIpv6Address* destination, const Net
     return 0;
 }
 
-int APS5_VABI sceNetAddrConfig6Start(void) {
+int APS5_VABI sceNetAddrConfig6Start(std::uint32_t interfaceId, NetAddressCallback callback, void* userArg, std::int32_t threadParameter1, std::int32_t threadParameter2, const NetAddress6StartParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2736,7 +2750,7 @@ int APS5_VABI sceNetAddrConfig6GetInfo(std::int32_t interfaceId, NetAddress6Info
     return 0;
 }
 
-int APS5_VABI sceNetInfoDumpStart(void) {
+int APS5_VABI sceNetInfoDumpStart(std::int32_t threadParameter1, std::int32_t threadParameter2, const NetInfoDumpParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2756,7 +2770,7 @@ int APS5_VABI sceNetDhcpdStop(int interfaceId) {
     return 0;
 }
 
-int APS5_VABI sceNetDuplicateIpStart(void) {
+int APS5_VABI sceNetDuplicateIpStart(std::int32_t interfaceId, NetAddressCallback callback, void* userArg, std::int32_t threadParameter1, std::int32_t threadParameter2) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
