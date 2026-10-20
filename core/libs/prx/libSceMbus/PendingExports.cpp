@@ -1,5 +1,7 @@
 #include "prx/libc/include/General.hpp"
 
+#include <cstddef>
+
 struct MbusDeviceDescription;
 struct MbusDeviceInfo;
 struct MbusSimulatedHandleStatus;
@@ -7,7 +9,12 @@ struct MbusSparkState;
 struct MbusDriverCallbacks;
 struct MbusUsbPowerEntry;
 struct MbusEvent;
-struct MbusDeviceCondition;
+struct alignas(8) MbusDeviceCondition {
+    std::byte data[256];
+};
+
+static_assert(sizeof(MbusDeviceCondition) == 256);
+struct MbusDeviceServiceInfo;
 struct MbusEventCallbacks {
     void (APS5_VABI *onOverflow)(std::int32_t eventHandle, void* userData);
     void (APS5_VABI *onEvent)(std::int32_t eventHandle, void* userData, const MbusEvent* event);
@@ -373,7 +380,7 @@ int APS5_VABI sceMbusGetDeviceInfoByBusId_(std::int32_t busId, MbusDeviceInfo* i
     return 0;
 }
 
-int APS5_VABI sceMbusGetDeviceInfoByConditionForDeviceService() {
+int APS5_VABI sceMbusGetDeviceInfoByConditionForDeviceService(std::int32_t flags, MbusDeviceServiceInfo* infos, std::int32_t capacity, std::int32_t* first, std::int32_t* second, MbusDeviceCondition condition) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

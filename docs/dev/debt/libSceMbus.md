@@ -8,7 +8,7 @@
 
 - [sceDeviceServiceQueryDeviceInfo_](../../../core/libs/prx/libSceMbus/Export.cpp): the 112-byte device-info layout and the third argument's meaning remain unresolved. The second argument is a six-byte HID usage filter pointer, not an integer. Initialization takes an optional 16-byte parameter structure with an optional thread configuration; custom scheduling throws because the host has no event worker. `sceDeviceServiceGetEventState` takes a clear flag, not a device type.
 
-- [sceMbus remaining declarations](../../../core/libs/prx/libSceMbus/PendingExports.cpp): GetDeviceInfoByConditionForDeviceService and SetDeviceFunctionState still require by-value aggregate layouts. AcquireControlList and Term return constants without reading incoming arguments, so their original parameter lists cannot be established from the callees. All protected stub bodies remain unchanged.
+- [sceMbus remaining declarations](../../../core/libs/prx/libSceMbus/PendingExports.cpp): SetDeviceFunctionState still requires its by-value aggregate layout. AcquireControlList and Term return constants without reading incoming arguments, so their original parameter lists cannot be established from the callees. All protected stub bodies remain unchanged.
 
 - [sceMbusAddHandleByDeviceId](../../../core/libs/prx/libSceMbus/PendingExports.cpp): the six-argument ABI is confirmed, including the 64-bit device ID. The meanings of the last three 32-bit fields require the device-service backend.
 
@@ -23,3 +23,5 @@
 - [sceMbus settings](../../../core/libs/prx/libSceMbus/PendingExports.cpp): USB power-list entries occupy 12 bytes, with an 8-bit count limited to 100; their fields remain unresolved. Several routing, scratch-data and proxy scalar meanings still require the service handler. Start/StopAudioOutAuxBroadcast and StopAudioOutSharePlay have confirmed zero-argument ABIs.
 
 - [sceMbusGetDeviceInfoByCondition_](../../../core/libs/prx/libSceMbus/PendingExports.cpp): its first parameter points to a 256-byte query condition; the second is a 32-bit scalar. Two optional 32-bit outputs and the sized 256-byte record array are confirmed, while condition fields and output meanings remain unresolved.
+
+- [sceMbusGetDeviceInfoByConditionForDeviceService](../../../core/libs/prx/libSceMbus/PendingExports.cpp): assembly and its DeviceService caller confirm five register arguments followed by a 256-byte condition passed by value on the stack. The condition keeps opaque storage because its service-side fields remain unresolved; byte 228 contains the 16-bit device class. Output records occupy 112 bytes. The two optional outputs are 32-bit values whose meanings remain unresolved.
