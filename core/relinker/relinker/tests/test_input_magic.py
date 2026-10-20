@@ -24,6 +24,11 @@ def main():
         convert("eboot.self.kernel", b"\x54\x14\xf5\xee" + bytes(0x1000), "The input is a SELF container, not an ELF")
         convert("eboot.pkg", b"\x7fCNT" + bytes(0x1000), "Invalid ELF magic number: 7f 43 4e 54")
         convert("eboot.short", b"\x7fEL", "File too small for ELF header")
+        unsupported_version = bytearray(64)
+        unsupported_version[:4] = b"\x7fELF"
+        unsupported_version[4:7] = b"\x02\x01\x01"
+        unsupported_version[0x12:0x14] = b"\x3e\x00"
+        convert("eboot.unsupported-version", unsupported_version, "Unsupported ELF object version: expected 1")
         if platform.system() == "Linux":
             import resource
 
