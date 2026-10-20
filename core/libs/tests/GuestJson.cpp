@@ -552,6 +552,14 @@ static void ObjectInsert() {
     Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(&p->key), "score") == 0);
     Require(*_ZNK3sce4Json5Value10getIntegerEv(&p->value) == 100);
 
+    Require(_ZN3sce4Json5Value3setEl(&pair.value, 200) == 0);
+    Iterator duplicate{};
+    Require(_ZN3sce4Json6Object6insertERKNS1_4PairE(&duplicate, &object, &pair) == &duplicate);
+    Require(_ZNK3sce4Json6Object8iteratoreqERKS2_(&duplicate, &inserted));
+    Require(_ZNK3sce4Json6Object4sizeEv(&object) == 1);
+    Require(*_ZNK3sce4Json5Value10getIntegerEv(&_ZNK3sce4Json6Object8iteratordeEv(&duplicate)->value) == 100);
+    _ZN3sce4Json6Object8iteratorD1Ev(&duplicate);
+
     String otherKey{};
     _ZN3sce4Json6StringC1EPKc(&otherKey, "other");
     Value otherValue{};

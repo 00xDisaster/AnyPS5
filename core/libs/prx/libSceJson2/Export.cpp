@@ -1083,7 +1083,6 @@ void APS5_VABI _ZN3sce4Json6Object4PairD1Ev(Pair* self) {
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object6insertERKNS1_4PairE(ObjectIterator* result, Object* self, const Pair* pair) {
     auto it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& p) { return *p.key.text == *pair->key.text; });
     if (it != self->items->end()) {
-        AssignNode(NodeOf(it->value), NodeOf(pair->value));
         result->it = it;
         return result;
     }
