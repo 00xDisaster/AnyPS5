@@ -232,8 +232,8 @@ static void ParseAndRoundTrip() {
     Require(*_ZNK3sce4Json5Value10getIntegerEv(_ZNK3sce4Json5ValueixEm(_ZNK3sce4Json5ValueixEm(&list, 2), 0)) == 3);
 
     const std::string serialized = Serialize(root);
-    Require(serialized == "{\"name\":\"x\xc3\xa9\\n\",\"count\":3,\"big\":18446744073709551615,\"neg\":-5,"
-                          "\"pi\":1.5,\"ok\":true,\"none\":null,\"list\":[1,\"two\",[3]]}");
+    Require(serialized == "{\"big\":18446744073709551615,\"count\":3,\"list\":[1,\"two\",[3]],"
+                          "\"name\":\"x\xc3\xa9\\n\",\"neg\":-5,\"none\":null,\"ok\":true,\"pi\":1.5}");
     Value reparsed{};
     _ZN3sce4Json5ValueC1Ev(&reparsed);
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&reparsed, serialized.c_str(), serialized.size()) == 0);
@@ -571,6 +571,11 @@ static void ObjectInsert() {
     Iterator otherInserted{};
     Require(_ZN3sce4Json6Object6insertERKNS1_4PairE(&otherInserted, &object, &otherPair) == &otherInserted);
     Require(_ZNK3sce4Json6Object4sizeEv(&object) == 2);
+    Iterator first{};
+    _ZNK3sce4Json6Object5beginEv(&first, &object);
+    Require(_ZNK3sce4Json6Object8iteratoreqERKS2_(&first, &otherInserted));
+    Require(*_ZNK3sce4Json5Value10getIntegerEv(&_ZNK3sce4Json6Object8iteratordeEv(&inserted)->value) == 100);
+    _ZN3sce4Json6Object8iteratorD1Ev(&first);
 
     _ZN3sce4Json6Object8iteratorD1Ev(&otherInserted);
     _ZN3sce4Json6Object4PairD1Ev(&otherPair);
@@ -580,6 +585,37 @@ static void ObjectInsert() {
     _ZN3sce4Json6Object8iteratorD1Ev(&end);
     _ZN3sce4Json6Object4PairD1Ev(&pair);
     _ZN3sce4Json5ValueD1Ev(&value);
+    _ZN3sce4Json6StringD1Ev(&key);
+    _ZN3sce4Json6ObjectD1Ev(&object);
+}
+
+static void ObjectKeyOrder() {
+    Object object{};
+    _ZN3sce4Json6ObjectC1Ev(&object);
+    for (const char* name : {"z", "\xc3\xa9", "a", "A", ""}) {
+        String key{};
+        _ZN3sce4Json6StringC1EPKc(&key, name);
+        _ZN3sce4Json6ObjectixERKNS0_6StringE(&object, &key);
+        _ZN3sce4Json6StringD1Ev(&key);
+    }
+    Iterator member{};
+    _ZNK3sce4Json6Object5beginEv(&member, &object);
+    for (const char* expected : {"", "A", "a", "z", "\xc3\xa9"}) {
+        Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(&_ZNK3sce4Json6Object8iteratordeEv(&member)->key), expected) == 0);
+        _ZN3sce4Json6Object8iteratorppEv(&member);
+    }
+    _ZN3sce4Json6Object8iteratorD1Ev(&member);
+    String key{};
+    _ZN3sce4Json6StringC1EPKc(&key, "a");
+    Value* existing = _ZN3sce4Json6ObjectixERKNS0_6StringE(&object, &key);
+    _ZN3sce4Json6String6appendEPKcm(&key, "\0suffix", 7);
+    Require(_ZN3sce4Json6ObjectixERKNS0_6StringE(&object, &key) == existing);
+    _ZNK3sce4Json6Object4findERKNS0_6StringE(&member, &object, &key);
+    Require(&_ZNK3sce4Json6Object8iteratordeEv(&member)->value == existing);
+    _ZN3sce4Json6Object8iteratorD1Ev(&member);
+    Require(_ZNK3sce4Json6Object4sizeEv(&object) == 5);
+    _ZN3sce4Json6Object5eraseERKNS0_6StringE(&object, &key);
+    Require(_ZNK3sce4Json6Object4sizeEv(&object) == 4);
     _ZN3sce4Json6StringD1Ev(&key);
     _ZN3sce4Json6ObjectD1Ev(&object);
 }
@@ -689,11 +725,11 @@ static void ObjectOperations() {
     _ZN3sce4Json6Object4PairC1ERKNS0_6StringERKNS0_5ValueE(&p2, &k2, &v2);
     _ZN3sce4Json6Object4PairC1ERKNS0_6StringERKNS0_5ValueE(&p3, &k3, &v3);
     Iterator ins{};
-    _ZN3sce4Json6Object6insertERKNS1_4PairE(&ins, &object, &p1);
+    _ZN3sce4Json6Object6insertERKNS1_4PairE(&ins, &object, &p3);
     _ZN3sce4Json6Object8iteratorD1Ev(&ins);
     _ZN3sce4Json6Object6insertERKNS1_4PairE(&ins, &object, &p2);
     _ZN3sce4Json6Object8iteratorD1Ev(&ins);
-    _ZN3sce4Json6Object6insertERKNS1_4PairE(&ins, &object, &p3);
+    _ZN3sce4Json6Object6insertERKNS1_4PairE(&ins, &object, &p1);
     _ZN3sce4Json6Object8iteratorD1Ev(&ins);
 
     Iterator begin{};
@@ -779,6 +815,13 @@ static void ValueAccess() {
     const char text[] = "{\"list\":[10,20,30],\"name\":\"value\",\"flag\":true}";
     Require(_ZN3sce4Json6Parser5parseERNS0_5ValueEPKcm(&root, text, sizeof(text) - 1) == 0);
     Require(_ZNK3sce4Json6Object4sizeEv(_ZNK3sce4Json5Value9getObjectEv(&root)) == 3);
+    Iterator member{};
+    _ZNK3sce4Json6Object5beginEv(&member, _ZNK3sce4Json5Value9getObjectEv(&root));
+    for (const char* expected : {"flag", "list", "name"}) {
+        Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(&_ZNK3sce4Json6Object8iteratordeEv(&member)->key), expected) == 0);
+        _ZN3sce4Json6Object8iteratorppEv(&member);
+    }
+    _ZN3sce4Json6Object8iteratorD1Ev(&member);
 
     String key{};
     _ZN3sce4Json6StringC1EPKc(&key, "list");
@@ -1232,6 +1275,7 @@ int main() {
     ObjectFind();
     ObjectPair();
     ObjectInsert();
+    ObjectKeyOrder();
     ArrayIteratorCopies();
     ObjectIteratorCopies();
     AllocatorNotifyError();

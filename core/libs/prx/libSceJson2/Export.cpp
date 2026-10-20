@@ -333,6 +333,10 @@ void Serialize(std::string& out, const Node& n) {
     throw std::runtime_error("sce::Json: invalid value type");
 }
 
+std::list<Pair>::iterator ObjectPosition(const Object& object, const std::string& key) {
+    return std::find_if(object.items->begin(), object.items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key.c_str()) >= 0; });
+}
+
 class Parser {
 public:
     Parser(const char* text, std::size_t size, const Handlers& handlers) : _text(text), _end(text + size), _handlers(handlers) {}
@@ -502,11 +506,10 @@ private:
                     if (_text >= _end || *_text != ':') return false;
                     ++_text;
                     skip();
-                    Pair pair{};
+                    auto& pair = *out.object.items->emplace(ObjectPosition(out.object, key));
                     Construct(pair.key, key);
                     Construct(pair.value);
                     pair.value.node->handlers = _handlers;
-                    out.object.items->push_back(pair);
                     if (!value(*pair.value.node)) return false;
                     skip();
                     if (_text < _end && *_text == ',') { ++_text; continue; }
@@ -532,13 +535,18 @@ void* const JsonMemAllocatorVtable[] = {
 };
 
 Value& ObjectEntry(Object& object, const std::string& key) {
-    for (auto& pair : *object.items)
-        if (*pair.key.text == key) return pair.value;
+    auto position = ObjectPosition(object, key);
+    if (position != object.items->end() && std::strcmp(position->key.text->c_str(), key.c_str()) == 0) return position->value;
     Pair pair{};
     Construct(pair.key, key);
-    Construct(pair.value);
-    object.items->push_back(pair);
-    return object.items->back().value;
+    try {
+        Construct(pair.value);
+        return object.items->insert(position, pair)->value;
+    } catch (...) {
+        Destroy(pair.value);
+        Destroy(pair.key);
+        throw;
+    }
 }
 
 }
@@ -718,7 +726,7 @@ ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iteratorppEv(ObjectIterator* self)
 Pair* APS5_VABI _ZNK3sce4Json6Object8iteratordeEv(const ObjectIterator* self) { return &*self->it; }
 Pair* APS5_VABI _ZNK3sce4Json6Object8iteratorptEv(const ObjectIterator* self) { return &*self->it; }
 ObjectIterator* APS5_VABI _ZNK3sce4Json6Object4findERKNS0_6StringE(ObjectIterator* result, const Object* self, const String* key) {
-    result->it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return *pair.key.text == *key->text; });
+    result->it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0; });
     return result;
 }
 bool APS5_VABI _ZNK3sce4Json6Object8iteratorneERKS2_(const ObjectIterator* self, const ObjectIterator* other) { return self->it != other->it; }
@@ -732,7 +740,7 @@ bool APS5_VABI _ZNK3sce4Json6Object5emptyEv(const Object* self) { return self->i
 std::size_t APS5_VABI _ZNK3sce4Json6Object4sizeEv(const Object* self) { return self->items->size(); }
 void APS5_VABI _ZN3sce4Json6Object5eraseERKNS0_6StringE(Object* self, const String* key) {
     if (key == nullptr || key->text == nullptr) throw std::invalid_argument("sce::Json::Object::erase: null key");
-    auto it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return *pair.key.text == *key->text; });
+    auto it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0; });
     if (it == self->items->end()) return;
     Destroy(it->key);
     Destroy(it->value);
@@ -857,7 +865,7 @@ const Value* APS5_VABI _ZNK3sce4Json5ValueixEPKc(const Value* self, const char* 
     const Node& n = NodeOf(*self);
     if (key != nullptr && n.type == TypeObject)
         for (const auto& pair : *n.object.items)
-            if (*pair.key.text == key) return &pair.value;
+            if (std::strcmp(pair.key.text->c_str(), key) == 0) return &pair.value;
     return &MissingElement(self);
 }
 const Value* APS5_VABI _ZNK3sce4Json5ValueixEm(const Value* self, std::size_t index) {
@@ -877,7 +885,7 @@ const Value* APS5_VABI _ZNK3sce4Json5Value8getValueERKNS0_6StringE(const Value* 
     const Node& n = NodeOf(*self);
     if (key != nullptr && n.type == TypeObject)
         for (const auto& pair : *n.object.items)
-            if (*pair.key.text == *key->text) return &pair.value;
+            if (std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0) return &pair.value;
     return &MissingElement(self);
 }
 Value* APS5_VABI _ZN3sce4Json5Value10referValueEm(Value* self, std::size_t index) {
@@ -891,7 +899,7 @@ Value* APS5_VABI _ZN3sce4Json5Value10referValueERKNS0_6StringE(Value* self, cons
     Node& n = NodeOf(*self);
     if (key == nullptr || n.type != TypeObject) return nullptr;
     for (auto& pair : *n.object.items)
-        if (*pair.key.text == *key->text) return &pair.value;
+        if (std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0) return &pair.value;
     return nullptr;
 }
 Array* APS5_VABI _ZN3sce4Json5Value10referArrayEv(Value* self) {
@@ -1089,8 +1097,8 @@ void APS5_VABI _ZN3sce4Json6Object4PairD1Ev(Pair* self) {
 }
 
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object6insertERKNS1_4PairE(ObjectIterator* result, Object* self, const Pair* pair) {
-    auto it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& p) { return *p.key.text == *pair->key.text; });
-    if (it != self->items->end()) {
+    auto it = ObjectPosition(*self, *pair->key.text);
+    if (it != self->items->end() && std::strcmp(it->key.text->c_str(), pair->key.text->c_str()) == 0) {
         result->it = it;
         return result;
     }
@@ -1099,7 +1107,7 @@ ObjectIterator* APS5_VABI _ZN3sce4Json6Object6insertERKNS1_4PairE(ObjectIterator
     Construct(copy.key, *pair->key.text);
     try {
         CopyInto(copy.value, pair->value);
-        result->it = self->items->insert(self->items->end(), copy);
+        result->it = self->items->insert(it, copy);
         return result;
     } catch (...) {
         Destroy(copy.value);
