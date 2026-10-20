@@ -7,6 +7,7 @@
 #include "VulkanTestDevice.hpp"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -95,8 +96,9 @@ void MatchTests() {
     Require(!MatchSgprPatternFill(packet, Code, data, noGroup), "a dispatch without the group id matched");
 }
 
-volatile std::uint32_t Finished = 0;
+alignas(8) std::uint32_t Finished = 0;
 std::uint32_t Submitted = 0;
+constexpr std::uint32_t MaxResubmits = 16;
 
 void Submit(const std::vector<std::uint32_t>& data, std::uint32_t groups) {
     std::vector<std::uint32_t> words;
@@ -123,13 +125,21 @@ void Submit(const std::vector<std::uint32_t>& data, std::uint32_t groups) {
 struct KeyRead {
     DccKeys keys;
     bool waited;
+    std::uint32_t resubmits;
 };
 
 std::uint64_t lastNote = 0;
 
-KeyRead SubmitAndRead(const std::vector<std::uint32_t>& data, std::uint32_t groups, std::uint64_t surfaceBytes = SurfaceBytes) {
+void Settle() {
+    AgcDriverWaitIdle_nid_postfix();
+    AgcDriver::GuestMemory::FlushGpuWrites(KeysAddress(), KeyBytes);
+}
+
+KeyRead SubmitAndRead(const std::vector<std::uint32_t>& data, std::uint32_t groups, std::uint64_t surfaceBytes = SurfaceBytes, bool retireFirst = false) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     Submit(data, groups);
+    if (retireFirst) Settle();
+    std::uint32_t resubmits = 0;
     for (;;) {
         bool retired = false;
         {
@@ -138,19 +148,18 @@ KeyRead SubmitAndRead(const std::vector<std::uint32_t>& data, std::uint32_t grou
             if (const auto noted = recorder != nullptr ? recorder->NewestWriteNote(KeysAddress(), KeyBytes) : 0; noted > lastNote) {
                 lastNote = noted;
                 const auto keys = AgcDriver::Graphics::CurrentDccKeys(KeysAddress(), surfaceBytes);
-                return {keys, !recorder->PendingWriteOverlaps(KeysAddress(), KeyBytes)};
+                return {keys, !recorder->PendingWriteOverlaps(KeysAddress(), KeyBytes), resubmits};
             }
-            retired = Finished == Submitted;
+            retired = std::atomic_ref<std::uint32_t>(Finished).load() == Submitted;
         }
-        if (retired) Submit(data, groups);
+        if (retired) {
+            Require(resubmits < MaxResubmits, "the dispatch completed " + std::to_string(resubmits + 1) + " times without a pending write over the keys");
+            ++resubmits;
+            Submit(data, groups);
+        }
         Require(std::chrono::steady_clock::now() < deadline, "the submitted dispatch never became a pending write over the keys");
         std::this_thread::yield();
     }
-}
-
-void Settle() {
-    AgcDriverWaitIdle_nid_postfix();
-    AgcDriver::GuestMemory::FlushGpuWrites(KeysAddress(), KeyBytes);
 }
 
 void RequireStored(std::uint32_t count, const Pattern& pattern, std::uint32_t before, const std::string& what) {
@@ -172,6 +181,12 @@ void ExecuteTests() {
         Require(read.keys == keys && !read.waited, Describe("a pending key code fill by the kernel", read));
         RequireStored(Dwords, Uniform(key), 0, "the kernel's key code fill");
     }
+
+    Settle();
+    const auto retired = SubmitAndRead(UserData(Dwords, Dwords, Uniform(0x40)), Dwords / 64, SurfaceBytes, true);
+    Require(retired.resubmits > 0, "a fill that retired before the read was not submitted again");
+    Require(retired.keys == DccKeys::Clear0001 && !retired.waited, Describe("a pending 0001 fill submitted again after it retired before the read", retired));
+    RequireStored(Dwords, Uniform(0x40), 0, "the 0001 fill submitted again");
 
     const auto other = SubmitAndRead(UserData(Dwords, Dwords, Uniform(0x5a)), Dwords / 64);
     Require(other.keys == DccKeys::Mixed && other.waited, Describe("a pending fill of a byte that is not a key code", other));
