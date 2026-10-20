@@ -817,6 +817,11 @@ bool CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
                 Require(DepthSurfaceView(context, target) == view, "updating the native clear value replaced its attachment");
                 const std::uint32_t clearPattern = clearOne ? (depthOnly ? 0xfffffff0u : 0xfffc00f0u) : 0u;
                 if (fault == ClearFault::DriverDispatch && clearOne) {
+                    struct ShutdownDriver {
+                        ~ShutdownDriver() {
+                            try { AgcDriverShutdown_nid_postfix(); } catch (...) {}
+                        }
+                    } shutdownDriver;
                     const auto generation = AgcDriver::GuestMemory::TrackerGeneration();
                     SubmitDriverHtileClear(target.htileAddress, gpuLock);
                     recorder.Activate();
