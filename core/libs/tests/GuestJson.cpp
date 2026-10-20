@@ -457,6 +457,7 @@ static void ObjectFind() {
     Value* second = _ZN3sce4Json6ObjectixERKNS0_6StringE(&object, &beta);
     Require(_ZN3sce4Json5Value3setEPKc(second, "b") == 0);
     _ZNK3sce4Json6Object3endEv(&end, &object);
+    _ZN3sce4Json6Object8iteratorD1Ev(&found);
     Iterator* returned = _ZNK3sce4Json6Object4findERKNS0_6StringE(&found, &object, &beta);
     Require(returned == &found);
     Require(_ZNK3sce4Json6Object8iteratorneERKS2_(&found, &end));
@@ -466,6 +467,7 @@ static void ObjectFind() {
     Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(&pair->key), "beta") == 0);
     _ZN3sce4Json6Object8iteratorppEv(&found);
     Require(!_ZNK3sce4Json6Object8iteratorneERKS2_(&found, &end));
+    _ZN3sce4Json6Object8iteratorD1Ev(&found);
     _ZNK3sce4Json6Object4findERKNS0_6StringE(&found, &object, &gamma);
     Require(!_ZNK3sce4Json6Object8iteratorneERKS2_(&found, &end));
     Require(_ZNK3sce4Json6Object4sizeEv(&object) == 2);
@@ -512,7 +514,8 @@ static void ObjectIteratorCopies() {
     Iterator it{};
     std::memset(&it, 0x5a, sizeof(it));
     _ZN3sce4Json6Object8iteratorC1Ev(&it);
-    Require(it.position == nullptr);
+    Require(it.position != nullptr);
+    _ZN3sce4Json6Object8iteratorD1Ev(&it);
 
     Iterator begin{}, end{};
     _ZNK3sce4Json6Object5beginEv(&begin, &object);
@@ -528,6 +531,7 @@ static void ObjectIteratorCopies() {
     _ZN3sce4Json6Object8iteratorD1Ev(&post);
 
     Iterator assigned{};
+    _ZN3sce4Json6Object8iteratorC1Ev(&assigned);
     Require(_ZN3sce4Json6Object8iteratoraSERKS2_(&assigned, &begin) == &assigned);
     Require(_ZNK3sce4Json6Object8iteratoreqERKS2_(&assigned, &begin));
     Require(!_ZNK3sce4Json6Object8iteratorneERKS2_(&assigned, &begin));
@@ -793,6 +797,14 @@ static void ObjectOperations() {
     _ZN3sce4Json6Object8iteratorC1ERKS2_(&copy, &begin);
     Require(_ZN3sce4Json6Object8iterator7advanceEm(&copy, 2) == &copy);
     Require(std::strcmp(_ZNK3sce4Json6String5c_strEv(&_ZNK3sce4Json6Object8iteratordeEv(&copy)->key), "gamma") == 0);
+    _ZN3sce4Json6Object8iterator7advanceEm(&copy, 1);
+    bool endRejected = false;
+    try {
+        _ZN3sce4Json6Object8iterator7advanceEm(&copy, 1);
+    } catch (const std::out_of_range&) {
+        endRejected = true;
+    }
+    Require(endRejected);
     _ZN3sce4Json6Object8iteratorD1Ev(&begin);
     _ZN3sce4Json6Object8iteratorD1Ev(&copy);
 

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <list>
 #include <mutex>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include "SceTypes.hpp"
@@ -39,7 +40,11 @@ struct ArrayIteratorState {
     std::list<Value>::iterator end;
 };
 struct ArrayIterator { ArrayIteratorState* state; };
-struct ObjectIterator { std::list<Pair>::iterator it; };
+struct ObjectIteratorState {
+    std::list<Pair>* owner = nullptr;
+    std::list<Pair>::iterator position{};
+};
+struct ObjectIterator { ObjectIteratorState* state; };
 struct Pair {
     String key;
     std::uint64_t reserved;
@@ -794,21 +799,44 @@ void APS5_VABI _ZN3sce4Json6Object5clearEv(Object* self) {
     self->items->clear();
 }
 Value* APS5_VABI _ZN3sce4Json6ObjectixERKNS0_6StringE(Object* self, const String* key) { return &ObjectEntry(*self, *key->text); }
-ObjectIterator* APS5_VABI _ZNK3sce4Json6Object5beginEv(ObjectIterator* result, const Object* self) { result->it = self->items->begin(); return result; }
-ObjectIterator* APS5_VABI _ZNK3sce4Json6Object3endEv(ObjectIterator* result, const Object* self) { result->it = self->items->end(); return result; }
-void APS5_VABI _ZN3sce4Json6Object8iteratorD1Ev(ObjectIterator* self) { (void)self; }
-ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iteratorppEv(ObjectIterator* self) { ++self->it; return self; }
-Pair* APS5_VABI _ZNK3sce4Json6Object8iteratordeEv(const ObjectIterator* self) { return &*self->it; }
-Pair* APS5_VABI _ZNK3sce4Json6Object8iteratorptEv(const ObjectIterator* self) { return &*self->it; }
+ObjectIterator* APS5_VABI _ZNK3sce4Json6Object5beginEv(ObjectIterator* result, const Object* self) { result->state = new ObjectIteratorState{self->items, self->items->begin()}; return result; }
+ObjectIterator* APS5_VABI _ZNK3sce4Json6Object3endEv(ObjectIterator* result, const Object* self) { result->state = new ObjectIteratorState{self->items, self->items->end()}; return result; }
+void APS5_VABI _ZN3sce4Json6Object8iteratorD1Ev(ObjectIterator* self) { delete self->state; self->state = nullptr; }
+ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iteratorppEv(ObjectIterator* self) {
+    if (self->state && self->state->owner) {
+        if (self->state->position == self->state->owner->end()) throw std::out_of_range("sce::Json::Object::iterator: advance past the end");
+        ++self->state->position;
+    }
+    return self;
+}
+Pair* APS5_VABI _ZNK3sce4Json6Object8iteratordeEv(const ObjectIterator* self) {
+    if (!self->state || !self->state->owner || self->state->position == self->state->owner->end()) throw std::out_of_range("sce::Json::Object::iterator: no current element");
+    return &*self->state->position;
+}
+Pair* APS5_VABI _ZNK3sce4Json6Object8iteratorptEv(const ObjectIterator* self) { return _ZNK3sce4Json6Object8iteratordeEv(self); }
 ObjectIterator* APS5_VABI _ZNK3sce4Json6Object4findERKNS0_6StringE(ObjectIterator* result, const Object* self, const String* key) {
-    result->it = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0; });
+    const auto position = std::find_if(self->items->begin(), self->items->end(), [&](const Pair& pair) { return std::strcmp(pair.key.text->c_str(), key->text->c_str()) == 0; });
+    result->state = new ObjectIteratorState{self->items, position};
     return result;
 }
-bool APS5_VABI _ZNK3sce4Json6Object8iteratorneERKS2_(const ObjectIterator* self, const ObjectIterator* other) { return self->it != other->it; }
-bool APS5_VABI _ZNK3sce4Json6Object8iteratoreqERKS2_(const ObjectIterator* self, const ObjectIterator* other) { return self->it == other->it; }
-void APS5_VABI _ZN3sce4Json6Object8iteratorC1ERKS2_(ObjectIterator* self, const ObjectIterator* other) { self->it = other->it; }
+bool APS5_VABI _ZNK3sce4Json6Object8iteratoreqERKS2_(const ObjectIterator* self, const ObjectIterator* other) {
+    if (!self->state || !other->state) return false;
+    return self->state->owner == other->state->owner && self->state->position == other->state->position;
+}
+bool APS5_VABI _ZNK3sce4Json6Object8iteratorneERKS2_(const ObjectIterator* self, const ObjectIterator* other) {
+    if (!self->state || !other->state) return false;
+    return !_ZNK3sce4Json6Object8iteratoreqERKS2_(self, other);
+}
+void APS5_VABI _ZN3sce4Json6Object8iteratorC1ERKS2_(ObjectIterator* self, const ObjectIterator* other) {
+    self->state = other->state ? new ObjectIteratorState(*other->state) : nullptr;
+}
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iterator7advanceEm(ObjectIterator* self, std::size_t count) {
-    std::advance(self->it, count);
+    if (self->state && self->state->owner) {
+        while (count) {
+            _ZN3sce4Json6Object8iteratorppEv(self);
+            --count;
+        }
+    }
     return self;
 }
 bool APS5_VABI _ZNK3sce4Json6Object5emptyEv(const Object* self) { return self->items->empty(); }
@@ -1163,8 +1191,9 @@ void APS5_VABI _ZN3sce4Json6Object4PairD1Ev(Pair* self) {
 
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object6insertERKNS1_4PairE(ObjectIterator* result, Object* self, const Pair* pair) {
     auto it = ObjectPosition(*self, *pair->key.text);
+    auto state = std::make_unique<ObjectIteratorState>(ObjectIteratorState{self->items, it});
     if (it != self->items->end() && std::strcmp(it->key.text->c_str(), pair->key.text->c_str()) == 0) {
-        result->it = it;
+        result->state = state.release();
         return result;
     }
     Pair copy{};
@@ -1172,7 +1201,8 @@ ObjectIterator* APS5_VABI _ZN3sce4Json6Object6insertERKNS1_4PairE(ObjectIterator
     Construct(copy.key, *pair->key.text);
     try {
         CopyInto(copy.value, pair->value);
-        result->it = self->items->insert(it, copy);
+        state->position = self->items->insert(it, copy);
+        result->state = state.release();
         return result;
     } catch (...) {
         Destroy(copy.value);
@@ -1204,18 +1234,26 @@ void APS5_VABI _ZN3sce4Json5Array8iteratorC1Ev(ArrayIterator* self) {
 }
 
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iteratorppEi(ObjectIterator* result, ObjectIterator* self, int) {
-    result->it = self->it;
-    ++self->it;
+    auto state = self->state ? std::make_unique<ObjectIteratorState>(*self->state) : nullptr;
+    _ZN3sce4Json6Object8iteratorppEv(self);
+    result->state = state.release();
     return result;
 }
 
 ObjectIterator* APS5_VABI _ZN3sce4Json6Object8iteratoraSERKS2_(ObjectIterator* self, const ObjectIterator* other) {
-    self->it = other->it;
+    if (self->state) {
+        if (other->state && other->state->owner) {
+            *self->state = *other->state;
+        } else {
+            delete self->state;
+            self->state = nullptr;
+        }
+    }
     return self;
 }
 
 void APS5_VABI _ZN3sce4Json6Object8iteratorC1Ev(ObjectIterator* self) {
-    self->it = {};
+    self->state = new ObjectIteratorState{};
 }
 
 void APS5_VABI _ZN3sce4Json6Object4PairC1Ev(Pair* self) {
