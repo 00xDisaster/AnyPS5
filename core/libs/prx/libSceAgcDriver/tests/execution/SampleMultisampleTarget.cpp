@@ -870,7 +870,13 @@ int main(int argc, char** argv) {
         auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
         if (argc == 2 && std::string_view(argv[1]) == "--native-fmask") {
-            if (!AgcDriver::VulkanDeviceTestAccess::ContextOf(*device).storageImageMultisample) return VulkanTestSkipped;
+            {
+                const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(*device);
+                if (!context.storageImageMultisample || (context.limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_8_BIT) == 0) {
+                    std::puts("native FMASK skipped, the device does not render or store 8-sample color");
+                    return VulkanTestSkipped;
+                }
+            }
             NativeFmask(device);
             return 0;
         }
