@@ -147,8 +147,12 @@ static std::optional<std::uint32_t> ConstantRaxLoad(const std::uint8_t* bytes, c
 }
 
 static std::optional<std::uint32_t> ConstantSyscallNumber(const std::vector<std::uint8_t>& codeSection, const FileByteOffset codeSectionOffset, const RecentInstructions& recent) {
+    FileByteOffset next = recent.Before(0).Offset;
     for (std::size_t step = 1; step <= SYSCALL_NUMBER_LOOKBACK && step < recent.count; ++step) {
         const auto& match = recent.Before(step);
+        if (match.Offset + match.Length != next)
+            return std::nullopt;
+        next = match.Offset;
         const std::size_t start = static_cast<std::size_t>(match.Offset - codeSectionOffset);
 
         if (start >= codeSection.size() || match.Length > codeSection.size() - start)
@@ -168,6 +172,49 @@ static std::optional<std::uint32_t> ConstantSyscallNumber(const std::vector<std:
             return std::nullopt;
     }
 
+    return std::nullopt;
+}
+
+static std::optional<std::uint32_t> ConstantRaxSetEndingAt(const std::vector<std::uint8_t>& code, const std::size_t end) {
+    std::uint32_t value = 0;
+    if (end >= 5 && code[end - 5] == 0xB8) {
+        std::memcpy(&value, code.data() + end - 4, sizeof(value));
+        return value;
+    }
+    if (end >= 7 && code[end - 7] == 0x48 && code[end - 6] == 0xC7 && code[end - 5] == 0xC0) {
+        std::memcpy(&value, code.data() + end - 4, sizeof(value));
+        return value;
+    }
+    if (end >= 2 && (code[end - 2] == 0x31 || code[end - 2] == 0x33) && code[end - 1] == 0xC0)
+        return value;
+    return std::nullopt;
+}
+
+static bool MovesOtherRegisterThanRax(const std::uint8_t* bytes, const std::size_t length) {
+    const std::uint8_t rex = length == 3 ? bytes[0] : 0;
+    if (length == 3 && (rex & 0xF0) != 0x40)
+        return false;
+    const std::uint8_t opcode = bytes[length - 2];
+    const std::uint8_t modrm = bytes[length - 1];
+    if ((modrm & 0xC0) != 0xC0)
+        return false;
+    const bool writesRm = opcode == 0x89 || opcode == 0x31;
+    const bool writesReg = opcode == 0x8B || opcode == 0x33;
+    if (!writesRm && !writesReg)
+        return false;
+    const unsigned written = writesRm ? (modrm & 7u) | ((rex & 1u) << 3) : ((modrm >> 3) & 7u) | ((rex & 4u) << 1);
+    return written != 0;
+}
+
+static std::optional<std::uint32_t> ConstantSyscallNumberInBytes(const std::vector<std::uint8_t>& code, const std::size_t end, const std::size_t steps) {
+    if (const auto value = ConstantRaxSetEndingAt(code, end))
+        return value;
+    if (steps == 0)
+        return std::nullopt;
+    for (const std::size_t length : {std::size_t{2}, std::size_t{3}})
+        if (end >= length && MovesOtherRegisterThanRax(code.data() + end - length, length))
+            if (const auto value = ConstantSyscallNumberInBytes(code, end - length, steps - 1))
+                return value;
     return std::nullopt;
 }
 
@@ -191,8 +238,7 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
     const auto scanner = Codegen::MakeInstructionScanner([&](auto completed, auto total) { progress.Report({Domain::ProgressStage::Decode, source, completed, total}); }, unwindRanges);
     RecentInstructions recent;
     std::vector<std::size_t> trapped;
-    std::vector<CodeRange> functions(unwindRanges);
-    std::sort(functions.begin(), functions.end(), [](const CodeRange& left, const CodeRange& right) { return left.Begin < right.Begin; });
+    const auto functions = Codegen::MergeCodeRanges(unwindRanges);
     const auto insideFunction = [&](const std::size_t offset) {
         const auto after = std::upper_bound(functions.begin(), functions.end(), offset, [](const std::size_t value, const CodeRange& range) { return value < range.Begin; });
         return after != functions.begin() && offset < std::prev(after)->End;
@@ -222,11 +268,15 @@ std::vector<std::size_t> SyscallScanner::ScanCodeSectionForSyscalls(const std::v
             return;
         }
 
-        const auto number = kind == ForbiddenInstruction::Invocation ? ConstantSyscallNumber(codeSection, codeSectionOffset, recent) : std::nullopt;
+        auto number = kind == ForbiddenInstruction::Invocation ? ConstantSyscallNumber(codeSection, codeSectionOffset, recent) : std::nullopt;
         if (!functions.empty() && !number && !insideFunction(start)) {
-            ++skipped;
-            if (!firstSkipped) firstSkipped = match.Offset;
-            return;
+            if (kind == ForbiddenInstruction::Invocation)
+                number = ConstantSyscallNumberInBytes(codeSection, opcode, SYSCALL_NUMBER_LOOKBACK - 1);
+            if (!number) {
+                ++skipped;
+                if (!firstSkipped) firstSkipped = match.Offset;
+                return;
+            }
         }
 
         std::ostringstream msg;

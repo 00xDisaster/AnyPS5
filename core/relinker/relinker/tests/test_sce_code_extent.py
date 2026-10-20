@@ -26,12 +26,13 @@ INVALID = bytes.fromhex("41 41 41 41 41 41 66 66 66 66 2e 0f 1f 84 00 00 00 00 0
 
 
 def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False, data_pointer=False, gap_entry=False,
-            plt_at=None, early_function=False, function_tls=False, pointer_target=None, gap_bytes=None):
+            plt_at=None, early_function=False, function_tls=False, pointer_target=None, gap_bytes=None, functions=None):
     plt = FUNCTION + FUNCTION_SIZE + gap if plt_at is None else plt_at
     entry = FUNCTION + FUNCTION_SIZE if gap_entry else FUNCTION
     data = plt + 0x20 if plt > FUNCTION else FUNCTION + FUNCTION_SIZE
-    functions = [(EARLY_FUNCTION, FUNCTION_SIZE)] if early_function else []
-    functions.append((FUNCTION, FUNCTION_SIZE))
+    if functions is None:
+        functions = [(EARLY_FUNCTION, FUNCTION_SIZE)] if early_function else []
+        functions.append((FUNCTION, FUNCTION_SIZE))
     interpreter = FUNCTION - len(INTERPRETER)
     image = bytearray(0x1000)
     image[:16] = b"\x7fELF\x02\x01\x01" + bytes(9)
