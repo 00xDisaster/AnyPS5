@@ -31,6 +31,7 @@
 #include <unistd.h>
 #endif
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/FilesystemError.hpp"
 #include "prx/libc/include/AppArchive.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 
@@ -421,8 +422,60 @@ extern "C" int HostStandardError_nid_no_patch() {
     return g_hostStandardError.load();
 }
 
+namespace {
+std::mutex g_hostStandardOutputMutex;
+std::atomic<int> g_hostStandardOutput{-1};
+}
+
+extern "C" int KeepHostStandardOutput_nid_no_patch() {
+    const std::lock_guard lock(g_hostStandardOutputMutex);
+    if (const int kept = g_hostStandardOutput.load(); kept >= 0) return kept;
+    const int kept = ::fcntl(1, F_DUPFD_CLOEXEC, 3);
+    if (kept < 0) {
+        if (errno == EBADF) return -1;
+        throw std::system_error(errno, std::generic_category(), "Keeping the host standard output");
+    }
+    std::FILE* const stream = ::fdopen(kept, "w");
+    if (stream == nullptr) {
+        const int error = errno;
+        ::close(kept);
+        throw std::system_error(error, std::generic_category(), "Keeping the host standard output");
+    }
+    std::setvbuf(stream, nullptr, _IONBF, 0);
+    std::fflush(stdout);
+    stdout = stream;
+    g_hostStandardOutput.store(kept);
+    return kept;
+}
+
 extern "C" int DuplicateHostDescriptor_nid_no_patch(int descriptor) {
     return ::fcntl(descriptor, F_DUPFD_CLOEXEC, 3);
+}
+#endif
+
+#ifdef _WIN32
+namespace {
+std::atomic<std::FILE*> g_hostStandardOutputFile{nullptr};
+std::atomic<std::FILE*> g_hostStandardErrorFile{nullptr};
+}
+
+extern "C" bool AdoptHostStandardStream_nid_no_patch(int standard, int saved) {
+    std::fflush(__acrt_iob_func(standard));
+    std::FILE* stream = ::_fdopen(saved, "w");
+    if (stream == nullptr) return false;
+    std::setvbuf(stream, nullptr, _IONBF, 0);
+    (standard == 1 ? g_hostStandardOutputFile : g_hostStandardErrorFile).store(stream, std::memory_order_release);
+    return true;
+}
+
+extern "C" std::FILE* HostStandardOutputFile_nid_no_patch() {
+    if (std::FILE* kept = g_hostStandardOutputFile.load(std::memory_order_acquire)) return kept;
+    return __acrt_iob_func(1);
+}
+
+extern "C" std::FILE* HostStandardErrorFile_nid_no_patch() {
+    if (std::FILE* kept = g_hostStandardErrorFile.load(std::memory_order_acquire)) return kept;
+    return __acrt_iob_func(2);
 }
 #endif
 
@@ -598,7 +651,7 @@ extern "C" int APS5_VABI chdir_nid_postfix(const char* path) {
         const auto resolved = Resolve(state, path, false, true);
         AppArchiveRefuseOnly_nid_no_patch(resolved, path, "changing the working directory to");
         const int error = SetWorkingDirectory(state, resolved);
-        if (error) { errno = error; return -1; }
+        if (error) { errno = error == 2 ? NotFoundError_nid_no_patch(resolved) : error; return -1; }
         return 0;
     } catch (const std::bad_alloc&) { errno = 12; return -1; }
       catch (const std::filesystem::filesystem_error& error) { errno = DirectoryFailure(error.code()); return -1; }
