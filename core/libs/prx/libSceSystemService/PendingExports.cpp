@@ -25,6 +25,12 @@ struct SystemServicePSButtonEvent;
 struct SystemServicePrivacyDefinitionData;
 struct SystemServicePrivacyDefinitionVersion;
 struct SystemServiceTitleWorkaroundInfo;
+struct SystemServiceStoreParam {
+    std::uint32_t size;
+};
+
+static_assert(sizeof(SystemServiceStoreParam) == 4);
+
 struct SystemServiceLocalProcessParam;
 struct SystemServiceJvmProcessParam;
 struct SystemServicePs2ProcessParam;
@@ -1961,7 +1967,7 @@ int APS5_VABI sceSystemServiceIsBgmPlaying() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsEyeToEyeDistanceAdjusted() {
+int APS5_VABI sceSystemServiceIsEyeToEyeDistanceAdjusted(std::uint32_t userId, std::uint8_t* adjusted) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1981,17 +1987,17 @@ bool APS5_VABI sceSystemServiceIsShellUiFgAndGameBgCpuMode() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceKillLocalProcess() {
+int APS5_VABI sceSystemServiceKillLocalProcess(std::int32_t appId, std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceKillLocalProcessForJvm() {
+int APS5_VABI sceSystemServiceKillLocalProcessForJvm(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceKillLocalProcessForPs2Emu() {
+int APS5_VABI sceSystemServiceKillLocalProcessForPs2Emu(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2001,7 +2007,7 @@ int APS5_VABI sceSystemServiceLaunchEventDetails() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceLaunchStore() {
+int APS5_VABI sceSystemServiceLaunchStore(const char* uri, const SystemServiceStoreParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2020,7 +2026,7 @@ int APS5_VABI sceSystemServiceLaunchUdsApp() {
     return SystemServiceRejected;
 }
 
-int APS5_VABI sceSystemServiceLaunchWebApp() {
+int APS5_VABI sceSystemServiceLaunchWebApp(const char* argument) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2054,7 +2060,7 @@ int APS5_VABI sceSystemServiceNotifyBgmCoreTermination() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceRaiseExceptionLocalProcess() {
+int APS5_VABI sceSystemServiceRaiseExceptionLocalProcess(std::int32_t appId, std::int32_t processId, std::uint64_t exception) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2100,12 +2106,12 @@ int APS5_VABI sceSystemServiceRequestToChangeRenderingMode() {
     return SystemServiceRejected;
 }
 
-int APS5_VABI sceSystemServiceResumeLocalProcess() {
+int APS5_VABI sceSystemServiceResumeLocalProcess(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSaveVideoToken() {
+int APS5_VABI sceSystemServiceSaveVideoToken(std::int32_t userId, const char* token) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2115,12 +2121,12 @@ int APS5_VABI sceSystemServiceSetControllerFocusPermission(std::uint8_t permissi
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSetGpuLoadEmulationMode() {
+int APS5_VABI sceSystemServiceSetGpuLoadEmulationMode(std::uint32_t mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSetOutOfVrPlayAreaFlag() {
+int APS5_VABI sceSystemServiceSetOutOfVrPlayAreaFlag(std::uint8_t flag) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2129,7 +2135,7 @@ int APS5_VABI sceSystemServiceSetOutOfVrPlayZoneWarning() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSetPowerSaveLevel() {
+int APS5_VABI sceSystemServiceSetPowerSaveLevel(std::uint32_t level) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2144,7 +2150,7 @@ int APS5_VABI sceSystemServiceShowClosedCaptionSettings() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceShowErrorDialog() {
+int APS5_VABI sceSystemServiceShowErrorDialog(std::uint32_t error, const char* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2159,22 +2165,22 @@ int APS5_VABI sceSystemServiceShowImposeMenuForPs2Emu() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSuspendBackgroundApp() {
+int APS5_VABI sceSystemServiceSuspendBackgroundApp(std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceSuspendLocalProcess() {
+int APS5_VABI sceSystemServiceSuspendLocalProcess(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceTelemetrySetData() {
+int APS5_VABI sceSystemServiceTelemetrySetData(const char* key, const void* data, std::size_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceTelemetrySetData2() {
+int APS5_VABI sceSystemServiceTelemetrySetData2(const char* key, const char* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
