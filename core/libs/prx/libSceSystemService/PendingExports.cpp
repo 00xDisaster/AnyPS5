@@ -7,44 +7,46 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+struct AppMessagingMessage;
+
 extern "C" {
 
-int APS5_VABI sceAppMessagingClearEventFlag() {
+int APS5_VABI sceAppMessagingClearEventFlag(std::int32_t appId, std::uint64_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingReceiveMsg() {
+int APS5_VABI sceAppMessagingReceiveMsg(AppMessagingMessage* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingSendMsg() {
+int APS5_VABI sceAppMessagingSendMsg(std::uint32_t appId, std::uint32_t messageId, const void* data, std::size_t size, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingSendMsgToShellCore() {
+int APS5_VABI sceAppMessagingSendMsgToShellCore(std::uint32_t messageId, const void* data, std::size_t size, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingSendMsgToShellUI() {
+int APS5_VABI sceAppMessagingSendMsgToShellUI(std::uint32_t messageId, const void* data, std::size_t size, std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingSetEventFlag() {
+int APS5_VABI sceAppMessagingSetEventFlag(std::int32_t appId, std::uint64_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingTryGetEventFlag() {
+int APS5_VABI sceAppMessagingTryGetEventFlag(std::uint64_t mask, std::uint64_t* flags, std::uint8_t clear) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceAppMessagingTryReceiveMsg() {
+int APS5_VABI sceAppMessagingTryReceiveMsg(AppMessagingMessage* message) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
