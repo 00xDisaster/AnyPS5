@@ -19,7 +19,7 @@ body:
     id: title
     attributes:
       label: Title, test or build step
-      description: Title ID and content version (for example PPSA99666 01.001.001), a homebrew with its source, the ctest name, or the build step that fails.
+      description: Title ID and content version (for example PPSAxxxxx 01.000.000), a homebrew with its source, the ctest name, or the build step that fails.
     validations:
       required: true
   - type: input
