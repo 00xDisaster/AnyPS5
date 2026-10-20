@@ -168,9 +168,12 @@ int main() {
 #ifdef __linux__
         if (stackSize == STACK_SIZES[sizeof(STACK_SIZES) / sizeof(STACK_SIZES[0]) - 1]) {
             const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-            const auto pageCount = (lastGuestStackSize + pageSize - 1) / pageSize;
+            const auto stackAddress = reinterpret_cast<std::uintptr_t>(lastGuestStack);
+            const auto firstPageAddress = stackAddress - stackAddress % pageSize;
+            const auto leadingBytes = stackAddress - firstPageAddress;
+            const auto pageCount = (leadingBytes + lastGuestStackSize + pageSize - 1) / pageSize;
             std::vector<unsigned char> residency(pageCount);
-            if (mincore(lastGuestStack, lastGuestStackSize, residency.data()) == 0) {
+            if (mincore(reinterpret_cast<void*>(firstPageAddress), pageCount * pageSize, residency.data()) == 0) {
                 for (std::size_t page = 0; page < pageCount; ++page)
                     Require((residency[page] & 1u) == 0);
             } else {
