@@ -791,22 +791,22 @@ std::uint64_t APS5_VABI sceShellCoreUtilGetFreeSizeOfAvContentsTmp() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetFreeSizeOfUserPartition() {
+int APS5_VABI sceShellCoreUtilGetFreeSizeOfUserPartition(std::uint64_t* firstSize, std::uint64_t* secondSize) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetFsckProgress() {
+int APS5_VABI sceShellCoreUtilGetFsckProgress(const char* path, std::uint32_t* progress) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetGameLiveStreamingStatus() {
+int APS5_VABI sceShellCoreUtilGetGameLiveStreamingStatus(bool* active) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetGnmCompositorOnScreenProfilerFlag() {
+bool APS5_VABI sceShellCoreUtilGetGnmCompositorOnScreenProfilerFlag() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -816,32 +816,32 @@ int APS5_VABI sceShellCoreUtilGetGpuLoadEmulationMode() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetGpuLoadEmulationModeByAppId() {
+int APS5_VABI sceShellCoreUtilGetGpuLoadEmulationModeByAppId(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigFileInfoString() {
+int APS5_VABI sceShellCoreUtilGetHidConfigFileInfoString(char* value, std::size_t capacity, std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigFileString() {
+int APS5_VABI sceShellCoreUtilGetHidConfigFileString(char* value, std::size_t capacity, std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigName() {
+int APS5_VABI sceShellCoreUtilGetHidConfigName(char* value, std::size_t capacity, std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetHidConfigNum() {
+int APS5_VABI sceShellCoreUtilGetHidConfigNum(std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetIDUMode() {
+int APS5_VABI sceShellCoreUtilGetIDUMode(std::uint8_t* mode) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -856,12 +856,12 @@ int APS5_VABI sceShellCoreUtilGetManifestFileStatus() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetNeedSizeOfAppContent() {
+int APS5_VABI sceShellCoreUtilGetNeedSizeOfAppContent(std::uint64_t* size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetNetEvConfigFileInfoString() {
+int APS5_VABI sceShellCoreUtilGetNetEvConfigFileInfoString(char* value, std::size_t capacity) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
