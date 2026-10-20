@@ -4,8 +4,43 @@
 #include <stdexcept>
 #include <string>
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 
-struct VrTracker2InitializeParameter;
+struct VrTracker2InitializeParameter {
+    std::uint32_t size;
+    std::uint32_t mode;
+    std::int32_t threadPriorities[2];
+    std::uint64_t threadAffinityMasks[2];
+    void* workMemory;
+    std::uint32_t workMemorySize;
+    std::uint32_t workMemoryAlignment;
+    std::uint32_t option;
+    std::uint32_t coordinateSystem;
+    std::uint8_t disableOption;
+    std::int8_t optionMode;
+    std::uint8_t reserved[14];
+};
+
+struct VrTracker2MemoryParameter {
+    std::uint32_t size;
+    std::uint32_t mode;
+    std::uint8_t reserved[24];
+};
+
+struct VrTracker2MemoryRequirement {
+    std::uint32_t size;
+    std::uint32_t memorySize;
+    std::uint32_t memoryAlignment;
+    std::uint8_t reserved[20];
+};
+
+static_assert(sizeof(VrTracker2InitializeParameter) == 72);
+static_assert(offsetof(VrTracker2InitializeParameter, threadAffinityMasks) == 16);
+static_assert(offsetof(VrTracker2InitializeParameter, workMemory) == 32);
+static_assert(offsetof(VrTracker2InitializeParameter, coordinateSystem) == 52);
+static_assert(offsetof(VrTracker2InitializeParameter, reserved) == 58);
+static_assert(sizeof(VrTracker2MemoryParameter) == 32);
+static_assert(sizeof(VrTracker2MemoryRequirement) == 32);
 struct VrTracker2ResultParameter;
 struct VrTracker2Result;
 struct VrTracker2CoordinateLocation;
@@ -84,17 +119,22 @@ std::int32_t APS5_VABI sceVrTracker2UnregisterDevice(std::int32_t deviceHandle) 
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-std::int32_t APS5_VABI sceVrTracker2QueryMemory(const void* parameter, void* requirement) {
+std::int32_t APS5_VABI sceVrTracker2QueryMemory(const VrTracker2MemoryParameter* parameter, VrTracker2MemoryRequirement* requirement) {
     if (parameter == nullptr || requirement == nullptr) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
-    const auto* bytes = static_cast<const std::uint8_t*>(parameter);
-    std::uint32_t size = 0;
-    std::memcpy(&size, bytes, sizeof size);
-    if (size != 0x20) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
-    for (std::size_t offset = sizeof size; offset < 0x20; ++offset)
-        if (bytes[offset] != 0) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
-    const std::uint32_t fields[3] = {0x20, 32u << 20, 64u << 10};
-    std::memset(requirement, 0, 0x20);
-    std::memcpy(requirement, fields, sizeof fields);
+    if (parameter->size != sizeof(VrTracker2MemoryParameter)) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
+    std::uint32_t memorySize = 32u << 20;
+    if (parameter->mode == 1000 || parameter->mode == 1001) {
+        const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
+        std::uint32_t sdkVersion;
+        std::memcpy(&sdkVersion, process + 0x10, sizeof(sdkVersion));
+        if (sdkVersion < 0x1000000) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
+        memorySize = parameter->mode == 1000 ? 7u << 20 : 3u << 20;
+    } else if (parameter->mode != 0) {
+        return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
+    }
+    for (const auto value : parameter->reserved)
+        if (value != 0) return VR_TRACKER2_ERROR_INVALID_ARGUMENT;
+    *requirement = {sizeof(VrTracker2MemoryRequirement), memorySize, 64u << 10, {}};
     return SCE_OK;
 }
 
