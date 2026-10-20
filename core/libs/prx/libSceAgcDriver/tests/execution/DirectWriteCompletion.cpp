@@ -17,6 +17,8 @@
 #endif
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +27,7 @@
 #include <mutex>
 #include <span>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -41,6 +44,7 @@ constexpr std::size_t SettledImportBytes = 64 * Block;
 constexpr std::uint32_t Untouched = 0xdeadbeefu;
 constexpr std::uint32_t Stored = 0x12345678u;
 constexpr std::uint32_t Filled = 0x9abcdef0u;
+constexpr std::uint32_t Written = 0x0badf00du;
 
 alignas(256) constexpr std::array<std::uint32_t, 7> StoreCode{
     0x7e040300, 0x7e060280, 0x7e0202ff, Stored, 0xf0200108, 0x00020102, 0xbf810000,
@@ -158,7 +162,23 @@ private:
 
 enum class Outcome { Kept, Dropped, Missed };
 
-Outcome StoreAfterFill(const Surface& surface) {
+void WriteOnceRecorded(const Surface& surface) {
+    const auto address = AddressOf(surface.Texels());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (;;) {
+        {
+            std::unique_lock hold(AgcDriver::GuestMemory::GpuMutex());
+            if (StorageTexture::FindPending(address, SurfaceBytes) != nullptr) {
+                surface.Texels()[0] = Written;
+                return;
+            }
+        }
+        Require(std::chrono::steady_clock::now() < deadline, "direct write completion: the image store was never recorded");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+Outcome StoreAfterFill(const Surface& surface, bool cpuWrite) {
     std::vector<std::uint32_t> copied(SurfaceBytes / 4u, Untouched);
     GuestAllocations::Mutation().Add(copied.data(), SurfaceBytes, true, true, true);
     struct Unregister {
@@ -168,8 +188,18 @@ Outcome StoreAfterFill(const Surface& surface) {
     std::vector<std::uint32_t> words;
     Fill(words, surface.Texels(), copied.data());
     Store(words, surface.Texels());
+    alignas(8) static std::uint32_t gate = 0;
+    gate = 0;
+    if (cpuWrite) {
+        const auto at = AddressOf(&gate);
+        words.insert(words.end(), {0xc0053c00u, 0x13u, static_cast<std::uint32_t>(at), static_cast<std::uint32_t>(at >> 32u), 1u, 0xffffffffu, 0x19u});
+    }
     Packet packet{words.data(), static_cast<std::uint32_t>(words.size()), 0, {}};
     AgcDriver::Submit(&packet, 0);
+    if (cpuWrite) {
+        WriteOnceRecorded(surface);
+        std::atomic_ref<std::uint32_t>(gate).store(1);
+    }
     AgcDriverWaitIdle_nid_postfix();
     std::vector<std::byte> landed(SurfaceBytes);
     AgcDriver::GuestMemory::Read(AddressOf(copied.data()), landed);
@@ -201,12 +231,12 @@ int main() {
         {
             constexpr std::size_t Runs = SettledImportBytes / SurfaceBytes - 1;
             std::vector<std::unique_ptr<Surface>> surfaces;
-            for (std::size_t index = 0; index <= Runs; ++index) surfaces.push_back(std::make_unique<Surface>());
-            static_cast<void>(StoreAfterFill(*surfaces[0]));
+            for (std::size_t index = 0; index <= 2 * Runs + 1; ++index) surfaces.push_back(std::make_unique<Surface>());
+            static_cast<void>(StoreAfterFill(*surfaces[0], false));
             std::size_t kept = 0;
             std::size_t dropped = 0;
             for (std::size_t run = 1; run <= Runs; ++run) {
-                const auto outcome = StoreAfterFill(*surfaces[run]);
+                const auto outcome = StoreAfterFill(*surfaces[run], false);
                 kept += outcome == Outcome::Kept;
                 dropped += outcome == Outcome::Dropped;
             }
@@ -214,6 +244,17 @@ int main() {
             std::printf("[direct write completion] %zu of %zu runs held the image results pending, %zu dropped them\n", kept + dropped, Runs, dropped);
             Require(kept + dropped != 0, "direct write completion: no run held the image results pending");
             Require(dropped == 0, "direct write completion: the completion of a buffer write dropped image results recorded after it");
+            static_cast<void>(StoreAfterFill(*surfaces[Runs + 1], false));
+            std::size_t keptOverWrite = 0;
+            std::size_t lostWrites = 0;
+            for (std::size_t run = Runs + 2; run <= 2 * Runs + 1; ++run) {
+                keptOverWrite += StoreAfterFill(*surfaces[run], true) == Outcome::Kept;
+                lostWrites += surfaces[run]->Texels()[0] != Written;
+            }
+            AgcDriverWaitIdle_nid_postfix();
+            std::printf("[direct write completion] %zu of %zu runs with a CPU write before the completion kept the image results, %zu lost the write\n", keptOverWrite, Runs, lostWrites);
+            Require(keptOverWrite == 0, "direct write completion: image results were kept over a CPU write made before the completion");
+            Require(lostWrites == 0, "direct write completion: a CPU write made before the completion was lost");
         }
         AgcDriverShutdown_nid_postfix();
         std::puts("direct write completion tests passed");
