@@ -197,10 +197,10 @@ int APS5_VABI sceRudpSetEventHandler(GuestRudpEventHandler handler, void* arg) {
     return 0;
 }
 
-int APS5_VABI sceRudpCreateContext(GuestRudpEventHandler handler, void* arg, int* ctx_id) {
+int APS5_VABI sceRudpCreateContext(GuestRudpEventHandler handler, void* arg, int* ctxId) {
     (void)handler;
     (void)arg;
-    if (ctx_id == nullptr) {
+    if (ctxId == nullptr) {
         return RUDP_ERROR_INVALID_ARGUMENT;
     }
     std::lock_guard<std::mutex> lk(g_mutex);
@@ -209,11 +209,11 @@ int APS5_VABI sceRudpCreateContext(GuestRudpEventHandler handler, void* arg, int
     }
     const int id = g_next_ctx++;
     g_ctx.emplace(id, RudpContext{});
-    *ctx_id = id;
+    *ctxId = id;
     return 0;
 }
 
-int APS5_VABI sceRudpBind(int ctx_id, uint16_t vport, int transport, uint16_t port) {
+int APS5_VABI sceRudpBind(int ctxId, uint16_t vport, int transport, uint16_t port) {
     (void)vport;
     (void)transport;
     (void)port;
@@ -221,19 +221,19 @@ int APS5_VABI sceRudpBind(int ctx_id, uint16_t vport, int transport, uint16_t po
     if (!g_inited) {
         return RUDP_ERROR_NOT_INITIALIZED;
     }
-    if (!valid_ctx(ctx_id)) {
+    if (!valid_ctx(ctxId)) {
         return RUDP_ERROR_INVALID_CONTEXT_ID;
     }
-    g_ctx.at(ctx_id).bound = true;
+    g_ctx.at(ctxId).bound = true;
     return 0;
 }
 
-int APS5_VABI sceRudpSetOption(int ctx_id, int option, const void* value, uint32_t len) {
+int APS5_VABI sceRudpSetOption(int ctxId, int option, const void* value, uint32_t len) {
     std::lock_guard<std::mutex> lk(g_mutex);
     if (!g_inited) {
         return RUDP_ERROR_NOT_INITIALIZED;
     }
-    const auto context = g_ctx.find(ctx_id);
+    const auto context = g_ctx.find(ctxId);
     if (context == g_ctx.end()) return RUDP_ERROR_INVALID_CONTEXT_ID;
     if (option < RUDP_OPTION_MAX_PAYLOAD || option > RUDP_OPTION_KEEP_ALIVE_TIMEOUT) return RUDP_ERROR_INVALID_OPTION;
     const auto entry = context->second.options.find(option);
@@ -243,12 +243,12 @@ int APS5_VABI sceRudpSetOption(int ctx_id, int option, const void* value, uint32
     return 0;
 }
 
-int APS5_VABI sceRudpGetOption(int ctx_id, int option, void* value, uint32_t len) {
+int APS5_VABI sceRudpGetOption(int ctxId, int option, void* value, uint32_t len) {
     std::lock_guard<std::mutex> lk(g_mutex);
     if (!g_inited) {
         return RUDP_ERROR_NOT_INITIALIZED;
     }
-    const auto context = g_ctx.find(ctx_id);
+    const auto context = g_ctx.find(ctxId);
     if (context == g_ctx.end()) return RUDP_ERROR_INVALID_CONTEXT_ID;
     if (option < RUDP_OPTION_MAX_PAYLOAD || option > RUDP_OPTION_KEEP_ALIVE_TIMEOUT) return RUDP_ERROR_INVALID_OPTION;
     const auto entry = context->second.options.find(option);
