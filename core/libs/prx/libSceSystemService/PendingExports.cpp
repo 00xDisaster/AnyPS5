@@ -18,6 +18,11 @@ static_assert(offsetof(ShellCoreErrorDialogParam, message) == 0);
 static_assert(offsetof(ShellCoreErrorDialogParam, formatArgs) == 8);
 static_assert(offsetof(ShellCoreErrorDialogParam, flag) == 16);
 
+struct SystemServiceLocalProcessParam;
+struct SystemServiceJvmProcessParam;
+struct SystemServicePs2ProcessParam;
+struct SystemServiceAppInstallStatus;
+struct SystemServiceAppStatus;
 struct ShellCoreLaunchByUriParam;
 struct ShellCoreTelemetryToken;
 struct ShellCoreUmmStatus;
@@ -521,17 +526,17 @@ int APS5_VABI sceShellCoreUtilActivateAbort() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateGetStatus() {
+int APS5_VABI sceShellCoreUtilActivateGetStatus(std::uintptr_t handle, std::uint32_t* status, std::int32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateInit() {
+int APS5_VABI sceShellCoreUtilActivateInit(std::uint32_t type, std::uintptr_t* handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilActivateIsActivated() {
+int APS5_VABI sceShellCoreUtilActivateIsActivated(std::uint32_t type, std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1561,22 +1566,22 @@ int APS5_VABI sceSystemServiceActivateHevc() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcAbort() {
+int APS5_VABI sceSystemServiceActivateHevcAbort(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcGetStatus() {
+int APS5_VABI sceSystemServiceActivateHevcGetStatus(std::uintptr_t handle, std::uint32_t* status, std::int32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcInit() {
+int APS5_VABI sceSystemServiceActivateHevcInit(std::uintptr_t* handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcIsActivated() {
+int APS5_VABI sceSystemServiceActivateHevcIsActivated(std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1586,92 +1591,92 @@ int APS5_VABI sceSystemServiceActivateHevcSoft() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftAbort() {
+int APS5_VABI sceSystemServiceActivateHevcSoftAbort(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftGetStatus() {
+int APS5_VABI sceSystemServiceActivateHevcSoftGetStatus(std::uintptr_t handle, std::uint32_t* status, std::int32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftInit() {
+int APS5_VABI sceSystemServiceActivateHevcSoftInit(std::uintptr_t* handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftIsActivated() {
+int APS5_VABI sceSystemServiceActivateHevcSoftIsActivated(std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftStart() {
+int APS5_VABI sceSystemServiceActivateHevcSoftStart(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcSoftTerm() {
+int APS5_VABI sceSystemServiceActivateHevcSoftTerm(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcStart() {
+int APS5_VABI sceSystemServiceActivateHevcStart(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateHevcTerm() {
+int APS5_VABI sceSystemServiceActivateHevcTerm(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2Abort() {
+int APS5_VABI sceSystemServiceActivateMpeg2Abort(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2GetStatus() {
+int APS5_VABI sceSystemServiceActivateMpeg2GetStatus(std::uintptr_t handle, std::uint32_t* status, std::int32_t* result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2Init() {
+int APS5_VABI sceSystemServiceActivateMpeg2Init(std::uintptr_t* handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2IsActivated() {
+int APS5_VABI sceSystemServiceActivateMpeg2IsActivated(std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2Start() {
+int APS5_VABI sceSystemServiceActivateMpeg2Start(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceActivateMpeg2Term() {
+int APS5_VABI sceSystemServiceActivateMpeg2Term(std::uintptr_t handle) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceAddLocalProcess() {
+int APS5_VABI sceSystemServiceAddLocalProcess(std::int32_t appId, const char* path, const char* const* argv, const SystemServiceLocalProcessParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceAddLocalProcessForJvm() {
+int APS5_VABI sceSystemServiceAddLocalProcessForJvm(const char* path, const char* const* argv, const SystemServiceJvmProcessParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceAddLocalProcessForPs2Emu() {
+int APS5_VABI sceSystemServiceAddLocalProcessForPs2Emu(const char* path, const char* const* argv, const SystemServicePs2ProcessParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceAppGetAppInstallStatus() {
+int APS5_VABI sceSystemServiceAppGetAppInstallStatus(const char* titleId, SystemServiceAppInstallStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1778,12 +1783,12 @@ int APS5_VABI sceSystemServiceEnableSuspendNotification() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppCategoryType() {
+int APS5_VABI sceSystemServiceGetAppCategoryType(std::int32_t appId, std::uint32_t* categoryType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppFocusedAppStatus() {
+int APS5_VABI sceSystemServiceGetAppFocusedAppStatus(SystemServiceAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1798,12 +1803,12 @@ int APS5_VABI sceSystemServiceGetAppIdListOfBigApp() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppLaunchedUser() {
+int APS5_VABI sceSystemServiceGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceSystemServiceGetAppStatus() {
+int APS5_VABI sceSystemServiceGetAppStatus(SystemServiceAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
