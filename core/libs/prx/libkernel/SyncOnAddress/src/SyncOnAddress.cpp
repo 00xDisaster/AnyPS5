@@ -1,7 +1,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <list>
 #include <mutex>
@@ -77,7 +76,7 @@ template <class TValue>
 TValue LoadAddressValue(TValue* address) {
     if (reinterpret_cast<std::uintptr_t>(address) % alignof(TValue) == 0) return std::atomic_ref<TValue>(*address).load();
     TValue value;
-    std::memcpy(&value, address, sizeof(value));
+    asm volatile("mov %1, %0" : "=r"(value) : "m"(*reinterpret_cast<const unsigned char (*)[sizeof(TValue)]>(address)));
     return value;
 }
 

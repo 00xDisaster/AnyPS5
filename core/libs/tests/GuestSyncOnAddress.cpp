@@ -296,6 +296,32 @@ static void MisalignedAddressesWaitAndWake() {
     Require(sceKernelSyncOnAddressWake(word, 1) == 1);
     waiter.join();
     Require(result == SCE_OK);
+
+    auto* shared = reinterpret_cast<std::uint64_t*>(storage + 3);
+    std::atomic<bool> stop{false};
+    std::atomic<int> rounds{0};
+    std::thread changer([&] {
+        std::uint64_t next = 1;
+        while (!stop.load()) {
+            __atomic_store_n(reinterpret_cast<unsigned char*>(shared), static_cast<unsigned char>(next), __ATOMIC_RELAXED);
+            ++next;
+            sceKernelSyncOnAddressWake(shared, INT_MAX);
+        }
+    });
+    for (int round = 0; round < 2000; ++round) {
+        unsigned char bytes[sizeof(std::uint64_t)];
+        bytes[0] = __atomic_load_n(reinterpret_cast<unsigned char*>(shared), __ATOMIC_RELAXED);
+        std::memcpy(bytes + 1, reinterpret_cast<unsigned char*>(shared) + 1, sizeof(bytes) - 1);
+        std::uint64_t seen = 0;
+        std::memcpy(&seen, bytes, sizeof(seen));
+        KernelUseconds waitTimeout = SHORT_TIMEOUT;
+        const int waited = sceKernelSyncOnAddressWait64(shared, seen, &waitTimeout, "changing");
+        Require(waited == SCE_OK || waited == SCE_KERNEL_ERROR_EAGAIN || waited == SCE_KERNEL_ERROR_ETIMEDOUT);
+        ++rounds;
+    }
+    stop.store(true);
+    changer.join();
+    Require(rounds.load() == 2000);
 }
 
 static void NullAddresses() {
