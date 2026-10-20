@@ -7,9 +7,7 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
-
-
-
+struct ShellCoreAppLaunchTypeInfo;
 struct LncLaunchParam;
 struct LncDaemonEvent;
 struct LncShellUiEvent;
@@ -533,7 +531,7 @@ int APS5_VABI sceShellCoreUtilActivateTerm() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilChangeRunLevel() {
+int APS5_VABI sceShellCoreUtilChangeRunLevel(std::int32_t runLevel) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -588,7 +586,7 @@ int APS5_VABI sceShellCoreUtilDeleteDiscInstalledTitleWorkaroundFile() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilDeleteDownloadedHidConfigFile() {
+int APS5_VABI sceShellCoreUtilDeleteDownloadedHidConfigFile(std::uint32_t deviceType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -603,12 +601,12 @@ int APS5_VABI sceShellCoreUtilDeleteDownloadedTitleWorkaroundFile() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilDoFsck() {
+int APS5_VABI sceShellCoreUtilDoFsck(const char* path) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilDownloadHidConfigFileFromServer() {
+int APS5_VABI sceShellCoreUtilDownloadHidConfigFileFromServer(std::uint32_t deviceType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -638,7 +636,7 @@ int APS5_VABI sceShellCoreUtilExecuteCrashReport() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilExfatFormatExternalHdd() {
+int APS5_VABI sceShellCoreUtilExfatFormatExternalHdd(const char* path) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -653,12 +651,12 @@ int APS5_VABI sceShellCoreUtilExitMiniApp() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilExitMiniAppWithValue() {
+int APS5_VABI sceShellCoreUtilExitMiniAppWithValue(const char* value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilFormatExternalHdd() {
+int APS5_VABI sceShellCoreUtilFormatExternalHdd(const char* path) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -668,27 +666,27 @@ int APS5_VABI sceShellCoreUtilFormatHddForRestore() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppData() {
+int APS5_VABI sceShellCoreUtilGetAppData(const char* key, void* data, std::int32_t capacity, std::int32_t* size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppEnableTTS() {
+int APS5_VABI sceShellCoreUtilGetAppEnableTTS(std::int32_t appId, bool* enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppEnterButtonAssign() {
+int APS5_VABI sceShellCoreUtilGetAppEnterButtonAssign(std::int32_t appId, std::int32_t* assignment) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppLaunchTypeInfo() {
+int APS5_VABI sceShellCoreUtilGetAppLaunchTypeInfo(std::int32_t appId, ShellCoreAppLaunchTypeInfo* info) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetAppLaunchedParamInt() {
+int APS5_VABI sceShellCoreUtilGetAppLaunchedParamInt(std::int32_t appId, const char* key, std::int32_t* value) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
