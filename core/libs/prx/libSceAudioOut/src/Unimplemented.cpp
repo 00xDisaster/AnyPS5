@@ -45,16 +45,6 @@ int APS5_VABI sceAudioOut2LoContextGetQueueLevel(void) {
     return 0;
 }
 
-int APS5_VABI sceAudioOut2LoPortSetAttributesEx(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2LoPortGetAttributes(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceAudioOutSetSystemDebugState(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -161,11 +151,6 @@ int APS5_VABI sceAudioOutMasteringGetState(void) {
 }
 
 int APS5_VABI sceAudioOutMasteringTerm(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2LoPortCreateEx(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -335,22 +320,7 @@ int APS5_VABI sceAudioOut2LoContextQueryMemory(void) {
     return 0;
 }
 
-int APS5_VABI sceAudioOut2LoContextQueryMemoryEx(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2LoContextGetAttributes(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceAudioOut2LoContextCreate(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2LoContextCreateEx(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -440,11 +410,6 @@ int APS5_VABI sceAudioOut2GetTvCorrectionInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceAudioOut2SetTvCorrectionInfo(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceAudioOut2GetIpcHandle(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -455,17 +420,7 @@ int APS5_VABI sceAudioOut2GetSystemStateEx(void) {
     return 0;
 }
 
-int APS5_VABI sceAudioOut2GetSystemDebugState(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceAudioOut2MasteringInitEx(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2SetSpeakerInfo(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -500,11 +455,6 @@ int APS5_VABI sceAudioOut2PortCreateEx(void) {
     return 0;
 }
 
-int APS5_VABI sceAudioOut2PortSetAttributesEx(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceAudioOut2InitializeEx(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -531,11 +481,6 @@ int APS5_VABI sceAudioOut2GetAmbisonicsEncodeCoefficients(void) {
 }
 
 int APS5_VABI sceAudioOut2GetHrtfIdForCronos(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceAudioOut2SetHrtfIdForCronos(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
