@@ -369,6 +369,29 @@ int main() {
         catch (const std::exception& error) { faultThrown = std::string(error.what()).find("BDA") != std::string::npos; }
         Require(faultThrown, "poisoned readonly SRT replay did not throw a host fault");
         Require(std::ranges::all_of(Pixels, [](std::byte value) { return value == Kept; }), "poisoned replay published guest color results before its fault");
+        alignas(256) std::array<std::uint32_t, Width + 1u> columnValues{};
+        alignas(256) std::array<float, Width> columnTexels{};
+        columnValues[0] = 0x2fu;
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            columnValues[x + 1u] = 0x30u + x;
+            columnTexels[x] = 1.0f;
+        }
+        constexpr std::array<std::uint32_t, 15> bufferImageCode{
+            0x7e060f00u, 0x7e080280u, 0xf0001108u, 0x00010503u, 0xe0302000u, 0x80000603u, 0xe0302000u, 0x80030803u,
+            0xbf8c3f70u, 0x7e0e02f2u, 0xf8000082u, 0x00000600u, 0xf800180fu, 0x07050805u, 0xbf810000u,
+        };
+        const auto columnBuffer = BufferDescriptor(columnValues.data() + 1, 4u, Width);
+        const auto alignedBuffer = BufferDescriptor(columnValues.data(), 4u, Width + 1u);
+        const auto texelAddress = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(columnTexels.data()));
+        const std::array<std::uint32_t, 8> columnTexture{static_cast<std::uint32_t>(texelAddress >> 8u), static_cast<std::uint32_t>((texelAddress >> 40u) & 0xffu) | (22u << 20u) | (((Width - 1u) & 3u) << 30u), (Width - 1u) >> 2u, 0xfacu | (9u << 28u), 0u, 0u, 0u, 0u};
+        std::vector<std::uint32_t> bufferImageData(columnBuffer.begin(), columnBuffer.end());
+        bufferImageData.insert(bufferImageData.end(), columnTexture.begin(), columnTexture.end());
+        bufferImageData.insert(bufferImageData.end(), alignedBuffer.begin(), alignedBuffer.end());
+        Draw(*device, PlainPixelCode, plain, replace(0u));
+        Draw(*device, bufferImageCode, exported, replace(), 3u, 1u, false, {}, {}, Vertices, VertexCode, bufferImageData);
+        Check(all, "a replayed export beside an image draws the image's texels");
+        Draw(*device, PlainPixelCode, plain, equal(0x35u));
+        Check([](std::uint32_t x, std::uint32_t) { return x == 5u; }, "a replayed export beside an image reads its guest buffer at a 4-byte offset");
         std::puts("stencil replay tests passed");
         return 0;
     } catch (const std::exception& error) {
