@@ -1,5 +1,7 @@
 #include "prx/libc/include/General.hpp"
 
+struct MbusEvent;
+struct MbusEventCallbacks;
 struct MbusProcessInfo;
 struct MbusStartupInfo;
 struct MbusStartupParam;
@@ -209,27 +211,27 @@ int APS5_VABI sceMbusDebugStartApplication2(std::int32_t appId, std::int32_t fir
     return 0;
 }
 
-int APS5_VABI sceMbusDebugStartApplicationNull() {
+int APS5_VABI sceMbusDebugStartApplicationNull(std::int32_t appId, std::int32_t first, std::int32_t second, std::uint8_t firstFlag, std::uint8_t secondFlag) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDebugSuspendApplication() {
+int APS5_VABI sceMbusDebugSuspendApplication(std::uint32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDebugTerminateApplication() {
+int APS5_VABI sceMbusDebugTerminateApplication(std::uint32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDebugTerminateProcess() {
+int APS5_VABI sceMbusDebugTerminateProcess(std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDetachFromApplicationByPid() {
+int APS5_VABI sceMbusDetachFromApplicationByPid(std::int32_t processId, std::int32_t deviceClass) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -239,12 +241,12 @@ int APS5_VABI sceMbusDisableBgmForShellUi() {
     return 0;
 }
 
-int APS5_VABI sceMbusDisableChat() {
+int APS5_VABI sceMbusDisableChat(std::uint32_t deviceClass) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDisconnectDevice() {
+int APS5_VABI sceMbusDisconnectDevice(std::uint64_t deviceId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -259,17 +261,17 @@ int APS5_VABI sceMbusDumpDeviceInfo() {
     return 0;
 }
 
-int APS5_VABI sceMbusDumpHandleStatusInfo() {
+int APS5_VABI sceMbusDumpHandleStatusInfo(std::uint64_t control, std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDumpHandleStatusInfoAll() {
+int APS5_VABI sceMbusDumpHandleStatusInfoAll(std::uint32_t flags) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusDumpModuleStateInfo() {
+int APS5_VABI sceMbusDumpModuleStateInfo(std::uint64_t control) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -289,7 +291,7 @@ int APS5_VABI sceMbusDumpPortHandleInfo() {
     return 0;
 }
 
-int APS5_VABI sceMbusDumpProcMediaInfo() {
+int APS5_VABI sceMbusDumpProcMediaInfo(std::uint64_t control) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -304,17 +306,17 @@ int APS5_VABI sceMbusDumpUserMediaInfo() {
     return 0;
 }
 
-int APS5_VABI sceMbusEnableChat() {
+int APS5_VABI sceMbusEnableChat(std::uint32_t deviceClass) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusEnterAudioOutAutoAttenuation() {
+int APS5_VABI sceMbusEnterAudioOutAutoAttenuation(std::int32_t first, std::int32_t second) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusEventBusStatusChangeSubscribe() {
+int APS5_VABI sceMbusEventBusStatusChangeSubscribe(std::int32_t eventHandle, std::uint32_t first, std::uint32_t second, std::uint64_t firstValue, std::uint64_t secondValue) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -324,12 +326,12 @@ int APS5_VABI sceMbusEventBusStatusChangeUnsubscribe() {
     return 0;
 }
 
-int APS5_VABI sceMbusEventCallbackFuncsInit_() {
+int APS5_VABI sceMbusEventCallbackFuncsInit_(MbusEventCallbacks* callbacks, std::uint32_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceMbusEventCreate_() {
+int APS5_VABI sceMbusEventCreate_(std::uint32_t flags, MbusEvent* buffer, std::uint32_t capacity, const MbusEventCallbacks* callbacks, void* userData) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
