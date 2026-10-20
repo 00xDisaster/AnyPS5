@@ -63,7 +63,33 @@ static_assert(sizeof(VrTracker2MeshRequirement) == 16);
 static_assert(sizeof(VrTracker2Pose) == 32);
 static_assert(offsetof(VrTracker2Pose, orientation) == 16);
 
-struct VrTracker2ResultParameter;
+struct VrTracker2ResultParameter {
+    std::uint32_t size;
+    std::int32_t deviceHandle;
+    std::uint32_t reserved;
+    std::uint8_t padding[4];
+    std::uint64_t timestamp;
+    std::uint32_t reserved2;
+    std::uint8_t padding2[4];
+    std::uint64_t userTag;
+    std::uint32_t reserved3[2];
+};
+
+struct VrTracker2LegacyResultParameter {
+    std::uint32_t size;
+    std::int32_t deviceHandle;
+    std::uint32_t reserved;
+    std::uint8_t padding[4];
+    std::uint64_t timestamp;
+    std::uint32_t userTag;
+    std::uint8_t padding2[4];
+};
+
+static_assert(sizeof(VrTracker2ResultParameter) == 48);
+static_assert(offsetof(VrTracker2ResultParameter, timestamp) == 16);
+static_assert(offsetof(VrTracker2ResultParameter, userTag) == 32);
+static_assert(sizeof(VrTracker2LegacyResultParameter) == 32);
+static_assert(offsetof(VrTracker2LegacyResultParameter, userTag) == 24);
 struct VrTracker2Result;
 struct VrTracker2CoordinateLocation;
 
