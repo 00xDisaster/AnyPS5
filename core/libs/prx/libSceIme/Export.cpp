@@ -15,6 +15,25 @@
 #include "prx/libSceIme/include/ImeFilterText.hpp"
 #include "prx/libSceIme/include/ImeInput.hpp"
 
+struct ImeVshContext;
+
+struct ImeVshCaretGeometry {
+    std::int32_t x;
+    std::int32_t y;
+    std::uint32_t height;
+    std::uint32_t index;
+};
+
+struct ImeVshTextGeometry {
+    std::int32_t x;
+    std::int32_t y;
+    std::uint32_t width;
+    std::uint32_t height;
+};
+
+static_assert(sizeof(ImeVshCaretGeometry) == 16);
+static_assert(sizeof(ImeVshTextGeometry) == 16);
+
 namespace {
 
 constexpr int ErrorBusy = static_cast<int>(0x80bc0001u);
@@ -586,7 +605,7 @@ int APS5_VABI sceImeVshOpen(void) {
     return 0;
 }
 
-int APS5_VABI sceImeKeyboardUpdate(void) {
+int APS5_VABI sceImeKeyboardUpdate(EventHandler handler) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -601,7 +620,7 @@ int APS5_VABI sceImeVshUpdateContext(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshClearPreedit(void) {
+int APS5_VABI sceImeVshClearPreedit(ImeVshContext* context) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -611,47 +630,47 @@ int APS5_VABI sceImeVshNotifySetText(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshSetCaretGeometry(void) {
+int APS5_VABI sceImeVshSetCaretGeometry(ImeVshContext* context, const ImeVshCaretGeometry* geometry) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshConfirmPreedit(void) {
+int APS5_VABI sceImeVshConfirmPreedit(ImeVshContext* context) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshSetCaretIndexInPreedit(void) {
+int APS5_VABI sceImeVshSetCaretIndexInPreedit(ImeVshContext* context, std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshSetPreeditGeometry(void) {
+int APS5_VABI sceImeVshSetPreeditGeometry(ImeVshContext* context, const ImeVshTextGeometry* geometry) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshSetSelectGeometry(void) {
+int APS5_VABI sceImeVshSetSelectGeometry(ImeVshContext* context, const ImeVshTextGeometry* geometry) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshClose(void) {
+int APS5_VABI sceImeVshClose(ImeVshContext* context) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeVshGetPanelPositionAndForm(void) {
+int APS5_VABI sceImeVshGetPanelPositionAndForm(ImeVshContext* context, PositionAndForm* form) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeSetCandidateIndex(void) {
+int APS5_VABI sceImeSetCandidateIndex(std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeConfirmCandidate(void) {
+int APS5_VABI sceImeConfirmCandidate(std::int32_t index) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -661,12 +680,12 @@ int APS5_VABI sceImeDisableController(void) {
     return 0;
 }
 
-int APS5_VABI sceImeSetVoiceDictationEnabled(void) {
+int APS5_VABI sceImeSetVoiceDictationEnabled(bool enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeSetEditEventWithRemotePlayEnabled(void) {
+int APS5_VABI sceImeSetEditEventWithRemotePlayEnabled(bool enabled) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -680,7 +699,7 @@ int APS5_VABI sceImeVshInformConfirmdString2(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshSetSelectionText(void) {
+int APS5_VABI sceImeVshSetSelectionText(ImeVshContext* context, const char16_t* text, std::uint32_t length) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -695,7 +714,7 @@ int APS5_VABI sceImeCheckRemoteEventParam(void) {
     return 0;
 }
 
-int APS5_VABI sceImeKeyboardOpenInternal(void) {
+int APS5_VABI sceImeKeyboardOpenInternal(std::int32_t userId, EventHandler handler, const KeyboardParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -745,7 +764,7 @@ int APS5_VABI sceImeVshCheckAutoReConvertingPreeditText(void) {
     return 0;
 }
 
-int APS5_VABI sceImeVshSetPanelPosition(void) {
+int APS5_VABI sceImeVshSetPanelPosition(ImeVshContext* context, float x, float y, std::int32_t horizontalAlignment, std::int32_t verticalAlignment) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -785,12 +804,12 @@ int APS5_VABI sceImeDicReplaceWord(void) {
     return 0;
 }
 
-int APS5_VABI sceImeDicDeleteLearnDics(void) {
+int APS5_VABI sceImeDicDeleteLearnDics(std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceImeDicDeleteUserDics(void) {
+int APS5_VABI sceImeDicDeleteUserDics(std::int32_t userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
