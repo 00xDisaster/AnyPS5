@@ -7,6 +7,10 @@ constexpr int SystemServiceRejected = static_cast<int>(0x80A10005);
 
 }
 
+
+struct LncLocalProcessParam;
+struct LncAppStatus;
+struct LncShellUiAppStatus;
 struct AppMessagingMessage;
 
 extern "C" {
@@ -71,12 +75,12 @@ int APS5_VABI sceLncUtilActivateCdlg() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilAddLocalProcess() {
+int APS5_VABI sceLncUtilAddLocalProcess(std::int32_t appId, const char* path, const char* const* argv, const LncLocalProcessParam* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilBlockAppSuspend() {
+int APS5_VABI sceLncUtilBlockAppSuspend(const char* reason) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -121,22 +125,22 @@ int APS5_VABI sceLncUtilFinishSpecialResume() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilForceKillApp() {
+int APS5_VABI sceLncUtilForceKillApp(std::int32_t appId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilForceKillLocalProcess() {
+int APS5_VABI sceLncUtilForceKillLocalProcess(std::int32_t appId, std::int32_t processId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppCategory() {
+int APS5_VABI sceLncUtilGetAppCategory(std::int32_t appId, std::uint32_t* category) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppCategoryType() {
+int APS5_VABI sceLncUtilGetAppCategoryType(std::int32_t appId, std::uint32_t* categoryType) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -151,7 +155,7 @@ int APS5_VABI sceLncUtilGetAppId() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppIdListOfBigApp() {
+int APS5_VABI sceLncUtilGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -161,7 +165,7 @@ int APS5_VABI sceLncUtilGetAppIdOfRunningBigApp() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppLaunchedUser() {
+int APS5_VABI sceLncUtilGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -171,17 +175,17 @@ int APS5_VABI sceLncUtilGetAppStatus() {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppStatusList() {
+int APS5_VABI sceLncUtilGetAppStatusList(LncAppStatus* statuses, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppStatusListForShellUIReboot() {
+int APS5_VABI sceLncUtilGetAppStatusListForShellUIReboot(LncShellUiAppStatus* statuses, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppTitleId() {
+int APS5_VABI sceLncUtilGetAppTitleId(std::int32_t appId, char* titleId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
