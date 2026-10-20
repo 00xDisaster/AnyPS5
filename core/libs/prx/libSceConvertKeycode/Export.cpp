@@ -38,7 +38,7 @@ int APS5_VABI sceConvertKeycodeGetVirtualKeycode(std::uint64_t a0, std::uint64_t
  return kErrInvalidAddress;
 }
 
-int APS5_VABI sceConvertKeycodeGetCharacterFromKeyboardData(void) {
+int APS5_VABI sceConvertKeycodeGetCharacterFromKeyboardData(const KeyboardData* keyData, std::int32_t index, std::uint32_t state, std::uint32_t keyboardType, char16_t* character) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
