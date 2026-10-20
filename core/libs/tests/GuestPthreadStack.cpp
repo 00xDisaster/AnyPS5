@@ -171,7 +171,7 @@ int main() {
             const auto pageCount = (lastGuestStackSize + pageSize - 1) / pageSize;
             std::vector<unsigned char> residency(pageCount);
             if (mincore(lastGuestStack, lastGuestStackSize, residency.data()) == 0) {
-                for (std::size_t page = 1; page < pageCount; ++page)
+                for (std::size_t page = 0; page < pageCount; ++page)
                     Require((residency[page] & 1u) == 0);
             } else {
                 Require(errno == ENOMEM);
