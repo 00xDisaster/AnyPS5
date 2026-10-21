@@ -17,6 +17,8 @@ int APS5_VABI sceSaveDataGetParam(const SaveDataMountPoint*, std::uint32_t, void
 int APS5_VABI sceSaveDataSetParam(const SaveDataMountPoint*, std::uint32_t, const void*, std::size_t);
 int APS5_VABI sceSaveDataLoadIcon(const SaveDataMountPoint*, SaveDataIcon*);
 int APS5_VABI sceSaveDataSaveIcon(const SaveDataMountPoint*, const SaveDataIcon*);
+int APS5_VABI sceSaveDataBackup(const SaveDataBackup*);
+int APS5_VABI sceSaveDataGetEventResult(const void*, SaveDataEvent*);
 }
 
 namespace {
@@ -59,6 +61,10 @@ void CheckUnmountedCalls() {
     Check(sceSaveDataSetParam(nullptr, 1, buf, sizeof(buf)) == SaveDataErrorParameter, "setParam null point is PARAMETER");
     Check(sceSaveDataSetParam(&point, 1, nullptr, sizeof(buf)) == SaveDataErrorParameter, "setParam null buf is PARAMETER");
     Check(sceSaveDataSetParam(&point, 1, buf, sizeof(buf)) == SaveDataErrorNotMounted, "setParam unmounted point is NOT_MOUNTED");
+    Check(sceSaveDataBackup(nullptr) == SaveDataErrorParameter, "backup null backup is PARAMETER");
+    SaveDataBackup nullDirBackup{};
+    Check(sceSaveDataBackup(&nullDirBackup) == SaveDataErrorParameter, "backup null dir_name is PARAMETER");
+    Check(sceSaveDataGetEventResult(nullptr, nullptr) == SaveDataErrorParameter, "getEventResult null event is PARAMETER");
 }
 
 void CheckMountInfoAndParam(const SaveDataMountPoint* point) {
