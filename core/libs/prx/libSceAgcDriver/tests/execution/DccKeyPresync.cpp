@@ -238,16 +238,16 @@ void RunOneKeyReadPerLookup(AgcDriver::VulkanDevice& device, const Scenario& sce
     Reset(scenario);
     const auto sample = Compile(device, SampleSecondTexelCode, scenario.sampleData);
     auto prepared = device.PrepareDispatch(sample, {}, Threads, reinterpret_cast<std::uintptr_t>(SampleSecondTexelCode.data()));
-    const auto waits = AgcDriver::Graphics::KeyWaitCounts();
+    const auto before = AgcDriver::Graphics::SampledLookupKeyScans();
     {
         std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
         device.Dispatch(sample, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(SampleSecondTexelCode.data()), std::move(prepared));
         device.WaitIdle();
     }
-    const auto reads = AgcDriver::Graphics::KeyWaitCounts().calls - waits.calls;
+    const auto scans = AgcDriver::Graphics::SampledLookupKeyScans() - before;
     char message[192];
-    std::snprintf(message, sizeof(message), "%s read the keys of its sampled texture %llu times under the GPU mutex with nothing written between the reads, expected at most once", what, static_cast<unsigned long long>(reads));
-    Require(reads <= 1u, message);
+    std::snprintf(message, sizeof(message), "%s scanned the keys of its sampled texture %llu times with nothing written between the scans, expected at most once", what, static_cast<unsigned long long>(scans));
+    Require(scans <= 1u, message);
 }
 
 void RunNoWriter(AgcDriver::VulkanDevice& device, const Scenario& scenario) {

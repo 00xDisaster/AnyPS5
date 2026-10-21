@@ -394,6 +394,8 @@ TextureCounters& TextureCounts() {
     return counters;
 }
 
+thread_local std::uint64_t sampledLookupKeyScans = 0;
+
 void reportTextureCounters() {
     static const bool profile = std::getenv("APS5_PROFILE_DRAW") != nullptr;
     if (!profile) return;
@@ -725,6 +727,7 @@ std::shared_ptr<Texture> cachedTexture(const Context& context, std::span<const s
         if (scanned.has_value()) return *scanned;
         const auto scanStart = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         scanned = TextureClearKeys(resource, guestBytes);
+        if (resource.dccAddress != 0) ++sampledLookupKeyScans;
         if (profile && resource.dccAddress != 0) LookupOutcomes::Add(LookupOutcomes::DccScan, scanStart);
         return *scanned;
     };
@@ -5097,6 +5100,10 @@ void ShaderResources::resolveImageTables() {
         }
     }
     reportTextureCounters();
+}
+
+std::uint64_t SampledLookupKeyScans() {
+    return sampledLookupKeyScans;
 }
 
 ImageTableReuseCounts ImageTableReuses() {
