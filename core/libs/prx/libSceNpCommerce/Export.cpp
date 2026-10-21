@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <stdexcept>
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "SceTypes.hpp"
 #include "prx/libSceCommonDialog/CommonDialog.hpp"
@@ -55,6 +56,38 @@ bool validateParam(const NpCommerceDialogParam& param) {
  default:
   return false;
  }
+}
+
+bool validateParam2(const NpCommerceDialogParam2& param) {
+ if (!isLoggedIn(param.userId) || param.size != sizeof(param)) return false;
+ if (param.option >= 8 && (param.contentMode == 0 || (param.contentMode == 1 && param.option >= 100))) return false;
+ if (!std::all_of(std::begin(param.reserved), std::end(param.reserved), [](std::uint8_t value) { return value == 0; })) return false;
+ bool valid = false;
+ switch (param.mode) {
+ case 0:
+  valid = param.contentMode < 2 && param.productCount <= 1 && (param.products != nullptr) == (param.productCount != 0);
+  break;
+ case 1:
+  valid = param.contentMode < 2 && param.productCount == 1 && param.products != nullptr;
+  break;
+ case 2:
+  valid = param.productCount <= 1 && (param.products != nullptr) == (param.productCount != 0);
+  break;
+ case 3:
+  valid = param.contentMode < 2 && param.productCount >= 1 && param.productCount <= 10 && param.products != nullptr;
+  break;
+ case 4:
+  valid = param.contentMode < 2 && param.productCount <= 10 && (param.products != nullptr) == (param.productCount != 0);
+  break;
+ case 5:
+  valid = param.productCount == 0 && param.argument == 1;
+  break;
+ default:
+  return false;
+ }
+ if (!valid) return false;
+ if (param.contentMode != 0 && (param.contentMode != 1 || param.mode != 1)) throw std::runtime_error("commerce dialog: extended content process version is not implemented");
+ return true;
 }
 
 }
@@ -128,6 +161,7 @@ int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param) {
  if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
  if (!ValidateCommonDialogBaseParam(param->base)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
  if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+ if (!validateParam2(*param)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }

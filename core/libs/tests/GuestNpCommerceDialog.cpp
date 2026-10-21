@@ -1,6 +1,7 @@
 #include "ProcessParametersFixture.hpp"
 #include "prx/libSceUserService/UserService.hpp"
 #include <array>
+#include <stdexcept>
 #include "SceTypes.hpp"
 #include "prx/libSceCommonDialog/CommonDialog.hpp"
 
@@ -54,7 +55,7 @@ int main() {
     param2.base.size = sizeof(param2.base);
     param2.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param2)) - 1060003575u;
     param2.size = sizeof(param2);
-    param2.userId = 1;
+    param2.userId = USER_SERVICE_INITIAL_USER_ID;
     Require(sceNpCommerceDialogGetStatus() == statusNone);
     Require(sceNpCommerceDialogOpen(nullptr) == static_cast<int>(0x80B8000Du));
     Require(sceNpCommerceDialogOpen2(nullptr) == static_cast<int>(0x80B8000Du));
@@ -120,9 +121,43 @@ int main() {
                 if (mode == 3) valid = count >= 1 && count <= 10 && hasProducts;
                 if (mode == 4) valid = count <= 10 && hasProducts == (count != 0);
                 Require(sceNpCommerceDialogOpen(&param) == (valid ? 0 : static_cast<int>(0x80B8000Au)));
+                param2.mode = mode;
+                param2.productCount = count;
+                param2.products = param.products;
+                Require(sceNpCommerceDialogOpen2(&param2) == (valid ? 0 : static_cast<int>(0x80B8000Au)));
             }
         }
     }
+    param2.mode = 1;
+    param2.contentMode = 1;
+    param2.productCount = 1;
+    param2.products = products;
+    param2.option = 99;
+    Require(sceNpCommerceDialogOpen2(&param2) == 0);
+    param2.option = 100;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.option = 0;
+    param2.mode = 2;
+    bool threw = false;
+    try {
+        sceNpCommerceDialogOpen2(&param2);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw);
+    param2.contentMode = 0;
+    param2.mode = 0;
+    param2.productCount = 0;
+    param2.products = nullptr;
+    param2.reserved[31] = 1;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.reserved[31] = 0;
+    param2.size = 0;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.size = sizeof(param2);
+    param2.userId = -1;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.userId = USER_SERVICE_INITIAL_USER_ID;
     for (std::uint32_t mode : {1000u, 1001u}) {
         param.mode = mode;
         param.productCount = 0;
