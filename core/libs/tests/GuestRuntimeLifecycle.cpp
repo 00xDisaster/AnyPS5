@@ -22,7 +22,9 @@ struct Event { std::size_t args; const void* argp; };
 std::array<Event, 8> events{};
 std::atomic<unsigned> count{0};
 std::atomic<bool> entered{false}, releaseEntry{false};
-bool concurrent = false;
+bool concurrent = false, reentrant = false;
+const char* modulePath = nullptr;
+std::int32_t reentrantHandle = -1;
 void Require(bool ok, const std::source_location& where = std::source_location::current()) {
     if (ok) return;
     std::fprintf(stderr, "guest_runtime_lifecycle: failed at %u\n", where.line());
@@ -34,6 +36,10 @@ extern "C" void APS5_VABI RecordArgs(std::size_t args, const void* argp) {
     const auto index = count.fetch_add(1);
     Require(index < events.size());
     events[index] = {args, argp};
+    if (index == 0 && reentrant) {
+        reentrantHandle = sceKernelLoadStartModule(modulePath, 0, nullptr, 0, nullptr, nullptr);
+        Require(reentrantHandle > 0 && count.load() == 1);
+    }
     if (index == 0 && concurrent) {
         entered.store(true, std::memory_order_release);
         const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -47,6 +53,8 @@ extern "C" void APS5_VABI RecordArgs(std::size_t args, const void* argp) {
 int main(int argc, char** argv) {
     Require(argc == 3);
     concurrent = std::strcmp(argv[2], "concurrent") == 0;
+    reentrant = std::strcmp(argv[2], "reentrant") == 0;
+    modulePath = argv[1];
     void* preload = ::dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     if (!preload) std::fprintf(stderr, "%s\n", ::dlerror());
     Require(preload && count.load() == 0);
@@ -82,6 +90,10 @@ int main(int argc, char** argv) {
     Require(events[1].args == 0xa1 && events[1].argp == nullptr);
     Require(sceKernelStopUnloadModule(first, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 2);
     Require(sceKernelStopUnloadModule(second, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 2);
+    if (reentrant) {
+        Require(reentrantHandle != first && reentrantHandle != second);
+        Require(sceKernelStopUnloadModule(reentrantHandle, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 2);
+    }
     Require(::dlclose(preload) == 0 && count.load() == 4);
     Require(events[2].args == 0xf1 && events[2].argp == nullptr);
     Require(events[3].args == 0xfe && events[3].argp == nullptr);
