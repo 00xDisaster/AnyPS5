@@ -7,7 +7,7 @@
 
 extern "C" {
 int APS5_VABI sceNpCommerceDialogInitialize();
-int APS5_VABI sceNpCommerceDialogOpen(const void* param);
+int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param);
 int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param);
 int APS5_VABI sceNpCommerceDialogUpdateStatus(void);
 int APS5_VABI sceNpCommerceDialogGetStatus(void);
@@ -45,6 +45,15 @@ int main() {
     param2.size = sizeof(param2);
     param2.userId = 1;
     Require(sceNpCommerceDialogGetStatus() == statusNone);
+    Require(sceNpCommerceDialogOpen(nullptr) == static_cast<int>(0x80B8000Du));
+    Require(sceNpCommerceDialogOpen2(nullptr) == static_cast<int>(0x80B8000Du));
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B80003u));
+    param2.base.magic = 0;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param2)) - 1060003575u;
+    param2.base.reserved[35] = 1;
+    Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
+    param2.base.reserved[35] = 0;
     Require(sceNpCommerceDialogTerminate() == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogGetResult(nullptr) == static_cast<int>(0x80B8000Du));
@@ -66,9 +75,16 @@ int main() {
     Require(sceNpCommerceDialogTerminate() == 0);
     Require(sceNpCommerceDialogGetStatus() == statusNone);
 
-    alignas(8) std::uint8_t param[0x40] = {};
+    NpCommerceDialogParam param{};
+    param.base.size = sizeof(param.base);
+    param.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param)) - 1060003575u;
+    param.size = sizeof(param);
+    param.userId = 1;
     Require(sceNpCommerceDialogInitialize() == 0);
-    Require(sceNpCommerceDialogOpen(param) == 0);
+    param.base.size = 0;
+    Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    param.base.size = sizeof(param.base);
+    Require(sceNpCommerceDialogOpen(&param) == 0);
     Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
     RequireCanceledResult();

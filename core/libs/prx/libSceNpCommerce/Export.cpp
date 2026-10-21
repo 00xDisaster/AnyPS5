@@ -16,6 +16,7 @@ constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80005u);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B8000Du);
 
+constexpr int COMMON_DIALOG_ERROR_INVALID_ARGUMENT = static_cast<int>(0x80B8000Au);
 constexpr int COMMON_DIALOG_ERROR_NOT_RUNNING = static_cast<int>(0x80B8000Bu);
 
 int g_status = COMMON_DIALOG_STATUS_NONE;
@@ -31,9 +32,10 @@ int APS5_VABI sceNpCommerceDialogInitialize() {
  return 0;
 }
 
-int APS5_VABI sceNpCommerceDialogOpen(const void* param) {
- if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param) {
  if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
+ if (!ValidateCommonDialogBaseParam(param->base)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
+ if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }
@@ -86,6 +88,9 @@ int APS5_VABI sceNpCommerceSetPsStoreIconLayout(int layout) {
 }
 
 int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param) {
+ if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
+ if (!ValidateCommonDialogBaseParam(param->base)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
+ if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }
