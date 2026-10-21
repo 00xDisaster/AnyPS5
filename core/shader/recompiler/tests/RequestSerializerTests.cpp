@@ -593,7 +593,7 @@ int main() {
         for (const std::uint8_t version : {32u, 33u, 34u, 35u, 36u, 37u, 38u}) {
             pointRequest.target.spannedWaves = spanned;
             auto legacy = DecodeBase64(serializer.Serialize(pointRequest));
-            legacy.resize(legacy.size() - (version >= 36u ? 13u : version >= 35u ? 14u : 19u));
+            legacy.resize(legacy.size() - (version >= 36u ? 14u : version >= 35u ? 15u : 20u));
             legacy[4] = version;
             const auto replayLegacy = serializer.Deserialize(EncodeBase64(legacy));
             Require(replayLegacy.request.target.spannedWaves == spanned);
@@ -605,13 +605,13 @@ int main() {
             Require(!replayLegacy.request.context.vertex->pointList && replayLegacy.request.context.vertex->pointSize == 1.0f);
             Require(replayLegacy.request.context.vertex->pointSizeMin == 0.0f && replayLegacy.request.context.vertex->pointSizeMax == 0.0f);
             const auto upgradedLegacy = DecodeBase64(serializer.Serialize(replayLegacy.request));
-            Require(upgradedLegacy[4] == 40u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 13u : version >= 35u ? 14u : 19u));
+            Require(upgradedLegacy[4] == 42u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 14u : version >= 35u ? 15u : 20u));
         }
     }
 
     pointRequest.context.pixel = pixel;
     auto legacy34 = DecodeBase64(serializer.Serialize(pointRequest));
-    legacy34.resize(legacy34.size() - 19u);
+    legacy34.resize(legacy34.size() - 20u);
     const auto stencil34 = std::search(legacy34.begin(), legacy34.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
     Require(stencil34 < legacy34.end() && *stencil34 == 0u);
     legacy34.erase(stencil34);
