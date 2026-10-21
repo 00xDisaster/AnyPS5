@@ -182,20 +182,21 @@ void CertificateReaders() {
     Check(sceSslGetSerialNumber(id, cert, nullptr, &querySize) == 0 && querySize == 3, "query serial size failed");
     querySize = 0;
     unsigned char shortBuf[2]{};
-    Check(sceSslGetSerialNumber(id, cert, shortBuf, &querySize) == 0 && querySize == 3, "zero-len serial query failed");
+    Check(sceSslGetSerialNumber(id, cert, shortBuf, &querySize) == 0 && querySize == 0, "zero-len serial copy changed length");
     querySize = sizeof(shortBuf);
-    Check(sceSslGetSerialNumber(id, cert, shortBuf, &querySize) == static_cast<int>(0x8095177a) && querySize == 3,
-        "short serial buffer accepted");
+    Check(sceSslGetSerialNumber(id, cert, shortBuf, &querySize) == 0 && querySize == 2 && shortBuf[0] == 0 && shortBuf[1] == 0x80,
+        "short serial copy mismatch");
     unsigned char serialData[8]{};
     std::size_t serialLen = sizeof(serialData);
     Check(sceSslGetSerialNumber(id, cert, serialData, &serialLen) == 0, "get serial failed");
     Check(serialLen == sizeof(serialData) && serialData[3] == 0, "a large enough serial buffer changed the caller's length");
     Check(serialData[0] == 0x00 && serialData[1] == 0x80 && serialData[2] == 0xa1, "serial bytes mismatch");
-    Check(sceSslGetSerialNumber(id, cert, serialData, nullptr) == static_cast<int>(0x8095177a), "null serial length accepted");
-    Throws([&] { sceSslGetSerialNumber(id, nullptr, serialData, &serialLen); });
+    Throws([&] { sceSslGetSerialNumber(id, cert, serialData, nullptr); });
+    Check(sceSslGetSerialNumber(id, cert, nullptr, nullptr) == 0, "empty serial query failed");
+    Check(sceSslGetSerialNumber(id, nullptr, serialData, &serialLen) == static_cast<int>(0x8095f007), "null certificate error mismatch");
     void* fake = &serialLen;
     Throws([&] { sceSslGetSerialNumber(id, fake, serialData, &serialLen); });
-    Throws([&] { sceSslGetSerialNumber(9999, cert, serialData, &serialLen); });
+    Check(sceSslGetSerialNumber(9999, cert, serialData, &serialLen) == InvalidId, "unknown context error mismatch");
 
     void* subject = sceSslGetSubjectName(id, cert);
     Check(subject != nullptr, "get subject failed");
@@ -301,7 +302,7 @@ void CertificateReaders() {
 
     Check(sceSslFreeCaList(id, &handles) == 0, "free ca list failed");
     Check(sceSslTerm_nid_postfix(id) == 0, "term failed");
-    Throws([&] { sceSslGetSerialNumber(id, cert, serialData, &serialLen); });
+    Check(sceSslGetSerialNumber(id, cert, serialData, &serialLen) == InvalidId, "terminated context error mismatch");
     Throws([&] { sceSslGetSubjectName(id, cert); });
     Throws([&] { sceSslGetIssuerName(id, cert); });
     Throws([&] { sceSslGetNotBefore(id, cert, &begin); });

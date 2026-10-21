@@ -991,19 +991,17 @@ int APS5_VABI sceSslClose(int sslConnectionId) {
 }
 
 int APS5_VABI sceSslGetSerialNumber(int sslCtxId, void* sslCert, unsigned char* sboData, std::size_t* sboLen) {
-    if (!sboLen) return ErrorInvalidArg;
     std::lock_guard lock(State().mutex);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!sslCert) return ErrorInvalidValue;
     const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
-    const auto reqLen = crt->serial.len;
-    if (!sboData || *sboLen == 0) {
-        *sboLen = reqLen;
+    if (!sboData) {
+        if (sboLen) *sboLen = crt->serial.len;
         return 0;
     }
-    if (*sboLen < reqLen) {
-        *sboLen = reqLen;
-        return ErrorInvalidArg;
-    }
-    std::memcpy(sboData, crt->serial.p, reqLen);
+    if (!sboLen) throw std::invalid_argument("sceSslGetSerialNumber: output buffer requires a length pointer");
+    const auto copyLength = std::min(*sboLen, crt->serial.len);
+    if (copyLength != 0) std::memcpy(sboData, crt->serial.p, copyLength);
     return 0;
 }
 

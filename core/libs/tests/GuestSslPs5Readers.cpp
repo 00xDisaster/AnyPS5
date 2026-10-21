@@ -55,8 +55,8 @@ void Readers() {
     Check(serial == std::array<unsigned char, 5>{0x00, 0x80, 0xa1, 0xa5, 0xa5}, "serial copy changed its bytes or guards");
     serial.fill(0xa5);
     length = 2;
-    Check(sceSslGetSerialNumber(context, certificate, serial.data(), &length) == static_cast<int>(0x8095177a) && length == 3, "short serial buffer did not report its required size");
-    Check(std::all_of(serial.begin(), serial.end(), [](auto byte) { return byte == 0xa5; }), "short serial buffer was modified");
+    Check(sceSslGetSerialNumber(context, certificate, serial.data(), &length) == 0 && length == 2, "short serial copy changed length");
+    Check(serial == std::array<unsigned char, 5>{0x00, 0x80, 0xa5, 0xa5, 0xa5}, "short serial copy changed guard bytes");
     Throws([&] { sceSslGetSerialNumber(other, certificate, nullptr, &length); });
 
     auto* subject = sceSslGetSubjectName(context, certificate);
