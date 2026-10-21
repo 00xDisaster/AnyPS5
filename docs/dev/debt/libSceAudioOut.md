@@ -1,5 +1,9 @@
 # libSceAudioOut technical debt
 
+### Silent stubs
+
+- [sceAudioOut2LoTerminate](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Low.cpp) (libSceAudioOut) - returns 0, as the PS5 12.00 module (0x248d0) does whether or not the low-latency service runs. The module disconnects from the audio server and clears the service tables; here `sceAudioOut2LoInit` starts no service and open contexts and ports are left as they are
+
 ### Unknown function info
 
 - [sceAudioOut2ContextAdvance and sceAudioOut2ContextPush](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Context.cpp) (libSceAudioOut) - with an SDL device, Advance snapshots each port's PCM and gain; Push consumes completed grains in order and a blocking Push waits for Advance when none is ready. Inferred from PPSA26358, which rewrites the same 512-frame, 12-channel float buffer on a producer thread and pushes on another thread. Console buffer ownership, snapshot timing and empty-queue errors are unverified. Completed grains remain queued until Push consumes them, so memory use grows with an unconsumed PCM backlog. The console backlog limit is unverified. A nonblocking Push without a completed grain throws; this is a runtime restriction, not a console measurement. Context destruction concurrent with active calls remains unsupported. Without an SDL device the existing wall-clock path remains.
@@ -91,7 +95,6 @@
 - [sceAudioOut2MbusSetSparkParam](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
 - [sceAudioOut2AllAudioMainToHeadphoneForDiag](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
 - [sceAudioOut2LoPortGetStateEx](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
-- [sceAudioOut2LoTerminate](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Low.cpp) (libSceAudioOut) - returns 0, as the PS5 12.00 module (0x248d0) does whether or not the low-latency service runs. The module disconnects from the audio server and clears the service tables; here `sceAudioOut2LoInit` starts no service and open contexts and ports are left as they are
 - [sceAudioOut2ReportRegisterHandler](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
 - [sceAudioOut2ReportUnregisterHandler](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
 - [sceAudioOut2GetTvCorrectionInfo](../../../core/libs/prx/libSceAudioOut/src/Unimplemented.cpp) (libSceAudioOut) - unknown signature
