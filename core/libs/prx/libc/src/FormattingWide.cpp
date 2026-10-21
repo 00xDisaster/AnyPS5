@@ -167,6 +167,8 @@ std::u16string FormatWide(const char16_t* format, VaList* source, bool secure = 
                 if (length == "h") value = static_cast<unsigned short>(value);
                 if (length == "hh") value = static_cast<unsigned char>(value);
             } else value = args.Next<unsigned long long>();
+            if (conversion == u'o' && value == 0 && precision == 0 && spec.find('#') != std::string::npos)
+                spec = spec.substr(0, spec.find('.')) + ".1";
             AppendNumber(out, spec + "ll" + static_cast<char>(conversion), value);
         } else if (In(conversion, "aAeEfFgG")) {
             if (length == "L") AppendNumber(out, spec + "L" + static_cast<char>(conversion), args.Next<long double>());
@@ -325,7 +327,7 @@ int APS5_VABI wprintf_nid_postfix(const char16_t* format, ...) {
     try {
         const std::u16string text = FormatWide(format, reinterpret_cast<VaList*>(args));
         const std::string bytes = ToUtf8(text);
-        if (std::fwrite(bytes.data(), 1, bytes.size(), stdout) == bytes.size()) result = static_cast<int>(text.size());
+        if (std::fwrite(bytes.data(), 1, bytes.size(), GetNativeStream(__stdoutp_nid_postfix)) == bytes.size()) result = static_cast<int>(text.size());
     } catch (const std::exception&) {
         errno = 22;
     }
