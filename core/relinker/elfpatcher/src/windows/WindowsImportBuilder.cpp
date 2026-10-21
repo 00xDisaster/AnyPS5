@@ -55,7 +55,7 @@ std::vector<std::string> WindowsImportBuilder::ReadLibraries(const Domain::SysVD
     // Keep the requested module first, then make its shared runtime visible.
     if ((unique.contains("libSceLibcInternal.prx") || unique.contains("libkernel.prx")) && !unique.contains("libc.prx"))
         result.push_back("libc.prx");
-    if (unique.contains("libkernel_web.prx") && !unique.contains("libkernel.prx"))
+    if ((unique.contains("libkernel_sys.prx") || unique.contains("libkernel_web.prx")) && !unique.contains("libkernel.prx"))
         result.push_back("libkernel.prx");
     return result;
 }
