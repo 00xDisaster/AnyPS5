@@ -206,9 +206,14 @@ struct Random {
     }
 };
 
+struct EncodedPrivateKey {
+    Block bytes;
+    std::size_t size;
+};
+
 struct Identity {
     std::shared_ptr<CertificateChain> chain;
-    PrivateKey key;
+    std::shared_ptr<EncodedPrivateKey> key;
 };
 
 struct Snapshot {
@@ -309,6 +314,7 @@ struct Session {
     int verifyResult = 0;
     unsigned int failedOptions = 0;
     Random random;
+    PrivateKey privateKey;
     mbedtls_x509_crt authorities;
     mbedtls_ssl_config config;
     mbedtls_ssl_context ssl;
@@ -339,8 +345,18 @@ struct Session {
         mbedtls_ssl_conf_min_tls_version(&config, MBEDTLS_SSL_VERSION_TLS1_2);
         mbedtls_ssl_conf_ca_chain(&config, &authorities, nullptr);
         mbedtls_ssl_conf_rng(&config, mbedtls_ctr_drbg_random, &random.drbg);
-        if (identity)
-            CheckBackend(mbedtls_ssl_conf_own_cert(&config, &identity->chain->root, &identity->key.key), "SSL client certificate setup failed");
+        if (identity) {
+            if (!identity->chain || !identity->key) throw std::logic_error("Incomplete SSL client identity is not supported");
+            const auto& encoded = *identity->key;
+            auto bytes = Allocate(Add(encoded.size, 1));
+            std::memcpy(bytes.get(), encoded.bytes.get(), encoded.size);
+            std::size_t first = 0;
+            while (first < encoded.size && (bytes.get()[first] == ' ' || bytes.get()[first] == '\r' || bytes.get()[first] == '\n' || bytes.get()[first] == '\t')) ++first;
+            const auto size = first < encoded.size && bytes.get()[first] == '-' ? Add(encoded.size, 1) : encoded.size;
+            CheckBackend(mbedtls_pk_parse_key(&privateKey.key, bytes.get(), size, nullptr, 0, mbedtls_ctr_drbg_random, &random.drbg), "Invalid SSL private key");
+            CheckBackend(mbedtls_pk_check_pair(&identity->chain->root.pk, &privateKey.key, mbedtls_ctr_drbg_random, &random.drbg), "SSL client certificate and private key do not match");
+            CheckBackend(mbedtls_ssl_conf_own_cert(&config, &identity->chain->root, &privateKey.key), "SSL client certificate setup failed");
+        }
         for (std::size_t start = 0; start <= alpn.size();) {
             const auto end = alpn.find(',', start);
             const auto protocol = alpn.substr(start, end == std::string::npos ? std::string::npos : end - start);
@@ -661,15 +677,15 @@ int APS5_VABI sceSslGetMemoryPoolStats(int sslCtxId, SceSsl::MemoryPoolStats* st
 }
 
 int APS5_VABI sceSslLoadCert(int sslCtxId, int caCertNum, SceSsl::Data** caList, SceSsl::Data* cert, SceSsl::Data* privateKey) {
-    if (caCertNum < 0 || (caCertNum && !caList) || (!!cert != !!privateKey))
-        throw std::invalid_argument("Invalid SSL certificate load arguments");
     auto& state = State();
     std::lock_guard lock(state.mutex);
-    auto& context = GetContext(sslCtxId);
+    const auto found = state.contexts.find(sslCtxId);
+    if (found == state.contexts.end()) return ErrorInvalidId;
+    auto& context = *found->second;
     PoolScope scope(context.pool);
     std::vector<std::shared_ptr<CertificateChain>> authorities;
     std::vector<std::unique_ptr<CertificateHandle>> handles;
-    for (int index = 0; index < caCertNum; ++index) {
+    for (int index = 0; caList && index < caCertNum; ++index) {
         if (!caList[index]) throw std::invalid_argument("Missing SSL certificate descriptor");
         auto chain = ParseCertificate(*caList[index]);
         for (auto* entry = &chain->root; entry; entry = entry->next) {
@@ -679,23 +695,25 @@ int APS5_VABI sceSslLoadCert(int sslCtxId, int caCertNum, SceSsl::Data** caList,
         }
         authorities.push_back(std::move(chain));
     }
-    std::shared_ptr<Identity> identity;
-    if (cert) {
-        identity = std::make_shared<Identity>();
-        identity->chain = ParseCertificate(*cert);
-        const auto key = CopyInput(*privateKey);
-        Random random;
-        random.Seed();
-        CheckBackend(mbedtls_pk_parse_key(&identity->key.key, key.bytes.get(), key.size, nullptr, 0,
-            mbedtls_ctr_drbg_random, &random.drbg), "Invalid SSL private key");
-        CheckBackend(mbedtls_pk_check_pair(&identity->chain->root.pk, &identity->key.key, mbedtls_ctr_drbg_random, &random.drbg),
-            "SSL client certificate and private key do not match");
-    }
     context.authorities.reserve(Add(context.authorities.size(), authorities.size()));
     context.certificateHandles.reserve(Add(context.certificateHandles.size(), handles.size()));
     for (auto& chain : authorities) context.authorities.push_back(std::move(chain));
     for (auto& handle : handles) context.certificateHandles.push_back(std::move(handle));
-    if (identity) context.identity = std::move(identity);
+    if (cert) {
+        if (!cert->ptr) return static_cast<int>(0x80951771);
+        context.identity = std::make_shared<Identity>();
+        context.identity->chain = ParseCertificate(*cert);
+    }
+    if (privateKey) {
+        if (!privateKey->ptr) return static_cast<int>(0x80951771);
+        if (!context.identity) context.identity = std::make_shared<Identity>();
+        auto identity = std::make_shared<Identity>(*context.identity);
+        context.identity = identity;
+        identity->key.reset();
+        auto bytes = Allocate(privateKey->size);
+        std::memcpy(bytes.get(), privateKey->ptr, privateKey->size);
+        identity->key = std::make_shared<EncodedPrivateKey>(EncodedPrivateKey{std::move(bytes), privateKey->size});
+    }
     return 0;
 }
 

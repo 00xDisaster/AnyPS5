@@ -141,14 +141,14 @@ void AtomicFailures() {
     Check(sceSslGetCaCerts(id, &bytes) == 0, "CA vanished after failure");
     CheckRoot(bytes);
     Check(sceSslFreeCaCerts(id, &bytes) == 0, "snapshot free failed");
-    Throws([&] { sceSslLoadCert(id, -1, nullptr, nullptr, nullptr); });
-    Throws([&] { sceSslLoadCert(id, 1, nullptr, nullptr, nullptr); });
+    Check(sceSslLoadCert(id, -1, nullptr, nullptr, nullptr) == 0, "negative CA count was not ignored");
+    Check(sceSslLoadCert(id, 1, nullptr, nullptr, nullptr) == 0, "null CA list was not ignored");
     SceSsl::Data* absent = nullptr;
     Throws([&] { sceSslLoadCert(id, 1, &absent, nullptr, nullptr); });
-    Throws([&] { sceSslLoadCert(id, 0, nullptr, &der, nullptr); });
+
     Check(Stats(id).currentInuseSize == before, "argument failure changed retained CA");
     Check(sceSslTerm_nid_postfix(id) == 0, "term failed");
-    Throws([&] { sceSslLoadCert(id, 1, &pointer, nullptr, nullptr); });
+    Check(sceSslLoadCert(id, 1, &pointer, nullptr, nullptr) == InvalidId, "invalid load context error mismatch");
     const int tiny = sceSslInit_nid_postfix(32);
     Throws([&] { sceSslLoadCert(tiny, 1, &pointer, nullptr, nullptr); });
     Check(Stats(tiny).currentInuseSize == 0, "failed small-pool load leaked");
@@ -163,8 +163,20 @@ void ClientIdentity() {
     Check(sceSslLoadCert(id, 0, nullptr, &client, &key) == 0, "client identity load failed");
     const auto before = Stats(id).currentInuseSize;
     Check(before > 0, "identity not retained");
-    Throws([&] { sceSslLoadCert(id, 0, nullptr, &client, &wrong); });
-    Check(Stats(id).currentInuseSize == before, "mismatched key changed identity");
+    Check(sceSslLoadCert(id, 0, nullptr, &client, &wrong) == 0, "key pair was checked during loading");
+    Check(sceSslLoadCert(id, 0, nullptr, &client, nullptr) == 0, "certificate-only load failed");
+    const auto certificateBytes = Stats(id).currentInuseSize;
+    Check(certificateBytes > 0 && certificateBytes < before, "certificate replacement retained the old key");
+    Check(sceSslLoadCert(id, 0, nullptr, nullptr, &key) == 0, "independent key load failed");
+    Check(Stats(id).currentInuseSize == before, "separate identity load retained different data");
+    auto arbitraryKey = Data("invalid key encoding");
+    Check(sceSslLoadCert(id, 0, nullptr, nullptr, &arbitraryKey) == 0, "key was parsed during loading");
+    Check(Stats(id).currentInuseSize == certificateBytes + arbitraryKey.size, "raw key bytes were not retained");
+    SceSsl::Data missing{};
+    Check(sceSslLoadCert(id, 0, nullptr, &missing, nullptr) == static_cast<int>(0x80951771), "null certificate payload error mismatch");
+    Check(sceSslLoadCert(id, 0, nullptr, nullptr, &missing) == static_cast<int>(0x80951771), "null key payload error mismatch");
+    Check(Stats(id).currentInuseSize == certificateBytes + arbitraryKey.size, "null payload cleared the identity");
+    Check(sceSslLoadCert(-1, -1, nullptr, &missing, &missing) == InvalidId, "load context validation precedence mismatch");
     Check(sceSslUnloadCert(id) == 0 && Stats(id).currentInuseSize == 0, "identity release failed");
     Check(sceSslTerm_nid_postfix(id) == 0, "identity term failed");
 }
