@@ -1116,23 +1116,27 @@ int APS5_VABI sceSslGetNameEntryInfo(int sslCtxId, void* certName, int entryNum,
 }
 
 int APS5_VABI sceSslGetNotBefore(int sslCtxId, void* sslCert, SceSsl::RtcTick* begin) {
-    if (!begin) return ErrorInvalidArg;
     std::lock_guard lock(State().mutex);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!sslCert || !begin) return ErrorInvalidValue;
     const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
     begin->tick = TimeToTick(crt->valid_from);
     return 0;
 }
 
 int APS5_VABI sceSslGetNotAfter(int sslCtxId, void* sslCert, SceSsl::RtcTick* limit) {
-    if (!limit) return ErrorInvalidArg;
     std::lock_guard lock(State().mutex);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!sslCert || !limit) return ErrorInvalidValue;
     const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
     limit->tick = TimeToTick(crt->valid_to);
     return 0;
 }
 
 int APS5_VABI sceSslGetFingerprint(int sslCtxId, void* sslCert, int hashType, unsigned char* fingerprint) {
-    if (!fingerprint) return ErrorInvalidArg;
+    std::lock_guard lock(State().mutex);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!sslCert || !fingerprint) return ErrorInvalidValue;
     mbedtls_md_type_t mdType;
     switch (hashType) {
     case 0: mdType = MBEDTLS_MD_MD5; break;
@@ -1145,7 +1149,6 @@ int APS5_VABI sceSslGetFingerprint(int sslCtxId, void* sslCert, int hashType, un
     }
     const auto* info = mbedtls_md_info_from_type(mdType);
     if (!info) return ErrorInvalidArg;
-    std::lock_guard lock(State().mutex);
     const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
     if (mbedtls_md(info, crt->raw.p, crt->raw.len, fingerprint) != 0) return ErrorInvalidArg;
     return 0;

@@ -253,20 +253,23 @@ void CertificateReaders() {
     Throws([&] { sceSslFreeSslCertName(9999, subject); });
 
     SceSsl::RtcTick begin{};
+    Check(sceSslGetNotBefore(0, nullptr, nullptr) == InvalidId, "date validation precedence mismatch");
+    Check(sceSslGetNotAfter(0, nullptr, nullptr) == InvalidId, "date validation precedence mismatch");
+    Check(sceSslGetFingerprint(0, nullptr, -1, nullptr) == InvalidId, "fingerprint validation precedence mismatch");
     Check(sceSslGetNotBefore(id, cert, &begin) == 0, "get not before failed");
     Check(begin.tick == 63927094442000000ULL, "not before tick mismatch");
-    Check(sceSslGetNotBefore(id, cert, nullptr) == static_cast<int>(0x8095177a), "null begin accepted");
-    Throws([&] { sceSslGetNotBefore(id, nullptr, &begin); });
+    Check(sceSslGetNotBefore(id, cert, nullptr) == static_cast<int>(0x8095f007), "null begin accepted");
+    Check(sceSslGetNotBefore(id, nullptr, &begin) == static_cast<int>(0x8095f007), "null certificate date error mismatch");
     Throws([&] { sceSslGetNotBefore(id, fake, &begin); });
-    Throws([&] { sceSslGetNotBefore(9999, cert, &begin); });
+    Check(sceSslGetNotBefore(9999, cert, &begin) == InvalidId, "invalid date context error mismatch");
 
     SceSsl::RtcTick limit{};
     Check(sceSslGetNotAfter(id, cert, &limit) == 0, "get not after failed");
     Check(limit.tick == 64242454442000000ULL, "not after tick mismatch");
-    Check(sceSslGetNotAfter(id, cert, nullptr) == static_cast<int>(0x8095177a), "null limit accepted");
-    Throws([&] { sceSslGetNotAfter(id, nullptr, &limit); });
+    Check(sceSslGetNotAfter(id, cert, nullptr) == static_cast<int>(0x8095f007), "null limit accepted");
+    Check(sceSslGetNotAfter(id, nullptr, &limit) == static_cast<int>(0x8095f007), "null certificate date error mismatch");
     Throws([&] { sceSslGetNotAfter(id, fake, &limit); });
-    Throws([&] { sceSslGetNotAfter(9999, cert, &limit); });
+    Check(sceSslGetNotAfter(9999, cert, &limit) == InvalidId, "invalid date context error mismatch");
 
     unsigned char md5[16]{};
     Check(sceSslGetFingerprint(id, cert, 0, md5) == 0, "get md5 fingerprint failed");
@@ -283,12 +286,12 @@ void CertificateReaders() {
     constexpr unsigned char expectedSha256[32] = {0x3d, 0x7d, 0xac, 0xd3, 0x04, 0x90, 0x42, 0xe1, 0x57, 0x19, 0x87, 0x27, 0x54, 0x45, 0xae, 0xed, 0xc4, 0xea, 0xd6, 0xd4, 0x20, 0xa0, 0x7f, 0xc4, 0xf5, 0x26, 0xc1, 0xa0, 0x85, 0x87, 0x5a, 0x4c};
     Check(std::memcmp(sha256, expectedSha256, sizeof(sha256)) == 0, "sha256 digest mismatch");
 
-    Check(sceSslGetFingerprint(id, cert, 3, nullptr) == static_cast<int>(0x8095177a), "null fingerprint buffer accepted");
+    Check(sceSslGetFingerprint(id, cert, 3, nullptr) == static_cast<int>(0x8095f007), "null fingerprint buffer accepted");
     Check(sceSslGetFingerprint(id, cert, -1, sha256) == static_cast<int>(0x8095177a), "negative hash type accepted");
     Check(sceSslGetFingerprint(id, cert, 99, sha256) == static_cast<int>(0x8095177a), "invalid hash type accepted");
-    Throws([&] { sceSslGetFingerprint(id, nullptr, 3, sha256); });
+    Check(sceSslGetFingerprint(id, nullptr, 3, sha256) == static_cast<int>(0x8095f007), "null fingerprint certificate error mismatch");
     Throws([&] { sceSslGetFingerprint(id, fake, 3, sha256); });
-    Throws([&] { sceSslGetFingerprint(9999, cert, 3, sha256); });
+    Check(sceSslGetFingerprint(9999, cert, 3, sha256) == InvalidId, "invalid fingerprint context error mismatch");
 
     std::size_t pemLen = 0;
     Check(sceSslGetPem(id, cert, nullptr, &pemLen) == 0, "query pem size failed");
@@ -314,9 +317,9 @@ void CertificateReaders() {
     Check(sceSslGetSerialNumber(id, cert, serialData, &serialLen) == InvalidId, "terminated context error mismatch");
     Throws([&] { sceSslGetSubjectName(id, cert); });
     Throws([&] { sceSslGetIssuerName(id, cert); });
-    Throws([&] { sceSslGetNotBefore(id, cert, &begin); });
-    Throws([&] { sceSslGetNotAfter(id, cert, &limit); });
-    Throws([&] { sceSslGetFingerprint(id, cert, 3, sha256); });
+    Check(sceSslGetNotBefore(id, cert, &begin) == InvalidId, "invalid date context error mismatch");
+    Check(sceSslGetNotAfter(id, cert, &limit) == InvalidId, "invalid date context error mismatch");
+    Check(sceSslGetFingerprint(id, cert, 3, sha256) == InvalidId, "invalid fingerprint context error mismatch");
     Check(sceSslGetPem(id, cert, pemBuf.data(), &writtenLen) == InvalidId, "terminated PEM context error mismatch");
 
     const int id2 = sceSslInit_nid_postfix(1024 * 1024);
