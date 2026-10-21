@@ -3487,6 +3487,15 @@ void verifyPointerChainImageTable() {
     auto nonTableRequest = TableRequest(nonTableCode, userData);
     nonTableRequest.shader.codeAddress = 0x3a000u;
     expectFailure([&] { static_cast<void>(GetResourcePlan(nonTableRequest)); }, "GetImageResource dword 0 is not a valid runtime value", "pointer chain image table: a phi with a non-table branch was planned as a table");
+
+    auto armOffsetCode = code;
+    armOffsetCode.erase(armOffsetCode.begin() + 14, armOffsetCode.begin() + 17);
+    armOffsetCode.insert(armOffsetCode.begin() + 14, {
+        0xbf068010u, 0xbf850004u, 0x8f128411u, 0xf4240b02u, 0x24000008u, 0xbf820003u, 0x8f128411u, 0xf4240b02u, 0x24000008u
+    });
+    auto armOffsetRequest = TableRequest(armOffsetCode, userData);
+    armOffsetRequest.shader.codeAddress = 0x3b000u;
+    expectFailure([&] { static_cast<void>(GetResourcePlan(armOffsetRequest)); }, "GetImageResource dword 0 is not a valid runtime value", "pointer chain image table: a phi whose arms compute their own table offset was planned as a table");
 }
 
 void verifyDescriptorPhis() {

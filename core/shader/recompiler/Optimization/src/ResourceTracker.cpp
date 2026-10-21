@@ -732,6 +732,27 @@ private:
         return candidate;
     }
 
+    bool BlockDominates(const IrBlock* dominator, const IrBlock* block) const {
+        if (dominator == block) return true;
+        std::vector<const IrBlock*> pending{block};
+        std::unordered_set<const IrBlock*> visited{block};
+        while (!pending.empty()) {
+            const IrBlock* current = pending.back();
+            pending.pop_back();
+            if (current->Predecessors().empty()) return false;
+            for (const IrBlock* predecessor : current->Predecessors()) {
+                if (predecessor != dominator && visited.insert(predecessor).second) pending.push_back(predecessor);
+            }
+        }
+        return true;
+    }
+
+    bool AvailableAt(IrValue* value, const IrBlock* block) const {
+        value = value->Resolve();
+        if (value->HasImmediate() || value->Parent() == nullptr) return true;
+        return BlockDominates(value->Parent(), block);
+    }
+
     bool TryMakeIndirectColumn(IrValue& handle, IrValue& descriptorPointer, bool sampler, std::uint32_t words, std::uint32_t descriptorOffset, std::uint32_t descriptorImmediate, TableColumnPlan& plan) {
         std::vector<PointerHop> hops;
         IrValue* pointer = &descriptorPointer;
@@ -785,6 +806,9 @@ private:
             } else if (memory->offset != first + static_cast<std::uint32_t>(sizeof(std::uint32_t)) || read->Argument(0)->Resolve() != bufferHandle || !EquivalentValue(m_program.Resources(), offset, read->Argument(1))) {
                 return false;
             }
+        }
+        if (!AvailableAt(offset, handle.Parent())) {
+            return false;
         }
         IrValue* key = nullptr;
         std::uint32_t stride = 0;
