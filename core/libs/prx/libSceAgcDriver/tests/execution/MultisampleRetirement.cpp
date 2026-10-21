@@ -575,7 +575,7 @@ int main() {
         run.SampledRemap();
         run.StorageRemap();
         run.OrderRemap();
-        run.StorageTwin();
+        if (context.storageImageMultisample) run.StorageTwin();
         std::puts("retired MSAA allocations stay bounded, recorded clears and storage promotions retain their images, sampled aliases release their parents after the last batch, and sample-order targets keep their retired images until their batch completes");
         return 0;
     } catch (const std::exception& error) {
