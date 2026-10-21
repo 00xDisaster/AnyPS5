@@ -1,6 +1,7 @@
 #include "prx/libc/include/general/LogMacros.hpp"
 #include "ControlFlow/GraphBuilder.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
+#include "prx/libSceAgcDriver/Execution/include/ProfileOutput.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
@@ -616,13 +617,15 @@ DeferredAbiUseCounters& DeferredAbiCounters() {
 }
 
 void ReportDeferredAbiUses() {
+    static const bool profile = std::getenv("APS5_PROFILE_DRAW") != nullptr;
+    if (!profile) return;
     auto& counters = DeferredAbiCounters();
     const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     auto previous = counters.lastReport.load(std::memory_order_relaxed);
     if ((previous != 0 && now - previous < 60000) || !counters.lastReport.compare_exchange_strong(previous, now, std::memory_order_relaxed)) return;
     const auto entries = counters.entries.load(std::memory_order_relaxed);
     const auto matched = counters.matchedEntries.load(std::memory_order_relaxed);
-    std::fprintf(stderr, "[shaders] deferred ABIs: %llu prepared at first use, %llu found their artifact there, %llu prepared their own; %llu of the %llu entries prepared from them never matched a use\n", static_cast<unsigned long long>(counters.firstUses.load(std::memory_order_relaxed)), static_cast<unsigned long long>(counters.found.load(std::memory_order_relaxed)), static_cast<unsigned long long>(counters.own.load(std::memory_order_relaxed)), static_cast<unsigned long long>(entries - std::min(entries, matched)), static_cast<unsigned long long>(entries));
+    AgcDriver::ProfilePrint_nid_no_patch("[shaders] deferred ABIs: %llu prepared at first use, %llu found their artifact there, %llu prepared their own; %llu of the %llu entries prepared from them never matched a use\n", static_cast<unsigned long long>(counters.firstUses.load(std::memory_order_relaxed)), static_cast<unsigned long long>(counters.found.load(std::memory_order_relaxed)), static_cast<unsigned long long>(counters.own.load(std::memory_order_relaxed)), static_cast<unsigned long long>(entries - std::min(entries, matched)), static_cast<unsigned long long>(entries));
 }
 
 void NoteMatchedEntry(PreparedShaders::Entry& entry, const PreparedAtUse& preparedAtUse) {
