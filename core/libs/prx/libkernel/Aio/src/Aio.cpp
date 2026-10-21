@@ -24,6 +24,7 @@ namespace {
 constexpr std::int32_t AioProcessing = 2;
 constexpr std::int32_t AioCompleted = 3;
 constexpr std::int32_t AioAborted = 4;
+constexpr std::int32_t AioReported = 0x10000;
 constexpr std::int32_t AioMaxQueues = 512;
 constexpr std::int32_t AioRequestNumMax = 128;
 constexpr std::int32_t AioIdNumMax = 128;
@@ -65,9 +66,16 @@ std::int32_t StateLocked(std::int32_t id) {
     return ValidId(id) && g_states[id] != 0 ? g_states[id] : SCE_KERNEL_ERROR_ESRCH;
 }
 
+std::int32_t ReportLocked(std::int32_t id) {
+    const std::int32_t state = StateLocked(id);
+    if (state != SCE_KERNEL_ERROR_ESRCH && state != AioProcessing) g_states[id] |= AioReported;
+    return state;
+}
+
 std::int32_t CancelLocked(std::int32_t id) {
     const std::int32_t state = StateLocked(id);
-    if (state != AioProcessing) return state;
+    if (state == SCE_KERNEL_ERROR_ESRCH) return state;
+    if (state != AioProcessing) return state & ~AioReported;
     g_states[id] = AioAborted;
     return AioAborted;
 }
@@ -114,7 +122,7 @@ std::int64_t NativePwrite(std::int32_t fd, const void* buf, std::size_t nbyte, s
 #endif
 }
 
-bool RunRequest(KernelAioRwRequest& req, bool write) {
+void RunRequest(KernelAioRwRequest& req, bool write) {
     const std::int64_t done = write
         ? NativePwrite(req.fd, req.buf, req.nbyte, req.offset)
         : NativePread(req.fd, req.buf, req.nbyte, req.offset);
@@ -124,12 +132,11 @@ bool RunRequest(KernelAioRwRequest& req, bool write) {
         if (error == EBADF) req.result->return_value = static_cast<std::int64_t>(SCE_KERNEL_ERROR_EBADF);
         if (error == EFAULT) req.result->return_value = static_cast<std::int64_t>(SCE_KERNEL_ERROR_EFAULT);
         if (error == EINVAL) req.result->return_value = static_cast<std::int64_t>(SCE_KERNEL_ERROR_EINVAL);
-        req.result->state = AioAborted;
-        return false;
+        req.result->state = AioCompleted;
+        return;
     }
     req.result->return_value = done;
     req.result->state = AioCompleted;
-    return true;
 }
 
 int ValidateRequests(KernelAioRwRequest* req, std::int32_t size, std::int32_t prio, const void* id) {
@@ -145,11 +152,8 @@ int SubmitCommands(KernelAioRwRequest* req, std::int32_t size, std::int32_t prio
     const int error = ValidateRequests(req, size, prio, id);
     if (error != 0) return error;
     const std::int32_t queue = AllocateId();
-    bool aborted = false;
-    for (std::int32_t i = 0; i < size; ++i) {
-        if (!RunRequest(req[i], write)) aborted = true;
-    }
-    SetState(queue, aborted ? AioAborted : AioCompleted);
+    for (std::int32_t i = 0; i < size; ++i) RunRequest(req[i], write);
+    SetState(queue, AioCompleted);
     *id = queue;
     return 0;
 }
@@ -159,7 +163,8 @@ int SubmitCommandsMultiple(KernelAioRwRequest* req, std::int32_t size, std::int3
     if (error != 0) return error;
     for (std::int32_t i = 0; i < size; ++i) {
         const std::int32_t queue = AllocateId();
-        SetState(queue, RunRequest(req[i], write) ? AioCompleted : AioAborted);
+        RunRequest(req[i], write);
+        SetState(queue, AioCompleted);
         id[i] = queue;
     }
     return 0;
@@ -252,7 +257,7 @@ int APS5_VABI sceKernelAioSubmitWriteCommandsMultiple(KernelAioRwRequest* req, i
 int APS5_VABI sceKernelAioPollRequest(int32_t id, int32_t* state) {
     if (state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
     std::lock_guard<std::mutex> lock(g_mutex);
-    *state = StateLocked(id);
+    *state = ReportLocked(id);
     return 0;
 }
 
@@ -267,15 +272,22 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             for (int32_t i = 0; i < num; ++i) {
-                state[i] = StateLocked(id[i]);
-                if (state[i] == AioProcessing) allDone = false;
-                if (state[i] == AioCompleted) anyCompleted = true;
+                const std::int32_t current = StateLocked(id[i]);
+                if (current == AioProcessing) allDone = false;
+                if ((current & ~AioReported) == AioCompleted) anyCompleted = true;
+            }
+            if (allDone || (mode == AioWaitOr && anyCompleted)) {
+                for (int32_t i = 0; i < num; ++i) state[i] = ReportLocked(id[i]);
+                return 0;
             }
         }
-        if (allDone || (mode == AioWaitOr && anyCompleted)) return 0;
         if (usec != nullptr && *usec != 0) {
             const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
-            if (elapsed > static_cast<std::int64_t>(*usec)) return SCE_KERNEL_ERROR_ETIMEDOUT;
+            if (elapsed > static_cast<std::int64_t>(*usec)) {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                for (int32_t i = 0; i < num; ++i) state[i] = ReportLocked(id[i]);
+                return SCE_KERNEL_ERROR_ETIMEDOUT;
+            }
         }
         PreciseSleepUs(10);
     }
@@ -288,7 +300,7 @@ int APS5_VABI sceKernelAioWaitRequest(int32_t id, int32_t* state, uint32_t* usec
         std::int32_t current;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            current = StateLocked(id);
+            current = ReportLocked(id);
         }
         if (current != AioProcessing) {
             *state = current;
@@ -309,7 +321,7 @@ int APS5_VABI sceKernelAioPollRequests(int32_t* id, int32_t num, int32_t* state)
     const int error = ValidateIds(id, num, state);
     if (error != 0) return error;
     std::lock_guard<std::mutex> lock(g_mutex);
-    for (int32_t i = 0; i < num; ++i) state[i] = StateLocked(id[i]);
+    for (int32_t i = 0; i < num; ++i) state[i] = ReportLocked(id[i]);
     return 0;
 }
 
