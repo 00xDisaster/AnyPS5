@@ -181,18 +181,37 @@ static void TestParse() {
     Require(sceNgs2ParseWaveformData(wrongRate.data(), wrongRate.size(), &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
 }
 
+static void RequireAtrac9Block(std::uint32_t config, std::uint32_t pos, std::uint32_t count, std::uint64_t offset, std::uint64_t size, std::uint32_t skip) {
+    const Ngs2WaveformFormat format{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, config, 0, 0};
+    Ngs2WaveformBlock block;
+    std::memset(&block, 0xab, sizeof(block));
+    Require(sceNgs2CalcWaveformBlock(&format, pos, count, &block) == SCE_NGS2_OK);
+    Require(block.data_offset == offset && block.data_size == size && block.num_skip_samples == skip && block.num_samples == count);
+    Require(block.num_repeats == 0 && block.reserved == 0 && block.user_data == 0);
+}
+
 static void TestCalcBlock() {
     const Ngs2WaveformFormat format{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, Config, 0, 0};
-    Ngs2WaveformBlock block{};
     Require(sceNgs2CalcWaveformBlock(&format, 1500, 600, nullptr) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
-    Require(sceNgs2CalcWaveformBlock(&format, 1500, 600, &block) == SCE_NGS2_OK);
-    Require(block.data_offset == SuperframeBytes && block.data_size == 2 * SuperframeBytes && block.num_skip_samples == 476 && block.num_samples == 600);
-    Require(sceNgs2CalcWaveformBlock(&format, 1500, 0, &block) == SCE_NGS2_OK);
-    Require(block.data_offset == SuperframeBytes && block.data_size == 0 && block.num_skip_samples == 0 && block.num_samples == 0);
-    const Ngs2WaveformFormat stereo{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 2, 48000, Config, 0, 0};
-    Require(sceNgs2CalcWaveformBlock(&stereo, 0, 1, &block) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
-    const Ngs2WaveformFormat silent{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 0, 48000, Config, 0, 0};
-    Require(sceNgs2CalcWaveformBlock(&silent, 0, 1, &block) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
+    RequireAtrac9Block(Config, 0, 768, 0, SuperframeBytes, 256);
+    RequireAtrac9Block(Config, 0, 769, 0, 2 * SuperframeBytes, 256);
+    RequireAtrac9Block(Config, 1500, 600, SuperframeBytes, 2 * SuperframeBytes, 732);
+    RequireAtrac9Block(Config, 1500, 0, SuperframeBytes, SuperframeBytes, 732);
+    RequireAtrac9Block(Config, 4294967195u, 1000, 1073741568u, 3221226240u, 1179);
+    RequireAtrac9Block(0xFE7007E0, 300, 10, 64, 128, 300);
+    RequireAtrac9Block(0xFE4007F0, 600, 100, SuperframeBytes, SuperframeBytes, 216);
+    RequireAtrac9Block(0xFE1007F0, 0, 1, 0, SuperframeBytes, 64);
+    Ngs2WaveformBlock block{};
+    const Ngs2WaveformFormat stereo{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 2, 44100, Config, 0, 0};
+    Require(sceNgs2CalcWaveformBlock(&stereo, 0, 1, &block) == SCE_NGS2_OK && block.data_size == SuperframeBytes && block.num_skip_samples == 256);
+    const Ngs2WaveformFormat silent{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 0, 0, Config, 0, 0};
+    Require(sceNgs2CalcWaveformBlock(&silent, 0, 1, &block) == SCE_NGS2_OK && block.data_size == SuperframeBytes && block.num_skip_samples == 256);
+    for (const std::uint32_t rateIndex : {0u, 2u, 3u, 5u, 6u, 8u, 15u}) {
+        const Ngs2WaveformFormat unknown{SCE_NGS2_WAVEFORM_TYPE_ATRAC9, 1, 48000, (Config & ~0x00F00000u) | rateIndex << 20, 0, 0};
+        bool threw = false;
+        try { sceNgs2CalcWaveformBlock(&unknown, 0, 1, &block); } catch (const std::runtime_error&) { threw = true; }
+        Require(threw);
+    }
 }
 
 static void RequirePcmBlock(std::uint32_t type, std::uint32_t channels, std::uint32_t pos, std::uint32_t count, std::uint64_t offset, std::uint64_t size) {

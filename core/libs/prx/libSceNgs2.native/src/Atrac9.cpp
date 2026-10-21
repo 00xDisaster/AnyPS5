@@ -27,6 +27,7 @@ static constexpr std::uint32_t WAVEFORM_TYPE_PCM_FIRST = 0x10;
 static constexpr std::uint32_t WAVEFORM_TYPE_PCM_LAST = 0x1b;
 static constexpr std::uint32_t WAVEFORM_TYPE_VAG = 0x1c;
 static constexpr std::uint32_t VAG_FRAME_SAMPLES = 28;
+static constexpr std::uint32_t ATRAC9_FRAME_SAMPLES[16] = {0, 64, 0, 0, 128, 0, 0, 256, 0, 0, 0, 0, 0, 0, 0, 0};
 static constexpr std::uint32_t PCM_BYTES_PER_SAMPLE[] = {1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 8, 8};
 
 static bool IsPcmType(std::uint32_t type) {
@@ -53,6 +54,25 @@ static Ngs2WaveformBlock VagBlock(std::uint32_t channels, std::uint32_t pos, std
     block.data_offset = offset;
     block.data_size = static_cast<std::uint32_t>(past * frameBytes - offset);
     block.num_samples = (past - first) * VAG_FRAME_SAMPLES;
+    return block;
+}
+
+static Ngs2WaveformBlock Atrac9Block(std::uint32_t config, std::uint32_t pos, std::uint32_t count) {
+    const std::uint32_t rateIndex = (config >> 20) & 0xfu;
+    const std::uint32_t frameSamples = ATRAC9_FRAME_SAMPLES[rateIndex];
+    if (frameSamples == 0) throw std::runtime_error("NGS2: ATRAC9 waveform blocks at sampling rate index " + std::to_string(rateIndex) + " are not implemented");
+    const std::uint32_t superframeShift = (config >> 3) & 3u;
+    const std::uint32_t superframeBytes = (((config >> 5) & 0x7ffu) + 1u) << superframeShift;
+    const std::uint32_t superframeSamples = frameSamples << superframeShift;
+    const std::uint32_t first = pos / superframeSamples;
+    const std::uint32_t lead = frameSamples + pos;
+    const std::uint32_t past = (count + lead + superframeSamples - 1u) / superframeSamples;
+    const std::uint32_t offset = first * superframeBytes;
+    Ngs2WaveformBlock block{};
+    block.data_offset = offset;
+    block.data_size = past * superframeBytes - offset;
+    block.num_skip_samples = lead - first * superframeSamples;
+    block.num_samples = count;
     return block;
 }
 
@@ -450,19 +470,7 @@ int APS5_VABI sceNgs2CalcWaveformBlock(const Ngs2WaveformFormat* format, uint32_
         return SCE_NGS2_OK;
     }
     if (type != SCE_NGS2_WAVEFORM_TYPE_ATRAC9) return SCE_NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT;
-    if (format->num_channels == 0 || format->num_channels > NGS2_MAX_CHANNELS || format->sample_rate == 0 || format->sample_rate > MAX_SAMPLE_RATE) {
-        return SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT;
-    }
-    Atrac9CodecInfo codec{};
-    if (!MatchingCodecInfo(*format, codec)) return SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT;
-    const std::uint64_t superframeSamples = static_cast<std::uint64_t>(codec.frameSamples) * codec.framesInSuperframe;
-    const std::uint64_t skip = sample_pos % superframeSamples;
-    block->data_offset = sample_pos / superframeSamples * codec.superframeSize;
-    if (num_samples != 0) {
-        block->data_size = (skip + num_samples + superframeSamples - 1) / superframeSamples * codec.superframeSize;
-        block->num_skip_samples = static_cast<std::uint32_t>(skip);
-    }
-    block->num_samples = num_samples;
+    *block = Atrac9Block(format->config_data, sample_pos, num_samples);
     return SCE_NGS2_OK;
 }
 
