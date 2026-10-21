@@ -115,7 +115,7 @@ static void Validation() {
     std::int32_t status = 0;
     CHECK(sceUltUlthreadJoin(&thread, &status) == Ok && status == 0x27);
     CHECK(sceUltFinalize() == Ok);
-    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(1, 1) == 256u + 16u * 1024u);
+    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(1, 1) == 1184);
     CHECK(sceUltConditionVariableDestroy(nullptr) == -2139029503);
     CHECK(sceUltReaderWriterLockDestroy(nullptr) == ULT_ERROR_NULL);
     bool threwInfo = false;
@@ -128,6 +128,10 @@ static void Validation() {
 }
 
 static void TryJoin() {
+    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(0, 0) == 384);
+    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(1, 1) == 1184);
+    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(3, 2) == 2128);
+    CHECK(sceUltUlthreadRuntimeGetWorkAreaSize(0x80000000u, 0) == 0xA00000180ull);
     Runtime runtime;
     Thread thread;
     std::uint8_t optParam[128];
