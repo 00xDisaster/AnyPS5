@@ -41,6 +41,21 @@ static_assert(offsetof(VrTracker2InitializeParameter, coordinateSystem) == 52);
 static_assert(offsetof(VrTracker2InitializeParameter, reserved) == 58);
 static_assert(sizeof(VrTracker2MemoryParameter) == 32);
 static_assert(sizeof(VrTracker2MemoryRequirement) == 32);
+struct VrTracker2LegacyParameter12 {
+    std::uint32_t size;
+    std::uint8_t opaque[8];
+};
+
+struct VrTracker2LegacyParameter20 {
+    std::uint32_t size;
+    std::uint8_t opaque[16];
+};
+
+struct VrTracker2UnsupportedCoordinateParameter;
+
+static_assert(sizeof(VrTracker2LegacyParameter12) == 12);
+static_assert(sizeof(VrTracker2LegacyParameter20) == 20);
+
 struct VrTracker2CalibrationResult;
 struct VrTracker2TelemetryData;
 struct VrTracker2PoseParameter;
@@ -408,12 +423,24 @@ std::int32_t APS5_VABI VrTracker2GetScalarResult(VrTracker2ScalarResult* result)
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-APS5_EXPORT("omJ7b8FqAN0", VrTracker2NotInitialized);
-APS5_EXPORT("G2PWj1HLqn8", VrTracker2NotInitialized);
+APS5_EXPORT("omJ7b8FqAN0", VrTracker2LegacyQuery12);
+std::int32_t APS5_VABI VrTracker2LegacyQuery12(const VrTracker2LegacyParameter12* parameter) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("G2PWj1HLqn8", VrTracker2LegacyQuery20);
+std::int32_t APS5_VABI VrTracker2LegacyQuery20(const VrTracker2LegacyParameter20* parameter) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("73zcxAFawYk", VrTracker2NotInitialized);
 APS5_EXPORT("vegrWFNiQwc", VrTracker2NotInitialized);
 APS5_EXPORT("6r01IawmypA", VrTracker2NotInitialized);
-APS5_EXPORT("zeof7sF2fqE", VrTracker2NotInitialized);
+APS5_EXPORT("zeof7sF2fqE", VrTracker2UnsupportedCoordinateOperation);
+std::int32_t APS5_VABI VrTracker2UnsupportedCoordinateOperation(const VrTracker2UnsupportedCoordinateParameter* parameter) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("Z0rfHOHQV1w", VrTracker2NotInitialized);
 APS5_EXPORT("4l7x+uy3dWw", VrTracker2NotInitialized);
 APS5_EXPORT("ZXlt-Xb3da4", VrTracker2NotInitialized);
