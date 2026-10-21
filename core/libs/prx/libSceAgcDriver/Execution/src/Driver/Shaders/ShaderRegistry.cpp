@@ -1051,7 +1051,10 @@ std::vector<PreparedShaders::Entry> PrepareRegistered(RegisteredPreparation& pla
             APS5_LOG_OUT("shader library prebuild skipped: %s", error.what());
         }
     }
-    if (request.context.pixel) {
+    if (request.context.compute) {
+        request.context.compute->partialThreads = {1, 1, 1};
+        append();
+    } else if (request.context.pixel) {
         request.layout.pushConstantSizeBytes = 0;
         append();
     }

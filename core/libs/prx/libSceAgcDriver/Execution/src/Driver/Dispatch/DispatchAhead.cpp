@@ -105,10 +105,7 @@ bool OverlapsLabel(std::span<const ShaderRecompiler::MemoryRegion> regions, cons
 }
 
 void Driver::resolveGroupAhead(const Submission& submission, const QueueState& live, std::size_t from) {
-    static const bool allQueues = [] {
-        const char* text = std::getenv("APS5_GROUP_CAPTURE_ALL_QUEUES");
-        return text == nullptr || (text[0] != '0' && text[0] != '\0');
-    }();
+    static const bool allQueues = std::getenv("APS5_GROUP_CAPTURE_ALL_QUEUES") != nullptr;
     if (!allQueues && submission.queue == 0) return;
     auto& resolved = resolvedAhead();
     const auto localDevice = device.Load();
@@ -145,7 +142,7 @@ void Driver::resolveGroupAhead(const Submission& submission, const QueueState& l
             const auto packet = std::span(commands).subspan(scan, count);
             const auto opcode = (header >> 8u) & 0xffu;
             const auto next = scan + count;
-            if (header == FlipPacketHeader || opcode == 0x22 || opcode == 0x3f) break;
+            if (header == FlipPacketHeader || header == RenderingWaitPacketHeader || opcode == 0x22 || opcode == 0x3f || opcode == 0x3c || opcode == 0x93) break;
             if (opcode == 0x15 || opcode == 0x16) {
                 if (count < (opcode == 0x15 ? 5u : 3u)) break;
                 try {
@@ -268,10 +265,6 @@ void Driver::resolveGroupAhead(const Submission& submission, const QueueState& l
             if (!label) break;
             NoteLabel(labels, label->address, label->Bytes());
             writes.emplace_back(label->address, label->address + label->Bytes().size());
-        } else if (Pm4::IndirectRegisterOpcode(opcode)) {
-            const auto found = submission.registerLists.find(cursor);
-            if (found == submission.registerLists.end() || !Pm4::IndirectRegistersValid(found->second)) break;
-            try { Pm4::ExecuteIndirectRegisters(packet, found->second, scratch); } catch (const std::exception&) { break; }
         } else if (opcode != 0x3f && opcode != 0x42 && opcode != 0x46 && opcode != 0x58) {
             if (Pm4::AccessesMemory(header)) break;
             try {
