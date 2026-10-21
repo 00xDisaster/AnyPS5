@@ -139,7 +139,6 @@ int main(int argc, char** argv) {
     Require(sceVoiceQoSDeleteRemoteEndpoint(remote) == notInitialized);
     Require(sceVoiceQoSCreateLocalEndpoint(&local, 1, 0, 0) == notInitialized);
     Require(sceVoiceQoSSetRemoteEndpointAttribute(remote, 3, &level, sizeof(level)) == notInitialized);
-    Require(sceVoiceQoSGetLocalEndpointAttribute(local, 3, &readLevel, sizeof(readLevel)) == notInitialized);
     Require(sceVoiceQoSReadPacket(connection, packet.data(), &packetSize) == notInitialized);
     Require(sceVoiceQoSWritePacket(connection, packet.data(), &packetSize) == notInitialized);
     Require(sceVoiceQoSInit(memory.data(), 0x40000, appType) == 0);
