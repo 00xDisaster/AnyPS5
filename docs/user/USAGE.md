@@ -97,7 +97,27 @@ The `--skip-sce-module`, `--exclude-sce-module <file>`, `--skip-syscall-check`, 
 
 A patch file changes bytes of the input executable or of a bundled module before conversion, for a title that hard-codes a value the host cannot meet. The relinker checks the bytes it replaces, so a patch for another version of the title fails instead of corrupting it. With no patch file the output is unchanged.
 
-For a local patch catalog, `python3 tools/suggest_patches.py --catalog <directory> --param-json <sce_sys/param.json> --input <input.elf> --relinker <relinker> [--sce-module-path <directory>] [--module-dir <directory>]...` recommends a patch only when `titleId`, `contentVersion`, SHA-256 of every patch target and `relinker --verify-patches` all match. Pass `--param-json` explicitly when metadata and unwrapped ELF files are in separate locations. It reads a user-supplied `index.json` with `format: 1` and an `entries` array. Each entry has `titleId`, `contentVersion`, a `patch` path relative to the catalog directory, and `targets` mapping every target path from that patch file to its lowercase SHA-256. For example, `{"format":1,"entries":[{"titleId":"TEST00001","contentVersion":"01.000.000","patch":"patch.toml","targets":{"Media/Modules/module.prx":"<64 lowercase hexadecimal digits>"}}]}`. Only entries matching the requested title and version have their patch files validated; a malformed entry for another title cannot block a valid recommendation. Verification has a 120-second limit by default; use `--timeout-seconds <positive integer>` to change it. A timeout gives no recommendation. For a synthetic input without system modules, use `--skip-sce-module` when it is also used for conversion. The tool does not fetch or apply patches. A recommendation prints the patch path for an explicit conversion with `--patches`; no match exits `1`, and invalid input exits `2`. Keep catalog patch files outside the input executable's directory to avoid automatic `relinker-patches.toml` discovery.
+To check a local patch catalog, run:
+
+```sh
+python3 tools/suggest_patches.py --catalog <directory> --param-json <sce_sys/param.json> --input <input.elf> --relinker <relinker> [--sce-module-path <directory>] [--module-dir <directory>]...
+```
+
+The advisor reads `titleId` and `contentVersion` from the specified `param.json`, checks the SHA-256 of every file targeted by a candidate patch, then calls `relinker --verify-patches`. The explicit metadata path also works when `param.json` and the unwrapped ELF files are stored separately. The catalog directory must contain an `index.json` with `format: 1` and an `entries` array. Each entry has `titleId`, `contentVersion`, a relative `patch` path, and `targets` mapping every patch target to its lowercase SHA-256. For example:
+
+```json
+{
+  "format": 1,
+  "entries": [{
+    "titleId": "TEST00001",
+    "contentVersion": "01.000.000",
+    "patch": "patch.toml",
+    "targets": {"Media/Modules/module.prx": "<64 lowercase hexadecimal digits>"}
+  }]
+}
+```
+
+The advisor validates patch files only for entries matching the requested title and version. An unrelated malformed entry cannot block a valid recommendation. Verification times out after 120 seconds by default; use `--timeout-seconds <positive integer>` to change the limit. For synthetic inputs without system modules, use `--skip-sce-module` if conversion also uses it. A timeout or invalid input exits `2`; no match exits `1`. The tool does not fetch or apply patches. A recommendation prints the path to pass explicitly with `--patches`. Keep catalog patch files outside the input executable's directory to avoid automatic `relinker-patches.toml` discovery.
 
 The target hashes identify the exact files changed by a patch, which might not include the main executable. They do not authenticate a catalog or establish that a patch is safe or that the title is fully playable. Use catalogs from sources you trust and review the patch before applying it.
 
