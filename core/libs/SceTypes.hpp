@@ -333,7 +333,7 @@ struct VaList {
 };
 #pragma pack(pop)
 
-using FiberEntry = void* (*)(std::uint64_t, void*);
+using FiberEntry = void (APS5_VABI*)(std::uint64_t argOnInitialize, std::uint64_t argOnRun);
 
 struct FiberOptParam {
     std::uint32_t magic;

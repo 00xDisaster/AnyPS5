@@ -239,7 +239,31 @@ static_assert(offsetof(UltUlthreadRuntimeInfo, reserved60) == 60);
 static_assert(offsetof(UltUlthreadRuntimeInfo, workerStackSize) == 64);
 static_assert(offsetof(UltUlthreadRuntimeInfo, reserved) == 72);
 
-struct UltUlthreadInfo;
+struct UltUlthreadInfo {
+    std::uint64_t size;
+    void* object;
+    char name[32];
+    std::uint32_t contextAttribute;
+    std::uint32_t reserved52;
+    void* runtime;
+    FiberInfo fiber;
+    std::byte reserved[64];
+};
+
+static_assert(sizeof(FiberInfo) == 128);
+static_assert(offsetof(FiberInfo, entry) == 8);
+static_assert(offsetof(FiberInfo, arg_on_initialize) == 16);
+static_assert(offsetof(FiberInfo, addr_context) == 24);
+static_assert(offsetof(FiberInfo, size_context) == 32);
+static_assert(offsetof(FiberInfo, name) == 40);
+static_assert(offsetof(FiberInfo, size_context_margin) == 72);
+static_assert(sizeof(UltUlthreadInfo) == 256);
+static_assert(offsetof(UltUlthreadInfo, object) == 8);
+static_assert(offsetof(UltUlthreadInfo, name) == 16);
+static_assert(offsetof(UltUlthreadInfo, contextAttribute) == 48);
+static_assert(offsetof(UltUlthreadInfo, runtime) == 56);
+static_assert(offsetof(UltUlthreadInfo, fiber) == 64);
+static_assert(offsetof(UltUlthreadInfo, reserved) == 192);
 
 struct UltMutexState {
     std::mutex _mutex;
