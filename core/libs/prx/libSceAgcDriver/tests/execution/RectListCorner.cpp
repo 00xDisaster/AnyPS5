@@ -2,6 +2,9 @@
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
 #include "Recompiler.hpp"
 #include "SpirvBackend/SpirvModule.hpp"
+#if ANYPS5_ENABLE_SPIRV_TOOLS
+#include "SpirvBackend/SpirvOptimizer.hpp"
+#endif
 #include "VulkanTestDevice.hpp"
 #include <array>
 #include <bit>
@@ -46,8 +49,11 @@ public:
         builder.EmitEntryPoint(spv::ExecutionModelVertex, main, "main", {vertexIndex, position, identity});
         result(spv::OpLabel);
         const auto index = result(spv::OpLoad, intType, vertexIndex);
-        const auto first = result(spv::OpIEqual, boolType, index, constant(intType, 0u));
-        const auto second = result(spv::OpIEqual, boolType, index, constant(intType, 1u));
+        const auto boolVectorType = type(spv::OpTypeVector, boolType, 4u);
+        const auto firstScalar = result(spv::OpIEqual, boolType, index, constant(intType, 0u));
+        const auto secondScalar = result(spv::OpIEqual, boolType, index, constant(intType, 1u));
+        const auto first = result(spv::OpCompositeConstruct, boolVectorType, firstScalar, firstScalar, firstScalar, firstScalar);
+        const auto second = result(spv::OpCompositeConstruct, boolVectorType, secondScalar, secondScalar, secondScalar, secondScalar);
         const auto positionValue = result(spv::OpSelect, vec4Type, first, vector(-1.0f, -1.0f, 0.0f, 1.0f), result(spv::OpSelect, vec4Type, second, vector(1.0f, -1.0f, 0.0f, 1.0f), vector(-1.0f, 1.0f, 0.0f, 1.0f)));
         const auto identityValue = result(spv::OpSelect, vec4Type, first, vector(0.0f, 0.0f, 0.0f, 1.0f), result(spv::OpSelect, vec4Type, second, vector(1.0f, 0.0f, 0.0f, 1.0f), vector(0.0f, 1.0f, 0.0f, 1.0f)));
         emit(spv::OpStore, position, positionValue);
@@ -142,6 +148,10 @@ int Run(AgcDriver::VulkanDevice& device, std::uint32_t maximumVersion) {
     ShaderRecompiler::RecompileResult fragment;
     vertex.spirv = ShaderRecompiler::SharedSpirv(Emitter(target.spirvVersion).Vertex());
     fragment.spirv = ShaderRecompiler::SharedSpirv(Emitter(target.spirvVersion).Fragment());
+#if ANYPS5_ENABLE_SPIRV_TOOLS
+    static_cast<void>(ShaderRecompiler::ValidateAndOptimizeSpirv(vertex.spirv, target.vulkanVersion, target.spirvVersion, target.nonConstantImageOffsets, false));
+    static_cast<void>(ShaderRecompiler::ValidateAndOptimizeSpirv(fragment.spirv, target.vulkanVersion, target.spirvVersion, target.nonConstantImageOffsets, false));
+#endif
     vertex.parameterExports = {0u};
     fragment.fragmentParameters = {{0u, 0u, false, false}};
     const auto rectangle = ShaderRecompiler::BuildRectListShaders(vertex, fragment, target);
