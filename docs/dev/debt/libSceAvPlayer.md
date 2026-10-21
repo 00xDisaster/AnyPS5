@@ -2,7 +2,7 @@
 
 ### Silent stubs
 
-- [libSceAvPlayer](../../../core/libs/prx/libSceAvPlayer/Export.cpp): `sceAvPlayerSetLogCallback` accepts a callback that is never called, as the player produces no log messages, and `sceAvPlayerSetAvailableBandwidth` has no effect, as it governs HLS sources, which `sceAvPlayerAddSource` does not implement.
+- [libSceAvPlayer](../../../core/libs/prx/libSceAvPlayer/Export.cpp): `sceAvPlayerSetLogCallback` accepts a callback that is never called, as the player produces no log messages, and `sceAvPlayerSetAvailableBandwidth` has no effect, as it governs HLS sources, which `sceAvPlayerAddSource` does not implement; after a source is added it returns `OPERATION_FAILED`, as [prosper's reading of the module](https://github.com/mattias800/prosper/blob/8dcb5dfdb9997ede7c76783995010d6abd1222f8/prosper/src/hle/video/avplayer.cpp#L960-L972) describes.
 - [sceAvPlayerSetTrickSpeed](../../../core/libs/prx/libSceAvPlayer/src/Source.cpp) (libSceAvPlayer) with a negative speed runs the clock backwards but delivers no frames; when a forward speed is set again, playback resumes from the rewound time.
 
 ### Unknown function info
