@@ -3563,9 +3563,6 @@ void verifySplitWaterfallImageTable() {
     std::copy(descriptor.begin(), descriptor.end(), root.begin() + 0x40u / 4u);
     const auto base = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(root.data()));
     const std::array<std::uint32_t, 2> userData{static_cast<std::uint32_t>(base), static_cast<std::uint32_t>(base >> 32u)};
-    // v_cmpx_gt_u32 exec, 6, v0; s17 = v_readfirstlane(v0); v1 = v_lshl_add_u32(v0, 5, addend) under that exec;
-    // s19 = v_readfirstlane(v1); s18 = s17 << 5; s_load_dwordx4 s[36:39] at s18 + 0x40 and s[40:43] at s19 + 0x40:
-    // the two halves of one T# record, with the second half's offset added before the lane read.
     const auto code = [](std::uint32_t addend) {
         return std::vector<std::uint32_t>{0xf4080700u, 0xfa000010u, 0xf4080800u, 0xfa000020u, 0x7da80086u, 0x7e220500u, 0xd7460001u, 0x00010b00u | (addend << 18u), 0x7e260501u, 0x8f128511u,
             0xf4080900u, 0x24000040u, 0xf4080a00u, 0x26000040u, 0xf09c0f08u, 0x01090000u, 0xe0700000u, 0x80070000u, 0xbf810000u};
