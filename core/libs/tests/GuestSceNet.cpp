@@ -1511,6 +1511,10 @@ int main() {
     Require(setsockopt_nid_postfix(closed, 0xffff, 0x20, &enabled, sizeof(enabled)) == 0);
     Require(sceNetSetsockopt(closed, 0xffff, 0x20, &enabled, sizeof(enabled)) == 0);
     Require(sceNetSetsockopt(closed, 0xffff, 0x4, &enabled, sizeof(enabled)) == 0);
+    int option = 0;
+    std::uint32_t optionSize = sizeof(option);
+    Require(sceNetGetsockopt(closed, 0xffff, 0x20, &option, &optionSize) == 0 && option == 0x20 && optionSize == sizeof(option));
+    Require(sceNetGetsockopt(closed, 0xffff, 0x4, &option, &optionSize) == 0 && option == 0x4);
     Require(close_nid_postfix(closed) == 0);
     Require(Failed(sceNetSocketClose(closed), 9));
     CheckKernelTimeouts();
