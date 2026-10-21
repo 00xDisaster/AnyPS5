@@ -1261,6 +1261,64 @@ void RelocatedHeaders() {
     ExpectFailure([&] { AgcDriverResolveShaderAbi_nid_postfix(&otherContext.shader, {}, primitive); }, "replaced shader header");
 }
 
+void DispatchAheadPrewarm() {
+    alignas(256) std::array<std::uint32_t, 1> pendingCode{0xbf810000u};
+    alignas(256) std::array<std::uint32_t, 1> lazyCode{0xbf810000u};
+    struct Header {
+        Shader shader{};
+        std::array<ShaderRegister, 7> registers{};
+        ShaderSpecialRegs specials{};
+    } pendingHeader, lazyHeader;
+    const auto fillHeader = [](Header& header, const std::array<std::uint32_t, 1>& code) {
+        const auto address = reinterpret_cast<std::uintptr_t>(code.data());
+        header.shader.file_header = 0x34333231u;
+        header.shader.version = 0x18;
+        header.shader.header_size = sizeof(Header);
+        header.shader.shader_size = sizeof(code);
+        header.shader.code = code.data();
+        header.shader.sh_registers = header.registers.data();
+        header.shader.num_sh_registers = header.registers.size();
+        header.shader.specials = &header.specials;
+        header.specials.dispatch_modifier = 0x8000;
+        header.registers = {{{0x20c, static_cast<std::uint32_t>(address >> 8u)}, {0x20d, static_cast<std::uint32_t>(address >> 40u)}, {0x207, 1}, {0x208, 1}, {0x209, 1}, {0x212, 0}, {0x213, 2}}};
+    };
+    fillHeader(pendingHeader, pendingCode);
+    fillHeader(lazyHeader, lazyCode);
+    AgcDriverRegisterShader_nid_postfix(&pendingHeader.shader);
+    AgcDriverRegisterShader_nid_postfix(&lazyHeader.shader);
+    AgcDriver::DriverDetail::AwaitRegistrationPreparation();
+    const auto registry = AgcDriver::DriverDetail::Driver::Get().RegisteredShaders();
+    Require(registry != nullptr, "dispatch ahead prewarm test published no shader registry");
+    const auto pendingSnapshot = AgcDriver::DriverDetail::RegisteredHeader(*registry, &pendingHeader.shader);
+    const auto lazySnapshot = AgcDriver::DriverDetail::RegisteredHeader(*registry, &lazyHeader.shader);
+    Require(pendingSnapshot != nullptr && lazySnapshot != nullptr, "dispatch ahead prewarm test published no snapshots");
+    std::vector<AgcDriver::DriverDetail::PreparedShaders::Entry> savedEntries;
+    {
+        std::lock_guard lock(pendingSnapshot->prepared->mutex);
+        savedEntries = std::move(pendingSnapshot->prepared->entries);
+        pendingSnapshot->prepared->entries.clear();
+        pendingSnapshot->prepared->pending = true;
+    }
+    {
+        std::lock_guard lock(lazySnapshot->prepared->mutex);
+        lazySnapshot->prepared->entries.clear();
+        lazySnapshot->prepared->pending = false;
+    }
+    auto settle = std::async(std::launch::async, SettleLater, std::ref(*pendingSnapshot->prepared), std::move(savedEntries), nullptr);
+    alignas(16) const std::array<std::uint32_t, 6> indirectPairs{0x20cu, lazyHeader.registers[0].value, 0x20du, lazyHeader.registers[1].value, 0x240u, 7u};
+    const auto pairsAddress = reinterpret_cast<std::uintptr_t>(indirectPairs.data());
+    std::vector<std::uint32_t> commands;
+    for (const auto reg : pendingHeader.registers) commands.insert(commands.end(), {0xc0017600u, reg.offset, reg.value});
+    commands.insert(commands.end(), {0xc0031500u, 1, 1, 1, 0x8041u, 0xffff1000u});
+    commands.insert(commands.end(), {0xc0036300u, static_cast<std::uint32_t>(pairsAddress), static_cast<std::uint32_t>(pairsAddress >> 32u), 0x80000000u, 3u});
+    commands.insert(commands.end(), {0xc0031500u, 1, 1, 1, 0x8041u});
+    Packet packet{commands.data(), static_cast<std::uint32_t>(commands.size()), 0, {}};
+    Require(sceAgcDriverSubmitAcb(0x20, &packet) == 0, "dispatch ahead prewarm submit failed");
+    AgcDriverWaitIdle_nid_postfix();
+    settle.get();
+    AgcDriverShutdown_nid_postfix();
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -1288,10 +1346,11 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--registered-workgroup") {
-            const auto device = OpenVulkanTestDevice();
+            auto device = OpenVulkanTestDevice();
             if (!device) return VulkanTestSkipped;
             RegisteredVertexWorkgroup(device->Target(), true);
-            AgcDriverShutdown_nid_postfix();
+            device.reset();
+            DispatchAheadPrewarm();
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--deferred") {

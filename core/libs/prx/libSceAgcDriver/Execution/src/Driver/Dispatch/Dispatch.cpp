@@ -401,10 +401,7 @@ void Driver::dispatch(QueueState& queue, std::span<const std::uint32_t> packet, 
         if (cached) ++groupStats.resolvedHits;
         if (compiledResult != nullptr) {
             SubmitLibraryPrebuild([localDevice, compiledResult, address] {
-                try {
-                    localDevice->PrebuildComputePipeline(*compiledResult, address);
-                } catch (...) {
-                }
+                try { localDevice->PrebuildComputePipeline(*compiledResult, address); } catch (...) {}
             });
         }
         return;
