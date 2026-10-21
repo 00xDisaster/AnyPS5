@@ -51,7 +51,7 @@ struct Connection {
         Require(sceNetConnect(sender, address.data(), size) == 0, "connect");
         receiver = sceNetAccept(listener, nullptr, nullptr);
         Require(receiver >= 0, "accept");
-        SetOption(receiver, NET_SO_RCVBUF, 1024 * 1024);
+        SetOption(receiver, NET_SO_RCVBUF, 4096);
         SetOption(receiver, 0x1106, 2000000);
     }
 
