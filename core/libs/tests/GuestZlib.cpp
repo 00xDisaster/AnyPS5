@@ -45,7 +45,6 @@ int main() {
         Require(sceZlibInflate(input, inputLength, output, capacity, &id) == 0);
         Require(id > previous);
         previous = id;
-        RequireThrows([&] { sceZlibInflate(input, inputLength, output, capacity, &id); });
         RequireThrows([&] { sceZlibFinalize(); });
         std::uint32_t timeout = 0;
         RequireThrows([&] { sceZlibWaitForDone(&id, &timeout); });
@@ -71,6 +70,21 @@ int main() {
     decode(compressed.data(), compressed.size() - 1, 65536, static_cast<std::int32_t>(0x811200FF));
     decode(compressed.data(), compressed.size() - 4, expectedLength, static_cast<std::int32_t>(0x811200FF));
     decode(compressed.data(), compressed.size() - 1, expectedLength, static_cast<std::int32_t>(0x811200FF));
+    alignas(2048) std::array<std::uint8_t, 3 * 8192> batch{};
+    std::array<std::uint64_t, 3> ids{};
+    for (std::size_t index = 0; index < ids.size(); ++index)
+        Require(sceZlibInflate(compressed.data(), compressed.size(), batch.data() + index * 8192, 8192, &ids[index]) == 0);
+    Require(ids[0] < ids[1] && ids[1] < ids[2]);
+    for (std::uint64_t expected : ids) {
+        std::uint64_t completed = 0;
+        Require(sceZlibWaitForDone(&completed, nullptr) == 0);
+        Require(completed == expected);
+    }
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        Require(sceZlibGetResult(ids[index], &produced, &status) == 0);
+        Require(status == 0 && produced == expectedLength);
+        Require(std::memcmp(batch.data() + index * 8192, text, sizeof(text) - 1) == 0);
+    }
     Require(sceZlibFinalize() == 0);
     Require(sceZlibGetResult(id, &produced, &status) == static_cast<std::int32_t>(0x81120032));
     std::array<std::uint8_t, 65536> scratch{};

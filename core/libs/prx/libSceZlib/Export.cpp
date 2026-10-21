@@ -63,7 +63,6 @@ std::int32_t APS5_VABI sceZlibInflate(const void* source, std::uint32_t sourceLe
     if (!source || !sourceLength || !destination || !requestId || !destinationLength ||
         destinationLength > 65536 || reinterpret_cast<std::uintptr_t>(destination) % 2048 != 0)
         throw std::runtime_error("sceZlibInflate: invalid buffer or size");
-    if (hasUnreadResult()) throw std::runtime_error("sceZlibInflate: multiple outstanding requests unsupported");
     if (nextId == std::numeric_limits<std::uint64_t>::max()) throw std::runtime_error("sceZlibInflate: request IDs exhausted");
     z_stream stream{};
     stream.next_in = const_cast<Bytef*>(static_cast<const Bytef*>(source));
