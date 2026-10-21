@@ -605,16 +605,27 @@ int main() {
             Require(!replayLegacy.request.context.vertex->pointList && replayLegacy.request.context.vertex->pointSize == 1.0f);
             Require(replayLegacy.request.context.vertex->pointSizeMin == 0.0f && replayLegacy.request.context.vertex->pointSizeMax == 0.0f);
             const auto upgradedLegacy = DecodeBase64(serializer.Serialize(replayLegacy.request));
-            Require(upgradedLegacy[4] == 42u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 14u : version >= 35u ? 15u : 20u));
+            Require(upgradedLegacy[4] == 43u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 14u : version >= 35u ? 15u : 20u));
         }
     }
 
+    pixel.sampleOrder = {0x76543210u, 0x01234567u, 0x10325476u, 0x67452301u};
+    pointRequest.context.pixel = pixel;
+    const auto sampledPoint = serializer.Deserialize(serializer.Serialize(pointRequest));
+    Require(sampledPoint.request.context.vertex->pointList && sampledPoint.request.context.pixel->sampleOrder == pixel.sampleOrder);
+    auto legacy42 = DecodeBase64(serializer.Serialize(pointRequest));
+    legacy42.resize(legacy42.size() - 13u);
+    legacy42[4] = 42u;
+    const auto replay42 = serializer.Deserialize(EncodeBase64(legacy42));
+    Require(replay42.request.context.pixel->sampleOrder == pixel.sampleOrder && !replay42.request.context.vertex->pointList && replay42.request.context.vertex->pointSize == 1.0f);
+    pixel.sampleOrder = {};
     pointRequest.context.pixel = pixel;
     auto legacy34 = DecodeBase64(serializer.Serialize(pointRequest));
     legacy34.resize(legacy34.size() - 20u);
     const auto stencil34 = std::search(legacy34.begin(), legacy34.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
-    Require(stencil34 < legacy34.end() && *stencil34 == 0u);
-    legacy34.erase(stencil34);
+    const auto legacyPixelTail = static_cast<std::ptrdiff_t>(1u + sizeof(pixel.sampleOrder));
+    Require(legacy34.end() - stencil34 > legacyPixelTail && std::all_of(stencil34, stencil34 + legacyPixelTail, [](std::uint8_t value) { return value == 0u; }));
+    legacy34.erase(stencil34, stencil34 + legacyPixelTail);
     legacy34[4] = 34u;
     const auto replay34 = serializer.Deserialize(EncodeBase64(legacy34));
     Require(replay34.request.context.pixel.has_value() && replay34.request.context.pixel->iteratesSamples && replay34.request.context.pixel->positionLocation == pixel.positionLocation && replay34.request.context.pixel->sampleLocations == pixel.sampleLocations);
