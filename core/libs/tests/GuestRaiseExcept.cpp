@@ -102,13 +102,14 @@ void Threads() {
         seed.x87[1]&=~0xffu;
         seed.sse=(seed.sse&~0x3fu)|(0x3f<<7);
         Write(seed);
-        *__error_nid_postfix()=static_cast<int>(100+flag);
         ready.arrive_and_wait();
+        *__error_nid_postfix()=static_cast<int>(100+flag);
         Require(raiseFlags(static_cast<int>(flag))==0,"thread return");
+        const int raisedError=*__error_nid_postfix();
         ready.arrive_and_wait();
         const auto after=Read();
         Require((after.x87[1]&0x3f)==flag && (after.sse&0x3f)==flag,"thread-local exception flags");
-        Require(*__error_nid_postfix()==static_cast<int>(100+flag),"thread-local errno");
+        Require(raisedError==static_cast<int>(100+flag),"thread-local errno");
         Write(original);
     };
     std::thread a(worker,1),b(worker,4);
