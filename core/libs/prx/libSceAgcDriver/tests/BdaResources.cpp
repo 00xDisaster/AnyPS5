@@ -2225,6 +2225,21 @@ void sparseImportedHeapTests(const Context& context, const BdaTestAccess& access
         }
     }
     {
+        auto misaligned = importing;
+        misaligned.limits.minStorageBufferOffsetAlignment = 256;
+        std::lock_guard gpu(AgcDriver::GuestMemory::GpuMutex());
+        Recorder recorder(misaligned);
+        recorder.Activate();
+        GuestBufferMemory memory(misaligned);
+        memory.AddReadable(base + 16, 2 * bytes - 16);
+        memory.Upload(false);
+        std::uint32_t adjustment = 0;
+        const auto view = memory.Descriptor(base + 16, 2 * bytes - 16, adjustment);
+        Require(view.buffer != imported->buffer, "a misaligned sparse descriptor bound its import in place");
+        Require(view.range != 0 && view.range <= bytes && memory.CopiedBytes() <= bytes && access.bytes(view.buffer)[view.offset + adjustment] == std::byte{0x57}, "a misaligned sparse descriptor does not serve its committed prefix alone");
+        memory.WriteBack();
+    }
+    {
         GuestBufferMemory written(importing);
         written.AddWritable(base, 2 * bytes);
         written.Upload(false);
