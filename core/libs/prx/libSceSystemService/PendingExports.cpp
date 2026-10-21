@@ -286,7 +286,7 @@ int APS5_VABI sceLncUtilBlockAppSuspend(const char* reason) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilBlockingGetEventForDaemon() {
+int APS5_VABI sceLncUtilBlockingGetEventForDaemon(LncDaemonEvent* event, std::uint64_t receiveArgument) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2157,7 +2157,7 @@ int APS5_VABI sceSystemServiceKillLocalProcessForPs2Emu(std::int32_t processId) 
     return 0;
 }
 
-int APS5_VABI sceSystemServiceLaunchEventDetails() {
+int APS5_VABI sceSystemServiceLaunchEventDetails(std::uint64_t unusedSlot, const char* eventId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2172,7 +2172,7 @@ int APS5_VABI sceSystemServiceLaunchTournamentList() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceLaunchTournamentsTeamProfile() {
+int APS5_VABI sceSystemServiceLaunchTournamentsTeamProfile(std::uint64_t unusedSlot, const char* profile, const char* tournament, const char* context) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -2315,7 +2315,7 @@ int APS5_VABI sceSystemServiceShowEyeToEyeDistanceSetting() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceShowImposeMenuForPs2Emu() {
+int APS5_VABI sceSystemServiceShowImposeMenuForPs2Emu(std::uint8_t enabled, std::uint64_t reserved) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
