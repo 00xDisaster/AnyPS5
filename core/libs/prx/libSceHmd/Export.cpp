@@ -542,7 +542,7 @@ int APS5_VABI sceHmdReprojectionStartCapture(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdInternalGetDefaultLedData(void) {
+int APS5_VABI sceHmdInternalGetDefaultLedData(std::int32_t handle, std::uint32_t* mask, HmdLedData* data) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
