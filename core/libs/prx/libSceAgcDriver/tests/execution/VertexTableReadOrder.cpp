@@ -103,9 +103,10 @@ void WaitEmpty() {
 }
 
 std::shared_ptr<Gate> completeAtBufferRead;
+const void* completeAtRead = BufferTable.data();
 
 void CompleteQueuedStoreAtBufferRead(std::uint64_t address, std::size_t) {
-    if (address != Address(BufferTable.data()) || completeAtBufferRead == nullptr) return;
+    if (address != Address(completeAtRead) || completeAtBufferRead == nullptr) return;
     std::exchange(completeAtBufferRead, nullptr)->release.store(true, std::memory_order_release);
     WaitEmpty();
 }
@@ -161,11 +162,37 @@ int main() {
 
         completeAtBufferRead = Hold(AttribTable.data(), 4, [] { AttribTable[0] = (0x2cu << 5u) | 1u; });
         AgcDriver::GuestMemory::SetReadGuard(&CompleteQueuedStoreAtBufferRead);
+        auto drains = DrawPipeline::Queue0().DecodeDrains();
         info = Decode(reads);
         AgcDriver::GuestMemory::SetReadGuard(nullptr);
         check(completeAtBufferRead == nullptr, "the queued attribute store did not complete during the decode");
         check(info.resources[0].fields[0] == 0x9000u && info.resources[0].fields[2] == 128u, "the decode kept the vertex buffer of an attribute word that a queued store replaced during the decode");
         check(reads.size() == 2 && reads[1].address == Address(BufferTable.data() + 4), "the recorded reads are not the stored attribute word and the V# it names");
+        check(DrawPipeline::Queue0().DecodeDrains() == drains + 1, "the drain the decode caused was not counted");
+
+        WaitEmpty();
+        auto finished = Hold(BufferTable.data() + 4, 16, [] {
+            BufferTable[4] = 0xb000u;
+            BufferTable[6] = 256u;
+        });
+        finished->release.store(true, std::memory_order_release);
+        WaitEmpty();
+        gate = Hold(Elsewhere.data(), sizeof(Elsewhere), [] {});
+        drains = DrawPipeline::Queue0().DecodeDrains();
+        info = Decode(reads);
+        check(info.resources[0].fields[0] == 0xb000u && info.resources[0].fields[2] == 256u, "the decode did not read the V# a finished item stored");
+        check(DrawPipeline::QueuedItems() == 1 && DrawPipeline::Queue0().DecodeDrains() == drains, "a decode of a table that a finished item wrote drained the pipeline");
+        gate->release.store(true, std::memory_order_release);
+        WaitEmpty();
+
+        completeAtBufferRead = Hold(Elsewhere.data(), sizeof(Elsewhere), [] { Elsewhere[0] = 1u; });
+        completeAtRead = BufferTable.data() + 4;
+        AgcDriver::GuestMemory::SetReadGuard(&CompleteQueuedStoreAtBufferRead);
+        drains = DrawPipeline::Queue0().DecodeDrains();
+        info = Decode(reads);
+        AgcDriver::GuestMemory::SetReadGuard(nullptr);
+        check(completeAtBufferRead == nullptr, "the unrelated queued store did not complete during the decode");
+        check(info.resources[0].fields[0] == 0xb000u && DrawPipeline::Queue0().DecodeDrains() == drains, "a store elsewhere that retired during the decode made the decode drain");
 
         StopQueue();
         std::puts("vertex table read order tests passed");

@@ -4,7 +4,6 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
-#include <array>
 #include <spirv/unified1/spirv.hpp>
 
 namespace AgcDriver::DriverDetail {
@@ -39,16 +38,14 @@ ShaderRecompiler::ShaderVertexStageInfo DecodeOrderedVertexStageInfo(std::span<c
     };
     if (!DrawPipeline::Active()) return decode();
     auto& queue = DrawPipeline::Queue0();
-    const bool queued = queue.Busy();
+    const auto watch = queue.WatchWrites();
     auto info = decode();
-    if (!queued && !queue.Busy()) return info;
-    const auto pending = [&queue](const Graphics::DecodeRead& read) { return queue.Overlaps(read.address, read.size); };
-    const auto unchanged = [](const Graphics::DecodeRead& read) {
-        std::array<std::byte, 16> now{};
-        GuestMemory::Read(read.address, std::span(now.data(), read.size), 4);
-        return std::equal(read.data.begin(), read.data.begin() + read.size, now.begin());
-    };
-    if (std::none_of(reads.begin(), reads.end(), pending) && std::all_of(reads.begin(), reads.end(), unchanged)) return info;
+    if (watch.items == 0 && !queue.Busy() && queue.Retired() == watch.retired) return info;
+    std::vector<DrawPipeline::Range> ranges;
+    ranges.reserve(reads.size());
+    for (const auto& read : reads) ranges.emplace_back(read.address, read.address + read.size);
+    if (!queue.WrittenSince(watch, ranges)) return info;
+    queue.NoteDecodeDrain();
     queue.Drain(DrawPipeline::DrainReason::Capture);
     return decode();
 }
