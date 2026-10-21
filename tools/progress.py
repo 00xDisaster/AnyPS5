@@ -446,6 +446,8 @@ def library_progress(group):
         return "Not present", None
     if "shared_sources" in group:
         return f'Shared sources: `{group["shared_sources"]}`', None
+    if "done" not in group or "todo" not in group:
+        return "Counts unavailable", None
     total = group["done"] + group["todo"]
     if not total:
         return "No exports", None

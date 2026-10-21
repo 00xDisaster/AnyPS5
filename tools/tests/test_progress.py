@@ -146,6 +146,27 @@ class ProgressTests(unittest.TestCase):
         self.assertIn("| libSceEmpty | Not present | No exports | n/a |", report)
         self.assertIn("| libSceEmptied | 1/1 (100.00%) | No exports | n/a |", report)
 
+    def test_report_marks_missing_counts_unavailable_with_no_delta(self):
+        complete = {"name": "libSceLegacy", "done": 1, "todo": 0, "done_names": ["Current"]}
+        for missing in ({"done_names": ["Legacy"]}, {"done": 0}, {"todo": 0}, {}):
+            minimal = {"name": "libSceLegacy", **missing}
+            for before, after in ((minimal, complete), (complete, minimal)):
+                with self.subTest(before=before, after=after):
+                    base = {"libraries": {"groups": [before], "percent": 0},
+                            "shaders": {"groups": [], "percent": 0}}
+                    head = {"libraries": {"groups": [after], "percent": 0},
+                            "shaders": {"groups": [], "percent": 0}}
+                    report = progress.report(base, head)
+                    self.assertIn("Counts unavailable", report)
+                    self.assertIn("| n/a |", report)
+                    self.assertNotIn("No exports", report)
+
+    def test_report_omits_unchanged_minimal_snapshots(self):
+        minimal = {"name": "libSceLegacy"}
+        snapshot = {"libraries": {"groups": [minimal], "percent": 0},
+                    "shaders": {"groups": [], "percent": 0}}
+        self.assertEqual(progress.report(snapshot, snapshot), "")
+
     def test_report_labels_shared_sources_without_duplicate_counts(self):
         owner = self.report_library("libScePad", ["Ready"], ["Pending"])
         alias = self.report_library("libScePad.native", ["Ready"], ["Pending"])
