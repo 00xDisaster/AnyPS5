@@ -1952,7 +1952,7 @@ int main() {
         Require(sceNetCtlCheckCallbackForNpToolkit() == 0);
         Require(toolkit.calls == 1 && toolkit.arg == &toolkit && (toolkit.event == 1 || toolkit.event == 3));
         int current = -1;
-        Require(sceNetCtlGetState(&current) == 0 && toolkit.event == current);
+        Require(sceNetCtlGetState(&current) == 0 && toolkit.event == (current == 3 ? 3 : 1));
         Require(sceNetCtlCheckCallbackForNpToolkit() == 0 && toolkit.calls == 1);
         int plainCid = -1;
         Require(sceNetCtlRegisterCallback(RecordNetCtlEvent, &plain, &plainCid) == 0);
