@@ -8,12 +8,29 @@
 #include <array>
 #include <bit>
 #include <optional>
+#include <mutex>
+#include <unordered_set>
 #include <stdexcept>
 #include <string>
 
 namespace AgcDriver::Graphics {
 
 namespace {
+
+std::mutex& oneFragmentFmaskMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::unordered_set<std::uint64_t>& oneFragmentFmasks() {
+    static std::unordered_set<std::uint64_t> addresses;
+    return addresses;
+}
+
+bool oneFragmentFmask(std::uint64_t address) {
+    std::lock_guard lock(oneFragmentFmaskMutex());
+    return oneFragmentFmasks().contains(address & ~0xffffull);
+}
 
 void requireValidDstSel(std::uint32_t value) {
     Require(value == 0 || value == 1 || (value >= 4 && value <= 7), "guest texture descriptor has an invalid destination channel selector");
@@ -186,6 +203,7 @@ GuestTextureResource DecodeTextureResource(std::span<const std::uint32_t> words)
         Require(!writeCompress && (!metaCompress || metaAddr != 0u), "FMASK CMASK compression is not implemented without readable metadata");
         Require(!metaCompress || metaPipeAligned, "FMASK CMASK metadata must be pipe aligned");
         Require(!metaCompress || format == static_cast<std::uint32_t>(ShaderRecompiler::IrBufferFormat::Fmask32_S8_F8), "FMASK CMASK compression is implemented only for 8-sample, 8-fragment FMASK");
+        Require(!oneFragmentFmask(baseAddress), "reading the FMASK of a one-fragment color target drawn on the host is not implemented (the host does not write it)");
         Require((typeRaw == 9u || typeRaw == 13u) && tileModeRaw == 24u && baseLevel == 0u && lastLevel == 0u && maxMip == 0u, "FMASK reads require a single-mip 2D or 2D-array Z_64KB_X surface");
         const bool identity = format != static_cast<std::uint32_t>(ShaderRecompiler::IrBufferFormat::Fmask32_S8_F8) && dstSelX == 4u && dstSelY == 5u && dstSelZ == 6u && dstSelW == 7u;
         for (const auto selector : {dstSelX, dstSelY, dstSelZ, dstSelW}) Require(identity || selector == 0u || selector == 1u || selector == 4u, "FMASK destination channel selector is not implemented");
@@ -367,6 +385,11 @@ bool ArrayLayersServeView(const GuestTextureResource& surface, const GuestTextur
     if (surface.dimension != TextureDimension::k2DArray) return false;
     if (view.dimension == TextureDimension::k2D) return view.baseArray == 0;
     return view.dimension == TextureDimension::k2DArray && view.depthOrLastArray <= surface.depthOrLastArray;
+}
+
+void NoteOneFragmentFmask(std::uint64_t address) {
+    std::lock_guard lock(oneFragmentFmaskMutex());
+    oneFragmentFmasks().insert(address & ~0xffffull);
 }
 
 }
