@@ -107,6 +107,22 @@ int main() {
     Require(sceSaveDataDialogTerminate() == SAVE_DATA_DIALOG_ERROR_NOT_INITIALIZED, "terminate when already terminated");
     Require(sceSaveDataDialogGetStatus() == SAVE_DATA_DIALOG_STATUS_NONE, "terminated state");
 
+    Require(sceSaveDataDialogInitialize() == 0, "re-initialize for empty selection");
+    SaveDataDialogParam emptySelectionParam{};
+    emptySelectionParam.size = sizeof(emptySelectionParam);
+    emptySelectionParam.mode = 1;
+    Require(sceSaveDataDialogOpen(&emptySelectionParam) == 0, "open selection dialog without items");
+    Require(sceSaveDataDialogGetStatus() == SAVE_DATA_DIALOG_STATUS_FINISHED, "selection finishes immediately");
+    SaveDataDirName emptySelectionDir{};
+    std::memset(emptySelectionDir.data, 'X', sizeof(emptySelectionDir.data));
+    SaveDataDialogResult emptySelectionResult{};
+    emptySelectionResult.dir_name = &emptySelectionDir;
+    Require(sceSaveDataDialogGetResult(&emptySelectionResult) == 0, "read empty selection result");
+    Require(emptySelectionDir.data[0] == '\0', "empty selection directory name must be null-terminated");
+    Require(emptySelectionResult.mode == emptySelectionParam.mode &&
+            emptySelectionResult.result == SAVE_DATA_DIALOG_RESULT_OK, "selection result status");
+    Require(sceSaveDataDialogTerminate() == 0, "terminate selection");
+
     Require(sceSaveDataDialogInitialize() == 0, "re-initialize for empty result");
     param = {};
     param.size = sizeof(param);
