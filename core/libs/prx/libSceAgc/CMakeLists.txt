@@ -33,7 +33,9 @@ add_library(libSceAgc SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/PacketInfo.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/Platform.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/RegisterDefaults.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/Semaphore.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/ShaderFusion.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/StaticBuffer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Misc/src/Suspend.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Patch/src/CondExec.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Patch/src/Dma.cpp
@@ -47,6 +49,7 @@ add_library(libSceAgc SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/Predication/src/Predication.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/CreateShader.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/GsOversubscription.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/GsPrimPayload.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/InterpolantMapping.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/LinkShaders.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Shader/src/PrimState.cpp
@@ -79,7 +82,33 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 endif()
+
+add_test_executable(agc_atomic_gds_size_tests EXCLUDE_FROM_ALL tests/AtomicGdsSize.cpp)
+target_include_directories(agc_atomic_gds_size_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_atomic_gds_size_tests PRIVATE libSceAgc libc)
+configure_windows_unwind(agc_atomic_gds_size_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_atomic_gds_size_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_atomic_gds_size COMMAND agc_atomic_gds_size_tests)
+    if(WIN32)
+        set_tests_properties(agc_atomic_gds_size PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
 configure_windows_unwind(libSceAgc)
+
+add_test_executable(agc_static_buffer_tests EXCLUDE_FROM_ALL tests/StaticBuffer.cpp)
+target_include_directories(agc_static_buffer_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_static_buffer_tests PRIVATE libSceAgc libSceAgcDriver libc)
+configure_windows_unwind(agc_static_buffer_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_static_buffer_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_static_buffer COMMAND agc_static_buffer_tests)
+    if(WIN32)
+        set_tests_properties(agc_static_buffer PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
 
 add_test_executable(agc_platform_tests EXCLUDE_FROM_ALL tests/Platform.cpp)
 target_include_directories(agc_platform_tests PRIVATE ${LIBS_INCLUDE_DIR})
@@ -90,6 +119,19 @@ if(BUILD_TESTING)
     add_test(NAME agc_platform_tests COMMAND agc_platform_tests)
     if(WIN32)
         set_tests_properties(agc_platform_tests PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
+
+add_test_executable(agc_semaphore_tests EXCLUDE_FROM_ALL tests/Semaphore.cpp)
+target_include_directories(agc_semaphore_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_semaphore_tests PRIVATE libSceAgc libc)
+configure_windows_unwind(agc_semaphore_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_semaphore_tests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    add_test(NAME agc_semaphore_tests COMMAND agc_semaphore_tests)
+    if(WIN32)
+        set_tests_properties(agc_semaphore_tests PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 endif()
@@ -291,6 +333,22 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+add_test_executable(agc_gs_prim_payload_tests EXCLUDE_FROM_ALL
+        tests/GsPrimPayload.cpp
+        Shader/src/GsPrimPayload.cpp
+)
+target_include_directories(agc_gs_prim_payload_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_gs_prim_payload_tests PRIVATE libc)
+configure_windows_unwind(agc_gs_prim_payload_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_gs_prim_payload_tests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    add_test(NAME agc_gs_prim_payload_tests COMMAND agc_gs_prim_payload_tests)
+    if(WIN32)
+        set_tests_properties(agc_gs_prim_payload_tests PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
+
 add_test_executable(agc_dma_data_tests EXCLUDE_FROM_ALL
         tests/DmaData.cpp
         Command/src/Packet.cpp
@@ -384,6 +442,7 @@ configure_windows_unwind(agc_shader_helpers_tests)
 if(BUILD_TESTING)
     set_target_properties(agc_shader_helpers_tests PROPERTIES EXCLUDE_FROM_ALL FALSE)
     add_test(NAME agc_shader_helpers COMMAND agc_shader_helpers_tests)
+    set_tests_properties(agc_shader_helpers PROPERTIES TIMEOUT 30)
     if(WIN32)
         set_tests_properties(agc_shader_helpers PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")

@@ -2,6 +2,7 @@
 #include <codegen/IInstructionScanner.hpp>
 #include <codegen/CodegenException.hpp>
 #include <codegen/x86/Amd64OnlySubstitutionTable.hpp>
+#include <codegen/x86/DecodedInstruction.hpp>
 #include <codegen/x86/X64InstructionDecoder.hpp>
 #include <codegen/x86/X64OpcodeConstants.hpp>
 #include <codegen/x86/IAmd64OnlyInstructionMatcher.hpp>
@@ -55,12 +56,16 @@ public:
     ) : _seg(seg), _matches(matches), _ph(ph), _branchTargets(branchTargets), _pending(pending), _claimed(claimed), _matcher(matcher) {}
 
     [[nodiscard]] std::optional<Placement> Window(const std::size_t index) const {
-        if (index + 1 < _matches.size() && (_pending.contains(index + 1) || _movable(index + 1, true))) {
-            if (auto placement = _relocate(index, index, index + 1))
-                return placement;
+        for (const bool avoidSegment : {true, false}) {
+            if (index + 1 < _matches.size() && (_pending.contains(index + 1) || _movable(index + 1, true, avoidSegment))) {
+                if (auto placement = _relocate(index, index, index + 1))
+                    return placement;
+            }
+            if (index > 0 && _movable(index - 1, false, avoidSegment)) {
+                if (auto placement = _relocate(index, index - 1, index))
+                    return placement;
+            }
         }
-        if (index > 0 && _movable(index - 1, false))
-            return _relocate(index, index - 1, index);
         return std::nullopt;
     }
 
@@ -108,8 +113,8 @@ private:
         return kind != ControlFlowKind::Sequential && kind != ControlFlowKind::ConditionalBranch;
     }
 
-    [[nodiscard]] bool _movable(const std::size_t index, const bool last) const {
-        return !_claimed.contains(index) && !_pending.contains(index) && (last || !_blocksFollowing(index));
+    [[nodiscard]] bool _movable(const std::size_t index, const bool last, const bool avoidSegment = false) const {
+        return !_claimed.contains(index) && !_pending.contains(index) && (last || !_blocksFollowing(index)) && !(avoidSegment && _info(index).SegmentPrefix != 0);
     }
 
     [[nodiscard]] TrampolineSite _site(const std::uint64_t start, const std::size_t length, LoweredBody body) const {
@@ -209,7 +214,7 @@ private:
 
 class Amd64OnlyConverter : public IAmd64OnlyConverter {
 public:
-    explicit Amd64OnlyConverter(const Amd64OnlyTarget target) : _matcher(MakeAmd64OnlyInstructionMatcher(target)) {}
+    Amd64OnlyConverter(const Amd64OnlyTarget target, std::function<void(std::uint64_t, std::uint64_t)> progress) : _matcher(MakeAmd64OnlyInstructionMatcher(target)), progress(std::move(progress)) {}
 
     [[nodiscard]] ConvertResult Convert(
         std::vector<std::uint8_t> fileBytes,
@@ -224,13 +229,15 @@ private:
     };
 
     std::unique_ptr<IAmd64OnlyInstructionMatcher> _matcher;
-    std::unique_ptr<IInstructionScanner> _scanner = MakeInstructionScanner();
+    std::function<void(std::uint64_t, std::uint64_t)> progress;
 
     void _convertSegment(
         std::vector<std::uint8_t>& fileBytes,
         const Domain::ProgramHeader& ph,
         const std::vector<Domain::ProgramHeader>& segments,
-        ConvertResult& result
+        ConvertResult& result,
+        std::uint64_t completed,
+        std::uint64_t total
     ) const;
 
     [[nodiscard]] static std::set<std::uint64_t> _collectBranchTargets(
@@ -254,6 +261,15 @@ std::set<std::uint64_t> Amd64OnlyConverter::_collectBranchTargets(
         const auto match = std::lower_bound(matches.begin(), matches.end(), offset, [](const InstructionMatch& item, const std::uint64_t value) { return item.Offset < value; });
         return match != matches.end() && match->Offset == offset;
     };
+    const auto pastPrefixes = [&](const std::uint64_t address) {
+        const auto offset = address - ph.MappedAddress;
+        const auto after = std::upper_bound(matches.begin(), matches.end(), offset, [](const std::uint64_t value, const InstructionMatch& item) { return value < item.Offset; });
+        if (after == matches.begin())
+            return false;
+        const auto& match = *std::prev(after);
+        const auto inside = offset - match.Offset;
+        return inside != 0 && inside < match.Length && inside > DecodedInstruction{seg.data() + match.Offset, match.Length}.OpcodeOffset();
+    };
     const X64InstructionDecoder decoder;
     std::set<std::uint64_t> targets;
     for (const auto& match : matches) {
@@ -261,7 +277,7 @@ std::set<std::uint64_t> Amd64OnlyConverter::_collectBranchTargets(
         const auto next = static_cast<std::int64_t>(ph.MappedAddress + match.Offset + info.Length);
         if (info.HasBranchTarget && !info.HasRipRelativeDisp) {
             const auto target = next + info.BranchDisp;
-            if (target >= 0)
+            if (target >= 0 && !pastPrefixes(static_cast<std::uint64_t>(target)))
                 targets.insert(static_cast<std::uint64_t>(target));
         } else if (info.HasRipRelativeDisp && info.Opcode == kLea) {
             std::int32_t displacement;
@@ -290,29 +306,37 @@ void Amd64OnlyConverter::_convertSegment(
     std::vector<std::uint8_t>& fileBytes,
     const Domain::ProgramHeader& ph,
     const std::vector<Domain::ProgramHeader>& segments,
-    ConvertResult& result
+    ConvertResult& result,
+    std::uint64_t completed,
+    std::uint64_t total
 ) const {
+    if (ph.Offset > fileBytes.size() || ph.FileSize > fileBytes.size() - ph.Offset)
+        throw CodegenException("Code segment exceeds the file", ph.Offset);
     const auto segOffset = static_cast<std::size_t>(ph.Offset);
     const auto segSize = static_cast<std::size_t>(ph.FileSize);
-    if (segOffset > fileBytes.size() || segSize > fileBytes.size() - segOffset)
-        throw CodegenException("Code segment exceeds the file", ph.Offset);
 
     std::vector<std::uint8_t> seg(
         fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset),
         fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset + segSize)
     );
 
-    const auto matches = _atFileOffset(ph.Offset, [&] { return _scanner->ScanCodeSection(seg, 0, seg.size()); });
+    const auto scanner = MakeInstructionScanner([&](auto offset, auto) { if (progress) progress(completed + offset, total); });
+    const auto matches = _atFileOffset(ph.Offset, [&] { return scanner->ScanCodeSection(seg, 0, seg.size()); });
 
+    if (progress) progress(completed + segSize, total);
     std::vector<Pending> pending;
     for (std::size_t index = 0; index < matches.size(); ++index) {
+        if (progress && index != 0 && index % 4096 == 0) progress(completed + segSize + matches[index].Offset, total);
         const auto& match = matches[index];
         auto substitution = _atFileOffset(ph.Offset + match.Offset, [&] { return _matcher->Match(seg.data() + match.Offset, match.Length); });
         if (substitution.has_value())
             pending.push_back({index, match, std::move(*substitution)});
     }
-    if (pending.empty())
+    if (progress) progress(completed + std::uint64_t{2} * segSize, total);
+    if (pending.empty()) {
+        if (progress) progress(completed + std::uint64_t{3} * segSize, total);
         return;
+    }
 
     const bool needsBranchTargets = std::any_of(pending.begin(), pending.end(), [](const Pending& item) {
         return item.Substitution.Lowering == Amd64OnlyLowering::Trampoline;
@@ -324,7 +348,11 @@ void Amd64OnlyConverter::_convertSegment(
         pendingIndices.insert(item.Index);
     std::set<std::size_t> claimed;
     std::set<std::size_t> consumed;
+
+    std::size_t processed = 0;
     for (const auto& item : pending) {
+        if (progress && processed != 0 && processed % 256 == 0) progress(completed + std::uint64_t{2} * segSize + item.Instruction.Offset, total);
+        ++processed;
         if (consumed.contains(item.Index))
             continue;
         const auto& match = item.Instruction;
@@ -368,6 +396,8 @@ void Amd64OnlyConverter::_convertSegment(
                     for (auto next = item.Index + 1; siteLength < Amd64OnlySubstitutionTable::kJmpRel32.Size; ++next) {
                         if (next >= matches.size() || matches[next].Offset != match.Offset + siteLength)
                             throw CodegenException("AMD-only instruction too short for a jump and not followed by an instruction", fileOffset);
+                        if (claimed.contains(next))
+                            throw CodegenException("AMD-only instruction too short for a jump is followed by an instruction another stub already moved", ph.Offset + matches[next].Offset);
                         const auto& following = matches[next];
                         const std::span<const std::uint8_t> bytes(seg.data() + following.Offset, following.Length);
                         const auto info = decoder.DecodeInstruction(bytes.data(), bytes.size());
@@ -425,6 +455,7 @@ void Amd64OnlyConverter::_convertSegment(
     if (seg.size() != segSize)
         throw CodegenException("Code segment size changed during Intel conversion", ph.Offset);
     std::copy(seg.begin(), seg.end(), fileBytes.begin() + static_cast<std::ptrdiff_t>(segOffset));
+    if (progress) progress(completed + std::uint64_t{3} * segSize, total);
 }
 
 ConvertResult Amd64OnlyConverter::Convert(
@@ -432,18 +463,28 @@ ConvertResult Amd64OnlyConverter::Convert(
     const std::vector<Domain::ProgramHeader>& segments
 ) const {
     ConvertResult result{};
+    std::uint64_t total = 0;
     for (const auto& ph : segments) {
-        if (ph.Type == kLoadSegment && (ph.Flags & kExecutableSegment) != 0)
-            _convertSegment(fileBytes, ph, segments, result);
+        if (ph.Type != kLoadSegment || (ph.Flags & kExecutableSegment) == 0) continue;
+        if (ph.FileSize > (std::numeric_limits<std::uint64_t>::max() - total) / 3) throw CodegenException("Instruction conversion progress size overflow");
+        total += 3 * ph.FileSize;
     }
+    if (progress) progress(0, total);
+    std::uint64_t completed = 0;
+    for (const auto& ph : segments) {
+        if (ph.Type != kLoadSegment || (ph.Flags & kExecutableSegment) == 0) continue;
+        _convertSegment(fileBytes, ph, segments, result, completed, total);
+        completed += 3 * ph.FileSize;
+    }
+    if (progress) progress(total, total);
     result.Bytes = std::move(fileBytes);
     return result;
 }
 
 }
 
-std::unique_ptr<IAmd64OnlyConverter> MakeAmd64OnlyConverter(const Amd64OnlyTarget target) {
-    return std::make_unique<Amd64OnlyConverter>(target);
+std::unique_ptr<IAmd64OnlyConverter> MakeAmd64OnlyConverter(const Amd64OnlyTarget target, std::function<void(std::uint64_t, std::uint64_t)> progress) {
+    return std::make_unique<Amd64OnlyConverter>(target, std::move(progress));
 }
 
 }

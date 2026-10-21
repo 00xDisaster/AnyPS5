@@ -17,7 +17,13 @@
 #include <windows.h>
 #include <io.h>
 #include "prx/libkernel/File/include/DirectoryDescriptor.hpp"
+#elif defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/event.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #else
+#include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/eventfd.h>
@@ -31,12 +37,17 @@ namespace {
 
 constexpr int GUEST_EBADF = 9;
 constexpr int GUEST_EINVAL = 22;
+#ifdef __APPLE__
+static_assert(NOTE_DELETE == 0x0001 && NOTE_WRITE == 0x0002 && NOTE_EXTEND == 0x0004 && NOTE_ATTRIB == 0x0008 &&
+    NOTE_LINK == 0x0010 && NOTE_RENAME == 0x0020);
+#else
 constexpr std::uint32_t NOTE_DELETE = 0x0001;
 constexpr std::uint32_t NOTE_WRITE = 0x0002;
 constexpr std::uint32_t NOTE_EXTEND = 0x0004;
 constexpr std::uint32_t NOTE_ATTRIB = 0x0008;
 constexpr std::uint32_t NOTE_LINK = 0x0010;
 constexpr std::uint32_t NOTE_RENAME = 0x0020;
+#endif
 constexpr std::uint32_t MAPPED_NOTES = NOTE_DELETE | NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB | NOTE_LINK | NOTE_RENAME;
 
 class VnodeWatch {
@@ -47,6 +58,15 @@ public:
         if (stopEvent == nullptr) {
             throw std::runtime_error("EVFILT_VNODE: CreateEvent failed, error=" + std::to_string(::GetLastError()));
         }
+#elif defined(__APPLE__)
+        int ends[2];
+        if (::pipe(ends) != 0) {
+            throw std::runtime_error("EVFILT_VNODE: pipe failed, errno=" + std::to_string(errno));
+        }
+        stopEvent = ends[0];
+        stopSignal = ends[1];
+        ::fcntl(stopEvent, F_SETFD, FD_CLOEXEC);
+        ::fcntl(stopSignal, F_SETFD, FD_CLOEXEC);
 #else
         stopEvent = ::eventfd(0, EFD_CLOEXEC);
         if (stopEvent < 0) {
@@ -58,6 +78,9 @@ public:
     ~VnodeWatch() {
 #ifdef _WIN32
         ::CloseHandle(stopEvent);
+#elif defined(__APPLE__)
+        ::close(stopEvent);
+        ::close(stopSignal);
 #else
         ::close(stopEvent);
 #endif
@@ -70,6 +93,10 @@ public:
         stopped.store(true);
 #ifdef _WIN32
         ::SetEvent(stopEvent);
+#elif defined(__APPLE__)
+        const char one = 1;
+        const auto written = ::write(stopSignal, &one, sizeof(one));
+        static_cast<void>(written);
 #else
         const std::uint64_t one = 1;
         const auto written = ::write(stopEvent, &one, sizeof(one));
@@ -95,6 +122,9 @@ private:
     std::atomic<bool> stopped{false};
 #ifdef _WIN32
     HANDLE stopEvent = nullptr;
+#elif defined(__APPLE__)
+    int stopEvent = -1;
+    int stopSignal = -1;
 #else
     int stopEvent = -1;
 #endif
@@ -161,6 +191,10 @@ bool TakeSnapshot(HANDLE handle, Snapshot& snapshot) {
     return true;
 }
 
+bool IsDeleted(const Snapshot& snapshot) {
+    return snapshot.deletePending || snapshot.links == 0;
+}
+
 std::vector<std::uint32_t> SnapshotHints(const Snapshot& before, const Snapshot& after, bool directory) {
     std::vector<std::uint32_t> hints;
     if (!directory) {
@@ -181,10 +215,28 @@ std::vector<std::uint32_t> SnapshotHints(const Snapshot& before, const Snapshot&
     if ((after.deletePending && !before.deletePending) || after.links < before.links) {
         hints.push_back(NOTE_DELETE);
     }
-    if (!after.path.empty() && after.path != before.path) {
+    if (!after.path.empty() && after.path != before.path && !IsDeleted(after)) {
         hints.push_back(NOTE_RENAME);
     }
     return hints;
+}
+
+std::string hostPathText(const std::wstring& path) {
+    const int size = ::WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) {
+        return "<unprintable host path>";
+    }
+    std::string text(static_cast<std::size_t>(size), '\0');
+    if (::WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, text.data(), size, nullptr, nullptr) != size) {
+        return "<unprintable host path>";
+    }
+    text.pop_back();
+    return text;
+}
+
+std::string changeNotificationFailure(const char* watcher, const std::wstring& path, DWORD error) {
+    return "EVFILT_VNODE: the " + std::string(watcher) + " watch of \"" + hostPathText(path) +
+        "\" failed, FindFirstChangeNotification error=" + std::to_string(error);
 }
 
 HANDLE WatchParent(const std::wstring& path) {
@@ -196,16 +248,16 @@ HANDLE WatchParent(const std::wstring& path) {
     const HANDLE handle = ::FindFirstChangeNotificationW(parent.c_str(), FALSE, PARENT_CHANGES);
     const DWORD error = handle == INVALID_HANDLE_VALUE ? ::GetLastError() : ERROR_SUCCESS;
     if (handle == INVALID_HANDLE_VALUE && error != ERROR_INVALID_FUNCTION) {
-        throw std::runtime_error("EVFILT_VNODE: FindFirstChangeNotification failed, error=" + std::to_string(error));
+        throw std::runtime_error(changeNotificationFailure("parent", parent, error));
     }
     return handle;
 }
 
-HANDLE WatchContents(const std::wstring& path, DWORD changes) {
+HANDLE WatchContents(const std::wstring& path, DWORD changes, const char* watcher) {
     const HANDLE handle = ::FindFirstChangeNotificationW(path.c_str(), FALSE, changes);
     if (handle == INVALID_HANDLE_VALUE) {
         const DWORD error = ::GetLastError();
-        throw std::runtime_error("EVFILT_VNODE: FindFirstChangeNotification failed, error=" + std::to_string(error));
+        throw std::runtime_error(changeNotificationFailure(watcher, path, error));
     }
     return handle;
 }
@@ -275,7 +327,9 @@ void RunHostWatch(std::shared_ptr<VnodeWatch> watch, HostWatch host) {
             }
             if (current.path != host.last.path) {
                 CloseChange(host.parent);
-                host.parent = WatchParent(current.path);
+                if (!IsDeleted(current)) {
+                    host.parent = WatchParent(current.path);
+                }
             }
             host.last = std::move(current);
         }
@@ -314,14 +368,90 @@ int OpenHostWatch(int descriptor, std::uint32_t notes, HostWatch& host) {
         throw std::runtime_error("EVFILT_VNODE: reading the watched file failed, error=" + std::to_string(error));
     }
     try {
-        host.parent = WatchParent(host.last.path);
+        if (!IsDeleted(host.last)) {
+            host.parent = WatchParent(host.last.path);
+        }
         if (host.directory) {
-            host.entries = WatchContents(host.last.path, FILE_NOTIFY_CHANGE_FILE_NAME);
-            host.subdirectories = WatchContents(host.last.path, FILE_NOTIFY_CHANGE_DIR_NAME);
+            host.entries = WatchContents(host.last.path, FILE_NOTIFY_CHANGE_FILE_NAME, "entries");
+            host.subdirectories = WatchContents(host.last.path, FILE_NOTIFY_CHANGE_DIR_NAME, "subdirectories");
         }
     } catch (...) {
         CloseHostWatch(host);
         throw;
+    }
+    return 0;
+}
+
+#elif defined(__APPLE__)
+
+struct HostWatch {
+    int notify = -1;
+    int target = -1;
+};
+
+void CloseHostWatch(HostWatch& host) {
+    for (int* descriptor : {&host.notify, &host.target}) {
+        if (*descriptor >= 0) {
+            ::close(*descriptor);
+            *descriptor = -1;
+        }
+    }
+}
+
+void RunHostWatch(std::shared_ptr<VnodeWatch> watch, HostWatch host) {
+    struct kevent stop {};
+    EV_SET(&stop, watch->StopEvent(), EVFILT_READ, EV_ADD, 0, 0, nullptr);
+    if (::kevent(host.notify, &stop, 1, nullptr, 0, nullptr) < 0) {
+        const int error = errno;
+        CloseHostWatch(host);
+        throw std::runtime_error("EVFILT_VNODE: registering the stop event failed, errno=" + std::to_string(error));
+    }
+    for (;;) {
+        struct kevent event {};
+        if (::kevent(host.notify, nullptr, 0, &event, 1, nullptr) < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            const int error = errno;
+            CloseHostWatch(host);
+            throw std::runtime_error("EVFILT_VNODE: kevent failed, errno=" + std::to_string(error));
+        }
+        if (event.filter != EVFILT_VNODE) {
+            break;
+        }
+        auto notes = event.fflags & MAPPED_NOTES;
+        if ((notes & NOTE_DELETE) != 0) {
+            notes &= ~NOTE_LINK;
+        }
+        watch->Deliver(notes);
+    }
+    CloseHostWatch(host);
+}
+
+int OpenHostWatch(int descriptor, std::uint32_t, HostWatch& host) {
+    struct stat status {};
+    if (::fstat(descriptor, &status) != 0) {
+        return GUEST_EBADF;
+    }
+    if (S_ISFIFO(status.st_mode) || S_ISSOCK(status.st_mode)) {
+        return GUEST_EINVAL;
+    }
+    if (!S_ISREG(status.st_mode) && !S_ISDIR(status.st_mode)) {
+        NotImplemented_nid_no_patch("EVFILT_VNODE: a descriptor that is not a file or a directory");
+    }
+    host.target = ::fcntl(descriptor, F_DUPFD_CLOEXEC, 0);
+    if (host.target < 0) {
+        const int error = errno;
+        CloseHostWatch(host);
+        throw std::runtime_error("EVFILT_VNODE: duplicating the watched descriptor failed, errno=" + std::to_string(error));
+    }
+    host.notify = ::kqueue();
+    struct kevent change {};
+    EV_SET(&change, host.target, EVFILT_VNODE, EV_ADD | EV_CLEAR, MAPPED_NOTES, 0, nullptr);
+    if (host.notify < 0 || ::kevent(host.notify, &change, 1, nullptr, 0, nullptr) < 0) {
+        const int error = errno;
+        CloseHostWatch(host);
+        throw std::runtime_error("EVFILT_VNODE: kqueue failed, errno=" + std::to_string(error));
     }
     return 0;
 }
@@ -331,18 +461,22 @@ int OpenHostWatch(int descriptor, std::uint32_t notes, HostWatch& host) {
 struct HostWatch {
     int notify = -1;
     int target = -1;
+    int entries = -1;
     bool directory = false;
     struct stat last {};
 };
 
+struct HostEvent {
+    std::uint32_t mask;
+    std::uint32_t cookie;
+};
+
 void CloseHostWatch(HostWatch& host) {
-    if (host.notify >= 0) {
-        ::close(host.notify);
-        host.notify = -1;
-    }
-    if (host.target >= 0) {
-        ::close(host.target);
-        host.target = -1;
+    for (int* descriptor : {&host.notify, &host.target, &host.entries}) {
+        if (*descriptor >= 0) {
+            ::close(*descriptor);
+            *descriptor = -1;
+        }
     }
 }
 
@@ -376,9 +510,73 @@ std::uint32_t ModifyHint(HostWatch& host) {
     return hint;
 }
 
+int ReadHostEvents(const HostWatch& host, std::vector<HostEvent>& events) {
+    alignas(inotify_event) char buffer[16384];
+    for (;;) {
+        const auto length = ::read(host.notify, buffer, sizeof(buffer));
+        if (length < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return errno == EAGAIN ? 0 : errno;
+        }
+        if (length == 0) {
+            return 0;
+        }
+        for (char* cursor = buffer; cursor < buffer + length;) {
+            const auto* event = reinterpret_cast<const inotify_event*>(cursor);
+            events.push_back({event->mask, event->cookie});
+            cursor += sizeof(inotify_event) + event->len;
+        }
+    }
+}
+
+std::unordered_map<std::uint32_t, int> CountMoves(const std::vector<HostEvent>& events) {
+    std::unordered_map<std::uint32_t, int> moves;
+    for (const auto& event : events) {
+        if ((event.mask & (IN_MOVED_FROM | IN_MOVED_TO)) != 0) {
+            ++moves[event.cookie];
+        }
+    }
+    return moves;
+}
+
+bool HasUnpairedMove(const std::vector<HostEvent>& events, std::size_t first) {
+    const auto moves = CountMoves(events);
+    for (std::size_t index = first; index < events.size(); ++index) {
+        if ((events[index].mask & IN_MOVED_FROM) != 0 && moves.at(events[index].cookie) == 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int WaitForRenamesInProgress(const HostWatch& host) {
+    char entries[1024];
+    if (::getdents64(host.entries, entries, sizeof(entries)) < 0 && errno != ENOENT) {
+        return errno;
+    }
+    return 0;
+}
+
+int ReadSettledHostEvents(const HostWatch& host, std::vector<HostEvent>& events) {
+    if (const int error = ReadHostEvents(host, events)) {
+        return error;
+    }
+    for (std::size_t settled = 0; HasUnpairedMove(events, settled);) {
+        settled = events.size();
+        if (const int error = WaitForRenamesInProgress(host)) {
+            return error;
+        }
+        if (const int error = ReadHostEvents(host, events)) {
+            return error;
+        }
+    }
+    return 0;
+}
+
 void RunHostWatch(std::shared_ptr<VnodeWatch> watch, HostWatch host) {
     pollfd waits[2] = {{host.notify, POLLIN, 0}, {watch->StopEvent(), POLLIN, 0}};
-    alignas(inotify_event) char buffer[16384];
     bool watching = true;
     while (watching) {
         if (::poll(waits, 2, -1) < 0) {
@@ -391,48 +589,36 @@ void RunHostWatch(std::shared_ptr<VnodeWatch> watch, HostWatch host) {
         if (waits[1].revents != 0) {
             break;
         }
-        const auto length = ::read(host.notify, buffer, sizeof(buffer));
-        if (length < 0) {
-            if (errno == EINTR || errno == EAGAIN) {
-                continue;
-            }
+        std::vector<HostEvent> events;
+        if (const int error = ReadSettledHostEvents(host, events)) {
             CloseHostWatch(host);
-            throw std::runtime_error("EVFILT_VNODE: reading inotify failed, errno=" + std::to_string(errno));
+            throw std::runtime_error("EVFILT_VNODE: reading inotify failed, errno=" + std::to_string(error));
         }
-        std::unordered_map<std::uint32_t, int> moves;
-        for (char* cursor = buffer; cursor < buffer + length;) {
-            const auto* event = reinterpret_cast<const inotify_event*>(cursor);
-            if ((event->mask & (IN_MOVED_FROM | IN_MOVED_TO)) != 0) {
-                ++moves[event->cookie];
-            }
-            cursor += sizeof(inotify_event) + event->len;
-        }
+        const auto moves = CountMoves(events);
         std::vector<std::uint32_t> hints;
-        for (char* cursor = buffer; cursor < buffer + length;) {
-            const auto* event = reinterpret_cast<const inotify_event*>(cursor);
-            const std::uint32_t link = (event->mask & IN_ISDIR) != 0 ? NOTE_LINK : 0;
-            if ((event->mask & IN_MODIFY) != 0) {
+        for (const auto& event : events) {
+            const std::uint32_t link = (event.mask & IN_ISDIR) != 0 ? NOTE_LINK : 0;
+            if ((event.mask & IN_MODIFY) != 0) {
                 hints.push_back(ModifyHint(host));
             }
-            if ((event->mask & IN_ATTRIB) != 0) {
+            if ((event.mask & IN_ATTRIB) != 0) {
                 hints.push_back(AttributeHint(host));
             }
-            if ((event->mask & (IN_CREATE | IN_DELETE)) != 0) {
+            if ((event.mask & (IN_CREATE | IN_DELETE)) != 0) {
                 hints.push_back(NOTE_WRITE | link);
             }
-            if ((event->mask & (IN_MOVED_FROM | IN_MOVED_TO)) != 0) {
-                hints.push_back(moves[event->cookie] > 1 ? NOTE_WRITE : NOTE_WRITE | NOTE_EXTEND | link);
+            if ((event.mask & (IN_MOVED_FROM | IN_MOVED_TO)) != 0) {
+                hints.push_back(moves.at(event.cookie) > 1 ? NOTE_WRITE : NOTE_WRITE | NOTE_EXTEND | link);
             }
-            if ((event->mask & IN_MOVE_SELF) != 0) {
+            if ((event.mask & IN_MOVE_SELF) != 0) {
                 hints.push_back(NOTE_RENAME);
             }
-            if ((event->mask & IN_DELETE_SELF) != 0) {
+            if ((event.mask & IN_DELETE_SELF) != 0) {
                 hints.push_back(NOTE_DELETE);
             }
-            if ((event->mask & IN_IGNORED) != 0) {
+            if ((event.mask & IN_IGNORED) != 0) {
                 watching = false;
             }
-            cursor += sizeof(inotify_event) + event->len;
         }
         for (const auto hint : hints) {
             watch->Deliver(hint);
@@ -459,6 +645,14 @@ int OpenHostWatch(int descriptor, std::uint32_t, HostWatch& host) {
         const int error = errno;
         CloseHostWatch(host);
         throw std::runtime_error("EVFILT_VNODE: opening the watched file failed, errno=" + std::to_string(error));
+    }
+    if (host.directory) {
+        host.entries = ::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (host.entries < 0) {
+            const int error = errno;
+            CloseHostWatch(host);
+            throw std::runtime_error("EVFILT_VNODE: opening the watched directory failed, errno=" + std::to_string(error));
+        }
     }
     host.notify = ::inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
     std::uint32_t mask = IN_MODIFY | IN_ATTRIB | IN_MOVE_SELF | IN_DELETE_SELF;
@@ -494,8 +688,8 @@ int VnodeDescriptorError(int descriptor) {
     if (descriptor < 0) {
         return GUEST_EBADF;
     }
-    if (descriptor >= GuestSockets::FirstDescriptor) {
-        return GuestSockets::IsOpen(descriptor) ? GUEST_EINVAL : GUEST_EBADF;
+    if (GuestSockets::IsOpen(descriptor)) {
+        return GUEST_EINVAL;
     }
     if (!DescriptorIsOpen_nid_no_patch(descriptor)) {
         return GUEST_EBADF;
@@ -582,7 +776,7 @@ int APS5_VABI sceKernelDeleteFileEvent(KernelEqueue eq, int fd) {
     if (!EqueuePin_nid_postfix(eq)) {
         return SCE_KERNEL_ERROR_EBADF;
     }
-    if (fd < 0 || (fd >= GuestSockets::FirstDescriptor ? !GuestSockets::IsOpen(fd) : !DescriptorIsOpen_nid_no_patch(fd))) {
+    if (fd < 0 || (!GuestSockets::IsOpen(fd) && !DescriptorIsOpen_nid_no_patch(fd))) {
         return SCE_KERNEL_ERROR_EBADF;
     }
     return EqueueDeleteEvent_nid_postfix(eq, static_cast<std::uintptr_t>(fd), EVFILT_VNODE);
