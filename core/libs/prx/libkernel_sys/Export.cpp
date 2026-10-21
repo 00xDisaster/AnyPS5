@@ -41,6 +41,7 @@
 #endif
 
 extern "C" int* APS5_VABI __error_nid_postfix();
+extern "C" int APS5_VABI getpid_nid_postfix();
 
 namespace {
 #ifdef _WIN32
@@ -796,6 +797,11 @@ int APS5_VABI sceKernelTitleWorkaroundIsEnabled(const KernelTitleWorkaround* wor
     if (!workaround || !enabled) return static_cast<int>(0x8002000E);
     if (static_cast<std::uint32_t>(bit) >= 0x3A) return static_cast<int>(0x80020016);
     *enabled = static_cast<std::int32_t>((workaround->ids[bit >> 6] >> (bit & 0x3F)) & 1);
+    return 0;
+}
+
+int APS5_VABI sceKernelGetProcessType(int pid) {
+    if (pid != getpid_nid_postfix() && pid != -1 && pid != 0) return static_cast<int>(0x80020003);
     return 0;
 }
 
