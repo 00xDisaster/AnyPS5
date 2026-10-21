@@ -1,3 +1,4 @@
+#include "SceTypes.hpp"
 #include <atomic>
 #include <cstdint>
 #include <cstddef>
@@ -5,6 +6,8 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libSceCommonDialog/CommonDialog.hpp"
 #include "prx/libc/include/General.hpp"
+
+extern "C" int APS5_VABI sceUserServiceGetLoginUserIdList(UserServiceLoginUserIdList* users);
 
 namespace {
 
@@ -38,6 +41,8 @@ int APS5_VABI sceG2PDialogOpen(const G2PDialogParam* param) {
     if (status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
     if (status == COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_BUSY;
     if (!ValidateCommonDialogBaseParam(param->base) || param->size != sizeof(*param) || param->userId == -1 || !std::all_of(std::begin(param->reserved), std::end(param->reserved), [](std::uint8_t value) { return value == 0; })) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
+    UserServiceLoginUserIdList users{};
+    if (sceUserServiceGetLoginUserIdList(&users) != 0 || std::none_of(std::begin(users.user_id), std::end(users.user_id), [param](std::int32_t userId) { return userId != -1 && userId == param->userId; })) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
     g_status = COMMON_DIALOG_STATUS_FINISHED;
     return 0;
 }
