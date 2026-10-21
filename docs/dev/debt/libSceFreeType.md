@@ -2,8 +2,6 @@
 
 ### Unknown function info
 
-- [FT_Outline_Copy](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console ABI, FreeType version and error equivalence are unverified. The adapter uses the existing LP64 guest outline and the unsigned counts and copy contract of bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftoutln.c).
-
 - [FT_Get_Sfnt_Name_Count, FT_Get_Sfnt_Name](../../../core/libs/prx/libSceFreeType/src/Names.cpp) (libSceFreeType) - console signatures, record layout and errors are unverified; the adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftsnames.c) and assumes the public LP64 `FT_SfntName` layout (24 bytes, string pointer at 8, byte length at 16). Strings retain their original encoding, borrow native face storage and remain valid only while the face is alive
 
 - [FT_Select_Charmap, FT_Set_Charmap, FT_Get_First_Char, FT_Get_Next_Char](../../../core/libs/prx/libSceFreeType/Export.cpp), [FT_Get_Glyph_Name, FT_Get_Name_Index, FT_Get_Postscript_Name](../../../core/libs/prx/libSceFreeType/src/Names.cpp) (libSceFreeType) - console signatures, naming rules and errors are unverified; the LP64 adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftobjs.c). Iteration uses the low 32 input bits and updates only the selected guest charmap; charmap fields are read-only copies. Naming preserves LP64 invalid-index errors on Windows. PostScript names borrow native face storage and remain valid only while the face is alive
@@ -26,6 +24,8 @@
 
 - [FT_Get_X11_Font_Format, FT_Get_FSType_Flags](../../../core/libs/prx/libSceFreeType/src/FaceInfo.cpp) (libSceFreeType) - console signatures, format labels and embedding-flag behavior are unverified; the adapter follows bundled FreeType 2.13.3's [format](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftfntfmt.c) and [FSType](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftfstype.c) services. Format strings borrow native driver storage; the console's string lifetime has not been measured
 - [FT_Get_Kerning](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - the name and NID `LPtlB241JSg` occur in the [PS5 3.20 libSceFreeTypeOt inventory](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceFreeTypeOt.c), but the console signature and kerning results are unverified. The adapter assumes the existing LP64 guest layout and follows bundled FreeType 2.13.3 for scaling, rounding and errors
+
+- [FT_Outline_Copy](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console ABI, FreeType version and error equivalence are unverified. The adapter uses the existing LP64 guest outline and the unsigned counts and copy contract of bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftoutln.c).
 
 ### Functional
 
