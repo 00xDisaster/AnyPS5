@@ -316,10 +316,17 @@ int main() {
         reparseHeader.ReparseGuid = {0x6a1e3d0b, 0x1f6c, 0x4c1e, {0x9b, 0x52, 0x3d, 0x8e, 0x41, 0x07, 0x5c, 0x2a}};
         std::memcpy(reparseData.data(), &reparseHeader, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE);
         DWORD returned = 0;
-        Require(DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, reparseData.data(), static_cast<DWORD>(reparseData.size()),
-            nullptr, 0, &returned, nullptr) != 0);
+        const bool set = DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, reparseData.data(), static_cast<DWORD>(reparseData.size()),
+            nullptr, 0, &returned, nullptr) != 0;
+        if (!set) Require(GetLastError() == ERROR_PRIVILEGE_NOT_HELD || GetLastError() == ERROR_ACCESS_DENIED);
         Require(CloseHandle(handle) != 0);
+        if (!set) {
+            Require(std::filesystem::remove(path));
+            std::fprintf(stderr, "Windows reparse point checks skipped: setting a reparse point on a file needs rights this user lacks\n");
+            return false;
+        }
         Require((GetFileAttributesW(path.c_str()) & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
+        return true;
     };
     const auto clearReparseTag = [](const std::filesystem::path& path, DWORD tag) {
         const HANDLE handle = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
@@ -335,17 +342,19 @@ int main() {
     };
     const auto tagged = root / "tagged.bin";
     std::ofstream(tagged, std::ios::binary) << "abc";
-    setReparseTag(tagged, 0x00000ABC);
-    Require(readlink_nid_postfix(tagged.string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
-    clearReparseTag(tagged, 0x00000ABC);
+    if (setReparseTag(tagged, 0x00000ABC)) {
+        Require(readlink_nid_postfix(tagged.string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
+        clearReparseTag(tagged, 0x00000ABC);
+    }
     const auto surrogate = root / "surrogate.bin";
     std::ofstream(surrogate, std::ios::binary) << "abc";
-    setReparseTag(surrogate, 0x20000ABC);
-    Require(readlink_nid_postfix(surrogate.string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
-    FileStat surrogateStatus{};
-    Require(lstat_nid_postfix(surrogate.string().c_str(), &surrogateStatus) == 0);
-    Require(surrogateStatus.st_mode == 0100666 && surrogateStatus.st_nlink == 1);
-    clearReparseTag(surrogate, 0x20000ABC);
+    if (setReparseTag(surrogate, 0x20000ABC)) {
+        Require(readlink_nid_postfix(surrogate.string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 22);
+        FileStat surrogateStatus{};
+        Require(lstat_nid_postfix(surrogate.string().c_str(), &surrogateStatus) == 0);
+        Require(surrogateStatus.st_mode == 0100666 && surrogateStatus.st_nlink == 1);
+        clearReparseTag(surrogate, 0x20000ABC);
+    }
 #endif
     std::error_code error;
     const auto link = (root / "link").string();

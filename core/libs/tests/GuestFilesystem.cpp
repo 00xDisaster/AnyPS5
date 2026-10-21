@@ -1006,24 +1006,30 @@ int main() {
     reparseHeader.ReparseGuid = {0x6a1e3d0b, 0x1f6c, 0x4c1e, {0x9b, 0x52, 0x3d, 0x8e, 0x41, 0x07, 0x5c, 0x2a}};
     std::memcpy(reparseData.data(), &reparseHeader, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE);
     DWORD returned = 0;
-    Require(DeviceIoControl(taggedHandle, FSCTL_SET_REPARSE_POINT, reparseData.data(), static_cast<DWORD>(reparseData.size()),
-        nullptr, 0, &returned, nullptr) != 0);
+    const bool taggedSet = DeviceIoControl(taggedHandle, FSCTL_SET_REPARSE_POINT, reparseData.data(),
+        static_cast<DWORD>(reparseData.size()), nullptr, 0, &returned, nullptr) != 0;
+    if (!taggedSet) Require(GetLastError() == ERROR_PRIVILEGE_NOT_HELD || GetLastError() == ERROR_ACCESS_DENIED);
     Require(CloseHandle(taggedHandle) != 0);
-    Require((GetFileAttributesW(tagged.c_str()) & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
-    FileStat taggedStatus{};
-    FileStat taggedFollowed{};
-    const int taggedResult = lstat_nid_postfix(tagged.string().c_str(), &taggedStatus);
-    const int taggedError = *__error_nid_postfix();
-    Require(stat_nid_postfix(tagged.string().c_str(), &taggedFollowed) == taggedResult);
-    Require(taggedResult == 0 ? (taggedStatus.st_ino == taggedFollowed.st_ino && taggedStatus.st_mode == taggedFollowed.st_mode)
-                              : *__error_nid_postfix() == taggedError);
-    const HANDLE taggedCleanup = CreateFileW(tagged.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-        FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-    Require(taggedCleanup != INVALID_HANDLE_VALUE);
-    reparseHeader.ReparseDataLength = 0;
-    Require(DeviceIoControl(taggedCleanup, FSCTL_DELETE_REPARSE_POINT, &reparseHeader, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE,
-        nullptr, 0, &returned, nullptr) != 0);
-    Require(CloseHandle(taggedCleanup) != 0 && std::filesystem::remove(tagged));
+    if (!taggedSet) {
+        Require(std::filesystem::remove(tagged));
+        std::fprintf(stderr, "Windows reparse point checks skipped: setting a reparse point on a file needs rights this user lacks\n");
+    } else {
+        Require((GetFileAttributesW(tagged.c_str()) & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
+        FileStat taggedStatus{};
+        FileStat taggedFollowed{};
+        const int taggedResult = lstat_nid_postfix(tagged.string().c_str(), &taggedStatus);
+        const int taggedError = *__error_nid_postfix();
+        Require(stat_nid_postfix(tagged.string().c_str(), &taggedFollowed) == taggedResult);
+        Require(taggedResult == 0 ? (taggedStatus.st_ino == taggedFollowed.st_ino && taggedStatus.st_mode == taggedFollowed.st_mode)
+                                  : *__error_nid_postfix() == taggedError);
+        const HANDLE taggedCleanup = CreateFileW(tagged.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        Require(taggedCleanup != INVALID_HANDLE_VALUE);
+        reparseHeader.ReparseDataLength = 0;
+        Require(DeviceIoControl(taggedCleanup, FSCTL_DELETE_REPARSE_POINT, &reparseHeader, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE,
+            nullptr, 0, &returned, nullptr) != 0);
+        Require(CloseHandle(taggedCleanup) != 0 && std::filesystem::remove(tagged));
+    }
 #endif
     FileStat identity{};
     FileStat byDescriptor{};
