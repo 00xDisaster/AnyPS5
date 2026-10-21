@@ -5,7 +5,6 @@
 #include <string>
 #include "FilesystemError.hpp"
 
-// Drops trailing separators but keeps the root: "/", "C:\" or a UNC share root.
 inline std::string TrimTrailingSeparators_nid_no_patch(std::string path) {
     const auto separator = [](char character) { return character == '/' || character == '\\'; };
     const std::size_t root = std::filesystem::path(path).root_path().native().size();
