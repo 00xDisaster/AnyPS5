@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <cmath>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -194,7 +195,9 @@ int APS5_VABI sceVoiceCreatePort(std::uint32_t* portId, const VoicePortParam* pa
 int APS5_VABI sceVoiceDeletePort(uint32_t port_id) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__);
+    if (!voice.initialized) return NotInitialized;
+    if (port_id > 127) return InvalidPort;
+    if (!voice.ports.contains(port_id)) return PortNotFound;
     std::erase_if(voice.connections, [port_id](const auto& link) { return link.first == port_id || link.second == port_id; });
     voice.ports.erase(port_id);
     voice.freePorts.push_back(port_id);
@@ -219,28 +222,40 @@ int APS5_VABI sceVoiceDisconnectIPortFromOPort(uint32_t input_port_id, uint32_t 
     return 0;
 }
 
-int APS5_VABI sceVoiceGetBitRate(uint32_t port_id, uint32_t* bitrate) {
-    if (bitrate == nullptr) APS5_INVALID_ARG_EX;
+int APS5_VABI sceVoiceGetBitRate(std::uint32_t portId, std::uint32_t* bitrate) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    const auto& port = RequirePort(voice, port_id, __func__);
-    if (port.type != PortInVoice && port.type != PortOutVoice) Fail(__func__, "port does not carry encoded voice");
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    if (!bitrate) return InvalidArgument;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    const auto& port = found->second;
+    if (port.type != PortInVoice && port.type != PortOutVoice) return PortNotFound;
     *bitrate = port.bitrate;
     return 0;
 }
 
-int APS5_VABI sceVoiceSetVolume(uint32_t port_id, float volume) {
+int APS5_VABI sceVoiceSetVolume(std::uint32_t portId, float volume) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__).volume = volume;
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    found->second.volume = std::isfinite(volume) ? volume : 0.0f;
     return 0;
 }
 
-int APS5_VABI sceVoiceGetVolume(uint32_t port_id, float* volume) {
-    if (volume == nullptr) APS5_INVALID_ARG_EX;
+int APS5_VABI sceVoiceGetVolume(std::uint32_t portId, float* volume) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    *volume = RequirePort(voice, port_id, __func__).volume;
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    if (!volume) return InvalidArgument;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    *volume = found->second.volume;
     return 0;
 }
 
@@ -307,18 +322,26 @@ int APS5_VABI sceVoiceWriteToIPort(uint32_t input_port_id, const void* data, uin
     return 0;
 }
 
-int APS5_VABI sceVoiceSetMuteFlag(uint32_t port_id, bool muted) {
+int APS5_VABI sceVoiceSetMuteFlag(std::uint32_t portId, std::uint8_t muted) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    RequirePort(voice, port_id, __func__).muted = muted;
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    found->second.muted = muted != 0;
     return 0;
 }
 
-int APS5_VABI sceVoiceGetMuteFlag(uint32_t port_id, bool* muted) {
-    if (muted == nullptr) APS5_INVALID_ARG_EX;
+int APS5_VABI sceVoiceGetMuteFlag(std::uint32_t portId, bool* muted) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    *muted = RequirePort(voice, port_id, __func__).muted;
+    if (!voice.initialized) return NotInitialized;
+    if (portId > 127) return InvalidPort;
+    if (!muted) return InvalidArgument;
+    const auto found = voice.ports.find(portId);
+    if (found == voice.ports.end()) return PortNotFound;
+    *muted = found->second.muted;
     return 0;
 }
 

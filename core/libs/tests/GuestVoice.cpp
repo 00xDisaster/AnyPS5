@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -18,7 +20,9 @@ int APS5_VABI sceVoiceDeletePort(std::uint32_t);
 int APS5_VABI sceVoiceConnectIPortToOPort(std::uint32_t, std::uint32_t);
 int APS5_VABI sceVoiceDisconnectIPortFromOPort(std::uint32_t, std::uint32_t);
 int APS5_VABI sceVoiceGetVolume(std::uint32_t, float*);
-int APS5_VABI sceVoiceSetMuteFlag(std::uint32_t, bool);
+int APS5_VABI sceVoiceSetMuteFlag(std::uint32_t, std::uint8_t);
+int APS5_VABI sceVoiceSetVolume(std::uint32_t, float);
+int APS5_VABI sceVoiceGetBitRate(std::uint32_t, std::uint32_t*);
 int APS5_VABI sceVoiceGetMuteFlag(std::uint32_t, bool*);
 int APS5_VABI sceVoiceGetPortInfo(std::uint32_t, VoicePortInfo*);
 int APS5_VABI sceVoiceReadFromOPort(std::uint32_t, void*, std::uint32_t*);
@@ -91,6 +95,12 @@ int main() {
     constexpr auto invalidPort = static_cast<std::int32_t>(0x804e0804u);
     constexpr auto invalidArgument = static_cast<std::int32_t>(0x804e0805u);
     constexpr auto portNotFound = static_cast<std::int32_t>(0x804e0807u);
+    Require(sceVoiceGetVolume(128, nullptr) == notInitialized);
+    Require(sceVoiceGetBitRate(128, nullptr) == notInitialized);
+    Require(sceVoiceGetMuteFlag(128, nullptr) == notInitialized);
+    Require(sceVoiceSetVolume(128, 1.0f) == notInitialized);
+    Require(sceVoiceSetMuteFlag(128, 1) == notInitialized);
+    Require(sceVoiceDeletePort(128) == notInitialized);
     Require(sceVoiceResetPort(0) == notInitialized);
     Require(sceVoicePausePort(0) == notInitialized);
     Require(sceVoiceResumePort(0) == notInitialized);
@@ -351,6 +361,40 @@ int main() {
         Require(sceVoiceCreatePort(&portId, &param) == 0);
         Require(sceVoiceGetMuteFlag(portId, &muted) == 0 && muted);
         Require(sceVoiceDeletePort(portId) == 0);
+    }
+    Require(sceVoiceGetVolume(128, nullptr) == invalidPort);
+    Require(sceVoiceGetBitRate(128, nullptr) == invalidPort);
+    Require(sceVoiceGetMuteFlag(128, nullptr) == invalidPort);
+    Require(sceVoiceSetVolume(128, 1.0f) == invalidPort);
+    Require(sceVoiceSetMuteFlag(128, 1) == invalidPort);
+    Require(sceVoiceDeletePort(128) == invalidPort);
+    Require(sceVoiceGetVolume(127, nullptr) == invalidArgument);
+    Require(sceVoiceGetBitRate(127, nullptr) == invalidArgument);
+    Require(sceVoiceGetMuteFlag(127, nullptr) == invalidArgument);
+    volume = 123.0f;
+    std::uint32_t bitrate = 123;
+    muted = true;
+    Require(sceVoiceGetVolume(127, &volume) == portNotFound && volume == 123.0f);
+    Require(sceVoiceGetBitRate(127, &bitrate) == portNotFound && bitrate == 123);
+    Require(sceVoiceGetMuteFlag(127, &muted) == portNotFound && muted);
+    Require(sceVoiceSetVolume(127, 1.0f) == portNotFound);
+    Require(sceVoiceSetMuteFlag(127, 1) == portNotFound);
+    Require(sceVoiceDeletePort(127) == portNotFound);
+    for (const auto type : {0, 1, 2, 3, 4, 5}) {
+        const auto id = CreatePort(type, -2.0f);
+        Require(sceVoiceGetBitRate(id, &bitrate) == (type == 2 || type == 4 ? 0 : portNotFound));
+        if (type == 2 || type == 4) Require(bitrate == 16000);
+        for (const float value : {-2.0f, -0.0f, 0.25f, 2.0f, std::numeric_limits<float>::max(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+            Require(sceVoiceSetVolume(id, value) == 0);
+            Require(sceVoiceGetVolume(id, &volume) == 0);
+            Require(volume == (std::isfinite(value) ? value : 0.0f));
+            if (value == 0.0f) Require(std::signbit(volume) == std::signbit(value));
+        }
+        for (const std::uint8_t value : {0, 1, 2, 128, 255}) {
+            Require(sceVoiceSetMuteFlag(id, value) == 0);
+            Require(sceVoiceGetMuteFlag(id, &muted) == 0 && muted == (value != 0));
+        }
+        Require(sceVoiceDeletePort(id) == 0);
     }
     Require(sceVoiceEnd_nid_postfix() == 0);
 
