@@ -1040,7 +1040,9 @@ const char* APS5_VABI sceSslGetAlpnSelected(int sslConnectionId) {
     std::shared_ptr<Session> session;
     {
         std::lock_guard lock(State().mutex);
-        session = RequireConnection(__func__, sslConnectionId).session;
+        const auto* connection = FindConnection(sslConnectionId);
+        if (!connection) return nullptr;
+        session = connection->session;
     }
     if (!session) return nullptr;
     std::lock_guard sessionLock(session->mutex);
@@ -1049,12 +1051,24 @@ const char* APS5_VABI sceSslGetAlpnSelected(int sslConnectionId) {
 }
 
 int APS5_VABI sceSslSetAlpn(int sslConnectionId, const char* proto) {
-    if (!proto) throw std::invalid_argument("sceSslSetAlpn: null protocol list");
     std::lock_guard lock(State().mutex);
     auto* connection = FindConnection(sslConnectionId);
     if (!connection) return ErrorInvalidId;
-    if (!*proto) return ErrorBadLength;
-    connection->alpn = proto;
+    connection->alpn.clear();
+    if (!proto) return 0;
+    std::size_t length = 0;
+    while (length < 65535 && proto[length] != 0) ++length;
+    if (length >= 65535) return ErrorBadLength;
+    std::size_t tokenLength = 0;
+    for (std::size_t index = 0; index <= length; ++index) {
+        if (index == length || proto[index] == ',') {
+            if (tokenLength == 0 || tokenLength > 255) return ErrorBadLength;
+            tokenLength = 0;
+        } else {
+            ++tokenLength;
+        }
+    }
+    connection->alpn.assign(proto, length);
     return 0;
 }
 

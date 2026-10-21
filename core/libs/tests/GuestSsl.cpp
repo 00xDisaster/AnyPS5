@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <string>
 
 extern "C" {
 int APS5_VABI sceSslInit_nid_postfix(std::size_t);
@@ -129,7 +130,14 @@ int main() {
     Require(sceSslGetAlpnSelected(connection) == nullptr);
     Require(sceSslSetAlpn(connection, "http/1.1") == 0);
     Require(sceSslSetAlpn(connection, "") == badLength);
-    Require(Throws([&] { sceSslSetAlpn(connection, nullptr); }));
+    Require(sceSslSetAlpn(connection, ",h2") == badLength);
+    Require(sceSslSetAlpn(connection, "h2,") == badLength);
+    Require(sceSslSetAlpn(connection, "h2,,http/1.1") == badLength);
+    Require(sceSslSetAlpn(connection, std::string(255, 'a').c_str()) == 0);
+    Require(sceSslSetAlpn(connection, std::string(256, 'a').c_str()) == badLength);
+    Require(sceSslSetAlpn(connection, std::string(65535, 'a').c_str()) == badLength);
+    Require(sceSslSetAlpn(0, nullptr) == invalidId);
+    Require(sceSslSetAlpn(connection, nullptr) == 0);
     Require(sceSslGetAlpnSelected(connection) == nullptr);
     char buffer[4]{};
     Require(sceSslConnect(connection) == badDescriptor);
@@ -144,7 +152,7 @@ int main() {
     Require(sceSslDisableVerifyOption(unknown, serverVerify) == invalidId);
     Require(sceSslSetMinSslVersion(unknown, 5) == invalidId);
     Require(sceSslSetAlpn(unknown, "http/1.1") == invalidId);
-    Require(Throws([&] { sceSslGetAlpnSelected(unknown); }));
+    Require(sceSslGetAlpnSelected(unknown) == nullptr);
     Require(sceSslConnect(unknown) == invalidId);
     Require(sceSslRead(unknown, buffer, sizeof(buffer), 0) == invalidId);
     Require(sceSslWrite(unknown, buffer, sizeof(buffer), 0) == invalidId);
@@ -158,7 +166,7 @@ int main() {
     Require(sceSslDisableVerifyOption(connection, serverVerify) == invalidId);
     Require(sceSslSetMinSslVersion(connection, 5) == invalidId);
     Require(sceSslSetAlpn(connection, "http/1.1") == invalidId);
-    Require(Throws([&] { sceSslGetAlpnSelected(connection); }));
+    Require(sceSslGetAlpnSelected(connection) == nullptr);
     Require(sceSslConnect(connection) == invalidId);
     Require(sceSslClose(connection) == invalidId);
     Require(sceSslCreateConnection(context, 0, "example.com") == invalidId);
