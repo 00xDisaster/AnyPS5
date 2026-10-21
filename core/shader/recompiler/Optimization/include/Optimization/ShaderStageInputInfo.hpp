@@ -200,6 +200,7 @@ struct ShaderPixelInputInfo {
     std::uint8_t mergeSamples = 1;
     bool mergeDepthStencilWrites = false;
     bool mergeDepthStencilTests = false;
+    std::array<std::uint32_t, 4> sampleOrder{};
     ShaderStageRuntime stage;
 
     bool HasPositionInput() const {
@@ -215,6 +216,10 @@ struct ShaderPixelInputInfo {
             if (sampleLocations[index] != sampleLocations[index % 8u]) return true;
         }
         return false;
+    }
+
+    [[nodiscard]] bool ReordersSamples() const {
+        return std::ranges::any_of(sampleOrder, [](std::uint32_t order) { return order != 0u && order != 0x76543210u; });
     }
 
     [[nodiscard]] bool QuadSampleMaskPartial() const {
