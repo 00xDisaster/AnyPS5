@@ -62,6 +62,21 @@ namespace {
 
 constexpr int user = 0x10000000;
 
+void TestOpenEx() {
+    constexpr int invalidSize = static_cast<int>(0x80260102);
+    constexpr int invalidFreq = static_cast<int>(0x80260103);
+    constexpr int invalidType = static_cast<int>(0x80260104);
+    Require(sceAudioInOpenEx(user, 2, 0, 7, 256, 48000, 2) == invalidType);
+    Require(sceAudioInOpenEx(user, 0, 0, 7, 512, 48000, 2) == invalidSize);
+    Require(sceAudioInOpenEx(user, 0, 0, 7, 256, 44100, 2) == invalidFreq);
+    Require(sceAudioInHqOpenEx(user, 0, 0, 7, 128, 44100, 2) == invalidFreq);
+    int port = sceAudioInOpenEx(user, 0, 0, 7, 256, 48000, 2);
+    Require(port > 0 && sceAudioInClose(port) == 0);
+    port = sceAudioInHqOpenEx(user, 0, 0, 7, 256, 16000, 2);
+    Require(port > 0 && sceAudioInClose(port) == 0);
+    Require(sceAudioInSetCompressorPreGain() == 0 && sceAudioInSetNoiseGateThreshold() == 0);
+}
+
 void TestValidation() {
     constexpr int invalidHandle = static_cast<int>(0x80260101);
     constexpr int invalidSize = static_cast<int>(0x80260102);
@@ -109,15 +124,6 @@ void TestValidation() {
     port = sceAudioInAsyncOpen(user, 0, 0, 384, 48000, 0x10);
     gain = 0.5f;
     Require(port > 0 && sceAudioInGetGain(port, &gain) == 0 && gain == 1.0f && sceAudioInGetRerouteCount(port) == 0 && sceAudioInClose(port) == 0);
-    Require(sceAudioInOpenEx(user, 2, 0, 7, 256, 48000, 2) == invalidType);
-    Require(sceAudioInOpenEx(user, 0, 0, 7, 512, 48000, 2) == invalidSize);
-    Require(sceAudioInOpenEx(user, 0, 0, 7, 256, 44100, 2) == invalidFreq);
-    Require(sceAudioInHqOpenEx(user, 0, 0, 7, 128, 44100, 2) == invalidFreq);
-    port = sceAudioInOpenEx(user, 0, 0, 7, 256, 48000, 2);
-    Require(port > 0 && sceAudioInClose(port) == 0);
-    port = sceAudioInHqOpenEx(user, 0, 0, 7, 256, 16000, 2);
-    Require(port > 0 && sceAudioInClose(port) == 0);
-    Require(sceAudioInSetCompressorPreGain() == 0 && sceAudioInSetNoiseGateThreshold() == 0);
     Require(ReportsNotImplemented("sceAudioInIsPadEmbeddedMic", [] { sceAudioInIsPadEmbeddedMic(1); }));
 }
 
@@ -138,6 +144,7 @@ void TestCapture() {
     SetEnvironment("SDL_DISKAUDIOFILEIN", path.string());
 
     TestValidation();
+    TestOpenEx();
     const int handle = sceAudioInOpen(user, 0, 0, 256, 48000, 2);
     Require(handle > 0 && sceAudioInGetSilentState(handle) == 0);
     std::vector<std::int16_t> block(256 * 2 + 1, 0x5555);
@@ -165,6 +172,7 @@ void TestNoDevice() {
     SetEnvironment("SDL_AUDIODRIVER", "none");
 
     TestValidation();
+    TestOpenEx();
     const int handle = sceAudioInOpen(user, 0, 0, 256, 16000, 0x12);
     Require(handle > 0 && sceAudioInGetSilentState(handle) == 1);
     Require(sceAudioInGetSilentState(handle + 1) == invalidHandle);
