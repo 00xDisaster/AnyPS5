@@ -5,22 +5,6 @@
 
 extern "C" {
 
-int APS5_VABI sceNpUniversalDataSystemIntAbortHandle() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntCheckNetSyncTitles() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntCreateContext() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntCreateHandle() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 int APS5_VABI sceNpUniversalDataSystemIntCreateRecordArray() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -33,23 +17,7 @@ int APS5_VABI sceNpUniversalDataSystemIntCreateRecordObject() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceNpUniversalDataSystemIntDeleteAllData() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 int APS5_VABI sceNpUniversalDataSystemIntDeleteAllRecord() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntDeleteUserDataWithServerData() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntDestroyContext() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntDestroyHandle() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -66,14 +34,6 @@ int APS5_VABI sceNpUniversalDataSystemIntDestroyRecordObject() {
     return 0;
 }
 int APS5_VABI sceNpUniversalDataSystemIntGetMemoryStat() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntInitialize() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntNetSyncTitles() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -170,10 +130,6 @@ int APS5_VABI sceNpUniversalDataSystemIntRecordObjectSetUInt32() {
     return 0;
 }
 int APS5_VABI sceNpUniversalDataSystemIntRecordObjectSetUInt64() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-int APS5_VABI sceNpUniversalDataSystemIntTerminate() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
