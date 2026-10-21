@@ -1144,10 +1144,15 @@ void ShaderStageTests() {
         lines.context[0x29b] = 1;
         Require(AgcDriver::Graphics::DecodeState(lines).stages.mesh->provokingVertex == 1, "a last-vertex geometry draw does not take its flat inputs and layer from the second vertex of each output line");
         lines.context[0x29b] = 0;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(lines); }, "missing register in context bank at DWORD 0x280");
+        lines.context[0x280] = 0x00080008u;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(lines); }, "missing register in context bank at DWORD 0x281");
+        lines.context[0x281] = 0xffff0000u;
         state = AgcDriver::Graphics::DecodeState(lines);
         mesh = *state.stages.mesh;
         Require(mesh.outputPrimitiveSize == 1 && mesh.maxPrimitives == 255 && AgcDriver::Graphics::RasterPrimitiveOf(state) == ShaderRecompiler::RasterPrimitive::Point, "a point-list subgroup did not decode as points");
         Require(mesh.provokingVertex == 0, "a point draw has provoking vertex 0");
+        Require(state.pointSize == 1.0f && state.pointSizeMin == 0.0f && state.pointSizeMax == 8191.875f, "geometry points did not decode the queue's default point size and limits");
         lines.context[0x205] = raster;
         auto points = lines;
         points.userConfig[0x242] = 6;
