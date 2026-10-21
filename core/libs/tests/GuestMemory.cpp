@@ -3220,12 +3220,36 @@ static void CheckAvailableDirectMemoryIsLargestFreeBlock() {
     Require(start == top + 0x200000 && size == 0x400000);
     Require(sceKernelAvailableDirectMemorySize(top, top + window, 0x1000000, &start, &size) == 0);
     Require(start == top + 0x1000000 && size == static_cast<std::size_t>(window - 0x1000000));
-    Require(sceKernelAvailableDirectMemorySize(top, top + 0x200000, 0, &start, &size) == SCE_KERNEL_ERROR_ENOMEM);
-    Require(start == 0 && size == 0);
-    Require(sceKernelAvailableDirectMemorySize(top + window, top, 0, &start, &size) == SCE_KERNEL_ERROR_EAGAIN);
-    Require(sceKernelAvailableDirectMemorySize(-1, top + window, 0, &start, &size) == SCE_KERNEL_ERROR_EAGAIN);
-    Require(sceKernelAvailableDirectMemorySize(top, top + window, std::numeric_limits<std::size_t>::max(), &start, &size) == SCE_KERNEL_ERROR_EAGAIN);
-    Require(sceKernelAvailableDirectMemorySize(top, top + window, 0, nullptr, &size) == SCE_KERNEL_ERROR_EINVAL);
+    const std::int64_t run = top + 0x800000;
+    const auto untouched = [&](std::int64_t searchStart, std::int64_t searchEnd, std::size_t alignment, int expected) {
+        start = -7;
+        size = 7;
+        return sceKernelAvailableDirectMemorySize(searchStart, searchEnd, alignment, &start, &size) == expected && start == -7 && size == 7;
+    };
+    Require(untouched(top, top + 0x200000, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(top + window, top, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(run, run, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(0, -1, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(run + 0x1000, run + 0x3000, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(static_cast<std::int64_t>(DIRECT_MEMORY_SIZE), std::numeric_limits<std::int64_t>::max(), 0, SCE_KERNEL_ERROR_ENOMEM));
+    for (const std::size_t alignment : {std::size_t{3}, std::size_t{0x6000}, std::size_t{0xc000}, std::size_t{0x14000}, ~std::size_t{0x3fff}, std::numeric_limits<std::size_t>::max()}) {
+        Require(untouched(top, top + window, alignment, SCE_KERNEL_ERROR_EINVAL));
+        Require(untouched(top + window, top, alignment, SCE_KERNEL_ERROR_EINVAL));
+    }
+    Require(sceKernelAvailableDirectMemorySize(top, top + window, 0, nullptr, &size) == 0 && size == static_cast<std::size_t>(window - 0x800000));
+    Require(sceKernelAvailableDirectMemorySize(top, top + window, 0, &start, nullptr) == 0 && start == run);
+    Require(sceKernelAvailableDirectMemorySize(top, top + window, 0, nullptr, nullptr) == 0);
+    Require(sceKernelAvailableDirectMemorySize(top, top + window, 3, nullptr, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelAvailableDirectMemorySize(-1, top + window, 0, &start, &size) == 0 && start >= 0 && static_cast<std::int64_t>(size) <= top + window - start);
+    Require(sceKernelAvailableDirectMemorySize(std::numeric_limits<std::int64_t>::min(), top + window, 0, &start, &size) == 0 && start >= 0);
+    Require(sceKernelAvailableDirectMemorySize(run, run + 0xfffff, 0, &start, &size) == 0 && start == run && size == 0xfffff);
+    Require(sceKernelAvailableDirectMemorySize(run, run + 0x3fff, 0, &start, &size) == 0 && start == run && size == 0x3fff);
+    Require(sceKernelAvailableDirectMemorySize(run + 1, run + 0x100000, 0, &start, &size) == 0 && start == run + 0x4000 && size == 0xfc000);
+    Require(sceKernelAvailableDirectMemorySize(run + 0x2000, run + 0x6000, 0, &start, &size) == 0 && start == run + 0x4000 && size == 0x2000);
+    Require(sceKernelAvailableDirectMemorySize(run + 0x2000, run + 0x10e000, 1, &start, &size) == 0 && start == run + 0x4000 && size == 0x10a000);
+    Require(sceKernelAvailableDirectMemorySize(run + 0x4000, run + 0x100000, 0x8000, &start, &size) == 0 && start == run + 0x8000 && size == 0xf8000);
+    Require(sceKernelAvailableDirectMemorySize(top, top + window, std::size_t{1} << 63, &start, &size) == 0);
+    Require(start == std::numeric_limits<std::int64_t>::min() && size == static_cast<std::size_t>(top + window) - (std::size_t{1} << 63));
 
     Require(sceKernelReleaseDirectMemory(first, 0x200000) == 0);
     Require(sceKernelReleaseDirectMemory(last, 0x200000) == 0);
