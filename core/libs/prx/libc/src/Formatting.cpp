@@ -7,7 +7,6 @@
 #include <cstring>
 #include <string>
 #include <cerrno>
-#include <climits>
 #include <cstdlib>
 #include <memory>
 #include <climits>
@@ -33,13 +32,6 @@ int __isoc99_vfscanf(std::FILE*, const char*, std::va_list);
 #endif
 
 namespace {
-
-bool SizeOverflowsInt(char* buffer, size_t size) {
-    if (size == 0 || size - 1 <= static_cast<size_t>(INT_MAX)) return false;
-    errno = 84;
-    if (buffer != nullptr) *buffer = '\0';
-    return true;
-}
 
 #ifndef _WIN32
 bool RequiresGuestFormatting(const char* format) {
@@ -367,6 +359,13 @@ int APS5_VABI fprintf_nid_postfix(FileStream* stream, const char* format, ...) {
     va_end(args);
 #endif
     return result;
+}
+
+static bool SizeOverflowsInt(char* buffer, size_t size) {
+    if (size == 0 || size - 1 <= static_cast<size_t>(INT_MAX)) return false;
+    errno = 84;
+    if (buffer != nullptr) *buffer = '\0';
+    return true;
 }
 
 int APS5_VABI fscanf_nid_postfix(FileStream* stream, const char* format, ...) {

@@ -2,6 +2,8 @@
 
 ### Unknown function info
 
+- [snprintf and vsnprintf](../../../core/libs/prx/libc/src/Formatting.cpp) (libc) reject sizes above `INT_MAX + 1` with `EOVERFLOW` (84), a terminating NUL and return value -1, following FreeBSD 11.4 [snprintf.c](https://github.com/freebsd/freebsd-src/blob/8c639945a44588f6cfdddfb057bb5aad88735da0/lib/libc/stdio/snprintf.c) and [vsnprintf.c](https://github.com/freebsd/freebsd-src/blob/8c639945a44588f6cfdddfb057bb5aad88735da0/lib/libc/stdio/vsnprintf.c). This limit is unverified on the console. A null buffer at an oversized nonzero size returns the error without writing, where FreeBSD dereferences it.
+
 - [strtonum](../../../core/libs/prx/libc/src/StringExtensions.cpp) (libc) is unverified on the console. Its signature, decimal parsing, inclusive bounds, error strings, error precedence and errno preservation follow [FreeBSD 11.4 strtonum.c](https://github.com/freebsd/freebsd-src/blob/8c639945a44588f6cfdddfb057bb5aad88735da0/lib/libc/stdlib/strtonum.c). Parsing uses the host `strtoll` with base 10.
 
 - [sceLibcBacktraceGetBufferSize, sceLibcBacktraceSelf](../../../core/libs/prx/libc/src/Backtrace.cpp) (libc) - signatures and frame record layout inferred from a title (next pointer, u32 module offset, module name at +0x10); the u32 at +0xC is unknown and written as 0. Module names are host file names without the `.guest.prx` suffix, so their case may differ from the PS5 module name. On Windows, unwinding uses `_Unwind_Backtrace` and stops at a frame without `.ehmeta` or `.ehfram` tables whose PE unwind data has an exception or termination handler, leaving the trace empty or cut short while still returning 0. Implemented only on Linux and Windows; other platforms throw
