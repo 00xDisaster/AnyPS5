@@ -1260,8 +1260,8 @@ struct ImeKeycode {
     std::uint64_t timestamp;
 };
 
-using ImeTextFilter = std::int32_t (APS5_VABI *)(char16_t* out_text, std::uint32_t* out_text_length, const char16_t* source_text, std::uint32_t source_text_length);
-using ImeExtKeyboardFilter = int (APS5_VABI *)(const ImeKeycode* source_keycode, std::uint16_t* out_keycode, std::uint32_t* out_status, void* reserved);
+using ImeTextFilter = std::int32_t (APS5_VABI*)(char16_t* outText, std::uint32_t* outTextLength, const char16_t* sourceText, std::uint32_t sourceTextLength);
+using ImeExtKeyboardFilter = int (APS5_VABI*)(const ImeKeycode* sourceKeycode, std::uint16_t* outKeycode, std::uint32_t* outStatus, void* reserved);
 
 struct ImeExtendedParam {
     std::uint32_t option;
@@ -1443,10 +1443,10 @@ using NetCtlCallback = void (APS5_VABI *)(int, void*);
 
 struct HttpEpoll;
 using HttpEpollHandle = HttpEpoll*;
-using HttpsCallback = int (*)(int, unsigned int, void* const*, int, void*);
-using HttpRedirectCallback = int (*)(int, std::int32_t, std::int32_t*, const char*, void*);
-using HttpCookieRecvCallback = int (*)(int, const char*, const char*, std::uint64_t, void*);
-using HttpAuthInfoCallback = int (*)(int, int, const char*, char*, char*, int, std::uint8_t**, std::uint64_t*, int*, void*);
+using HttpsCallback = int (APS5_VABI*)(int, unsigned int, void* const*, int, void*);
+using HttpRedirectCallback = int (APS5_VABI*)(int, std::int32_t, std::int32_t*, const char*, void*);
+using HttpCookieRecvCallback = int (APS5_VABI*)(int, const char*, const char*, std::uint64_t, void*);
+using HttpAuthInfoCallback = int (APS5_VABI*)(int, int, const char*, char*, char*, int, std::uint8_t**, std::uint64_t*, int*, void*);
 
 struct HttpNBEvent { std::uint8_t opaque[64]; };
 
@@ -2068,7 +2068,7 @@ static_assert(sizeof(RudpPollEvent) == 8);
 static_assert(offsetof(RudpPollEvent, events) == 4);
 static_assert(offsetof(RudpPollEvent, returnedEvents) == 6);
 
-using RudpEventHandler = void (*)(int ctx_id, int event_id, int error_code, void* arg);
+using RudpEventHandler = void (APS5_VABI*)(int ctxId, int eventId, int errorCode, void* arg);
 
 struct SystemServiceStatus {
     std::int32_t event_num = 0;

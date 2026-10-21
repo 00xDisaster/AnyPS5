@@ -58,7 +58,7 @@ enum RudpOption {
     RUDP_OPTION_KEEP_ALIVE_TIMEOUT = 19,
 };
 
-using GuestRudpEventHandler = void(APS5_VABI*)(int, int, int, void*);
+using GuestRudpEventHandler = RudpEventHandler;
 
 std::mutex g_mutex;
 bool g_inited = false;
