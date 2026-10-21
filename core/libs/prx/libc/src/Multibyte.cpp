@@ -1,5 +1,6 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/SonyCrt.hpp"
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -286,9 +287,9 @@ std::size_t APS5_VABI wcsrtombs_nid_postfix(char* destination, const std::uint16
     }
 }
 
-int APS5_VABI wcsrtombs_s_nid_postfix(
+static int WideToLocaleChecked(
     std::size_t* result, char* destination, std::size_t capacity, const std::uint16_t** source, std::size_t limit,
-    void* state
+    void* state, bool stopAtLimit
 ) {
     constexpr int GuestEinval = 22;
     constexpr int GuestErange = 34;
@@ -329,6 +330,7 @@ int APS5_VABI wcsrtombs_s_nid_postfix(
             *result = Failed;
             return GuestEilseq;
         }
+        if (length > limit && stopAtLimit) break;
         if (length > limit || length > capacity) {
             *source = wide;
             destination[0] = '\0';
@@ -356,6 +358,20 @@ int APS5_VABI wcsrtombs_s_nid_postfix(
     destination[written] = '\0';
     *result = written;
     return 0;
+}
+
+int APS5_VABI wcsrtombs_s_nid_postfix(
+    std::size_t* result, char* destination, std::size_t capacity, const std::uint16_t** source, std::size_t limit,
+    void* state
+) {
+    return WideToLocaleChecked(result, destination, capacity, source, limit, state, false);
+}
+
+int APS5_VABI wcstombs_s_nid_postfix(
+    std::size_t* result, char* destination, std::size_t capacity, const std::uint16_t* source, std::size_t limit
+) {
+    std::array<std::uint64_t, 16> state{};
+    return WideToLocaleChecked(result, destination, capacity, &source, limit, state.data(), limit < capacity);
 }
 
 std::size_t APS5_VABI mbsrtowcs_nid_postfix(std::uint16_t* destination, const char** source, std::size_t capacity, void* state) {

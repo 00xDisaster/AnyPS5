@@ -714,6 +714,7 @@ size_t APS5_VABI wcsftime_nid_postfix(std::uint16_t* str, size_t count, const st
     constexpr auto Failed = static_cast<std::size_t>(-1);
     if (format == nullptr) throw std::invalid_argument("wcsftime: null format");
     if (timeptr == nullptr) throw std::invalid_argument("wcsftime: null time");
+    if (str == nullptr) return 0;
     const std::uint16_t* formatCursor = format;
     const std::size_t formatLength = wcsrtombs_nid_postfix(nullptr, &formatCursor, 0, nullptr);
     if (formatLength == Failed) return 0;

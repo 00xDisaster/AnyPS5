@@ -119,6 +119,28 @@ class SelectTests(unittest.TestCase):
         subprocess.run(["cmake", "--build", str(self.build)], check=True, capture_output=True)
         self.assertEqual(built, {"alpha_tests"})
 
+    def test_explain_reports_input_and_fixture_reasons_without_a_build_cache(self):
+        changed = self.build / "explain-changed.txt"
+        cache = self.build / "CMakeCache.txt"
+        saved = self.build / "CMakeCache.saved"
+        cache.rename(saved)
+        try:
+            for path in ("alpha/alpha.h", "beta/main.c", "CMakeLists.txt"):
+                with self.subTest(path=path):
+                    changed.write_text(path + "\n", encoding="utf-8")
+                    report = json.loads(self.tool("explain", self.graph, changed))
+                    picked, full = select_tests.select(json.loads(self.graph.read_text(encoding="utf-8")), [path])
+                    self.assertEqual(report["tests"], sorted(picked) if picked is not None else None)
+                    self.assertEqual(report["full_run_paths"], full)
+                    if path == "alpha/alpha.h":
+                        self.assertIn("input: alpha/alpha.h", report["reasons"]["alpha"])
+                        self.assertIn("no build executable", report["reasons"]["script"])
+                    elif path == "beta/main.c":
+                        self.assertIn("fixture setup for: beta", report["reasons"]["beta_setup"])
+        finally:
+            saved.rename(cache)
+
+
 
 @unittest.skipUnless(shutil.which("ninja") and (shutil.which("gcc") or shutil.which("cc")), "needs ninja and a C compiler")
 class FixtureBuildTests(unittest.TestCase):
@@ -176,6 +198,30 @@ class FixtureBuildTests(unittest.TestCase):
         output = self.run_selected("alpha/main.c", older)
         for name in ("alpha", "alpha_data", "beta", "beta_setup", "beta_cleanup"):
             self.assertIn(name, output)
+
+
+class BuildErrorTests(unittest.TestCase):
+    def run_tool(self, *args):
+        return subprocess.run([sys.executable, "-I", str(TOOL), *map(str, args)], capture_output=True, text=True, timeout=60)
+
+    def test_missing_build_directory_is_reported_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for command in (("dump", root / "no build", root / "graph.json"),
+                            ("select", root / "no build", root / "graph.json", root / "changed.txt")):
+                with self.subTest(command[0]):
+                    result = self.run_tool(*command)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("not a configured CMake build directory", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_cache_without_the_build_locations_is_reported_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "CMakeCache.txt").write_text("# empty\n", encoding="utf-8")
+            result = self.run_tool("dump", directory, Path(directory) / "graph.json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("CMAKE_CACHEFILE_DIR", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 class CaseInsensitivePathTests(unittest.TestCase):
