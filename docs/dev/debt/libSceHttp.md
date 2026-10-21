@@ -7,7 +7,7 @@
 
 ### Unknown function info
 
-- [HTTP object options](../../../core/libs/prx/libSceHttp/src/Options.cpp) (libSceHttp) - a template starts with redirects followed, blocking calls and no `Accept-Encoding: gzip`, a connection or request copies its parent's options when it is created, and `sceHttpGetAutoRedirect`, `sceHttpGetNonblock`, `sceHttpGetAcceptEncodingGZIPEnabled` and `sceHttpGetEpoll` read them back; these defaults and the copying follow [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/a808e76/src/core/libraries/network/http.cpp) (PS4) and are not measured on a PS5. `sceHttpSetDefaultAcceptEncodingGZIPEnabled` sets the gzip value for templates created later in that context, where shadPS4 keeps one value for the library, and the option setters now return `ERROR_INVALID_ID` for an id that is not a live template, connection or request. The options change no request, as none reaches the network
+- [HTTP object options](../../../core/libs/prx/libSceHttp/src/Options.cpp) (libSceHttp) - a template starts with redirects followed, blocking calls and no `Accept-Encoding: gzip`, and a connection or request copies its parent's options when it is created. The signatures of the option calls, these defaults, the copying and the order of the checks (`BEFORE_INIT` first; the last `sceHttpTerm` ends every object's options) follow [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/a808e76/src/core/libraries/network/http.cpp) (PS4) and are not measured on a PS5. `sceHttpSetDefaultAcceptEncodingGZIPEnabled` sets the gzip value for templates created later in that context, where shadPS4 keeps one value for the library, and `sceHttpUnsetEpoll` takes a template or connection id, where shadPS4 looks only at requests. The options change no request, as none reaches the network
 - [sceHttpUriBuild](../../../core/libs/prx/libSceHttp/src/Uri.cpp) (libSceHttp) retains `//` for a non-opaque URI independently of the selected fields, following [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/a8a70da595da2a96e0410309472ba4a7eb558144/src/core/libraries/network/http.cpp#L3551-L3558). Black Myth: Wukong builds its `Scheme` header with option 1 and expects `http://` or `https://`. Other partial field combinations follow the PS4 reference and remain unverified on PS5 hardware.
 - [sceHttpSetCookieEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) - the two-argument signature and 0/1 enable values follow [VitaSDK](https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/http.h) and [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/network/http.cpp); PPSA01521 passes 0 to disable cookies. Disabling succeeds because the offline HTTP backend has no cookie engine; enabling throws. Invalid enable values use the same error as `sceHttpSetInflateGZIPEnabled`. Like the existing offline HTTP setters, the handle is not validated; requests still fail with the network error. Console behavior is unverified
 - [sceHttpParseResponseHeader](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - signature follows [SharpProspero](https://github.com/SvenGDK/SharpProspero/blob/main/src/SharpProspero/Interop/Net/Http.cs); parsing and error codes follow [shadPS4's reverse-engineered PS4 library](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/network/http.cpp), not confirmed on a PS5 title or hardware. Folded values retain their line breaks and whitespace; an empty first line starts the value scan after its line feed. A consumed byte count above `INT_MAX` throws instead of wrapping.
@@ -32,17 +32,11 @@
 - [sceHttpDbgShowMemoryPoolStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgGetConnectionStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpDbgGetRequestStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpAbortRequestForce](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpAddRequestHeaderRaw](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpRemoveRequestHeader](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpGetAuthEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpGetAutoRedirect](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpTrySetNonblock](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpGetNonblock](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpTryGetNonblock](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetEpollId](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpGetEpollId](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpGetEpoll](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpGetCookie](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpGetCookieEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpAddCookie](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
@@ -54,14 +48,9 @@
 - [sceHttpSetCookieMaxNum](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetCookieMaxNumPerDomain](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpGetCookieStats](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpsEnableOptionPrivate](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpsDisableOptionPrivate](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetPriorityOption](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetPolicyOption](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpRequestGetAllHeaders](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpSetAcceptEncodingGZIPEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpGetAcceptEncodingGZIPEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpSetDefaultAcceptEncodingGZIPEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetProxy](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetSocketCreationCallback](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetHttp09Enabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
@@ -69,7 +58,6 @@
 - [sceHttpGetConnectionStat](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpAddQuery](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 - [sceHttpSetDelayBuildRequestEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
-- [sceHttpCacheRedirectedConnectionEnabled](../../../core/libs/prx/libSceHttp/Export.cpp) (libSceHttp) - unknown signature
 
 ### Functional
 
