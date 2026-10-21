@@ -101,6 +101,13 @@ class SelectTests(unittest.TestCase):
                 self.assertIsNone(selected)
                 self.assertIn(changed, output)
 
+    def test_changed_list_with_a_byte_order_mark_and_crlf_keeps_its_first_path(self):
+        listed = self.build / "changed bom.txt"
+        listed.write_bytes(b"\xef\xbb\xbfCMakeLists.txt\r\nalpha/alpha.h\r\n")
+        output = self.tool("select", self.build, self.graph, listed)
+        self.assertIn("CMakeLists.txt", output)
+        self.assertFalse((self.build / "select.tests").exists())
+
     def test_missing_graph_runs_everything(self):
         self.assertIsNone(self.select("alpha/alpha.h", graph=self.build / "missing.json")[1])
 
