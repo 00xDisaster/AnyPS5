@@ -2,6 +2,11 @@
 
 #include <cstddef>
 
+struct MbusDeviceFunctionState {
+    std::byte data[180];
+};
+
+static_assert(sizeof(MbusDeviceFunctionState) == 180);
 struct MbusDeviceDescription;
 struct MbusDeviceInfo;
 struct MbusSimulatedHandleStatus;
@@ -340,7 +345,7 @@ int APS5_VABI sceMbusEventBusStatusChangeSubscribe(std::int32_t eventHandle, std
     return 0;
 }
 
-int APS5_VABI sceMbusEventBusStatusChangeUnsubscribe() {
+int APS5_VABI sceMbusEventBusStatusChangeUnsubscribe(std::uint64_t unusedSlot, std::int32_t subscription) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -505,7 +510,7 @@ int APS5_VABI sceMbusSetCameraAppModuleFocus(std::int32_t moduleId) {
     return 0;
 }
 
-int APS5_VABI sceMbusSetDeviceFunctionState() {
+int APS5_VABI sceMbusSetDeviceFunctionState(std::uint64_t deviceId, MbusDeviceFunctionState state) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
