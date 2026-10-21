@@ -1,3 +1,6 @@
+#include "ProcessParametersFixture.hpp"
+#include "prx/libSceUserService/UserService.hpp"
+#include <array>
 #include "SceTypes.hpp"
 #include "prx/libSceCommonDialog/CommonDialog.hpp"
 
@@ -6,6 +9,8 @@
 #include <cstring>
 
 extern "C" {
+int APS5_VABI sceUserServiceInitialize(const UserServiceInitParam* param);
+int APS5_VABI sceUserServiceTerminate();
 int APS5_VABI sceNpCommerceDialogInitialize();
 int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param);
 int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param);
@@ -19,6 +24,8 @@ int APS5_VABI sceNpCommerceDialogTerminate();
 namespace {
 
 void Require(bool value) { if (!value) std::abort(); }
+
+alignas(16) std::array<std::byte, 64> process{};
 
 constexpr int statusNone = 0;
 constexpr int statusInitialized = 1;
@@ -39,6 +46,10 @@ void RequireCanceledResult() {
 }
 
 int main() {
+    Require(ProcessParametersFixture::Install(process.data(), process.size()));
+    std::uint32_t sdkVersion = 0x03500000;
+    std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
+    Require(sceUserServiceInitialize(nullptr) == 0);
     NpCommerceDialogParam2 param2{};
     param2.base.size = sizeof(param2.base);
     param2.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param2)) - 1060003575u;
@@ -79,16 +90,69 @@ int main() {
     param.base.size = sizeof(param.base);
     param.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param)) - 1060003575u;
     param.size = sizeof(param);
-    param.userId = 1;
+    param.userId = USER_SERVICE_INITIAL_USER_ID;
     Require(sceNpCommerceDialogInitialize() == 0);
     param.base.size = 0;
     Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
     param.base.size = sizeof(param.base);
+    param.size = 0;
+    Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    param.size = sizeof(param);
+    param.option = 8;
+    Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    param.option = 0;
+    param.reserved[31] = 1;
+    Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    param.reserved[31] = 0;
+    param.userId = -1;
+    Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    param.userId = USER_SERVICE_INITIAL_USER_ID;
+    const char* products[11]{};
+    for (std::uint32_t mode = 0; mode <= 6; ++mode) {
+        param.mode = mode;
+        for (std::uint32_t count = 0; count <= 11; ++count) {
+            param.productCount = count;
+            for (bool hasProducts : {false, true}) {
+                param.products = hasProducts ? products : nullptr;
+                bool valid = false;
+                if (mode == 0 || mode == 2) valid = count <= 1 && hasProducts == (count != 0);
+                if (mode == 1) valid = count == 1 && hasProducts;
+                if (mode == 3) valid = count >= 1 && count <= 10 && hasProducts;
+                if (mode == 4) valid = count <= 10 && hasProducts == (count != 0);
+                Require(sceNpCommerceDialogOpen(&param) == (valid ? 0 : static_cast<int>(0x80B8000Au)));
+            }
+        }
+    }
+    for (std::uint32_t mode : {1000u, 1001u}) {
+        param.mode = mode;
+        param.productCount = 0;
+        param.argument = 1;
+        Require(sceNpCommerceDialogOpen(&param) == static_cast<int>(0x80B8000Au));
+    }
+    param.mode = 5;
+    param.productCount = 0;
+    param.products = nullptr;
+    for (std::uint64_t argument = 0; argument <= 4; ++argument) {
+        param.argument = argument;
+        Require(sceNpCommerceDialogOpen(&param) == (argument == 1 ? 0 : static_cast<int>(0x80B8000Au)));
+    }
+    sdkVersion = 0x01700000;
+    std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
+    param.argument = 3;
+    Require(sceNpCommerceDialogOpen(&param) == 0);
+    sdkVersion = 0x01600000;
+    std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
+    param.size = 0;
+    param.option = 100;
+    param.userId = -1;
+    param.reserved[31] = 1;
+    param.argument = 7;
     Require(sceNpCommerceDialogOpen(&param) == 0);
     Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
     RequireCanceledResult();
     Require(sceNpCommerceDialogTerminate() == 0);
     Require(sceNpCommerceDialogGetStatus() == statusNone);
+    Require(sceUserServiceTerminate() == 0);
     return 0;
 }
