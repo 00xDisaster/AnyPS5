@@ -145,6 +145,15 @@ static void CheckIntegerScanWidths() {
     Require(sscanf_nid_postfix("5000000000", "%hd", &shortValue) == 1 && shortValue == -3584);
     signed char charValue = 7;
     Require(sscanf_nid_postfix("300", "%hhd", &charValue) == 1 && charValue == 44);
+    Require(sscanf_nid_postfix("4294967295", "%u", &unsignedValue) == 1 && unsignedValue == 4294967295u);
+    unsigned short unsignedShort = 7;
+    Require(sscanf_nid_postfix("40000", "%hu", &unsignedShort) == 1 && unsignedShort == 40000);
+    Require(sscanf_nid_postfix("70000", "%hu", &unsignedShort) == 1 && unsignedShort == 4464);
+    Require(sscanf_nid_postfix("ffff", "%hx", &unsignedShort) == 1 && unsignedShort == 0xffff);
+    unsigned char unsignedChar = 7;
+    Require(sscanf_nid_postfix("200", "%hhu", &unsignedChar) == 1 && unsignedChar == 200);
+    Require(sscanf_nid_postfix("300", "%hhu", &unsignedChar) == 1 && unsignedChar == 44);
+    Require(sscanf_nid_postfix("377", "%hho", &unsignedChar) == 1 && unsignedChar == 255);
     long long quad = 7;
     Require(sscanf_nid_postfix("3000000000", "%qd", &quad) == 1 && quad == 3000000000ll);
     unsigned long long unsignedQuad = 7;

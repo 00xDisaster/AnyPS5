@@ -19,7 +19,9 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
     struct NarrowInteger {
         void* destination;
         size_t size;
+        bool isUnsigned;
         long long value;
+        unsigned long long unsignedValue;
         int end;
     };
     std::vector<NarrowInteger> narrowIntegers;
@@ -58,10 +60,12 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
             translated += *format++;
         }
         if (narrow) {
-            narrowIntegers.push_back({args.Next<void*>(), length.empty() ? sizeof(int) : length == "h" ? sizeof(short) : sizeof(char), 0, -1});
+            const bool isUnsigned = std::strchr("ouxX", conversion) != nullptr;
+            narrowIntegers.push_back({args.Next<void*>(), length.empty() ? sizeof(int) : length == "h" ? sizeof(short) : sizeof(char), isUnsigned, 0, 0, -1});
             translated += "%n";
-            pointers.push_back(&narrowIntegers.back().value);
-            pointers.push_back(&narrowIntegers.back().end);
+            auto& integer = narrowIntegers.back();
+            pointers.push_back(isUnsigned ? static_cast<void*>(&integer.unsignedValue) : static_cast<void*>(&integer.value));
+            pointers.push_back(&integer.end);
         } else if (!suppressed) pointers.push_back(args.Next<void*>());
         else if (conversion != 'n') {
             translated += "%n";
@@ -71,7 +75,11 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
     const int result = scan(translated.c_str(), reinterpret_cast<char*>(pointers.data()));
     for (const auto& integer : narrowIntegers) {
         if (integer.end < 0) continue;
-        if (integer.size == sizeof(char)) *static_cast<char*>(integer.destination) = static_cast<char>(integer.value);
+        if (integer.isUnsigned) {
+            if (integer.size == sizeof(char)) *static_cast<unsigned char*>(integer.destination) = static_cast<unsigned char>(integer.unsignedValue);
+            else if (integer.size == sizeof(short)) *static_cast<unsigned short*>(integer.destination) = static_cast<unsigned short>(integer.unsignedValue);
+            else *static_cast<unsigned int*>(integer.destination) = static_cast<unsigned int>(integer.unsignedValue);
+        } else if (integer.size == sizeof(char)) *static_cast<signed char*>(integer.destination) = static_cast<signed char>(integer.value);
         else if (integer.size == sizeof(short)) *static_cast<short*>(integer.destination) = static_cast<short>(integer.value);
         else *static_cast<int*>(integer.destination) = static_cast<int>(integer.value);
     }
