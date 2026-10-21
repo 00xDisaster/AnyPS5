@@ -211,9 +211,9 @@ void CertificateReaders() {
 
     Check(sceSslGetNameEntryCount(id, subject) == 3, "subject entry count mismatch");
     Check(sceSslGetNameEntryCount(id, issuer) == 3, "issuer entry count mismatch");
-    Check(sceSslGetNameEntryCount(id, nullptr) == static_cast<int>(0x8095177a), "null cert name count accepted");
+    Check(sceSslGetNameEntryCount(id, nullptr) == static_cast<int>(0x8095f007), "null cert name count accepted");
     Throws([&] { sceSslGetNameEntryCount(id, fake); });
-    Throws([&] { sceSslGetNameEntryCount(9999, subject); });
+    Check(sceSslGetNameEntryCount(9999, subject) == InvalidId, "unknown name context error mismatch");
 
     char oid[32]{};
     char val[64]{};
@@ -227,14 +227,23 @@ void CertificateReaders() {
 
     char smallVal[4]{};
     std::size_t fullLen = 0;
-    Check(sceSslGetNameEntryInfo(id, subject, 1, nullptr, 0, smallVal, sizeof(smallVal), &fullLen) == 0, "truncated query failed");
-    Check(std::strcmp(smallVal, "Any") == 0 && fullLen == 12, "buffer truncation mismatch");
+    Check(sceSslGetNameEntryInfo(id, subject, 1, oid, 0, smallVal, sizeof(smallVal), &fullLen) == 0, "truncated query failed");
+    Check(std::memcmp(smallVal, "AnyP", 4) == 0 && fullLen == 4, "buffer truncation mismatch");
+    char shortOid[5] = {'x', 'x', 'x', 'x', 'x'};
+    char shortValue[5] = {'y', 'y', 'y', 'y', 'y'};
+    Check(sceSslGetNameEntryInfo(id, subject, 1, shortOid, 4, shortValue, 4, &fullLen) == 0, "bounded entry query failed");
+    Check(std::memcmp(shortOid, "orga", 4) == 0 && shortOid[4] == 'x', "oid copy or guard mismatch");
+    Check(std::memcmp(shortValue, "AnyP", 4) == 0 && shortValue[4] == 'y' && fullLen == 4, "value copy or guard mismatch");
+    Check(sceSslGetNameEntryInfo(id, subject, 1, shortOid, 0, shortValue, 0, &fullLen) == 0 && fullLen == 0, "zero capacity query failed");
+    Check(sceSslGetNameEntryInfo(id, subject, 1, nullptr, 0, shortValue, 0, &fullLen) == static_cast<int>(0x8095f007), "null oid accepted");
+    Check(sceSslGetNameEntryInfo(id, subject, 1, shortOid, 0, nullptr, 0, &fullLen) == static_cast<int>(0x8095f007), "null value accepted");
+    Check(sceSslGetNameEntryInfo(id, subject, 1, shortOid, 0, shortValue, 0, nullptr) == static_cast<int>(0x8095f007), "null value length accepted");
 
-    Check(sceSslGetNameEntryInfo(id, subject, -1, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095177a), "negative index accepted");
-    Check(sceSslGetNameEntryInfo(id, subject, 3, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095177a), "out of bounds index accepted");
-    Check(sceSslGetNameEntryInfo(id, nullptr, 0, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095177a), "null certName accepted");
+    Check(sceSslGetNameEntryInfo(id, subject, -1, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095f007), "negative index accepted");
+    Check(sceSslGetNameEntryInfo(id, subject, 3, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095f007), "out of bounds index accepted");
+    Check(sceSslGetNameEntryInfo(id, nullptr, 0, oid, sizeof(oid), val, sizeof(val), &vlen) == static_cast<int>(0x8095f007), "null certName accepted");
     Throws([&] { sceSslGetNameEntryInfo(id, fake, 0, oid, sizeof(oid), val, sizeof(val), &vlen); });
-    Throws([&] { sceSslGetNameEntryInfo(9999, subject, 0, oid, sizeof(oid), val, sizeof(val), &vlen); });
+    Check(sceSslGetNameEntryInfo(9999, subject, 0, oid, sizeof(oid), val, sizeof(val), &vlen) == InvalidId, "unknown entry context error mismatch");
 
     Check(sceSslFreeSslCertName(id, subject) == 0, "free subject name failed");
     Check(sceSslFreeSslCertName(id, issuer) == 0, "free issuer name failed");
@@ -327,7 +336,7 @@ void CertificateReaders() {
     Throws([&] { sceSslGetFingerprint(id2, cert2, 3, sha256); });
     Throws([&] { sceSslGetPem(id2, cert2, pemBuf.data(), &writtenLen); });
     Check(sceSslTerm_nid_postfix(id2) == 0, "term failed");
-    Throws([&] { sceSslGetNameEntryCount(id2, subject2); });
+    Check(sceSslGetNameEntryCount(id2, subject2) == InvalidId, "terminated name context error mismatch");
     Throws([&] { sceSslFreeSslCertName(id2, subject2); });
 }
 

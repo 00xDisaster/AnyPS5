@@ -1084,37 +1084,34 @@ void* APS5_VABI sceSslGetIssuerName(int sslCtxId, void* sslCert) {
 }
 
 int APS5_VABI sceSslGetNameEntryCount(int sslCtxId, void* certName) {
-    if (!certName) return ErrorInvalidArg;
     auto& state = State();
     std::lock_guard lock(state.mutex);
+    if (!state.contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!certName) return ErrorInvalidValue;
     auto& context = GetContext(sslCtxId);
     const auto found = context.certNames.find(certName);
     if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryCount: unknown cert name");
     return static_cast<int>(found->second->entries.size());
 }
 
-int APS5_VABI sceSslGetNameEntryInfo(int sslCtxId, void* certName, int entryNum, char* oidname, std::size_t maxOidnameLen,
-    char* value, std::size_t maxValueLen, std::size_t* valueLen) {
-    if (!certName) return ErrorInvalidArg;
+int APS5_VABI sceSslGetNameEntryInfo(int sslCtxId, void* certName, int entryNum, char* oidname, std::size_t maxOidnameLen, char* value, std::size_t maxValueLen, std::size_t* valueLen) {
     auto& state = State();
     std::lock_guard lock(state.mutex);
+    if (!state.contexts.contains(sslCtxId)) return ErrorInvalidId;
+    if (!certName || !oidname || !value || !valueLen) return ErrorInvalidValue;
     auto& context = GetContext(sslCtxId);
     const auto found = context.certNames.find(certName);
     if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryInfo: unknown cert name");
     const auto& entries = found->second->entries;
-    if (entryNum < 0 || static_cast<std::size_t>(entryNum) >= entries.size()) return ErrorInvalidArg;
+    if (entryNum < 0 || static_cast<std::size_t>(entryNum) >= entries.size()) return ErrorInvalidValue;
     const auto& entry = entries[static_cast<std::size_t>(entryNum)];
-    if (oidname && maxOidnameLen > 0) {
-        const auto copyLen = std::min<std::size_t>(entry.oid.size(), maxOidnameLen - 1);
-        std::memcpy(oidname, entry.oid.data(), copyLen);
-        oidname[copyLen] = '\0';
+    const auto copyLength = std::min(entry.value.size(), maxValueLen);
+    if (copyLength != 0) std::memcpy(value, entry.value.data(), copyLength);
+    *valueLen = copyLength;
+    if (maxOidnameLen != 0) {
+        std::memset(oidname, 0, maxOidnameLen);
+        std::memcpy(oidname, entry.oid.data(), std::min(entry.oid.size(), maxOidnameLen));
     }
-    if (value && maxValueLen > 0) {
-        const auto copyLen = std::min<std::size_t>(entry.value.size(), maxValueLen - 1);
-        std::memcpy(value, entry.value.data(), copyLen);
-        value[copyLen] = '\0';
-    }
-    if (valueLen) *valueLen = entry.value.size();
     return 0;
 }
 

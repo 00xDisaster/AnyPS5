@@ -89,7 +89,7 @@ void Readers() {
     Check(sceSslFreeSslCertName(context, subject) == 0, "name free failed");
     Throws([&] { sceSslGetNameEntryCount(context, subject); });
     Check(sceSslTerm_nid_postfix(context) == 0, "context term failed");
-    Throws([&] { sceSslGetNameEntryCount(context, issuer); });
+    Check(sceSslGetNameEntryCount(context, issuer) == static_cast<int>(0x8095f006), "terminated context count error mismatch");
     Check(sceSslTerm_nid_postfix(other) == 0, "other context term failed");
 }
 
