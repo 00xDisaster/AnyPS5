@@ -2,6 +2,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include "SceTypes.hpp"
 
 extern "C" {
 int APS5_VABI sceAcmContextCreate(std::uint32_t*);
@@ -11,7 +13,7 @@ int APS5_VABI sceAcmBatchStartBuffers(std::uint32_t, std::uint32_t, const void* 
 int APS5_VABI sceAcmBatchWait(std::uint32_t, std::uint32_t, std::uint32_t);
 int APS5_VABI sceAcm_ConvReverb_SharedInput(void);
 int APS5_VABI sceAcm_FFT(void);
-int APS5_VABI sceAcm_Panner(void);
+int APS5_VABI sceAcm_Panner(AcmBatchInfo*, std::uint32_t, const void* const*, std::uint32_t, std::uint32_t, std::uint32_t, const void* const*, const void* const*, const void* const*, void* const*);
 }
 
 static void Require(bool value) {
@@ -52,7 +54,33 @@ int main() {
 
     Require(sceAcm_ConvReverb_SharedInput() == 0);
     Require(sceAcm_FFT() == 0);
-    Require(sceAcm_Panner() == 0);
+    alignas(128) std::byte commands[256]{};
+    alignas(128) std::uint32_t sourceData[32]{};
+    alignas(128) const void* sources[16]{sourceData};
+    alignas(128) void* outputs[16]{sourceData};
+    AcmBatchInfo commandBatch{commands, 0, sizeof(commands)};
+    Require(sceAcm_Panner(&commandBatch, 0, sources, 0, 0, 1, sources, sources, nullptr, outputs) == BadPointer);
+    sourceData[0] = 2;
+    Require(sceAcm_Panner(&commandBatch, 1, sources, 0, 0, 1, sources, sources, nullptr, outputs) == BadPointer);
+    sourceData[0] = 0;
+    outputs[0] = reinterpret_cast<std::byte*>(sourceData) + 4;
+    Require(sceAcm_Panner(&commandBatch, 1, sources, 0, 0, 1, sources, sources, nullptr, outputs) == static_cast<int>(0x8194000A));
+    outputs[0] = sourceData;
+    Require(sceAcm_Panner(&commandBatch, 1, sources, 2, 1, 1, sources, sources, nullptr, outputs) == 0);
+    Require(commandBatch.offset == 32 && commandBatch.buffer_size == 128);
+    std::uint64_t commandWords[4];
+    std::memcpy(commandWords, commands, sizeof(commandWords));
+    Require(commandWords[0] == ((std::uint64_t{1} << 34) | (std::uint64_t{1} << 36) | 0x01010300));
+    Require(commandWords[1] == 0x8000000000000D && commandWords[2] == reinterpret_cast<std::uintptr_t>(commands + 128) && commandWords[3] == 10);
+    std::uint64_t descriptor[16];
+    std::memcpy(descriptor, commands + 128, sizeof(descriptor));
+    Require(descriptor[0] == 1 && descriptor[1] == 0 && descriptor[2] == reinterpret_cast<std::uintptr_t>(outputs));
+    Require(descriptor[3] == reinterpret_cast<std::uintptr_t>(sources) && descriptor[4] == 0x100000002 && descriptor[5] == 1);
+    Require(descriptor[6] == reinterpret_cast<std::uintptr_t>(sources) && descriptor[7] == reinterpret_cast<std::uintptr_t>(sources));
+    for (std::size_t index = 8; index < 16; ++index) Require(descriptor[index] == 0);
+    commandBatch = {commands, 0, 152};
+    Require(sceAcm_Panner(&commandBatch, 1, sources, 0, 0, 1, sources, sources, nullptr, outputs) == static_cast<int>(0x81940009));
+    Require(commandBatch.offset == 0 && commandBatch.buffer_size == 152);
 
     Require(sceAcmContextDestroy(context1) == 0);
     Require(sceAcmContextDestroy(context1) == BadContext);

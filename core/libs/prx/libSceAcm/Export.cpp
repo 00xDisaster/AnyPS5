@@ -87,7 +87,46 @@ int APS5_VABI sceAcm_FFT(void) {
     return 0;
 }
 
-int APS5_VABI sceAcm_Panner(void) {
+int APS5_VABI sceAcm_Panner(AcmBatchInfo* batch, std::uint32_t sourceCount, const void* const* sources, std::uint32_t sourceMode, std::uint32_t outputMode, std::uint32_t channelCount, const void* const* sourceParameters, const void* const* sourceMatrices, const void* const* inputChannels, void* const* outputChannels) {
+    if (!batch || sourceCount == 0 || sourceCount > 65535 || sourceMode > 2 || outputMode > 1 || channelCount == 0 || channelCount > 36 || !sources || !sourceParameters || !sourceMatrices || !outputChannels) return SCE_ACM_ERROR_BAD_POINTER;
+    std::uintptr_t alignment = reinterpret_cast<std::uintptr_t>(sources) | reinterpret_cast<std::uintptr_t>(sourceParameters) | reinterpret_cast<std::uintptr_t>(sourceMatrices) | reinterpret_cast<std::uintptr_t>(inputChannels) | reinterpret_cast<std::uintptr_t>(outputChannels);
+    for (std::uint32_t index = 0; index < sourceCount; ++index) {
+        if (!sources[index] || !sourceParameters[index] || !sourceMatrices[index]) return SCE_ACM_ERROR_BAD_POINTER;
+        std::uint32_t parameterMode;
+        std::memcpy(&parameterMode, sourceParameters[index], sizeof(parameterMode));
+        if (parameterMode > 1) return SCE_ACM_ERROR_BAD_POINTER;
+        alignment |= reinterpret_cast<std::uintptr_t>(sources[index]) | reinterpret_cast<std::uintptr_t>(sourceParameters[index]) | reinterpret_cast<std::uintptr_t>(sourceMatrices[index]);
+    }
+    for (std::uint32_t index = 0; index < channelCount; ++index) {
+        if (!outputChannels[index]) return SCE_ACM_ERROR_BAD_POINTER;
+        alignment |= reinterpret_cast<std::uintptr_t>(outputChannels[index]);
+        if (inputChannels) alignment |= reinterpret_cast<std::uintptr_t>(inputChannels[index]);
+    }
+    if (alignment & 127) return static_cast<int>(0x8194000A);
+    const auto offset = batch->offset;
+    const auto capacity = batch->buffer_size;
+    if (offset > capacity || capacity - offset < 8) return static_cast<int>(0x81940009);
+    auto* buffer = static_cast<std::byte*>(batch->buffer);
+    const auto writeWord = [buffer](std::size_t position, std::uint64_t value) { std::memcpy(buffer + position, &value, sizeof(value)); };
+    const auto encodedCount = sourceCount < 255 ? sourceCount : 255;
+    writeWord(offset, (static_cast<std::uint64_t>(channelCount) << 24) | (static_cast<std::uint64_t>(encodedCount) << 16) | (std::uint64_t{1} << (sourceMode + 32)) | (std::uint64_t{1} << (outputMode + 35)) | 0x300);
+    if (capacity < 128 || capacity - offset < 152) return static_cast<int>(0x81940009);
+    const auto descriptorOffset = capacity - 128;
+    std::memset(buffer + descriptorOffset, 0, 128);
+    writeWord(descriptorOffset, sourceCount);
+    writeWord(descriptorOffset + 8, reinterpret_cast<std::uintptr_t>(inputChannels));
+    writeWord(descriptorOffset + 16, reinterpret_cast<std::uintptr_t>(outputChannels));
+    writeWord(descriptorOffset + 24, reinterpret_cast<std::uintptr_t>(sources));
+    writeWord(descriptorOffset + 32, sourceMode | (static_cast<std::uint64_t>(outputMode) << 32));
+    writeWord(descriptorOffset + 40, channelCount);
+    writeWord(descriptorOffset + 48, reinterpret_cast<std::uintptr_t>(sourceParameters));
+    writeWord(descriptorOffset + 56, reinterpret_cast<std::uintptr_t>(sourceMatrices));
+    writeWord(offset + 8, 0x8000000000000D);
+    writeWord(offset + 16, reinterpret_cast<std::uintptr_t>(buffer + descriptorOffset));
+    if (capacity - offset < 160) return static_cast<int>(0x81940009);
+    writeWord(offset + 24, 10);
+    batch->offset = offset + 32;
+    batch->buffer_size = descriptorOffset;
     return 0;
 }
 
