@@ -29,6 +29,46 @@ struct PlayerReviewDialogParam {
     std::uint8_t reserved[64];
 };
 
+struct PlayerSelectionDialogPlayer {
+    std::uint64_t accountId;
+    std::uint32_t option0;
+    std::uint32_t option1;
+    std::uint32_t mode;
+    std::uint8_t reserved[64];
+    std::uint32_t padding;
+};
+
+struct PlayerSelectionDialogParam {
+    CommonDialogBaseParam base;
+    std::uint64_t size;
+    std::int32_t userId;
+    char title[64];
+    std::uint32_t maxPlayers;
+    std::uint32_t mode;
+    std::uint32_t padding0;
+    const PlayerSelectionDialogPlayer* players;
+    std::uint32_t playerCount;
+    std::uint8_t reserved[64];
+    std::uint32_t padding1;
+};
+
+struct PlayerSelectionDialogResult {
+    std::int32_t result;
+    std::uint32_t option;
+    std::uint64_t* accountIds;
+    std::uint32_t count;
+    std::uint32_t padding;
+};
+
+static_assert(sizeof(PlayerSelectionDialogPlayer) == 88);
+static_assert(offsetof(PlayerSelectionDialogPlayer, reserved) == 20);
+static_assert(sizeof(PlayerSelectionDialogParam) == 216);
+static_assert(offsetof(PlayerSelectionDialogParam, maxPlayers) == 124);
+static_assert(offsetof(PlayerSelectionDialogParam, players) == 136);
+static_assert(offsetof(PlayerSelectionDialogParam, reserved) == 148);
+static_assert(sizeof(PlayerSelectionDialogResult) == 24);
+static_assert(offsetof(PlayerSelectionDialogResult, accountIds) == 8);
+
 struct NpCommerceDialogResult {
     std::int32_t result;
     std::uint8_t authorized;
