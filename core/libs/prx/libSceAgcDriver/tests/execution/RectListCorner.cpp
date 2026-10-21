@@ -128,15 +128,16 @@ std::uint32_t VertexOf(std::uint32_t x, std::uint32_t y) {
     return (red >= 128u ? 1u : 0u) + (green >= 128u ? 2u : 0u);
 }
 
-int Run(AgcDriver::VulkanDevice& device) {
+int Run(AgcDriver::VulkanDevice& device, std::uint32_t maximumVersion) {
     std::cout << "device: " << device.DeviceName() << "\n";
     auto target = device.Target();
     if (!target.tessellation.has_value() || !TargetHasCapability(target, spv::CapabilityTessellation)) {
         std::cout << "skipped, device has no tessellation\n";
         return VulkanTestSkipped;
     }
-    if (target.spirvVersion > 0x00010400u) target.spirvVersion = 0x00010400u;
+    if (target.spirvVersion > maximumVersion) target.spirvVersion = maximumVersion;
     Require(target.spirvVersion >= 0x00010300u, "rect-list corner draw needs SPIR-V 1.3");
+    std::cout << "SPIR-V " << (target.spirvVersion >> 16u) << "." << ((target.spirvVersion >> 8u) & 0xffu) << "\n";
     ShaderRecompiler::RecompileResult vertex;
     ShaderRecompiler::RecompileResult fragment;
     vertex.spirv = ShaderRecompiler::SharedSpirv(Emitter(target.spirvVersion).Vertex());
@@ -194,8 +195,12 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        const auto result = Run(*device);
+        auto result = Run(*device, 0x00010300u);
         if (result != 0) return result;
+        if (device->Target().spirvVersion >= 0x00010400u) {
+            result = Run(*device, 0x00010400u);
+            if (result != 0) return result;
+        }
         std::cout << "rect-list corner tests passed\n";
         return 0;
     } catch (const std::exception& error) {
