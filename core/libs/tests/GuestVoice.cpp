@@ -5,11 +5,13 @@
 #include <cstring>
 #include <initializer_list>
 #include <stdexcept>
+#include <vector>
 
 extern "C" {
 int APS5_VABI sceVoiceInit(const VoiceInitParam*, std::int32_t);
 int APS5_VABI sceVoiceSetThreadsParams(const VoiceThreadsParams*);
 int APS5_VABI sceVoiceStart(const VoiceStartParam*);
+int APS5_VABI sceVoiceStop();
 int APS5_VABI sceVoiceEnd_nid_postfix();
 int APS5_VABI sceVoiceCreatePort(std::uint32_t*, const VoicePortParam*);
 int APS5_VABI sceVoiceDeletePort(std::uint32_t);
@@ -106,6 +108,11 @@ int main() {
         Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
     }
     VoiceStartParam start{};
+    Require(sceVoiceStart(nullptr) == notInitialized);
+    Require(sceVoiceStart(&start) == notInitialized);
+    Require(sceVoiceStop() == notInitialized);
+    Require(sceVoiceEnd_nid_postfix() == notInitialized);
+    std::vector<std::byte> voiceMemory(0xc0000);
     Require(sceVoiceInit(&init, 100) == 0);
     Require(sceVoiceInit(nullptr, 0) == static_cast<std::int32_t>(0x804e0802u));
     Require(sceVoiceInit(&init, 100) == static_cast<std::int32_t>(0x804e0802u));
@@ -118,7 +125,19 @@ int main() {
     threads.mode = 1;
     RequireThrows([&] { sceVoiceSetThreadsParams(&threads); });
     threads.mode = 0;
+    Require(sceVoiceStart(nullptr) == invalidArgument);
+    Require(sceVoiceStart(&start) == invalidArgument);
+    start.container = voiceMemory.data();
+    Require(sceVoiceStart(&start) == static_cast<std::int32_t>(0x804e0806u));
+    start.mem_size = 0x40000;
     Require(sceVoiceStart(&start) == 0);
+    start.mem_size = 0;
+    Require(sceVoiceStart(&start) == 0);
+    Require(sceVoiceStart(nullptr) == invalidArgument);
+    start.container = nullptr;
+    Require(sceVoiceStart(&start) == invalidArgument);
+    start.container = voiceMemory.data();
+    start.mem_size = 0x40000;
     Require(sceVoiceSetThreadsParams(nullptr) == invalidArgument);
     Require(sceVoiceSetThreadsParams(&threads) == static_cast<std::int32_t>(0x804e080bu));
     Require(sceVoiceGetResourceInfo(nullptr) == invalidArgument);
@@ -192,6 +211,20 @@ int main() {
     for (const auto mode : {4, 0x08000000, 0x10000000, 0x20000000}) {
         init.app_type = mode;
         Require(sceVoiceInit(&init, 100) == 0);
+        const std::uint32_t memorySize = mode == 4 || mode == 0x08000000 ? 0xc0000 : 0x40000;
+        start.mem_size = memorySize - 1;
+        Require(sceVoiceStart(&start) == static_cast<std::int32_t>(0x804e0806u));
+        start.mem_size = memorySize + 1;
+        Require(sceVoiceStart(&start) == static_cast<std::int32_t>(0x804e0806u));
+        start.mem_size = memorySize;
+        Require(sceVoiceStart(&start) == 0);
+        Require(sceVoiceStop() == 0);
+        Require(sceVoiceStop() == 0);
+        Require(sceVoiceSetThreadsParams(&threads) == 0);
+        VoicePortParam portParam{};
+        portParam.port_type = 0;
+        std::uint32_t port = UINT32_MAX;
+        Require(sceVoiceCreatePort(&port, &portParam) == 0 && port == 0);
         Require(sceVoiceGetResourceInfo(&resourceOutput.info) == 0);
         Require(resourceOutput.info.maxVoiceInputPorts == (mode == 4 ? 0 : mode == 0x20000000 ? 7 : 15));
         Require(resourceOutput.info.maxVoiceOutputPorts == (mode == 4 ? 0 : 4));

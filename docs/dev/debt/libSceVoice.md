@@ -22,3 +22,5 @@
 - [sceVoiceGetPortAttr](../../../core/libs/prx/libSceVoice/Export.cpp): native initialization, port-range, pointer, attribute-size and port-type validation is implemented. Supported device attributes throw because the host has no device state or voice-activity processing. The former constant-zero voice-activity fallback is removed; failed calls leave output untouched.
 
 - [sceVoiceSetThreadsParams](../../../core/libs/prx/libSceVoice/Export.cpp): the 48-byte mode/priority/affinity layout and initialization, null, started-state and mode validation are recovered. Mode 1 throws because worker scheduling is not implemented; mode 0 is the native no-op. The 32-byte event callback union is recovered, but callback delivery and device-state byte semantics remain unimplemented.
+
+- [sceVoiceStart, sceVoiceStop and sceVoiceEnd](../../../core/libs/prx/libSceVoice/Export.cpp) validate initialization, container presence and native mode-dependent memory sizes, but do not partition guest working memory or run the audio workers. Start/stop currently change software state only; backend failures and active-stream shutdown are not reproduced.

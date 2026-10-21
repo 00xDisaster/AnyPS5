@@ -75,6 +75,7 @@ int APS5_VABI sceVoiceInit(const VoiceInitParam* param, std::int32_t version) {
     if (!param || version != 100) return InvalidArgument;
     if (param->app_type != 4 && param->app_type != 0x08000000 && param->app_type != 0x10000000 && param->app_type != 0x20000000) return InvalidArgument;
     voice.appType = param->app_type;
+    voice.nextId = 0;
     voice.initialized = true;
     return 0;
 }
@@ -93,8 +94,11 @@ int APS5_VABI sceVoiceSetThreadsParams(const VoiceThreadsParams* params) {
 int APS5_VABI sceVoiceStart(const VoiceStartParam* param) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) return VoiceErrorNotInitialized;
-    if (param == nullptr) APS5_INVALID_ARG_EX;
+    if (!voice.initialized) return NotInitialized;
+    if (!param || !param->container) return InvalidArgument;
+    if (voice.started) return 0;
+    const std::uint32_t memorySize = voice.appType == 0x10000000 || voice.appType == 0x20000000 ? 0x40000 : 0xc0000;
+    if (param->mem_size != memorySize) return static_cast<std::int32_t>(0x804e0806u);
     voice.started = true;
     return 0;
 }
@@ -102,7 +106,7 @@ int APS5_VABI sceVoiceStart(const VoiceStartParam* param) {
 int APS5_VABI sceVoiceStop(void) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) Fail(__func__, "library not initialized");
+    if (!voice.initialized) return NotInitialized;
     voice.started = false;
     return 0;
 }
@@ -110,7 +114,7 @@ int APS5_VABI sceVoiceStop(void) {
 int APS5_VABI sceVoiceEnd_nid_postfix(void) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) Fail(__func__, "library not initialized");
+    if (!voice.initialized) return NotInitialized;
     voice.ports.clear();
     voice.connections.clear();
     voice.started = false;
