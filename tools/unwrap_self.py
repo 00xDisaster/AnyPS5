@@ -196,6 +196,9 @@ def place_segments(data, headers, records):
             if header["size"] and (offset > host["size"] or header["size"] > host["size"] - offset):
                 raise Refused("segment %d does not fit the file-backed range of PT_LOAD %d"
                               % (header["index"], host["index"]))
+            if host["size"] == 0 or offset > host["size"]:
+                header["source"] = 0
+                continue
             header["host"] = host
             header["source"] = host["source"] + offset
             if tail is None or header["offset"] > tail[0]:
