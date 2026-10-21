@@ -92,9 +92,11 @@ int main(int argc, char** argv) {
     Require(sceKernelStopUnloadModule(second, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 2);
     if (reentrant) {
         Require(reentrantHandle != first && reentrantHandle != second);
-        Require(sceKernelStopUnloadModule(reentrantHandle, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 2);
+        Require(::dlclose(preload) == 0 && count.load() == 2);
+        Require(sceKernelStopUnloadModule(reentrantHandle, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 4);
+    } else {
+        Require(::dlclose(preload) == 0 && count.load() == 4);
     }
-    Require(::dlclose(preload) == 0 && count.load() == 4);
     Require(events[2].args == 0xf1 && events[2].argp == nullptr);
     Require(events[3].args == 0xfe && events[3].argp == nullptr);
 }
