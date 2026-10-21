@@ -2972,7 +2972,8 @@ std::string AddressCopyOverflow(std::vector<AddressCopy> copies, std::uint64_t l
     std::string message = text;
     for (std::size_t index = 0; index < copies.size() && index < 8; ++index) {
         const auto& copy = copies[index];
-        std::snprintf(text, sizeof(text), " 0x%llx+0x%llx (%.1f MiB committed, %s)", static_cast<unsigned long long>(copy.begin), static_cast<unsigned long long>(copy.end - copy.begin), copy.committed / 1048576.0, copy.reason);
+        const char* reason = copy.heap ? heapCopyReason(copy.overBudget, GuestMemory::Watched(copy.begin, copy.end - copy.begin)) : copy.reason;
+        std::snprintf(text, sizeof(text), " 0x%llx+0x%llx (%.1f MiB committed, %s)", static_cast<unsigned long long>(copy.begin), static_cast<unsigned long long>(copy.end - copy.begin), copy.committed / 1048576.0, reason);
         message += text;
     }
     return message;
@@ -3729,8 +3730,8 @@ void GuestBufferMemory::AcquireRegistered() {
                 continue;
             }
             copiedBytes += committed;
-            const char* reason = !mirrorsEnabled() ? "mirrors disabled by APS5_NO_LEASE_MIRROR" : copied.sparse ? "unreadable pages" : !range->releasable ? "image mirror refused" : heapCopyReason(overBudget, GuestMemory::Watched(range->address, range->bytes));
-            copies.push_back({copied.begin, copied.end, committed, reason});
+            const char* reason = !mirrorsEnabled() ? "mirrors disabled by APS5_NO_LEASE_MIRROR" : copied.sparse ? "unreadable pages" : !range->releasable ? "image mirror refused" : nullptr;
+            copies.push_back({copied.begin, copied.end, committed, reason, reason == nullptr, overBudget});
         }
         releaseImportedMirrors(context, imported);
         regionsSorted = sortedLookup;
