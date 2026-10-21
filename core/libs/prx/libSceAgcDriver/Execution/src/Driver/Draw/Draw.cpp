@@ -470,7 +470,6 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
     auto& compiledStages = tail.compiledStages;
     compiledStages.reserve(programs.size());
     auto& stages = tail.stages;
-    results.reserve(programs.size() + 2u);
     stages.reserve(programs.size());
     auto& pushCursorBytes = tail.pushCursorBytes;
 
@@ -826,6 +825,7 @@ DrawVerdict Driver::finishDraw(DrawTail& tail, PerformanceTimer& timing) {
             return;
         }
         require(stages.size() == 2, "rect-list requires vertex and fragment programs");
+        results.reserve(programs.size() + 2u);
         rectIndex = results.size();
         results.push_back(std::move(control));
         results.push_back(std::move(rectangle.evaluation));
@@ -851,6 +851,7 @@ DrawVerdict Driver::finishDraw(DrawTail& tail, PerformanceTimer& timing) {
     } else if (!programs.empty() && programResults.back() != nullptr && programResults.back()->barycentricEmulation.active) {
         require(!graphics.rectList && graphics.stages.path == Graphics::ShaderPath::Vertex && programs.size() == 2 && programResults[0] != nullptr && stages.size() == 2, "a pixel shader that reads barycentrics without VK_KHR_fragment_shader_barycentric needs a vertex shader before it");
         const auto geometryLimits = localDevice->GeometryLimits();
+        results.reserve(programs.size() + 2u);
         if (geometryLimits || !localDevice->Target().tessellation) {
             results.push_back(ShaderRecompiler::BuildBarycentricGeometryShader(*programResults[0], *programResults[1], localDevice->Target(), geometryLimits));
             stages.insert(stages.begin() + 1, Graphics::CompiledShader{Stage::Geometry, &results.back(), 0});
@@ -892,6 +893,7 @@ DrawVerdict Driver::finishDraw(DrawTail& tail, PerformanceTimer& timing) {
     if (drawParameters.indirect && indirectCpu) {
 
         const auto indirect = *drawParameters.indirect;
+        results.reserve(programs.size() + 2u);
         for (std::size_t i = 0; i < programs.size(); ++i) {
             if (programResults[i] == nullptr) continue;
             resultIndex[i] = results.size();
