@@ -453,6 +453,16 @@ class TestFixtureExportTests(unittest.TestCase):
         self.assertIn("core/libs/prx/libSceAudioOut/src/Clock.cpp:1: error: [duplicate-export]", result.stdout)
         self.assertIn("sceKernelGetProcessTime is also in libkernel", result.stdout)
 
+    def test_large_export_set_uses_a_file_backed_pattern(self):
+        names = [f"ConventionExport{index:08d}LongName" for index in range(1100)]
+        self.assertGreater(len("|".join(names)), 32767)
+        source = "\n".join(f"int APS5_VABI {name}(void) {{ return 0; }}" for name in names)
+        source += "\nstd::uint64_t APS5_VABI sceKernelGetProcessTime() { return now(); }\n"
+        result = self.check("core/libs/prx/libSceAudioOut/src/Exports.cpp", source)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("core/libs/prx/libSceAudioOut/src/Exports.cpp:1101: error: [duplicate-export]", result.stdout)
+        self.assertIn("sceKernelGetProcessTime is also in libkernel", result.stdout)
+
     def test_export_shadowing_an_assembly_export_is_a_duplicate(self):
         result = self.check("core/libs/prx/libSceLibcInternal/Export.cpp",
                             "int APS5_VABI setjmp_nid_postfix(void) {\n    NotImplemented_nid_no_patch(__func__);\n    return 0;\n}\n",
