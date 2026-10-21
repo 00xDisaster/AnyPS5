@@ -52,6 +52,7 @@ int main() {
         std::uint64_t completed;
         Require(sceZlibWaitForDone(&completed, nullptr) == 0);
         Require(completed == id);
+        RequireThrows([&] { sceZlibWaitForDone(&completed, nullptr); });
         RequireThrows([&] { sceZlibGetResult(id + 1, &produced, &status); });
         Require(sceZlibGetResult(id, &produced, &status) == 0);
         Require(status == expectedStatus && produced <= capacity);
