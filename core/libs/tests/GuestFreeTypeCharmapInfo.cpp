@@ -39,31 +39,6 @@ static std::vector<unsigned char> Font(std::uint16_t language4, std::uint32_t la
     return FontFixture::BuildFont(3, {{"cmap", cmap}});
 }
 
-static std::vector<unsigned char> BitmapFont() {
-    const std::string_view font =
-        "STARTFONT 2.1\n"
-        "FONT -anyps5-fixture-medium-r-normal--1-10-75-75-c-10-iso10646-1\n"
-        "SIZE 1 75 75\n"
-        "FONTBOUNDINGBOX 1 1 0 0\n"
-        "STARTPROPERTIES 4\n"
-        "FONT_ASCENT 1\n"
-        "FONT_DESCENT 0\n"
-        "CHARSET_REGISTRY \"ISO10646\"\n"
-        "CHARSET_ENCODING \"1\"\n"
-        "ENDPROPERTIES\n"
-        "CHARS 1\n"
-        "STARTCHAR A\n"
-        "ENCODING 65\n"
-        "SWIDTH 1000 0\n"
-        "DWIDTH 1 0\n"
-        "BBX 1 1 0 0\n"
-        "BITMAP\n"
-        "80\n"
-        "ENDCHAR\n"
-        "ENDFONT\n";
-    return {font.begin(), font.end()};
-}
-
 struct FacePair {
     std::vector<unsigned char> bytes;
     GuestFace guest;
@@ -129,7 +104,7 @@ int main() {
         Require(Unsupported([&] { FT_Get_Charmap_Index_nid_postfix(&copied); }));
         Require(Unsupported([&] { FT_Get_CMap_Language_ID_nid_postfix(&copied); }));
         Require(Unsupported([&] { FT_Get_CMap_Format_nid_postfix(&copied); }));
-        FacePair bitmap(library, nativeLibrary, BitmapFont());
+        FacePair bitmap(library, nativeLibrary, FontFixture::BitmapFont());
         Require(!FT_IS_SFNT(bitmap.oracle) && bitmap.guest.rec.num_charmaps == 1);
         GuestCharMapRec* bitmapMap = bitmap.guest.rec.charmaps[0];
         Require(FT_Get_Charmap_Index_nid_postfix(bitmapMap) == FT_Get_Charmap_Index(bitmap.oracle->charmaps[0]));
