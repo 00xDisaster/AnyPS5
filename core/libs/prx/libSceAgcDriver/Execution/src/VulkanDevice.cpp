@@ -19,6 +19,7 @@
 #include "prx/libSceAgcDriver/Execution/include/PipelineLinkOptimization.hpp"
 #include "prx/libSceAgcDriver/Execution/include/DrawInputsInPlace.hpp"
 #include "prx/libSceAgcDriver/Execution/include/RobustBufferAccess.hpp"
+#include "prx/libSceAgcDriver/Execution/include/SubgroupBarrier.hpp"
 #include "prx/libSceAgcDriver/Execution/include/SubgroupClock.hpp"
 #include "prx/libSceAgcDriver/Execution/include/ShaderDeviceProfile.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PresentMode.hpp"
@@ -33,6 +34,7 @@
 #include "prx/libSceAgcDriver/Execution/include/DisplayFormat.hpp"
 #include "prx/libSceAgcDriver/Execution/include/HostHdr.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/MultisampleTarget.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/SampleOrder.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureDetiler.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/GpuColorTransfer.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
@@ -65,6 +67,7 @@
 #include <array>
 #include <optional>
 #include <algorithm>
+#include <bit>
 #include <cstring>
 #include <deque>
 #include <limits>
@@ -321,10 +324,12 @@ struct VulkanDevice::State {
     bool float16DenormPreserve = false;
     bool float32FlushToZeroCandidate = false;
     bool float32FlushToZero = false;
+    bool float32DenormPreserve = false;
     bool probingFloatControls = false;
     bool demoteToHelperInvocation = false;
     bool earlyFragmentSampleMaskTestBeforeSampleCounting = false;
     bool robustBufferAccess2 = false;
+    bool subgroupControlBarriers = true;
     // VK_EXT_descriptor_indexing with non-uniform image array indexing (bindless image tables in
     // graphics stages, and compute workgroups wider than a wave).
     bool descriptorIndexing = false;
@@ -344,11 +349,15 @@ struct VulkanDevice::State {
     bool imageViewMinLod = false;
     bool pipelineExecutableInfo = false;
     bool maintenance8 = false;
+    bool maintenance5 = false;
+    bool fillModeNonSolid = false;
     std::uint32_t srgbDecodeFormats = 0;
     std::uint32_t srgbCopyFormats = 0;
     bool storageImageWithoutFormat = false;
     VkSampleCountFlags sampleLocationSampleCounts = 0;
     VkSampleCountFlags sampleLocationGridSampleCounts = 0;
+    std::array<VkExtent2D, 4> sampleLocationGridSizes{};
+    bool shaderStencilExport = false;
     bool depthClamp = false;
     bool depthBounds = false;
     bool depthBiasClamp = false;
@@ -774,6 +783,7 @@ struct VulkanDevice::State {
             Graphics::ClearCachedPipelines(device);
             Graphics::ClearDepthSurfaces(device);
             Graphics::ClearMultisampleTargets(device);
+            Graphics::ClearSampleOrders(device);
             {
                 std::lock_guard pipelines(computePipelinesMutex);
                 computePipelines.clear();
@@ -1167,6 +1177,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         driverId = driver.driverID;
         state->driverInfo = std::string(driver.driverName) + " " + driver.driverInfo;
         state->individuallyFreeDescriptorSets = driver.driverID == VK_DRIVER_ID_MESA_LLVMPIPE;
+        state->subgroupControlBarriers = SubgroupControlBarrierUsable(driver.driverID);
     }
     auto byteFeatures = QueryBdaByteFeatures(selected, state->InstanceFunction<PFN_vkGetPhysicalDeviceFeatures2>("vkGetPhysicalDeviceFeatures2"), availableExtensions);
     auto bdaFeatures = QueryBdaFeatures(selected, state->InstanceFunction<PFN_vkGetPhysicalDeviceFeatures2>("vkGetPhysicalDeviceFeatures2"), availableExtensions);
@@ -1264,6 +1275,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         deviceExtensions.push_back(VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME);
         state->capabilities.push_back(spv::CapabilityStencilExportEXT);
         state->spirvExtensions.push_back("SPV_EXT_shader_stencil_export");
+        state->shaderStencilExport = true;
     }
     if (state->shaderClock) {
         deviceExtensions.push_back(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
@@ -1329,7 +1341,8 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
     const auto float32Flush = Float32FlushControlFor(driverId, floatControls.shaderDenormFlushToZeroFloat32, floatControls.denormBehaviorIndependence);
     state->float32FlushToZeroCandidate = float32Flush.probe && std::getenv("APS5_NO_HW_F32_FLUSH") == nullptr;
     if (state->float32FlushToZeroCandidate && float32Flush.declared) state->capabilities.push_back(spv::CapabilityDenormFlushToZero);
-    if (state->float16DenormPreserve && std::find(state->capabilities.begin(), state->capabilities.end(), static_cast<std::uint32_t>(spv::CapabilityDenormPreserve)) == state->capabilities.end()) state->capabilities.push_back(spv::CapabilityDenormPreserve);
+    state->float32DenormPreserve = floatControls.shaderDenormPreserveFloat32 == VK_TRUE && floatControls.denormBehaviorIndependence != VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE && std::getenv("APS5_NO_HW_F32_PRESERVE") == nullptr;
+    if ((state->float16DenormPreserve || state->float32DenormPreserve) && std::find(state->capabilities.begin(), state->capabilities.end(), static_cast<std::uint32_t>(spv::CapabilityDenormPreserve)) == state->capabilities.end()) state->capabilities.push_back(spv::CapabilityDenormPreserve);
     deviceExtensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
     deviceExtensions.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
     state->capabilities.push_back(4448);
@@ -1345,13 +1358,18 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         state->InstanceFunction<PFN_vkGetPhysicalDeviceProperties2>("vkGetPhysicalDeviceProperties2")(selected, &properties);
         if (locations.sampleLocationSubPixelBits >= 4 && locations.sampleLocationCoordinateRange[0] <= 0.0f && locations.sampleLocationCoordinateRange[1] >= 15.0f / 16.0f) {
             const auto multisampleProperties = state->InstanceFunction<PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT>("vkGetPhysicalDeviceMultisamplePropertiesEXT");
+            std::string grids;
             for (const auto samples : {VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_2_BIT, VK_SAMPLE_COUNT_4_BIT, VK_SAMPLE_COUNT_8_BIT}) {
                 if ((locations.sampleLocationSampleCounts & samples) == 0) continue;
                 VkMultisamplePropertiesEXT multisample{VK_STRUCTURE_TYPE_MULTISAMPLE_PROPERTIES_EXT};
                 multisampleProperties(selected, samples, &multisample);
-                if (multisample.maxSampleLocationGridSize.width != 0 && multisample.maxSampleLocationGridSize.height != 0) state->sampleLocationSampleCounts |= samples;
-                if (multisample.maxSampleLocationGridSize.width % 2u == 0 && multisample.maxSampleLocationGridSize.height % 2u == 0) state->sampleLocationGridSampleCounts |= samples;
+                const auto grid = multisample.maxSampleLocationGridSize;
+                state->sampleLocationGridSizes[static_cast<std::size_t>(std::countr_zero(static_cast<std::uint32_t>(samples)))] = grid;
+                if (grid.width != 0 && grid.height != 0) state->sampleLocationSampleCounts |= samples;
+                if (AgcDriver::Graphics::HostsSampleLocationGrid(grid)) state->sampleLocationGridSampleCounts |= samples;
+                grids += (grids.empty() ? "" : ", ") + std::to_string(static_cast<std::uint32_t>(samples)) + " samples " + std::to_string(grid.width) + "x" + std::to_string(grid.height);
             }
+            if (!grids.empty()) std::fprintf(stderr, "[gpu] largest sample location grids (vkGetPhysicalDeviceMultisamplePropertiesEXT): %s; maxSampleLocationGridSize for every count %ux%u\n", grids.c_str(), locations.maxSampleLocationGridSize.width, locations.maxSampleLocationGridSize.height);
         }
         if (state->sampleLocationSampleCounts != 0) deviceExtensions.push_back(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME);
     }
@@ -1521,6 +1539,15 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
             state->pipelineLinkTimeOptimization = PipelineLinkTimeOptimizationUsable(driver.driverID);
         }
     }
+    VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5Features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR};
+    if (state->graphicsPipelineLibrary && hasExtension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &maintenance5Features};
+        state->InstanceFunction<PFN_vkGetPhysicalDeviceFeatures2>("vkGetPhysicalDeviceFeatures2")(selected, &features);
+        state->maintenance5 = maintenance5Features.maintenance5 == VK_TRUE;
+        if (state->maintenance5) deviceExtensions.push_back(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
+    }
+    maintenance5Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR};
+    maintenance5Features.maintenance5 = VK_TRUE;
     renderingFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR, nullptr, VK_TRUE};
     libraryFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT, &dynamicStateFeatures, VK_TRUE};
     dynamicStateFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT, &renderingFeatures, VK_TRUE};
@@ -1650,6 +1677,8 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
     // PA_CL_CLIP_CNTL near/far clip disable maps to depth clamping.
     enabled.depthClamp = available.depthClamp;
     state->depthClamp = enabled.depthClamp == VK_TRUE;
+    enabled.fillModeNonSolid = available.fillModeNonSolid;
+    state->fillModeNonSolid = enabled.fillModeNonSolid == VK_TRUE;
     enabled.depthBounds = available.depthBounds;
     state->depthBounds = enabled.depthBounds == VK_TRUE;
     enabled.depthBiasClamp = available.depthBiasClamp;
@@ -1760,6 +1789,10 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
     if (fifoLatestReady) {
         fifoLatestReadyFeatures.pNext = const_cast<void*>(deviceInfo.pNext);
         deviceInfo.pNext = &fifoLatestReadyFeatures;
+    }
+    if (state->maintenance5) {
+        maintenance5Features.pNext = const_cast<void*>(deviceInfo.pNext);
+        deviceInfo.pNext = &maintenance5Features;
     }
     if (state->maintenance8) {
         maintenance8Features.pNext = const_cast<void*>(deviceInfo.pNext);
@@ -3642,7 +3675,13 @@ ShaderRecompiler::SpirvTarget VulkanDevice::Target() const {
     require(state->shaderProfile != nullptr, "shader device profile is unavailable");
     auto target = state->shaderProfile->Target();
     target.float32FlushToZero = state->float32FlushToZero;
+    target.float32DenormPreserve = state->float32DenormPreserve;
     return target;
+}
+
+Graphics::SampleOrder VulkanDevice::HostSampleOrder(const Graphics::State& graphics) const {
+    if (!graphics.sampleLocationGrid) return {};
+    return Graphics::HostSampleLocationsFor(graphicsContext(), graphics).order;
 }
 
 ShaderRecompiler::SpirvTarget VulkanDevice::buildTarget() const {
@@ -3658,6 +3697,7 @@ ShaderRecompiler::SpirvTarget VulkanDevice::buildTarget() const {
     target.fixedPushSlots = state->graphicsPipelineLibrary;
     target.registrationModules = state->graphicsPipelineLibrary;
     target.robustBufferAccess2 = state->robustBufferAccess2;
+    target.waveLdsMemoryBarriers = !state->subgroupControlBarriers;
     target.srgbDecodeFormats = state->srgbDecodeFormats & ~state->srgbCopyFormats;
     target.vertexSubgroups = (state->subgroup.supportedStages & VK_SHADER_STAGE_VERTEX_BIT) != 0;
     if (state->meshShader) {
@@ -3790,6 +3830,8 @@ Graphics::Context VulkanDevice::buildContext() const {
     context.samplerTableUpdateAfterBind = SamplerTableUpdateAfterBind(context);
     context.geometryShader = state->geometryShader;
     context.sampleRateShading = state->sampleRateShading;
+    context.fillModeNonSolid = state->fillModeNonSolid;
+    context.maintenance5 = state->maintenance5;
     context.storageImageMultisample = state->storageImageMultisample;
     context.shaderClipDistance = state->shaderClipDistance;
     context.shaderCullDistance = state->shaderCullDistance;
@@ -3807,7 +3849,9 @@ Graphics::Context VulkanDevice::buildContext() const {
     context.srgbCopyFormats = state->srgbCopyFormats;
     context.sampleLocationSampleCounts = state->sampleLocationSampleCounts;
     context.sampleLocationGridSampleCounts = state->sampleLocationGridSampleCounts;
-    context.memoryProperties2 = state->memoryBudget ? state->InstanceFunction<PFN_vkGetPhysicalDeviceMemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2") : nullptr;
+    context.sampleLocationGridSizes = state->sampleLocationGridSizes;
+    context.shaderStencilExport = state->shaderStencilExport;
+    context.memoryProperties2 =state->memoryBudget ? state->InstanceFunction<PFN_vkGetPhysicalDeviceMemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2") : nullptr;
     context.singlePassStorage = state->storageImageWithoutFormat;
     context.cacheReclaim = Graphics::ReleaseTextureCaches;
     return context;
@@ -3819,6 +3863,10 @@ VulkanDevice::IndirectDrawSupport VulkanDevice::DrawIndirectSupport() const {
 
 std::optional<std::string> VulkanDevice::KnownDrawRejection(const Graphics::State& graphics, std::span<const Graphics::CompiledShader> shaders) const {
     return Graphics::KnownValidationFailure(graphicsContext(), shaders, graphics);
+}
+
+void VulkanDevice::DepthCopyPass(const Graphics::DepthCopyPass& pass) {
+    Graphics::RunDepthCopyPass(graphicsContext(), pass);
 }
 
 void VulkanDevice::ColorMetadataPass(const Graphics::ColorMetadataPass& pass) {
