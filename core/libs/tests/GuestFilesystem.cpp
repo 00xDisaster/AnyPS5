@@ -256,6 +256,8 @@ static void TestParentTraversal() {
     Require(TrimTrailingSeparators_nid_no_patch("C:\\") == "C:\\");
     Require(TrimTrailingSeparators_nid_no_patch("C:/") == "C:/");
     Require(TrimTrailingSeparators_nid_no_patch("C:\\dir\\") == "C:\\dir");
+    Require(TrimTrailingSeparators_nid_no_patch("C:\\\\") == "C:\\");
+    Require(TrimTrailingSeparators_nid_no_patch("C:\\folder\\\\") == "C:\\folder");
 #endif
     std::filesystem::create_directory(root / "dot-victim");
     for (const char* name : {"/parent-test-mount/dot-victim/.", "/parent-test-mount/dot-victim/..", "/parent-test-mount/dot-victim/./", "/parent-test-mount/dot-victim/../"}) {
