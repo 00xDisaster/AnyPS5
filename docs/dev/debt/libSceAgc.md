@@ -2,7 +2,6 @@
 
 ### Unknown function info
 
-- [GS shader-half fusion](../../../core/libs/prx/libSceAgc/Misc/src/ShaderFusion.cpp) - front-half hardware state outside the user SGPR and offchip LDS enable fields still throws when the back half does not enable it. Native shared VGPR allocation and resource-field maxima remain to be reconciled with the host fusion path.
 
 - [sceAgcDcbSetCfRegisterDirect, sceAgcDcbSetCfRegisterRangeDirect](../../../core/libs/prx/libSceAgc/DcbState/src/Registers.cpp) (libSceAgc) - signatures follow [OpenAGC](https://github.com/OpenAGC/OpenAGC/blob/main/src/game_compat.c) and [SharpProspero](https://github.com/SvenGDK/SharpProspero/blob/main/src/SharpProspero/Interop/Agc/SceAgc.cs), which agree; the SET_CONFIG_REG (0x68) packet is OpenAGC's. The driver does not execute SET_CONFIG_REG, so a submitted packet throws
 - [Command buffer cursors](../../../core/libs/prx/libSceAgc/Command/src/Packet.cpp) (libSceAgc) - a null `cursor_down` is taken as a buffer without downward allocations, whose limit is `top`. PPSA16064 builds one-packet buffers of 8 dwords that way; the console's handling is unconfirmed
