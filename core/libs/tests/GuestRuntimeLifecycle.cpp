@@ -99,4 +99,17 @@ int main(int argc, char** argv) {
     }
     Require(events[2].args == 0xf1 && events[2].argp == nullptr);
     Require(events[3].args == 0xfe && events[3].argp == nullptr);
+    if (std::strcmp(argv[2], "reload") == 0) {
+        void* resident = ::dlopen(argv[1], RTLD_NOW | RTLD_NOLOAD);
+        Require(resident == nullptr);
+        result = -1;
+        const auto reload = sceKernelLoadStartModule(argv[1], sizeof(payload), &payload, 0, nullptr, &result);
+        Require(reload > 0 && reload != first && reload != second && result == 0x5a17);
+        Require(count.load() == 6 && events[4].args == sizeof(payload) && events[4].argp == &payload);
+        Require(events[5].args == 0xa1 && events[5].argp == nullptr);
+        Require(sceKernelStopUnloadModule(reload, 0, nullptr, 0, nullptr, nullptr) == 0 && count.load() == 8);
+        Require(events[6].args == 0xf1 && events[6].argp == nullptr);
+        Require(events[7].args == 0xfe && events[7].argp == nullptr);
+        Require(::dlopen(argv[1], RTLD_NOW | RTLD_NOLOAD) == nullptr);
+    }
 }
