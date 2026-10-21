@@ -190,7 +190,10 @@ int APS5_VABI sceImeDialogForceClose(void) {
 }
 
 int APS5_VABI sceImeDialogGetCurrentStarState(int64_t state) {
-    NotImplemented_nid_no_patch(__func__);
+    std::lock_guard lock(g_mutex);
+    if (g_dialog.status == StatusNone) return ErrorNotInUse;
+    if (state == 0) return ErrorInvalidAddress;
+    *reinterpret_cast<std::uint32_t*>(state) = 0;
     return 0;
 }
 
