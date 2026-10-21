@@ -341,16 +341,20 @@ void DepthCopyCase(Context context, std::uint8_t* block) {
         return count;
     };
     std::fill(block, block + BlockBytes, std::uint8_t{0});
-    ExpectFailure([&] { copy(2, 0, {Side, Side}); }, "no draw rendered", "a DB depth copy from memory without a depth surface was accepted");
-    Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.375f, 0, 0, false, 2}) != VK_NULL_HANDLE, "the two-sample depth surface was not created");
-    copy(2, 0, {Side, Side});
-    Require(countBlock(0.375f) == Side * Side, "the DB depth copy of sample 0 did not store the cleared depth in every texel of the R32 float target");
-    std::fill(block, block + BlockBytes, std::uint8_t{0});
-    copy(2, 1, {Side, Side});
-    Require(countBlock(0.375f) == Side * Side, "the DB depth copy of sample 1 did not store the cleared depth in every texel of the R32 float target");
-    ExpectFailure([&] { copy(2, 2, {Side, Side}); }, "does not have", "a DB depth copy of a third sample of a two-sample surface was accepted");
-    ExpectFailure([&] { copy(2, 0, {Side / 2, Side / 2}); }, "of another size", "a DB depth copy of another extent than the depth surface was accepted");
-    ClearDepthSurfaces(context.device);
+    ExpectFailure([&] { copy(1, 0, {Side, Side}); }, "no draw rendered", "a DB depth copy from memory without a depth surface was accepted");
+    const auto sampledCounts = context.limits.sampledImageDepthSampleCounts & context.limits.framebufferDepthSampleCounts;
+    const std::uint32_t samples = (sampledCounts & VK_SAMPLE_COUNT_2_BIT) != 0 ? 2u : (sampledCounts & VK_SAMPLE_COUNT_4_BIT) != 0 ? 4u : 0u;
+    if (samples != 0) {
+        Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.375f, 0, 0, false, samples}) != VK_NULL_HANDLE, "the multisample depth surface was not created");
+        for (std::uint32_t sample = 0; sample < samples; ++sample) {
+            std::fill(block, block + BlockBytes, std::uint8_t{0});
+            copy(samples, sample, {Side, Side});
+            Require(countBlock(0.375f) == Side * Side, "the DB depth copy of sample " + std::to_string(sample) + " of " + std::to_string(samples) + " did not store the cleared depth in every texel of the R32 float target");
+        }
+        ExpectFailure([&] { copy(samples, samples, {Side, Side}); }, "does not have", "a DB depth copy of a sample past the last of a multisample surface was accepted");
+        ExpectFailure([&] { copy(samples, 0, {Side / 2, Side / 2}); }, "of another size", "a DB depth copy of another extent than the depth surface was accepted");
+        ClearDepthSurfaces(context.device);
+    }
     Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.625f, 0, 0, false, 1}) != VK_NULL_HANDLE, "the one-sample depth surface was not created");
     std::fill(block, block + BlockBytes, std::uint8_t{0});
     copy(1, 0, {Side, Side});
