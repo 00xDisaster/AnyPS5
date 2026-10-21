@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include "SceTypes.hpp"
 
 extern "C" {
@@ -12,7 +13,7 @@ int APS5_VABI sceAcmBatchStartBuffer(std::uint32_t, const void*, std::size_t, vo
 int APS5_VABI sceAcmBatchStartBuffers(std::uint32_t, std::uint32_t, const void* const[], void*, std::uint32_t*);
 int APS5_VABI sceAcmBatchWait(std::uint32_t, std::uint32_t, std::uint32_t);
 int APS5_VABI sceAcm_ConvReverb_SharedInput(void);
-int APS5_VABI sceAcm_FFT(void);
+int APS5_VABI sceAcm_FFT(AcmBatchInfo*, std::int32_t, std::uint32_t, std::int32_t, const void* const*, std::int32_t, void* const*, std::int32_t);
 int APS5_VABI sceAcm_Panner(AcmBatchInfo*, std::uint32_t, const void* const*, std::uint32_t, std::uint32_t, std::uint32_t, const void* const*, const void* const*, const void* const*, void* const*);
 }
 
@@ -53,7 +54,7 @@ int main() {
     Require(sceAcmBatchWait(context2, batch2, 0) == 0);
 
     Require(sceAcm_ConvReverb_SharedInput() == 0);
-    Require(sceAcm_FFT() == 0);
+    Require(sceAcm_FFT(nullptr, 0, 0, 0, nullptr, 0, nullptr, 0) == BadPointer);
     alignas(128) std::byte commands[256]{};
     alignas(128) std::uint32_t sourceData[32]{};
     alignas(128) const void* sources[16]{sourceData};
@@ -78,6 +79,41 @@ int main() {
     Require(descriptor[3] == reinterpret_cast<std::uintptr_t>(sources) && descriptor[4] == 0x100000002 && descriptor[5] == 1);
     Require(descriptor[6] == reinterpret_cast<std::uintptr_t>(sources) && descriptor[7] == reinterpret_cast<std::uintptr_t>(sources));
     for (std::size_t index = 8; index < 16; ++index) Require(descriptor[index] == 0);
+    commandBatch = {commands, 0, sizeof(commands)};
+    Require(sceAcm_FFT(&commandBatch, 2048, 1, 0, sources, 0, outputs, 0) == BadPointer);
+    Require(sceAcm_FFT(&commandBatch, 512, 1, 0, sources, 0, outputs, 3) == BadPointer);
+    Require(sceAcm_FFT(&commandBatch, 512, 1, 0, sources, 0, outputs, 0) == 0);
+    Require(commandBatch.offset == 72 && commandBatch.buffer_size == sizeof(commands));
+    std::uint64_t fftWords[9];
+    std::memcpy(fftWords, commands, sizeof(fftWords));
+    Require(fftWords[0] == 0x1C030400 && fftWords[1] == 0xC0A);
+    Require(fftWords[2] == 0x400000006 && fftWords[3] == reinterpret_cast<std::uintptr_t>(sourceData));
+    Require(fftWords[4] == 0x90A && fftWords[5] == 0xB0A && fftWords[6] == 0x40A);
+    Require(fftWords[7] == 0x400000008 && fftWords[8] == reinterpret_cast<std::uintptr_t>(sourceData));
+    commandBatch = {commands, 0, 71};
+    Require(sceAcm_FFT(&commandBatch, 512, 1, 0, sources, 0, outputs, 0) == static_cast<int>(0x81940009));
+    Require(commandBatch.offset == 0);
+    commandBatch = {commands, 0, sizeof(commands)};
+    Require(sceAcm_FFT(&commandBatch, 2048, 1, 1, sources, 1, outputs, 9) == 0);
+    std::memcpy(fftWords, commands, sizeof(fftWords));
+    Require(fftWords[0] == 0x600 && fftWords[1] == 0x80A && fftWords[4] == 0x20A && fftWords[5] == 0x60A && fftWords[6] == 0x50A);
+    sources[1] = sourceData;
+    outputs[1] = sourceData;
+    for (const auto size : {512, 1024, 2048}) {
+        for (std::int32_t inputFormat = 0; inputFormat < 2; ++inputFormat) {
+            for (std::int32_t outputFormat = 0; outputFormat < 2; ++outputFormat) {
+                for (std::int32_t flags = 0; flags < 16; ++flags) {
+                    commandBatch = {commands, 0, sizeof(commands)};
+                    const auto result = sceAcm_FFT(&commandBatch, size, 1, inputFormat, sources, outputFormat, outputs, flags);
+                    if ((flags & 3) == 3 || (size == 2048 && !(flags & 1))) {
+                        Require(result == BadPointer && commandBatch.offset == 0);
+                    } else {
+                        Require(result == 0 && commandBatch.offset == 72 + ((flags & 2) ? 8 : 0) + ((flags & 4) ? 8 : 0));
+                    }
+                }
+            }
+        }
+    }
     commandBatch = {commands, 0, 152};
     Require(sceAcm_Panner(&commandBatch, 1, sources, 0, 0, 1, sources, sources, nullptr, outputs) == static_cast<int>(0x81940009));
     Require(commandBatch.offset == 0 && commandBatch.buffer_size == 152);
