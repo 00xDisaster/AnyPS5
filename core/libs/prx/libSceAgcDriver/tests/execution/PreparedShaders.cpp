@@ -1220,7 +1220,17 @@ void CommittedAbis() {
         scope.Commit();
     };
     resolve();
+    const auto registry = AgcDriver::DriverDetail::Driver::Get().RegisteredShaders();
+    Require(registry != nullptr, "committed ABI resolution published no shader registry");
+    const auto pixelSnapshot = AgcDriver::DriverDetail::RegisteredHeader(*registry, &pixel.shader);
+    Require(pixelSnapshot != nullptr, "committed ABI resolution published no pixel snapshot");
+    const auto committedAbis = [&] {
+        std::lock_guard lock(pixelSnapshot->prepared->mutex);
+        return pixelSnapshot->prepared->registeredAbis.size();
+    };
+    AgcDriver::DriverDetail::AwaitRegistrationPreparation();
     const auto before = ShaderRecompiler::FrontEndBuilds();
+    const auto abisBefore = committedAbis();
     bool unblocked = false;
     bool excluded = false;
     std::uint64_t repeatedBuilds = 0;
@@ -1234,7 +1244,9 @@ void CommittedAbis() {
         unblocked = repeated.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
         repeatedBuilds = ShaderRecompiler::FrontEndBuilds() - before;
         other = std::async(std::launch::async, resolveOther);
-        excluded = other.wait_for(std::chrono::milliseconds(200)) == std::future_status::timeout;
+        const auto started = std::chrono::steady_clock::now();
+        while (ShaderRecompiler::FrontEndBuilds() == before + repeatedBuilds && std::chrono::steady_clock::now() - started < std::chrono::seconds(10)) std::this_thread::yield();
+        excluded = other.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout && committedAbis() == abisBefore;
         open.Commit();
     }
     repeated.get();
