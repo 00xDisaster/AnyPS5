@@ -664,9 +664,5 @@ void* APS5_VABI _ZNSt8__sce_v28_Thrd_idEv_nid_postfix() {
     return _Thrd_current_nid_postfix();
 }
 
-[[noreturn]] void APS5_VABI _ZNSt8__sce_v216_Throw_Cpp_errorEi_nid_postfix(int code) {
-    ThrowCppError_nid_no_patch(code);
-}
-
 }
 

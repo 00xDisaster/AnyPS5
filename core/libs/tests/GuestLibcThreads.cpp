@@ -71,6 +71,8 @@ int APS5_VABI _ZNSt8__sce_v210_Thrd_joinEP7pthreadPi_nid_postfix(void* thread, i
 void APS5_VABI _ZNSt8__sce_v211_Thrd_yieldEv_nid_postfix();
 void* APS5_VABI _ZNSt8__sce_v28_Thrd_idEv_nid_postfix();
 int APS5_VABI scePthreadCreate(void** thread, const void* attr, void* (APS5_VABI* entry)(void*), void* argument, const char* name);
+int APS5_VABI scePthreadMutexUnlock(void** mutex);
+int APS5_VABI scePthreadCondWait(void** condition, void** mutex);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -423,6 +425,13 @@ static void VersionedSync() {
     Require(_ZNSt8__sce_v29_Mtx_lockEPP13pthread_mutex_nid_postfix(&plainMutex) == success);
     Require(_ZNSt8__sce_v29_Mtx_lockEPP13pthread_mutex_nid_postfix(&plainMutex) == busy);
     Require(_ZNSt8__sce_v211_Mtx_unlockEPP13pthread_mutex_nid_postfix(&plainMutex) == success);
+    void* unownedCondition = nullptr;
+    Require(_ZNSt8__sce_v29_Cnd_initEPP12pthread_cond_nid_postfix(&unownedCondition) == success);
+    Require(scePthreadMutexUnlock(&plainMutex) != 0);
+    Require(scePthreadCondWait(&unownedCondition, &plainMutex) != 0);
+    Require(_ZNSt8__sce_v211_Mtx_unlockEPP13pthread_mutex_nid_postfix(&plainMutex) == success);
+    Require(_ZNSt8__sce_v29_Cnd_waitEPP12pthread_condPP13pthread_mutex_nid_postfix(&unownedCondition, &plainMutex) == success);
+    Require(_ZNSt8__sce_v212_Cnd_destroyEPP12pthread_cond_nid_postfix(&unownedCondition) == success);
     Require(_ZNSt8__sce_v212_Mtx_destroyEPP13pthread_mutex_nid_postfix(&plainMutex) == success);
 
     VersionedShared shared;
