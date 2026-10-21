@@ -29,6 +29,27 @@ struct PlayerReviewDialogParam {
     std::uint8_t reserved[64];
 };
 
+struct WebBrowserDialogExtendedResult {
+    std::uint64_t size;
+    std::uint32_t type;
+    char content[2048];
+    std::uint8_t reserved0[4];
+    char* extendedContent;
+    std::uint32_t extendedCapacity;
+    std::uint8_t reserved1[20];
+};
+
+struct WebBrowserDialogResult {
+    std::int32_t result;
+    std::uint32_t padding;
+    WebBrowserDialogExtendedResult* extended;
+    std::uint8_t reserved[240];
+};
+
+static_assert(sizeof(WebBrowserDialogExtendedResult) == 2096);
+static_assert(offsetof(WebBrowserDialogExtendedResult, extendedContent) == 2064);
+static_assert(sizeof(WebBrowserDialogResult) == 256);
+
 struct WebBrowserDialogAllowList {
     std::uint64_t size;
     const char* addresses[20];
