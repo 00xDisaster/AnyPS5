@@ -527,7 +527,7 @@ int APS5_VABI sceNetCtlRegisterCallbackV6(NetCtlCallback func, void* arg, int* c
     return RegisterCallback(g_callbacksV6, func, arg, cid);
 }
 
-int APS5_VABI sceNetCtlGetInfoV6(int code, void* info) {
+int APS5_VABI sceNetCtlGetInfoV6(std::uint32_t code, NetCtlInfoV6* info) {
     if (!info) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     if (code < NET_CTL_INFO_V6_IP_ADDRESS || code > NET_CTL_INFO_V6_SECONDARY_DNS) return SCE_NET_CTL_ERROR_INVALID_CODE;
     if (!HostHasAddress(AF_INET6)) return SCE_NET_CTL_ERROR_NOT_CONNECTED;
