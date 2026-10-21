@@ -31,6 +31,14 @@
 #include <string_view>
 #include <vector>
 
+namespace AgcDriver {
+
+struct VulkanDeviceTestAccess {
+    static Graphics::Context Context(const VulkanDevice& device) { return device.graphicsContext(); }
+};
+
+}
+
 namespace {
 
 using AgcDriver::Graphics::Require;
@@ -305,7 +313,8 @@ bool ExpectMerged(AgcDriver::VulkanDevice& device) {
     return true;
 }
 
-bool ExpectTruncated(AgcDriver::VulkanDevice& device) {
+std::string ExpectTruncated(AgcDriver::VulkanDevice& device) {
+    if ((AgcDriver::VulkanDeviceTestAccess::Context(device).limits.framebufferDepthSampleCounts & VK_SAMPLE_COUNT_2_BIT) == 0) return "the device has no two-sample depth targets (framebufferDepthSampleCounts)";
     constexpr std::size_t bytes = std::size_t{Width} * Height * 16u;
     AgcDriver::Graphics::DepthTarget depth{reinterpret_cast<std::uintptr_t>(DepthMemory.data()), 0u, {Width, Height}, VK_FORMAT_D32_SFLOAT, 0.0f, 0};
     depth.samples = 2;
@@ -319,7 +328,7 @@ bool ExpectTruncated(AgcDriver::VulkanDevice& device) {
             Draw(device, color, ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::SampleCoverage), Program(0u), *triangle, 2u, &depth);
         } catch (const std::exception& error) {
             if (std::string_view(error.what()).find("truncated coverage reduction") == std::string_view::npos) throw;
-            return false;
+            return "the device lacks VK_AMD_mixed_attachment_samples and VK_NV_framebuffer_mixed_samples with truncated coverage reduction";
         }
         const auto stored = ReadBack(device, block.Address(), bytes);
         for (std::uint32_t y = 0; y < Height; ++y) {
@@ -362,7 +371,7 @@ bool ExpectTruncated(AgcDriver::VulkanDevice& device) {
         }
     }
     Require(perSampleWritten == written[1] + written[3] && perSampleUntouched == untouched, "truncated coverage per sample: the draws wrote " + std::to_string(perSampleWritten) + " pixels where one invocation per pixel wrote " + std::to_string(written[1] + written[3]));
-    return true;
+    return {};
 }
 
 }
@@ -377,7 +386,7 @@ int main() {
         Expect(*device, PixelInputBit(PixelInput::PerspectiveCenter) | PixelInputBit(PixelInput::SampleCoverage), 2u, "SAMPLE_COVERAGE after the perspective center");
         Expect(*device, PixelInputBit(PixelInput::Ancillary) | PixelInputBit(PixelInput::SampleCoverage), 1u, "SAMPLE_COVERAGE after ANCILLARY");
         if (!ExpectMerged(*device)) std::puts("merged coverage not tested: the device lacks VK_NV_framebuffer_mixed_samples with merged coverage reduction");
-        if (!ExpectTruncated(*device)) std::puts("truncated coverage not tested: the device lacks VK_AMD_mixed_attachment_samples and VK_NV_framebuffer_mixed_samples with truncated coverage reduction");
+        if (const auto skipped = ExpectTruncated(*device); !skipped.empty()) std::printf("truncated coverage not tested: %s\n", skipped.c_str());
         std::puts("pixel sample coverage tests passed");
         return 0;
     } catch (const std::exception& error) {
