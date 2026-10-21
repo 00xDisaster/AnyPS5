@@ -63,7 +63,7 @@ std::uint64_t FrameMillis(const AVFrame& frame, AVRational timeBase) {
 
 bool IsStreamSupported(const AVStream& stream) {
     const auto codec = stream.codecpar->codec_id;
-    return codec == AV_CODEC_ID_H264 || codec == AV_CODEC_ID_HEVC || codec == AV_CODEC_ID_AAC;
+    return codec == AV_CODEC_ID_H264 || codec == AV_CODEC_ID_HEVC || codec == AV_CODEC_ID_AAC || codec == AV_CODEC_ID_VP9 || codec == AV_CODEC_ID_OPUS;
 }
 
 float DisplayAspect(int width, int height, AVRational sampleAspect) {
@@ -507,7 +507,7 @@ private:
         while (!frames.empty() && frames.front().epoch < stale) recycleFront(video);
         if (frames.empty()) return false;
         const auto& front = frames.front();
-        if (paused && front.epoch <= clockEpoch) return false;
+        if (paused && presented && front.epoch <= clockEpoch) return false;
         if (front.epoch > clockEpoch) {
             if (synced && audioDriving && speed == NormalSpeed) return false;
             if (synced && front.seamless && presented && presentationClock.Now() < static_cast<double>(lastPresented + frameDuration())) return false;

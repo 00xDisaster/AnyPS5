@@ -63,6 +63,34 @@ def main():
                 assert result.returncode == 2 and message in result.stderr, (options, result.stderr)
                 assert not output.exists(), options
 
+            for linked, options in (("eboot.exe", ["--executable", "picker/eboot.exe"]),
+                                    ("picker.exe", ["--executable", "picker/picker.bin", "--executable", "picker/picker.exe"])):
+                case = work / f"{windows}-hardlink-{linked}"
+                (case / "picker").mkdir(parents=True)
+                target = case / ("eboot.bin" if linked == "eboot.exe" else "picker/picker.bin")
+                target.write_bytes(main_fixture())
+                os.link(target, case / "picker" / linked)
+                result, output = convert(case, windows, options)
+                assert result.returncode == 2 and "converted twice" in result.stderr, (linked, result.stdout, result.stderr)
+                assert not output.exists(), linked
+
+            for index, (directory, executable) in enumerate((("Picker", "picker/picker.bin"), ("picker", "PICKER/picker.bin"), ("linked", "picker/picker.bin"))):
+                case = work / f"{windows}-identity-{index}"
+                case.mkdir()
+                insensitive = (work / f"{windows}-IDENTITY-{index}").exists()
+                if (directory == "linked" and os.name == "nt") or (executable != "picker/picker.bin" and not insensitive):
+                    continue
+                if directory == "linked":
+                    (case / "linked").symlink_to("picker", target_is_directory=True)
+                elif not insensitive:
+                    (case / directory).mkdir()
+                result, output = convert(case, windows, ["--module-dir", directory, "--executable", executable])
+                if insensitive or directory == "linked":
+                    assert result.returncode == 2 and "in a guest module directory" in result.stderr, (directory, executable, result.stderr)
+                    assert not output.exists(), (directory, executable)
+                else:
+                    assert result.returncode == 0, (directory, executable, result.stdout, result.stderr)
+
             case = work / f"{windows}-needed"
             (case / "Media" / "Modules").mkdir(parents=True)
             (case / "Media" / "Modules" / "needed.prx").write_bytes(module_with_symbol(True))
