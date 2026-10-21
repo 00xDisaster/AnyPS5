@@ -141,5 +141,6 @@ int main() {
     char16_t letters[4]{};
     Require(ScanWideSized(u"abcdef", u"%3ls", letters, 4u) == 1 && std::u16string(letters) == u"abc", "vswscanf_s %ls with a size");
     Require(ScanWideSized(u"abcdef", u"%ls", letters, 4u) == 0 && letters[0] == 0, "vswscanf_s rejects a too small buffer");
+    CheckVacopy();
     return 0;
 }
