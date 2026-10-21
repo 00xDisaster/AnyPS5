@@ -1241,11 +1241,6 @@ bool APS5_VABI sceShellCoreUtilIsBgmCpuBudgetAvailable() {
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilIsBgmPlaying() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 bool APS5_VABI sceShellCoreUtilIsExternalStorageAppMoveInProgress() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
