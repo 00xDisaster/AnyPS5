@@ -437,6 +437,10 @@ int main() {
     Require(fchdir_nid_postfix(pipeEnds[0]) == -1 && Error() == 22);
     Require(fchdir_nid_postfix(pipeEnds[1]) == -1 && Error() == 22);
     Require(close_nid_postfix(pipeEnds[0]) == 0 && close_nid_postfix(pipeEnds[1]) == 0);
+    const int characterDevice = open_nid_postfix("/dev/random", 0, 0);
+    Require(characterDevice >= 0);
+    Require(fchdir_nid_postfix(characterDevice) == -1 && Error() == 20);
+    Require(close_nid_postfix(characterDevice) == 0);
     const int socketDescriptor = socket_nid_postfix(2, 2, 0);
     Require(socketDescriptor >= 0);
     Require(fchdir_nid_postfix(socketDescriptor) == -1 && Error() == 22);

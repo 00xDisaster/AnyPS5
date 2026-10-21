@@ -3,6 +3,7 @@
 #include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/File/include/RandomDevice.hpp"
 #include "prx/libkernel/File/include/ArchivedFile.hpp"
+#include "prx/libkernel/Socket/include/SocketRuntime.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/FileLock.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
@@ -581,6 +582,16 @@ bool Appends(int fd) {
     std::lock_guard lock(g_mutex);
     const auto found = g_entries.find(fd);
     return found != g_entries.end() && found->second.status && (*found->second.status & Append) != 0;
+}
+
+bool IsCharacterDevice(int fd) {
+    if (fd < 0) return false;
+#ifdef _WIN32
+    return DescriptorIsOpen_nid_no_patch(fd) && !GuestSockets::IsOpen(fd) && !File::DirectoryDescriptorPath(fd) && ::GetFileType(WindowsDescriptorHandle_nid_no_patch(fd)) == FILE_TYPE_CHAR;
+#else
+    struct stat status{};
+    return ::fstat(fd, &status) == 0 && S_ISCHR(status.st_mode);
+#endif
 }
 
 bool IsVnode(int fd) {
