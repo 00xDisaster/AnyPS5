@@ -88,18 +88,34 @@ int APS5_VABI sceGnmDingDongForWorkload(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchDirect(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDispatchDirect(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t threadsX, std::uint32_t threadsY, std::uint32_t threadsZ, std::uint32_t flags) {
+    if (!cmdbuf || size != 9 || static_cast<std::int32_t>(threadsX | threadsY | threadsZ) < 0) return CommandFailed;
+    cmdbuf[0] = Header(0x15, 4, true, flags & 1);
+    cmdbuf[1] = threadsX;
+    cmdbuf[2] = threadsY;
+    cmdbuf[3] = threadsZ;
+    cmdbuf[4] = (flags & 0x18) + 1;
+    Nop(cmdbuf + 5, 3);
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchIndirect(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDispatchIndirect(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t flags) {
+    if (!cmdbuf || size != 7) return CommandFailed;
+    cmdbuf[0] = Header(0x16, 2, true, flags & 1);
+    cmdbuf[1] = dataOffset;
+    cmdbuf[2] = (flags & 0x18) + 1;
+    Nop(cmdbuf + 3, 3);
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchIndirectOnMec(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDispatchIndirectOnMec(std::uint32_t* cmdbuf, std::uint32_t size, std::uint64_t args, std::uint32_t modifier) {
+    if (!cmdbuf || size != 8 || args == 0 || (args & 3) != 0) return CommandFailed;
+    cmdbuf[0] = Header(0x16, 3, true, modifier & 1);
+    cmdbuf[1] = static_cast<std::uint32_t>(args);
+    cmdbuf[2] = static_cast<std::uint32_t>(args >> 32);
+    cmdbuf[3] = (modifier & 0x18) | 1;
+    cmdbuf[4] = Header(OpNop, 3);
+    cmdbuf[5] = 0;
     return 0;
 }
 
