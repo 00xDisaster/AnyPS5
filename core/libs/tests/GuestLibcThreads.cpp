@@ -320,7 +320,6 @@ static void PadDetach() {
     RegisterPthreadDetach_nid_no_patch(nullptr);
 }
 
-// Calling into libkernel also makes Windows load it, which registers the thread forwards.
 static void KernelKeys() {
     Require(_Thrd_current_nid_postfix() == scePthreadSelf());
     int key = -1;
