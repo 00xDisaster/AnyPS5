@@ -198,6 +198,13 @@ int main() {
     Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
     Require(sceKernelCreateEventFlag(&ef, "test", EVF_ATTR_SINGLE | EVF_ATTR_MULTI, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelCreateEventFlag(&ef, "test", EVF_ATTR_MULTI | 0x1000u, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    for (const std::uint32_t attr : {0x03u, 0x13u, 0x23u, 0x103u, 0x130u, 0x04u, 0x08u, 0x40u, 0x80u, 0x200u, 0x80000000u, 0xffffffffu}) {
+        Require(sceKernelCreateEventFlag(&ef, "test_bad_attr", attr, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    }
+    for (const std::uint32_t attr : {0x02u, 0x11u, 0x12u, 0x21u, 0x22u}) {
+        Require(sceKernelCreateEventFlag(&ef, "test_attr", attr, 0, nullptr) == SCE_OK);
+        Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
+    }
     Require(sceKernelDeleteEventFlag(nullptr) == SCE_KERNEL_ERROR_ESRCH);
     Require(sceKernelSetEventFlag(nullptr, 1) == SCE_KERNEL_ERROR_ESRCH);
     Require(sceKernelClearEventFlag(nullptr, 1) == SCE_KERNEL_ERROR_ESRCH);
@@ -224,6 +231,16 @@ int main() {
     Require(sceKernelPollEventFlag(ef, 1, 0, &pattern) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelPollEventFlag(ef, 1, EVF_WAITMODE_AND | EVF_WAITMODE_OR, &pattern) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelPollEventFlag(ef, 1, EVF_WAITMODE_AND | EVF_WAITMODE_CLEAR_ALL | EVF_WAITMODE_CLEAR_PAT, &pattern) == SCE_KERNEL_ERROR_EINVAL);
+    for (const std::uint32_t mode : {0x04u, 0x40u, 0x100u, 0x80000000u, 0x103u}) {
+        pattern = 0xdeadbeef;
+        Require(sceKernelPollEventFlag(ef, 1, mode, &pattern) == SCE_KERNEL_ERROR_EINVAL && pattern == 0xdeadbeef);
+    }
+    for (const std::uint32_t mode : {EVF_WAITMODE_OR | 0x04u, EVF_WAITMODE_OR | 0x08u, EVF_WAITMODE_AND | 0x40u, EVF_WAITMODE_AND | 0x100u, EVF_WAITMODE_OR | 0x80000000u,
+                                     EVF_WAITMODE_OR | 0xffffff00u}) {
+        Require(sceKernelPollEventFlag(ef, 0x10, mode, &pattern) == SCE_OK && pattern == 0x15);
+    }
+    Require(sceKernelPollEventFlag(ef, 0x10, EVF_WAITMODE_OR | EVF_WAITMODE_CLEAR_PAT | 0x100u, &pattern) == SCE_OK && pattern == 0x15);
+    Require(sceKernelSetEventFlag(ef, 0x10) == SCE_OK);
 
     Require(sceKernelPollEventFlag(ef, 0x20, EVF_WAITMODE_OR, &pattern) == SCE_KERNEL_ERROR_EBUSY);
     Require(pattern == 0x15);
@@ -261,7 +278,22 @@ int main() {
 
     Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
 
-    Require(sceKernelCreateEventFlag(&ef, "single", EVF_ATTR_SINGLE | 0x02u, 0, nullptr) == SCE_OK);
+    Require(sceKernelCreateEventFlag(&ef, "single", EVF_ATTR_SINGLE | 0x02u, 0x04, nullptr) == SCE_OK);
+    std::atomic<int> singleRes{-1};
+    std::uint64_t singlePat = 0xdeadbeef;
+    std::thread singleWaiter([&] {
+        singleRes = sceKernelWaitEventFlag(ef, 0x01, EVF_WAITMODE_AND, &singlePat, nullptr);
+    });
+    WaitForEventFlagWaiters(ef, 1);
+    pattern = 0xdeadbeef;
+    Require(sceKernelPollEventFlag(ef, 0x04, EVF_WAITMODE_AND, &pattern) == SCE_KERNEL_ERROR_EPERM && pattern == 0);
+    pattern = 0xdeadbeef;
+    Require(sceKernelWaitEventFlag(ef, 0x04, EVF_WAITMODE_AND, &pattern, nullptr) == SCE_KERNEL_ERROR_EPERM && pattern == 0);
+    waitThreads = -1;
+    Require(sceKernelCancelEventFlag(ef, 0x08, &waitThreads) == SCE_OK && waitThreads == 1);
+    singleWaiter.join();
+    Require(singleRes == SCE_KERNEL_ERROR_ECANCELED && singlePat == 0);
+    Require(sceKernelPollEventFlag(ef, 0x08, EVF_WAITMODE_AND, &pattern) == SCE_OK && pattern == 0x08);
     Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
 
     Require(sceKernelCreateEventFlag(&ef, "imm_sat", EVF_ATTR_MULTI, 0x05, nullptr) == SCE_OK);
@@ -323,8 +355,9 @@ int main() {
     Require(sceKernelCreateEventFlag(&ef, "del_waiters", EVF_ATTR_MULTI, 0, nullptr) == SCE_OK);
     std::atomic<int> delRes1{-1};
     std::atomic<int> delRes2{-1};
+    std::uint64_t delPat = 0xdeadbeef;
     std::thread delT1([&] {
-        delRes1 = sceKernelWaitEventFlag(ef, 0x01, EVF_WAITMODE_AND, nullptr, nullptr);
+        delRes1 = sceKernelWaitEventFlag(ef, 0x01, EVF_WAITMODE_AND, &delPat, nullptr);
     });
     std::thread delT2([&] {
         delRes2 = sceKernelWaitEventFlag(ef, 0x02, EVF_WAITMODE_AND, nullptr, nullptr);
@@ -333,7 +366,7 @@ int main() {
     Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
     delT1.join();
     delT2.join();
-    Require(delRes1 == SCE_KERNEL_ERROR_EACCES);
+    Require(delRes1 == SCE_KERNEL_ERROR_EACCES && delPat == 0);
     Require(delRes2 == SCE_KERNEL_ERROR_EACCES);
 
     for (int iter = 0; iter < 50; ++iter) {

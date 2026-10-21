@@ -27,8 +27,11 @@ static constexpr int SCE_KERNEL_ERROR_EINVAL = 0x80020016;
 static constexpr int SCE_KERNEL_ERROR_ETIMEDOUT = 0x8002003C;
 static constexpr int SCE_KERNEL_ERROR_ECANCELED = 0x80020055;
 
+static constexpr uint32_t EVF_ATTR_TH_FIFO = 0x01;
+static constexpr uint32_t EVF_ATTR_TH_PRIO = 0x02;
 static constexpr uint32_t EVF_ATTR_SINGLE = 0x10;
 static constexpr uint32_t EVF_ATTR_MULTI = 0x20;
+static constexpr uint32_t EVF_ATTR_UNKNOWN_0x100 = 0x100;
 static constexpr uint32_t EVF_WAITMODE_AND = 0x01;
 static constexpr uint32_t EVF_WAITMODE_OR = 0x02;
 static constexpr uint32_t EVF_WAITMODE_CLEAR_ALL = 0x10;
@@ -110,7 +113,6 @@ static bool TraceSync() {
 static bool IsValidWaitMode(uint32_t waitMode) {
     const uint32_t match = waitMode & (EVF_WAITMODE_AND | EVF_WAITMODE_OR);
     const uint32_t clear = waitMode & (EVF_WAITMODE_CLEAR_ALL | EVF_WAITMODE_CLEAR_PAT);
-    if ((waitMode & ~(EVF_WAITMODE_AND | EVF_WAITMODE_OR | EVF_WAITMODE_CLEAR_ALL | EVF_WAITMODE_CLEAR_PAT)) != 0) return false;
     return (match == EVF_WAITMODE_AND || match == EVF_WAITMODE_OR) && clear != (EVF_WAITMODE_CLEAR_ALL | EVF_WAITMODE_CLEAR_PAT);
 }
 
@@ -130,7 +132,9 @@ int APS5_VABI sceKernelCreateEventFlag(KernelEventFlag* ef, const char* name, ui
     (void)param;
     if (!ef || !name) return SCE_KERNEL_ERROR_EINVAL;
     if ((attr & EVF_ATTR_SINGLE) && (attr & EVF_ATTR_MULTI)) return SCE_KERNEL_ERROR_EINVAL;
-    if ((attr & ~0x33u) != 0) return SCE_KERNEL_ERROR_EINVAL;
+    if ((attr & EVF_ATTR_TH_FIFO) && (attr & EVF_ATTR_TH_PRIO)) return SCE_KERNEL_ERROR_EINVAL;
+    if ((attr & ~(EVF_ATTR_TH_FIFO | EVF_ATTR_TH_PRIO | EVF_ATTR_SINGLE | EVF_ATTR_MULTI | EVF_ATTR_UNKNOWN_0x100)) != 0) return SCE_KERNEL_ERROR_EINVAL;
+    if (attr & EVF_ATTR_UNKNOWN_0x100) NotImplemented_nid_no_patch("sceKernelCreateEventFlag attribute 0x100");
     std::shared_ptr<KernelEventFlagPrivate> flag;
     try {
         flag = std::make_shared<KernelEventFlagPrivate>();
@@ -226,7 +230,10 @@ int APS5_VABI sceKernelPollEventFlag(KernelEventFlag ef, uint64_t bit_pattern, u
     if (bit_pattern == 0 || !IsValidWaitMode(wait_mode)) return SCE_KERNEL_ERROR_EINVAL;
     std::lock_guard lock(ef->_mutex);
     if (ef->_deleted) return SCE_KERNEL_ERROR_ESRCH;
-    if (!ef->_multipleWaiters && ef->_waiters != 0) return SCE_KERNEL_ERROR_EPERM;
+    if (!ef->_multipleWaiters && ef->_waiters != 0) {
+        if (result_pat) *result_pat = 0;
+        return SCE_KERNEL_ERROR_EPERM;
+    }
     if (!IsSatisfied(ef->_pattern, bit_pattern, wait_mode)) {
         if (result_pat) *result_pat = ef->_pattern;
         return SCE_KERNEL_ERROR_EBUSY;
@@ -242,7 +249,10 @@ int APS5_VABI sceKernelWaitEventFlag(KernelEventFlag ef, uint64_t bit_pattern, u
     if (bit_pattern == 0 || !IsValidWaitMode(wait_mode)) return SCE_KERNEL_ERROR_EINVAL;
     std::unique_lock lock(ef->_mutex);
     if (ef->_deleted) return SCE_KERNEL_ERROR_ESRCH;
-    if (!ef->_multipleWaiters && ef->_waiters != 0) return SCE_KERNEL_ERROR_EPERM;
+    if (!ef->_multipleWaiters && ef->_waiters != 0) {
+        if (result_pat) *result_pat = 0;
+        return SCE_KERNEL_ERROR_EPERM;
+    }
     if (IsSatisfied(ef->_pattern, bit_pattern, wait_mode)) {
         Consume(ef, bit_pattern, wait_mode, result_pat);
         return SCE_OK;
@@ -275,10 +285,11 @@ int APS5_VABI sceKernelWaitEventFlag(KernelEventFlag ef, uint64_t bit_pattern, u
     }
     KernelTraceWait_nid_postfix("evf", __builtin_return_address(0), static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), timedOut);
     if (ef->_deleted) {
+        if (result_pat) *result_pat = 0;
         return SCE_KERNEL_ERROR_EACCES;
     }
     if (ef->_cancelGeneration != generation) {
-        if (result_pat) *result_pat = ef->_pattern;
+        if (result_pat) *result_pat = 0;
         return SCE_KERNEL_ERROR_ECANCELED;
     }
     if (timedOut && !waiter.satisfied) {
