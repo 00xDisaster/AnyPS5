@@ -8,6 +8,7 @@
 #include <utility>
 #include "Decoder/Png.hpp"
 #include "SceTypes.hpp"
+#include "prx/libc/include/General.hpp"
 
 static_assert(sizeof(PngDecCreateParam) == 0xC);
 static_assert(sizeof(PngDecParseParam) == 0x10);
@@ -124,9 +125,10 @@ int32_t APS5_VABI scePngDecDecode(void* handle, const PngDecDecodeParam* param, 
     const Context* context = toContext(handle);
     if (!context) return SCE_PNG_DEC_ERROR_INVALID_HANDLE;
     if (!param) return SCE_PNG_DEC_ERROR_INVALID_PARAM;
-    if (!param->png_mem_addr || !param->image_mem_addr) return SCE_PNG_DEC_ERROR_INVALID_ADDR;
+    if (!param->png_mem_addr || !param->image_mem_addr || (reinterpret_cast<std::uintptr_t>(param->image_mem_addr) & 3u) != 0) return SCE_PNG_DEC_ERROR_INVALID_ADDR;
     if (param->png_mem_size == 0 || param->image_mem_size == 0) return SCE_PNG_DEC_ERROR_INVALID_SIZE;
     if (param->pixel_format != PIXEL_FORMAT_R8G8B8A8 && param->pixel_format != PIXEL_FORMAT_B8G8R8A8) return SCE_PNG_DEC_ERROR_INVALID_PARAM;
+    if (param->alpha_value > 0xFF) return SCE_PNG_DEC_ERROR_INVALID_PARAM;
 
     const std::span<const std::uint8_t> png = toBytes(param->png_mem_addr, param->png_mem_size);
     const std::optional<Decoder::Png::Header> header = Decoder::Png::ParseHeader(png);
@@ -191,6 +193,11 @@ int32_t APS5_VABI scePngDecQueryMemorySize(const PngDecCreateParam* param) {
     const std::int32_t result = validateCreateParam(param);
     if (result != 0) return result;
     return static_cast<std::int32_t>(MEMORY_SIZE);
+}
+
+int APS5_VABI scePngDecDecodeWithInputControl() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
 }
 
 }
