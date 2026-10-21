@@ -293,7 +293,7 @@ int APS5_VABI sceHmd2ReprojectionInitialize(const Hmd2::ReprojectionInitializePa
     return 0;
 }
 
-int APS5_VABI sceHmd2ReprojectionQueryBufferSizeAlign() {
+Hmd2::SizeAlign APS5_VABI sceHmd2ReprojectionQueryBufferSizeAlign() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
