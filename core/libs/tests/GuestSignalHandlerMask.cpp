@@ -79,6 +79,15 @@ static void APS5_VABI RecordMask(int) {
     Require(sigprocmask_nid_postfix(SigBlock, nullptr, &setInHandler) == 0);
 }
 
+static void APS5_VABI UnblockAndRaise(int signal) {
+    if (++calls == 1) {
+        const GuestSignalSet own{{Bit(signal), 0, 0, 0}};
+        Require(sigprocmask_nid_postfix(SigUnblock, &own, nullptr) == 0);
+        Require(raise_nid_postfix(signal) == 0);
+        callsAfterNestedRaise = calls;
+    }
+}
+
 static void Install(int signal, void (APS5_VABI* handler)(int), int flags, std::uint32_t mask) {
     GuestSigaction action{reinterpret_cast<std::uintptr_t>(handler), flags, {{mask, 0, 0, 0}}};
     Require(sigaction_nid_postfix(signal, &action, nullptr) == 0);
@@ -127,6 +136,26 @@ static void CheckOtherThreadKept() {
     Require(CurrentMask() == 0);
 }
 
+static void CheckOtherThreadKeptSameSignal() {
+    calls = 0;
+    Install(SigUsr1, BlockFromOtherThread, SaRestart, Bit(SigTerm));
+    Require(raise_nid_postfix(SigUsr1) == 0);
+    Require(calls == 1);
+    Require(CurrentMask() == Bit(SigTerm));
+    const GuestSignalSet set{{Bit(SigTerm), 0, 0, 0}};
+    Require(sigprocmask_nid_postfix(SigUnblock, &set, nullptr) == 0);
+    Require(CurrentMask() == 0);
+}
+
+static void CheckUnblockInsideHandler() {
+    calls = 0;
+    callsAfterNestedRaise = 0;
+    Install(SigUsr2, UnblockAndRaise, SaRestart, 0);
+    Require(raise_nid_postfix(SigUsr2) == 0);
+    Require(callsAfterNestedRaise == 2);
+    Require(CurrentMask() == 0);
+}
+
 static void CheckUpperMaskWords() {
     calls = 0;
     const GuestSigaction action{reinterpret_cast<std::uintptr_t>(RecordMask), SaRestart, {{Bit(SigKill), 1u << 7, 0, 1u << 31}}};
@@ -158,6 +187,8 @@ int main() {
     CheckNodefer();
     CheckResethand();
     CheckOtherThreadKept();
+    CheckOtherThreadKeptSameSignal();
+    CheckUnblockInsideHandler();
     CheckUpperMaskWords();
     CheckLeftWithLongjmp();
     return 0;
