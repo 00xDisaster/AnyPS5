@@ -10,15 +10,18 @@
 #include <optional>
 #include <span>
 #include <utility>
+#include <vector>
 
 namespace AgcDriver::Graphics {
 
 class Texture;
 class StorageTexture;
 
-VkImageView DepthSurfaceView(const Context& context, const DepthTarget& target);
+VkImageView DepthSurfaceView(const Context& context, const DepthTarget& target, bool depthWritten = true);
 SampleOrderTarget DepthSurfaceOrderTarget(const Context& context, const DepthTarget& target);
 DepthSampleLocations DepthSurfaceSampleLocations(const Context& context, const DepthTarget& target);
+std::vector<std::pair<std::uint64_t, std::uint64_t>> FlushDepthPlanes(std::uint64_t address, std::size_t bytes);
+bool DepthPlanesStale();
 bool SampleLocationsCompatibleDepth(const Context& context, VkFormat format, std::uint32_t samples);
 std::uint64_t DepthSurfacesSerial();
 std::uint64_t DepthSurfacesReleased();
