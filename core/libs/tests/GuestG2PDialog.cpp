@@ -78,18 +78,18 @@ int main() {
     Require(result[2] == kResultUserCanceled);
     Require(result[1] == -1);
 
-    Require(sceG2PDialogClose() == 0);
+    Require(sceG2PDialogClose() == static_cast<int>(0x80B8000Bu));
     Require(sceG2PDialogTerminate() == 0);
     Require(sceG2PDialogTerminate() == kErrNotInitialized);
     Require(sceG2PDialogGetStatus() == kStatusNone);
 
     Require(sceG2PDialogInitialize() == 0);
     Require(sceG2PDialogGetStatus() == kStatusInitialized);
-    Require(sceG2PDialogClose() == 0);
-    Require(sceG2PDialogGetStatus() == kStatusFinished);
+    Require(sceG2PDialogClose() == static_cast<int>(0x80B8000Bu));
+    Require(sceG2PDialogGetStatus() == kStatusInitialized);
     result[2] = -1;
-    Require(sceG2PDialogGetResult(result) == 0);
+    Require(sceG2PDialogGetResult(result) == kErrNotFinished);
     Require(result[0] == -1 && result[1] == -1 && result[3] == -1);
-    Require(result[2] == kResultUserCanceled);
+    Require(result[2] == -1);
     Require(sceG2PDialogTerminate() == 0);
 }

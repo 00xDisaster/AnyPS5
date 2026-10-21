@@ -16,6 +16,7 @@ constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u
 constexpr int COMMON_DIALOG_ERROR_INVALID_ARGUMENT = static_cast<int>(0x80B8000Au);
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80005u);
 constexpr int COMMON_DIALOG_ERROR_BUSY = static_cast<int>(0x80B80007u);
+constexpr int COMMON_DIALOG_ERROR_NOT_RUNNING = static_cast<int>(0x80B8000Bu);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B8000Du);
 constexpr int COMMON_DIALOG_RESULT_USER_CANCELED = 1;
 
@@ -59,7 +60,9 @@ int APS5_VABI sceG2PDialogGetResult(CommonDialogResultPrefix* result) {
 }
 
 int APS5_VABI sceG2PDialogClose(void) {
-    if (g_status.load() == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+    const int status = g_status.load();
+    if (status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+    if (status != COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_NOT_RUNNING;
     g_status = COMMON_DIALOG_STATUS_FINISHED;
     return 0;
 }

@@ -47,7 +47,9 @@ int APS5_VABI scePlayerReviewDialogOpen(const PlayerReviewDialogParam* param) {
 }
 
 int APS5_VABI scePlayerReviewDialogClose(void) {
-    if (g_status.load() == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+    const int status = g_status.load();
+    if (status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+    if (status != COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_NOT_RUNNING;
     g_status = COMMON_DIALOG_STATUS_FINISHED;
     return 0;
 }
