@@ -65,7 +65,7 @@ def button_mask(value):
 def main():
     parser = argparse.ArgumentParser(description="Queue a controller pulse for APS5_PAD_INPUT_FILE.")
     parser.add_argument("path", type=Path)
-    parser.add_argument("button", help="a button name, or several joined by '+' to press them together (for example l1+r1)")
+    parser.add_argument("button", help=f"a button name ({', '.join(BUTTONS)}), or several joined by '+' to press them together (for example l1+r1); release must be used alone")
     parser.add_argument("--hold-ms", type=int, default=300)
     parser.add_argument("--left-stick", type=int, nargs=2, metavar=("X", "Y"))
     parser.add_argument("--right-stick", type=int, nargs=2, metavar=("X", "Y"))
