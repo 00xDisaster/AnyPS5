@@ -271,7 +271,7 @@ def main():
         print("full run: no test graph")
         return 0
     graph = json.loads(Path(args.graph).read_text(encoding="utf-8"))
-    changed = [line.strip() for line in Path(args.changed).read_text(encoding="utf-8").splitlines() if line.strip()]
+    changed = [line.strip() for line in Path(args.changed).read_text(encoding="utf-8-sig").splitlines() if line.strip()]
     picked, full = select(graph, changed)
     if picked is None:
         print(f"full run: {', '.join(full[:5])}")

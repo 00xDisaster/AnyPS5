@@ -73,6 +73,7 @@ void* APS5_VABI _ZNSt8__sce_v28_Thrd_idEv_nid_postfix();
 int APS5_VABI scePthreadCreate(void** thread, const void* attr, void* (APS5_VABI* entry)(void*), void* argument, const char* name);
 int APS5_VABI scePthreadMutexUnlock(void** mutex);
 int APS5_VABI scePthreadCondWait(void** condition, void** mutex);
+void* APS5_VABI scePthreadSelf();
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -339,6 +340,7 @@ static void PadDetach() {
 }
 
 static void KernelKeys() {
+    Require(_Thrd_current_nid_postfix() == scePthreadSelf());
     int key = -1;
     Require(_Tss_create_nid_postfix(&key, nullptr) == success && key >= 0);
     int value = 0;
