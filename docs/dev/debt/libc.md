@@ -52,6 +52,8 @@
 - [__umodti3](../../../core/libs/prx/libc/src/RuntimeSupport.cpp) (libc) - the hardware traps on a zero divisor; this throws instead
 - [__modti3](../../../core/libs/prx/libc/src/RuntimeSupport.cpp) (libc) - the hardware traps on a zero divisor; this throws instead
 
+- [feupdateenv](../../../core/libs/prx/libc/src/Math.cpp) (libSceLibcInternal, implemented in libc, NID `YXQ4gXamCrY`) follows FreeBSD 11.4 amd64 [fenv.c](https://github.com/freebsd/freebsd-src/blob/d106002967eff712894ab8b5337bbbff106ce5e0/lib/msun/amd64/fenv.c): capture the old x87/MXCSR exception union (`0x3f`), restore the saved 32-byte environment, raise those flags in both units, then `fwait`. The console's layout, behavior and module versions are unmeasured; state belongs to the current host thread. A null input or MXCSR bits unsupported by the host's `FXSAVE` mask throw before changing floating-point state; the mask's architectural zero fallback is `0xffbf`. Console fault behavior for malformed environments is unknown. The separate `__fe_dfl_env` object remains unimplemented; no host `FE_DFL_ENV` sentinel is substituted.
+
 ### Functional
 
 - [_FSinh and _FCosh](../../../core/libs/prx/libc/src/Math.cpp) (libc) finite results are not verified bit for bit against the console: the scaled product uses the host's binary64 hyperbolic function before rounding to binary32, rather than the float rational and `_FExp` sequence in PRAGMATA's bundled `libc.prx`. NaN preference and payloads, signed zeros, infinite operands and the range-error thresholds follow that binary's instructions; the system `libSceLibcInternal` implementation and nondefault flush-to-zero modes are unverified.
