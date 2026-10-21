@@ -52,12 +52,17 @@ class DependencyTests(unittest.TestCase):
             "- [x] Depends on: [#2](https://github.com/owner/repo/pull/2)",
             "- [x] Depends on: https://github.com/owner/repo/pull/2",
             "- [x] Depends on: [PR #2](https://github.com/owner/repo/pull/2)",
+            "- [x] Depends on: https://github.com/owner/repo/pull/2/files",
+            "- [x] Depends on: https://github.com/owner/repo/pull/2#issuecomment-1",
+            "- [x] Depends on: https://github.com/BOYKOPOVAR/AnyPS5/pull/2",
             "Depends on: [#2](https://github.com/owner/repo/pull/2), [#3](https://github.com/owner/repo/pull/3)",
             "Depends on:\n- [#2](https://github.com/owner/repo/pull/2)\n- [#3](https://github.com/owner/repo/pull/3)",
             "- [x] Depends on: [none](https://example.com)",
+            "- [x] Depends on: https://github.com/shadps4-emu/shadPS4/pull/1234",
+            "- [x] Depends on: [#1234](https://github.com/shadps4-emu/shadPS4/pull/1234)",
         ):
             with self.subTest(body=body):
-                expected = set() if "none" in body else ({2, 3} if "3" in body else {2})
+                expected = set() if "none" in body or "shadps4" in body else ({2, 3} if "3" in body else {2})
                 self.assertEqual(pull_requests(body)[1]["depends"], expected)
 
     def test_later_references_are_not_dependencies(self):
