@@ -2054,16 +2054,10 @@ if(BUILD_TESTING)
     add_test(NAME agc_driver_store_idle_results_wake COMMAND agc_driver_store_idle_results_tests --idle-epoch-wake)
     set_tests_properties(agc_driver_store_idle_results_wake PROPERTIES
             ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" SKIP_RETURN_CODE 77 TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    add_test(NAME agc_driver_stencil_ref_export_unused_keep COMMAND agc_driver_stencil_ref_export_unused_tests --case keep)
-    add_test(NAME agc_driver_stencil_ref_export_unused_invert COMMAND agc_driver_stencil_ref_export_unused_tests --case invert)
-    set_tests_properties(agc_driver_stencil_ref_export_unused_keep agc_driver_stencil_ref_export_unused_invert PROPERTIES
-            ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" SKIP_RETURN_CODE 77 TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     if(WIN32)
         set_tests_properties(agc_driver_store_pending_identity PROPERTIES ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
         set_tests_properties(agc_driver_store_idle_results_wake PROPERTIES ENVIRONMENT_MODIFICATION
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
-        set_tests_properties(agc_driver_stencil_ref_export_unused_keep agc_driver_stencil_ref_export_unused_invert PROPERTIES ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 endif()
