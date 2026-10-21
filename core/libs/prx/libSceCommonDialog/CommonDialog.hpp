@@ -39,6 +39,27 @@ struct VrSetupDialogParam {
 
 static_assert(sizeof(VrSetupDialogParam) == 56);
 
+struct UsbStorageDialogParam {
+    CommonDialogBaseParam base;
+    std::uint64_t size;
+    char path[1024];
+    std::int32_t userId;
+    std::uint32_t padding;
+};
+
+struct UsbStorageDialogResult {
+    std::uint64_t size;
+    std::int32_t result;
+    std::int32_t status;
+    std::uint8_t reserved[64];
+};
+
+static_assert(offsetof(UsbStorageDialogParam, path) == 56);
+static_assert(offsetof(UsbStorageDialogParam, userId) == 1080);
+static_assert(sizeof(UsbStorageDialogResult) == 80);
+static_assert(offsetof(UsbStorageDialogResult, result) == 8);
+static_assert(offsetof(UsbStorageDialogResult, status) == 12);
+
 struct G2PDialogParam {
     CommonDialogBaseParam base;
     std::int32_t userId;
