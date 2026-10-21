@@ -77,6 +77,7 @@ int main() {
     int elements[16]{};
     unsigned char buffer[64]{};
     Require(sceRazorCpuInitDataTags(storage, sizeof(storage)) == 0);
+    Require(sceRazorCpuInitDataTags(nullptr, 0) == 0);
     Require(sceRazorCpuTagArray("elements", 7, elements, sizeof(elements), sizeof(elements[0])) == 0);
     Require(sceRazorCpuTagBuffer("buffer", 7, buffer, sizeof(buffer)) == 0);
     Require(sceRazorCpuResizeTaggedBuffer(7, buffer, sizeof(buffer) / 2) == 0);
