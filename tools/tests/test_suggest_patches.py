@@ -34,10 +34,19 @@ class PatchAdvisorTests(unittest.TestCase):
     def write_index(self):
         (self.catalog / "index.json").write_text(json.dumps({"format": 1, "entries": [self.entry]}))
 
-    def advise(self):
+    def advise(self, *extra):
         return suggest_patches.main(["--catalog", str(self.catalog), "--param-json", str(self.param),
                                      "--input", str(self.input), "--relinker", str(self.relinker),
-                                     "--module-dir", "Media/Modules"])
+                                     "--module-dir", "Media/Modules", *extra])
+
+    def additional_executable(self):
+        executable = self.root / "picker" / "picker.bin"
+        executable.parent.mkdir()
+        executable.write_bytes(b"secondary executable")
+        (self.catalog / "patch.toml").write_text('format = 1\n[[patch]]\ntarget = "picker/picker.bin"\nva = 0x1000\nexpected = "00"\nvalue = "01"\n')
+        self.entry["targets"] = {"picker/picker.bin": hashlib.sha256(executable.read_bytes()).hexdigest()}
+        self.write_index()
+        return executable
 
     @patch.object(suggest_patches.subprocess, "run")
     def test_verified_match_requires_explicit_application(self, run):
@@ -73,6 +82,27 @@ class PatchAdvisorTests(unittest.TestCase):
         self.entry["targets"] = {"eboot.bin": hashlib.sha256(self.input.read_bytes()).hexdigest()}
         self.write_index()
         self.assertEqual(self.advise(), 2)
+        run.assert_not_called()
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_additional_executable_is_hashed_and_verified(self, run):
+        self.additional_executable()
+        run.return_value.returncode = 0
+        self.assertEqual(self.advise("--executable", "picker/picker.bin"), 0)
+        self.assertEqual(run.call_args.args[0], [str(self.relinker), "--verify-patches",
+                                                 str(self.catalog / "patch.toml"), "--module-dir", "Media/Modules",
+                                                 "--executable", "picker/picker.bin", str(self.input)])
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_changed_additional_executable_is_not_verified(self, run):
+        executable = self.additional_executable()
+        executable.write_bytes(b"different executable")
+        self.assertEqual(self.advise("--executable", "picker/picker.bin"), 1)
+        run.assert_not_called()
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_additional_executable_cannot_escape_module_parent(self, run):
+        self.assertEqual(self.advise("--executable", "../outside.bin"), 2)
         run.assert_not_called()
 
 

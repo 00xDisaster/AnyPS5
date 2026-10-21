@@ -65,6 +65,7 @@ def main(argv=None):
     parser.add_argument("--relinker", required=True, type=Path)
     parser.add_argument("--sce-module-path", type=Path)
     parser.add_argument("--module-dir", action="append", default=[])
+    parser.add_argument("--executable", action="append", default=[])
     args = parser.parse_args(argv)
     try:
         metadata = json.loads(args.param_json.read_text(encoding="utf-8"))
@@ -79,6 +80,8 @@ def main(argv=None):
         root = (args.sce_module_path or args.input.parent).resolve()
         if not root.is_dir():
             raise ValueError("module parent must be a directory")
+        for executable in args.executable:
+            confined(root, executable)
         matches = []
         for number, entry, patch in load_catalog(args.catalog.resolve()):
             if (entry["titleId"], entry["contentVersion"]) != (title, version):
@@ -100,6 +103,8 @@ def main(argv=None):
                 command.extend(("--sce-module-path", str(args.sce_module_path)))
             for module_dir in args.module_dir:
                 command.extend(("--module-dir", module_dir))
+            for executable in args.executable:
+                command.extend(("--executable", executable))
             command.append(str(args.input))
             result = subprocess.run(command, capture_output=True, text=True)
             if result.returncode:
