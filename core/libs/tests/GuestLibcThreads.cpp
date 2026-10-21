@@ -54,6 +54,7 @@ int APS5_VABI _Tss_set_nid_postfix(int key, void* value);
 int APS5_VABI _Thrd_equal_nid_postfix(void* first, void* second);
 void* APS5_VABI _Thrd_current_nid_postfix(void);
 int APS5_VABI _Mtx_current_owns_nid_postfix(void** handle);
+void* APS5_VABI scePthreadSelf();
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -319,7 +320,9 @@ static void PadDetach() {
     RegisterPthreadDetach_nid_no_patch(nullptr);
 }
 
+// Calling into libkernel also makes Windows load it, which registers the thread forwards.
 static void KernelKeys() {
+    Require(_Thrd_current_nid_postfix() == scePthreadSelf());
     int key = -1;
     Require(_Tss_create_nid_postfix(&key, nullptr) == success && key >= 0);
     int value = 0;
