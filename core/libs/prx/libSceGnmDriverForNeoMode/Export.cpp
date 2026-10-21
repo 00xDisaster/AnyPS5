@@ -31,6 +31,21 @@ constexpr int Failure = static_cast<int>(0x8EEE00FFu);
 constexpr int NoInterface = static_cast<int>(0x80000000u);
 constexpr int ValidationNotEnabled = static_cast<int>(0x80D13FFFu);
 
+constexpr int CommandFailed = -1;
+constexpr std::uint32_t OpNop = 0x10;
+constexpr std::uint32_t NeoDrawFlags = 0xe0000000u;
+constexpr std::uint32_t AutoIndex = 2;
+
+constexpr std::uint32_t Header(std::uint32_t opcode, std::uint32_t bodyWords, bool compute = false, bool predicated = false) {
+    return 0xc0000000u | ((bodyWords - 1) << 16) | (opcode << 8) | (compute ? 2u : 0u) | (predicated ? 1u : 0u);
+}
+
+std::uint32_t* Nop(std::uint32_t* at, std::uint32_t bodyWords) {
+    at[0] = Header(OpNop, bodyWords);
+    at[1] = 0;
+    return at + 1 + bodyWords;
+}
+
 } // namespace
 
 extern "C" {
@@ -88,13 +103,24 @@ int APS5_VABI sceGnmDispatchIndirectOnMec(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndex(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndex(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t indexCount, std::uint64_t indexAddress, std::uint32_t flags, std::uint32_t) {
+    if (!cmdbuf || size != 10 || indexAddress == 0 || (indexAddress & 1) != 0 || (flags & 0x1ffffffeu) != 0) return CommandFailed;
+    cmdbuf[0] = Header(0x27, 5);
+    cmdbuf[1] = indexCount;
+    cmdbuf[2] = static_cast<std::uint32_t>(indexAddress);
+    cmdbuf[3] = static_cast<std::uint32_t>(indexAddress >> 32);
+    cmdbuf[4] = indexCount;
+    cmdbuf[5] = flags & NeoDrawFlags;
+    Nop(cmdbuf + 6, 3);
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexAuto(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndexAuto(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t indexCount, std::uint32_t flags) {
+    if (!cmdbuf || size != 7 || (flags & 0x1ffffffeu) != 0) return CommandFailed;
+    cmdbuf[0] = Header(0x2d, 2);
+    cmdbuf[1] = indexCount;
+    cmdbuf[2] = (flags & NeoDrawFlags) | AutoIndex;
+    Nop(cmdbuf + 3, 3);
     return 0;
 }
 
@@ -118,8 +144,14 @@ int APS5_VABI sceGnmDrawIndexMultiInstanced(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexOffset(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndexOffset(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t indexOffset, std::uint32_t indexCount, std::uint32_t flags) {
+    if (!cmdbuf || size != 9) return CommandFailed;
+    cmdbuf[0] = Header(0x35, 4, false, flags & 1);
+    cmdbuf[1] = indexCount;
+    cmdbuf[2] = indexOffset;
+    cmdbuf[3] = indexCount;
+    cmdbuf[4] = flags & NeoDrawFlags;
+    Nop(cmdbuf + 5, 3);
     return 0;
 }
 
@@ -321,8 +353,12 @@ int APS5_VABI sceGnmGpuPaDebugLeave(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmInsertDingDongMarker(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmInsertDingDongMarker(std::uint32_t* cmdbuf, std::uint32_t size) {
+    if (!cmdbuf || size != 4) return CommandFailed;
+    cmdbuf[0] = Header(OpNop, 3);
+    cmdbuf[1] = 0;
+    cmdbuf[2] = 0;
+    cmdbuf[3] = 0;
     return 0;
 }
 
