@@ -355,6 +355,12 @@ void DepthCopyCase(Context context, std::uint8_t* block) {
         ExpectFailure([&] { copy(samples, 0, {Side / 2, Side / 2}); }, "of another size", "a DB depth copy of another extent than the depth surface was accepted");
         ClearDepthSurfaces(context.device);
     }
+    if ((context.limits.sampledImageDepthSampleCounts & VK_SAMPLE_COUNT_2_BIT) == 0) {
+        Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.375f, 0, 0, false, 2}) != VK_NULL_HANDLE, "the unsampleable two-sample depth surface was not created");
+        ExpectFailure([&] { copy(2, 0, {Side, Side}); }, "cannot sample at its sample count", "a DB depth copy from an unsampleable two-sample depth surface was accepted");
+        ClearDepthSurfaces(context.device);
+        std::puts("DB depth copy: unsupported two-sample source refused cleanly");
+    }
     Require(DepthSurfaceView(context, DepthTarget{depthAddress, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 0.625f, 0, 0, false, 1}) != VK_NULL_HANDLE, "the one-sample depth surface was not created");
     std::fill(block, block + BlockBytes, std::uint8_t{0});
     copy(1, 0, {Side, Side});
