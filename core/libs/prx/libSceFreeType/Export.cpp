@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -320,6 +321,19 @@ void APS5_VABI FT_Set_Transform_nid_postfix(GuestFaceRec* face, const GuestMatri
     if (matrix) nativeMatrix = {component(matrix->xx), component(matrix->xy), component(matrix->yx), component(matrix->yy)};
     if (delta) nativeDelta = {component(delta->x), component(delta->y)};
     FT_Set_Transform(owner->host, matrix ? &nativeMatrix : nullptr, delta ? &nativeDelta : nullptr);
+}
+
+int APS5_VABI FT_Outline_Copy_nid_postfix(const GuestOutline* source, GuestOutline* target) {
+    if (!source || !target) return FT_Err_Invalid_Outline;
+    if (source->n_points != target->n_points || source->n_contours != target->n_contours) return FT_Err_Invalid_Argument;
+    if (source == target) return FT_Err_Ok;
+    if (source->n_points) {
+        std::memmove(target->points, source->points, source->n_points * sizeof(GuestVector));
+        std::memmove(target->tags, source->tags, source->n_points * sizeof(unsigned char));
+    }
+    if (source->n_contours) std::memmove(target->contours, source->contours, source->n_contours * sizeof(std::uint16_t));
+    target->flags = (source->flags & ~FT_OUTLINE_OWNER) | (target->flags & FT_OUTLINE_OWNER);
+    return FT_Err_Ok;
 }
 
 }
