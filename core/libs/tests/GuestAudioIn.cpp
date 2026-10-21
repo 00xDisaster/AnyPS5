@@ -16,6 +16,10 @@ int APS5_VABI sceAudioInInit();
 int APS5_VABI sceAudioInOpen(int, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
 int APS5_VABI sceAudioInHqOpen(int, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
 int APS5_VABI sceAudioInAsyncOpen(int, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+int APS5_VABI sceAudioInOpenEx(int, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+int APS5_VABI sceAudioInHqOpenEx(int, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
+int APS5_VABI sceAudioInSetCompressorPreGain();
+int APS5_VABI sceAudioInSetNoiseGateThreshold();
 int32_t APS5_VABI sceAudioInIsPadEmbeddedMic(int32_t);
 int32_t APS5_VABI sceAudioInGetGain(int32_t, float*);
 int32_t APS5_VABI sceAudioInGetRerouteCount(int32_t);
@@ -105,6 +109,15 @@ void TestValidation() {
     port = sceAudioInAsyncOpen(user, 0, 0, 384, 48000, 0x10);
     gain = 0.5f;
     Require(port > 0 && sceAudioInGetGain(port, &gain) == 0 && gain == 1.0f && sceAudioInGetRerouteCount(port) == 0 && sceAudioInClose(port) == 0);
+    Require(sceAudioInOpenEx(user, 2, 0, 7, 256, 48000, 2) == invalidType);
+    Require(sceAudioInOpenEx(user, 0, 0, 7, 512, 48000, 2) == invalidSize);
+    Require(sceAudioInOpenEx(user, 0, 0, 7, 256, 44100, 2) == invalidFreq);
+    Require(sceAudioInHqOpenEx(user, 0, 0, 7, 128, 44100, 2) == invalidFreq);
+    port = sceAudioInOpenEx(user, 0, 0, 7, 256, 48000, 2);
+    Require(port > 0 && sceAudioInClose(port) == 0);
+    port = sceAudioInHqOpenEx(user, 0, 0, 7, 256, 16000, 2);
+    Require(port > 0 && sceAudioInClose(port) == 0);
+    Require(sceAudioInSetCompressorPreGain() == 0 && sceAudioInSetNoiseGateThreshold() == 0);
     Require(ReportsNotImplemented("sceAudioInIsPadEmbeddedMic", [] { sceAudioInIsPadEmbeddedMic(1); }));
 }
 
