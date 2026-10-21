@@ -296,6 +296,9 @@ struct Session {
     std::vector<std::string> alpnStrings;
     std::vector<const char*> alpnList;
     std::string alpnSelected;
+    Block peekBuffer;
+    std::size_t peekOffset = 0;
+    std::size_t peekSize = 0;
     bool handshaken = false;
     bool verifying = false;
     bool verified = false;
@@ -915,6 +918,7 @@ int APS5_VABI sceSslConnect(int sslConnectionId) {
 }
 
 int APS5_VABI sceSslRead(int sslConnectionId, void* buf, size_t len, int flags) {
+    if (static_cast<unsigned int>(flags) > 3) return ErrorInvalidValue;
     if (!buf && len) throw std::invalid_argument("sceSslRead: null buffer");
     std::shared_ptr<Session> session;
     if (const int code = Establish(__func__, sslConnectionId, session)) {
@@ -932,7 +936,28 @@ int APS5_VABI sceSslRead(int sslConnectionId, void* buf, size_t len, int flags) 
     const auto total = std::min<std::size_t>(len, INT_MAX);
     std::size_t received = 0;
     while (received < total) {
-        const int result = mbedtls_ssl_read(&session->ssl, bytes + received, total - received);
+        if (session->peekOffset < session->peekSize) {
+            const auto count = std::min(total - received, session->peekSize - session->peekOffset);
+            std::memcpy(bytes + received, session->peekBuffer.get() + session->peekOffset, count);
+            received += count;
+            if (flags == 3) break;
+            session->peekOffset += count;
+            if (session->peekOffset == session->peekSize) {
+                session->peekOffset = 0;
+                session->peekSize = 0;
+                session->peekBuffer.reset();
+            }
+            if (flags != 0) break;
+            continue;
+        }
+        if (flags == 3 && !session->peekBuffer) session->peekBuffer = Allocate(MBEDTLS_SSL_IN_CONTENT_LEN);
+        const int result = flags == 3
+            ? mbedtls_ssl_read(&session->ssl, session->peekBuffer.get(), MBEDTLS_SSL_IN_CONTENT_LEN)
+            : mbedtls_ssl_read(&session->ssl, bytes + received, total - received);
+        if (result > 0 && flags == 3) {
+            session->peekSize = static_cast<std::size_t>(result);
+            continue;
+        }
         if (result > 0) {
             received += static_cast<std::size_t>(result);
             if (flags != 0) break;
