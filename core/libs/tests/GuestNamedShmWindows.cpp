@@ -2,6 +2,7 @@
 #include "prx/libkernel/File/include/SharedMemory.hpp"
 #include "nid/Sha1.hpp"
 #include <windows.h>
+#include <aclapi.h>
 #include <io.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -47,6 +48,44 @@ void Require(bool condition, const char* message) {
 
 void RequireError(int descriptor, int expected, const char* message) {
     Require(descriptor == -1 && *__error_nid_postfix() == expected, message);
+}
+
+void RequireNoAdministratorsAccess(HANDLE handle) {
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    const DWORD result = ::GetSecurityInfo(handle, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+        nullptr, nullptr, &dacl, nullptr, &descriptor);
+    if (result != ERROR_SUCCESS || dacl == nullptr) {
+        if (descriptor != nullptr) ::LocalFree(descriptor);
+        Require(false, "reading named shared-memory object permissions failed");
+    }
+    SID_IDENTIFIER_AUTHORITY authority = SECURITY_NT_AUTHORITY;
+    PSID administrators = nullptr;
+    if (::AllocateAndInitializeSid(&authority, 2, SECURITY_BUILTIN_DOMAIN_RID,
+        DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &administrators) == FALSE) {
+        ::LocalFree(descriptor);
+        Require(false, "building the Administrators SID failed");
+    }
+    ACL_SIZE_INFORMATION information{};
+    const BOOL gotInformation = ::GetAclInformation(dacl, &information, sizeof(information), AclSizeInformation);
+    bool grantsAdministrators = false;
+    if (gotInformation) {
+        for (DWORD index = 0; index < information.AceCount; ++index) {
+            void* rawAce = nullptr;
+            if (!::GetAce(dacl, index, &rawAce)) continue;
+            const auto* header = static_cast<const ACE_HEADER*>(rawAce);
+            if (header->AceType != ACCESS_ALLOWED_ACE_TYPE) continue;
+            const auto* ace = static_cast<const ACCESS_ALLOWED_ACE*>(rawAce);
+            if (::EqualSid(const_cast<DWORD*>(&ace->SidStart), administrators) != FALSE) {
+                grantsAdministrators = true;
+                break;
+            }
+        }
+    }
+    ::FreeSid(administrators);
+    ::LocalFree(descriptor);
+    Require(gotInformation && !grantsAdministrators,
+        "named shared-memory object grants access to the Administrators group");
 }
 
 void RequireNoUnlinkedFiles(const std::string& name) {
@@ -317,7 +356,9 @@ void Run() {
 
     const std::string permissionsName = base + "-permissions";
     const int restricted = shm_open_nid_postfix(permissionsName.c_str(), ReadWrite | Create | Exclusive, 0400);
-    Require(restricted >= 0 && close_nid_postfix(restricted) == 0, "read-only mode creation failed");
+    Require(restricted >= 0, "read-only mode creation failed");
+    RequireNoAdministratorsAccess(reinterpret_cast<HANDLE>(::_get_osfhandle(restricted)));
+    Require(close_nid_postfix(restricted) == 0, "closing read-only mode object failed");
     *__error_nid_postfix() = 0;
     RequireError(shm_open_nid_postfix(permissionsName.c_str(), ReadWrite, 0), 13,
                  "mode 0400 allowed a later read-write open");

@@ -1295,7 +1295,7 @@ if(BUILD_TESTING)
     if(WIN32)
         add_test_executable(guest_named_shm_windows_tests ${LIBS_INCLUDE_DIR}/tests/GuestNamedShmWindows.cpp)
         target_include_directories(guest_named_shm_windows_tests PRIVATE ${LIBS_INCLUDE_DIR} ${LIBS_INCLUDE_DIR}/nid/include)
-        target_link_libraries(guest_named_shm_windows_tests PRIVATE libkernel libc)
+        target_link_libraries(guest_named_shm_windows_tests PRIVATE libkernel libc advapi32)
         configure_windows_unwind(guest_named_shm_windows_tests)
         add_test(NAME guest_named_shm_windows COMMAND guest_named_shm_windows_tests)
         set_tests_properties(guest_named_shm_windows PROPERTIES TIMEOUT 20 ENVIRONMENT_MODIFICATION
