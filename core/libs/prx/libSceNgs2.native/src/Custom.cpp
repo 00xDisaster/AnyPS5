@@ -45,7 +45,7 @@ static int CheckBuiltInModule(const Ngs2CustomRackModuleInfo& info) {
     return SCE_NGS2_OK;
 }
 
-int Ngs2CheckCustomRack(const Ngs2CustomRackOption& option, std::uint32_t maxInputs) {
+int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option, std::uint32_t maxInputs) {
     if (option.num_buffers == 0 || option.num_buffers > SCE_NGS2_CUSTOM_MAX_BUFFERS || option.num_buffers < maxInputs) {
         return SCE_NGS2_ERROR_INVALID_NUM_BUFFERS;
     }
@@ -70,7 +70,10 @@ int Ngs2CheckCustomRack(const Ngs2CustomRackOption& option, std::uint32_t maxInp
     }
     if (option.num_buffers != 1) throw std::runtime_error("NGS2: custom racks with " + std::to_string(option.num_buffers) + " buffers are not implemented");
     for (std::uint32_t m = 0; m < option.num_modules; m++) {
-        const char* name = BuiltInModuleName(option.module[m].module_id);
+        const auto moduleId = option.module[m].module_id;
+        if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN && rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) continue;
+        if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN) throw std::runtime_error("NGS2: the custom Gain module on a custom sampler rack is not implemented");
+        const char* name = BuiltInModuleName(moduleId);
         if (name != nullptr) throw std::runtime_error(std::string("NGS2: the custom ") + name + " module is not implemented");
     }
     for (std::uint32_t p = 0; p < option.rack_option.max_ports; p++) {
@@ -92,6 +95,7 @@ void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
     for (auto& voice : rack.voices) {
         voice.userFx.resize(option.num_modules);
         voice.customUserFx.resize(option.num_modules);
+        voice.customGain.assign(option.num_modules, {});
     }
     for (std::uint32_t m = 0; m < option.num_modules; m++) {
         rack.customModuleIds[m] = option.module[m].module_id;
@@ -159,6 +163,26 @@ static void SetCustomUserFxParam(Ngs2Voice& voice, std::uint32_t index, const Ng
     fx.flags = 1;
 }
 
+static void SetGainParam(Ngs2Voice& voice, std::uint32_t index, const Ngs2CustomVoiceGainParam& param) {
+    if (index >= voice.customGain.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_GAIN) APS5_INVALID_ARG_EX;
+    for (const float gain : param.gain) {
+        if (!(gain >= -32.0f && gain <= 32.0f)) throw std::runtime_error("NGS2: a custom Gain level outside -32 to 32 is not implemented");
+    }
+    std::copy(std::begin(param.gain), std::end(param.gain), voice.customGain[index].target.begin());
+}
+
+static void ProcessGain(Ngs2Voice& voice, Ngs2VoiceCustomGain& gain, const std::vector<float*>& channels, std::uint32_t grain) {
+    if (voice.hasSamples) {
+        for (std::uint32_t c = 0; c < voice.channels; c++) {
+            const float from = gain.current[c];
+            const float step = (gain.target[c] - from) / static_cast<float>(grain);
+            for (std::uint32_t i = 0; i < grain; i++) channels[c][i] *= from + step * static_cast<float>(i + 1);
+        }
+        voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
+    }
+    gain.current = gain.target;
+}
+
 void Ngs2ApplyCustomParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
     const auto rackId = voice.rack->rackId;
     if (param.id == SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP) {
@@ -191,6 +215,11 @@ void Ngs2ApplyCustomParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
         Ngs2SetFilter(voice, filter);
         return;
     }
+    if ((param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN) {
+        if (rackId != SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) throw std::invalid_argument("NGS2: voice param " + Ngs2Hex(param.id) + " belongs to another rack");
+        SetGainParam(voice, param.id & 0x1f, ParamAs<Ngs2CustomVoiceGainParam>(param));
+        return;
+    }
     if ((param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
         if (rackId != SCE_NGS2_RACK_ID_CUSTOM_SAMPLER && rackId != SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) {
             throw std::invalid_argument("NGS2: voice param " + Ngs2Hex(param.id) + " belongs to another rack");
@@ -212,7 +241,9 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
     std::vector<float*> channels(voice.channels);
     for (std::uint32_t c = 0; c < voice.channels; c++) channels[c] = voice.samples.data() + static_cast<std::size_t>(c) * grain;
     for (std::size_t m = 0; m < voice.rack->customModuleIds.size(); m++) {
-        if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) {
+        if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_GAIN) {
+            ProcessGain(voice, voice.customGain[m], channels, grain);
+        } else if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) {
             if (!voice.hasSamples) continue;
             auto& fx = voice.userFx[m];
             const auto& module = voice.rack->userFx[m];

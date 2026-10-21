@@ -103,8 +103,8 @@ static int CheckedRackOption(std::uint32_t rackId, const Ngs2RackOption* option,
     }
     if (options.common.max_voices == 0 || maxChannels == 0) throw std::invalid_argument("NGS2: invalid rack voice or channel count");
     int result = SCE_NGS2_OK;
-    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) result = Ngs2CheckCustomRack(options.customSampler.custom_rack_option, 0);
-    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) result = Ngs2CheckCustomRack(options.customSubmixer.custom_rack_option, options.customSubmixer.max_inputs);
+    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) result = Ngs2CheckCustomRack(rackId, options.customSampler.custom_rack_option, 0);
+    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) result = Ngs2CheckCustomRack(rackId, options.customSubmixer.custom_rack_option, options.customSubmixer.max_inputs);
     if (result != SCE_NGS2_OK) return result;
     if (maxChannels > NGS2_MAX_CHANNELS) {
         if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) {
