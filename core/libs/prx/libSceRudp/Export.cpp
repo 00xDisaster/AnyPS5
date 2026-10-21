@@ -236,10 +236,10 @@ int APS5_VABI sceRudpSetOption(int ctxId, int option, const void* value, uint32_
     const auto context = g_ctx.find(ctxId);
     if (context == g_ctx.end()) return RUDP_ERROR_INVALID_CONTEXT_ID;
     if (option < RUDP_OPTION_MAX_PAYLOAD || option > RUDP_OPTION_KEEP_ALIVE_TIMEOUT) return RUDP_ERROR_INVALID_OPTION;
-    const auto entry = context->second.options.find(option);
-    if (entry == context->second.options.end()) NotImplemented_nid_no_patch(__func__);
-    if (value == nullptr || len != sizeof(entry->second)) return RUDP_ERROR_INVALID_ARGUMENT;
-    std::memcpy(&entry->second, value, sizeof(entry->second));
+    uint32_t optionValue;
+    if (value == nullptr || len != sizeof(optionValue)) return RUDP_ERROR_INVALID_ARGUMENT;
+    std::memcpy(&optionValue, value, sizeof(optionValue));
+    context->second.options.insert_or_assign(option, optionValue);
     return 0;
 }
 
@@ -252,7 +252,10 @@ int APS5_VABI sceRudpGetOption(int ctxId, int option, void* value, uint32_t len)
     if (context == g_ctx.end()) return RUDP_ERROR_INVALID_CONTEXT_ID;
     if (option < RUDP_OPTION_MAX_PAYLOAD || option > RUDP_OPTION_KEEP_ALIVE_TIMEOUT) return RUDP_ERROR_INVALID_OPTION;
     const auto entry = context->second.options.find(option);
-    if (entry == context->second.options.end()) NotImplemented_nid_no_patch(__func__);
+    if (entry == context->second.options.end() ||
+        (option > RUDP_OPTION_AGGREGATION_TIMEOUT && option < RUDP_OPTION_READ_TIMEOUT)) {
+        NotImplemented_nid_no_patch(__func__);
+    }
     if (value == nullptr || len != sizeof(entry->second)) return RUDP_ERROR_INVALID_ARGUMENT;
     std::memcpy(value, &entry->second, sizeof(entry->second));
     return 0;

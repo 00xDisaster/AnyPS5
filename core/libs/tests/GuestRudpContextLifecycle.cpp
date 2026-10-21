@@ -77,18 +77,30 @@ static void CheckOptions(int context) {
         std::uint32_t value = 0xa5a5a5a5u;
         bool threw = false;
         try {
-            sceRudpSetOption(context, option, &value, sizeof(value));
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw);
-        threw = false;
-        try {
             sceRudpGetOption(context, option, &value, sizeof(value));
         } catch (const std::runtime_error&) {
             threw = true;
         }
         Require(threw && value == 0xa5a5a5a5u);
+        for (std::uint32_t input : {0u, 1u, 0x80000000u, 0xffffffffu}) {
+            buffer.fill(0xa5);
+            std::memcpy(buffer.data() + 1, &input, sizeof(input));
+            Require(sceRudpSetOption(context, option, buffer.data() + 1, sizeof(input)) == 0);
+            Require(buffer.front() == 0xa5 && buffer.back() == 0xa5);
+            for (int current : {context, other}) {
+                threw = false;
+                try {
+                    sceRudpGetOption(current, option, &value, sizeof(value));
+                } catch (const std::runtime_error&) {
+                    threw = true;
+                }
+                Require(threw && value == 0xa5a5a5a5u);
+            }
+        }
+        for (std::uint32_t length : {0u, 1u, 3u, 5u, 8u, std::numeric_limits<std::uint32_t>::max()}) {
+            Require(sceRudpSetOption(context, option, &value, length) == invalidArgument);
+        }
+        Require(sceRudpSetOption(context, option, nullptr, sizeof(value)) == invalidArgument);
     }
     Require(sceRudpTerminate(other) == 0);
 }
