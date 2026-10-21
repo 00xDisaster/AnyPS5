@@ -180,18 +180,22 @@ struct Block {
     std::uint8_t* data = nullptr;
 };
 
-AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
+AgcDriver::Graphics::ColorTarget DecodeTarget(std::uint64_t address, std::uint32_t sampleShift = SampleShift, VkExtent2D extent = {Side, Side}) {
     AgcDriver::Registers cx;
-    cx[0x318] = static_cast<std::uint32_t>(block.Address() >> 8u);
+    cx[0x318] = static_cast<std::uint32_t>(address >> 8u);
     cx[0x31b] = 0;
     cx[0x31c] = Float16x4Info;
-    cx[0x31d] = MultisampledAttrib;
-    cx[0x3b0] = ((Side - 1u) << 14u) | (Side - 1u);
+    cx[0x31d] = (sampleShift << 12u) | (sampleShift << 15u);
+    cx[0x3b0] = ((extent.width - 1u) << 14u) | (extent.height - 1u);
     cx[0x3b8] = TiledAttrib3;
-    cx[0x390] = static_cast<std::uint32_t>(block.Address() >> 40u);
+    cx[0x390] = static_cast<std::uint32_t>(address >> 40u);
     const auto color = AgcDriver::Graphics::DecodeColorBuffer(cx, 0);
-    Require(color.format == VK_FORMAT_R16G16B16A16_SFLOAT && color.samples == Samples && color.extent.width == Side && color.extent.height == Side, "the target did not decode as a 16x16 RGBA16F surface of 4 samples");
+    Require(color.format == VK_FORMAT_R16G16B16A16_SFLOAT && color.samples == 1u << sampleShift && color.extent.width == extent.width && color.extent.height == extent.height, "the target did not decode as an RGBA16F surface of " + std::to_string(extent.width) + "x" + std::to_string(extent.height) + " and " + std::to_string(1u << sampleShift) + " samples");
     return color;
+}
+
+AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
+    return DecodeTarget(block.Address());
 }
 
 AgcDriver::Graphics::ColorTarget DecodeSwappedTarget(const Block& block) {
@@ -235,17 +239,17 @@ AgcDriver::Graphics::State TargetState(const AgcDriver::Graphics::ColorTarget& c
     state.colors = {color};
     state.color = color;
     state.hasColorTarget = true;
-    state.renderExtent = {Side, Side};
+    state.renderExtent = color.extent;
     state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    state.viewport = {0, static_cast<float>(Side), static_cast<float>(Side), -static_cast<float>(Side), 0, 1};
+    state.viewport = {0, static_cast<float>(color.extent.height), static_cast<float>(color.extent.width), -static_cast<float>(color.extent.height), 0, 1};
     state.negativeOneToOne = false;
-    state.scissor = {{0, 0}, {Side, Side}};
+    state.scissor = {{0, 0}, color.extent};
     state.cullMode = VK_CULL_MODE_NONE;
     state.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     state.blends = {blend};
     state.blend = blend;
     state.blendConstants = {};
-    state.samples = Samples;
+    state.samples = color.samples;
     return state;
 }
 
@@ -576,6 +580,64 @@ void CheckOverwrittenTarget(AgcDriver::VulkanDevice& device) {
     std::puts("a drawn 4x target in watched memory stays guarded until the title writes over its color memory; the next guarded read then retires it, and a later draw guards the new target");
 }
 
+bool Refused(std::uint64_t address, std::size_t bytes, const char* access) {
+    try {
+        AgcDriver::Graphics::RequireNoMultisampleTarget(address, bytes, access);
+    } catch (const std::exception& error) {
+        if (std::string_view(error.what()).find("whose samples are only on the host") == std::string_view::npos) throw;
+        return true;
+    }
+    return false;
+}
+
+void CheckClaimedTargets(AgcDriver::VulkanDevice& device) {
+    const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(device);
+    if ((context.limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_2_BIT) == 0 || (context.limits.framebufferStencilSampleCounts & VK_SAMPLE_COUNT_2_BIT) == 0) {
+        std::puts("claimed target retirement not tested: the device cannot render two-sample color and stencil");
+        return;
+    }
+    for (const bool drawnAgain : {false, true}) {
+        Block color(BlockBytes);
+        Block depth(2u * BlockBytes);
+        const auto state = TargetState(DecodeTarget(color.Address(), 1u));
+        Draw(device, state);
+        device.WaitIdle();
+        Require(Refused(color.Address(), 0x1000u, "a read of a drawn 2x target"), "a drawn 2x target is not guarded");
+        AgcDriver::Graphics::DepthTarget stencil{depth.Address(), color.Address(), {Side, Side}, VK_FORMAT_D32_SFLOAT_S8_UINT, 1.0f, 0u, depth.Address() + BlockBytes, false, 2u};
+        stencil.htileDepthOnly = true;
+        AgcDriver::Graphics::DepthSurfaceView(context, stencil);
+        device.WaitIdle();
+        if (drawnAgain) {
+            Draw(device, state);
+            device.WaitIdle();
+        }
+        const bool refused = Refused(color.Address(), 0x1000u, drawnAgain ? "a read of a 2x target drawn again after a stencil plane was bound over it" : "a read of a 2x target that a stencil plane was bound over");
+        AgcDriver::Graphics::ClearDepthSurfaces(context.device);
+        Require(refused == drawnAgain, drawnAgain ? "a 2x target drawn again after a D32S8 target's stencil plane was bound over it is not guarded" : "a 2x target that a D32S8 target's stencil plane was bound over after its last draw is still guarded");
+    }
+    {
+        Block reused(BlockBytes);
+        Draw(device, TargetState(DecodeTarget(reused.Address(), 1u)));
+        device.WaitIdle();
+        Draw(device, TargetState(DecodeTarget(reused.Address(), 0u)));
+        device.WaitIdle();
+        Require(!Refused(reused.Address(), 0x1000u, "a read of a 2x target that a single-sample color target was drawn over"), "a 2x target that a single-sample color target was drawn over is still guarded");
+    }
+    {
+        Block reused(2u * BlockBytes);
+        const auto wide = TargetState(DecodeTarget(reused.Address(), 1u, {8u * Side, 4u * Side}));
+        const auto narrow = TargetState(DecodeTarget(reused.Address()));
+        Require(AgcDriver::Graphics::MultisampledColorBytes(wide.color) == 2u * BlockBytes && AgcDriver::Graphics::MultisampledColorBytes(narrow.color) == BlockBytes, "the 2x target does not span the 4x target and one more block");
+        Draw(device, wide);
+        device.WaitIdle();
+        Draw(device, narrow);
+        device.WaitIdle();
+        Require(!Refused(reused.Address() + BlockBytes, 0x1000u, "a read of the part of a 2x target that a 4x target drawn over it does not cover"), "a 2x target that a 4x target was drawn over is still guarded");
+        Require(Refused(reused.Address(), 0x1000u, "a read of a 4x target drawn over a 2x target"), "a 4x target drawn over a 2x target is not guarded");
+    }
+    std::puts("a 2x target whose memory a D32S8 stencil plane, a single-sample color target or a 4x target was bound over after its last draw is retired at the next guarded read; one drawn again after the stencil bind stays guarded");
+}
+
 void StoreWords(const Block& block, std::uint64_t bytes, std::uint32_t word) {
     for (std::uint64_t offset = 0; offset < bytes; offset += sizeof(word)) std::memcpy(block.data + offset, &word, sizeof(word));
 }
@@ -728,6 +790,7 @@ int main(int argc, char** argv) {
         Draw(*device, state);
         CheckSamples(state, LoadSamples(*device, block), {});
         CheckOverwrittenTarget(*device);
+        CheckClaimedTargets(*device);
         const auto colorBytes = AgcDriver::Graphics::MultisampledColorBytes(color);
         Require(colorBytes != 0 && colorBytes <= block.bytes, "the 4x target's color memory does not fit its block");
         AgcDriver::Graphics::NoteColorMetadataFill(block.Address(), static_cast<std::size_t>(colorBytes), FillOnes);
