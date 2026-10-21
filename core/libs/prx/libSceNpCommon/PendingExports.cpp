@@ -380,31 +380,6 @@ int APS5_VABI sceNpLwCondWait(void) {
     return 0;
 }
 
-int APS5_VABI sceNpLwMutexDestroy(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpLwMutexInit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpLwMutexLock(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpLwMutexTryLock(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpLwMutexUnlock(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceNpMemoryHeapDestroy(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -421,31 +396,6 @@ int APS5_VABI sceNpMemoryHeapGetAllocatorEx(void) {
 }
 
 int APS5_VABI sceNpMemoryHeapInit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpMutexDestroy(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpMutexInit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpMutexLock(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpMutexTryLock(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpMutexUnlock(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
