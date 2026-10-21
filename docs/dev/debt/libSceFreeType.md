@@ -10,6 +10,8 @@
 
 - [FT_Outline_Check, FT_Outline_Get_CBox](../../../core/libs/prx/libSceFreeType/src/Outline.cpp) (libSceFreeType) - console signatures, count signedness and errors are unverified; the adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftoutln.c), including its unsigned 16-bit counts and contour endpoints. Control-box coordinates use the existing guest LP64 layout and retain their full 64-bit range on Windows; contour checking does not validate point tags
 
+- [FT_Get_Charmap_Index, FT_Get_CMap_Language_ID, FT_Get_CMap_Format](../../../core/libs/prx/libSceFreeType/src/Charmap.cpp) (libSceFreeType) - console signatures and return values are unverified; the adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftobjs.c) and the existing guest LP64 model. Charmaps must be the face's original read-only guest records; copied or otherwise unregistered records with a non-null face throw instead of reading private native cmap fields from guest memory
+
 ### Functional
 
 - [libSceFreeType](../../../core/libs/prx/libSceFreeType/src/GuestObjects.cpp) (libSceFreeType) - private fields (`driver`, `memory`, `stream`, `sizes_list`, `extensions`) and `subglyphs` stay null. Face, size and glyph-slot records are copies. Only edits to outline points and flags are written back before `FT_Render_Glyph`; replacing arrays or exceeding the host `FT_Pos` range throws. `FT_New_Face` reads the whole file into memory and throws for files of 2 GiB or more on Windows. On macOS, native FreeType symbols remain exported and could resolve guest imports without adaptation; Windows and Linux hide them with `--exclude-libs`.
