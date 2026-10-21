@@ -30,7 +30,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           python3 tools/progress.py "$RUNNER_TEMP/progress"
-          site=$(gh api "repos/$GH_REPO/pages" --jq .html_url)
+          set +e
+          site=$(gh api "repos/$GH_REPO/pages" --jq .html_url 2>"$RUNNER_TEMP/pages-api-stderr")
+          status=$?
+          set -e
+          if [ $status -ne 0 ]; then
+            if grep -q "HTTP 404" "$RUNNER_TEMP/pages-api-stderr"; then
+              echo "GitHub Pages is not configured, progress deployment skipped" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            cat "$RUNNER_TEMP/pages-api-stderr" >&2
+            exit $status
+          fi
           if curl -fsSL "${site%/}/progress.json?$GITHUB_SHA" -o "$RUNNER_TEMP/deployed.json" &&
             cmp -s "$RUNNER_TEMP/deployed.json" "$RUNNER_TEMP/progress/progress.json"; then
             echo "Progress unchanged, Pages not deployed" >> "$GITHUB_STEP_SUMMARY"
