@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -52,6 +54,30 @@ def main():
         assert not list(output.parent.glob("*.patches.toml")), "manifest written without patches"
 
         (source.parent / "relinker-patches.toml").write_text(patch_text(address, expected, "flip_bit"))
+        catalog = root / "catalog"
+        catalog.mkdir()
+        (catalog / "patch.toml").write_text(patch_text(address, expected, "flip_bit"))
+        (catalog / "index.json").write_text(json.dumps({"format": 1, "entries": [{
+            "titleId": "TEST00001", "contentVersion": "01.000.000", "patch": "patch.toml",
+            "targets": {"eboot.bin": hashlib.sha256(image).hexdigest()}
+        }]}))
+        metadata = root / "param.json"
+        metadata.write_text(json.dumps({"titleId": "TEST00001", "contentVersion": "01.000.000"}))
+        advisor = Path(__file__).resolve().parents[4] / "tools" / "suggest_patches.py"
+        advised = subprocess.run([sys.executable, str(advisor), "--catalog", str(catalog),
+                                  "--param-json", str(metadata), "--input", str(source),
+                                  "--relinker", str(relinker), "--skip-sce-module"],
+                                 capture_output=True, text=True, timeout=30)
+        assert advised.returncode == 0 and f"Recommended: {catalog / 'patch.toml'}" in advised.stdout, (advised.stdout, advised.stderr)
+        (catalog / "index.json").write_text(json.dumps({"format": 1, "entries": [{
+            "titleId": "TEST00001", "contentVersion": "01.000.000", "patch": "patch.toml",
+            "targets": {"eboot.bin": hashlib.sha256(b"other build").hexdigest()}
+        }]}))
+        advised = subprocess.run([sys.executable, str(advisor), "--catalog", str(catalog),
+                                  "--param-json", str(metadata), "--input", str(source),
+                                  "--relinker", str(relinker), "--skip-sce-module"],
+                                 capture_output=True, text=True, timeout=30)
+        assert advised.returncode == 1 and "No recommendation" in advised.stdout, (advised.stdout, advised.stderr)
         result = run("--skip-sce-module", "--no-patches", str(source), str(output))
         assert result.returncode == 0 and output.read_bytes() == baseline, result.stderr
         assert "Patches:" not in result.stdout and not list(output.parent.glob("*.patches.toml"))

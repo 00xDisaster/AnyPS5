@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -103,6 +104,32 @@ class PatchAdvisorTests(unittest.TestCase):
     @patch.object(suggest_patches.subprocess, "run")
     def test_additional_executable_cannot_escape_module_parent(self, run):
         self.assertEqual(self.advise("--executable", "../outside.bin"), 2)
+        run.assert_not_called()
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_unrelated_malformed_patch_does_not_block_recommendation(self, run):
+        bad = {"titleId": "OTHER0001", "contentVersion": "01.000.000", "patch": "missing.toml", "targets": {}}
+        (self.catalog / "index.json").write_text(json.dumps({"format": 1, "entries": [bad, self.entry]}))
+        run.return_value.returncode = 0
+        self.assertEqual(self.advise(), 0)
+        run.assert_called_once()
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_matching_malformed_patch_is_rejected(self, run):
+        self.entry["patch"] = "missing.toml"
+        self.write_index()
+        self.assertEqual(self.advise(), 2)
+        run.assert_not_called()
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_relinker_timeout_is_not_a_recommendation(self, run):
+        run.side_effect = subprocess.TimeoutExpired([str(self.relinker)], 7)
+        self.assertEqual(self.advise("--timeout-seconds", "7"), 2)
+        self.assertEqual(run.call_args.kwargs["timeout"], 7)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_invalid_timeout_is_rejected_before_relinker(self, run):
+        self.assertEqual(self.advise("--timeout-seconds", "0"), 2)
         run.assert_not_called()
 
 

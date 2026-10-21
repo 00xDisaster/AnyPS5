@@ -31,13 +31,15 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def load_catalog(directory):
+def load_catalog(directory, title, version):
     data = json.loads(confined(directory, "index.json").read_text(encoding="utf-8"))
     if not isinstance(data, dict) or set(data) != {"format", "entries"} or type(data["format"]) is not int or data["format"] != 1 or not isinstance(data["entries"], list):
         raise ValueError("catalog must have format 1 and an entries array")
     entries = []
     for number, entry in enumerate(data["entries"], 1):
-        if not isinstance(entry, dict) or set(entry) != {"titleId", "contentVersion", "patch", "targets"}:
+        if not isinstance(entry, dict) or (entry.get("titleId"), entry.get("contentVersion")) != (title, version):
+            continue
+        if set(entry) != {"titleId", "contentVersion", "patch", "targets"}:
             raise ValueError(f"entry {number}: invalid fields")
         if any(not isinstance(entry[key], str) or not entry[key] for key in ("titleId", "contentVersion")):
             raise ValueError(f"entry {number}: invalid title or version")
@@ -66,6 +68,8 @@ def main(argv=None):
     parser.add_argument("--sce-module-path", type=Path)
     parser.add_argument("--module-dir", action="append", default=[])
     parser.add_argument("--executable", action="append", default=[])
+    parser.add_argument("--skip-sce-module", action="store_true")
+    parser.add_argument("--timeout-seconds", type=int, default=120)
     args = parser.parse_args(argv)
     try:
         metadata = json.loads(args.param_json.read_text(encoding="utf-8"))
@@ -77,15 +81,15 @@ def main(argv=None):
             raise ValueError("param.json needs nonempty titleId and contentVersion")
         if not args.input.is_file() or not args.relinker.is_file():
             raise ValueError("input and relinker must be files")
+        if args.timeout_seconds <= 0:
+            raise ValueError("timeout-seconds must be positive")
         root = (args.sce_module_path or args.input.parent).resolve()
         if not root.is_dir():
             raise ValueError("module parent must be a directory")
         for executable in args.executable:
             confined(root, executable)
         matches = []
-        for number, entry, patch in load_catalog(args.catalog.resolve()):
-            if (entry["titleId"], entry["contentVersion"]) != (title, version):
-                continue
+        for number, entry, patch in load_catalog(args.catalog.resolve(), title, version):
             errors = []
             for name, expected in entry["targets"].items():
                 try:
@@ -99,6 +103,8 @@ def main(argv=None):
                 print(f"Catalog entry {number} ({entry['patch']}): rejected: {'; '.join(errors)}")
                 continue
             command = [str(args.relinker), "--verify-patches", str(patch)]
+            if args.skip_sce_module:
+                command.append("--skip-sce-module")
             if args.sce_module_path:
                 command.extend(("--sce-module-path", str(args.sce_module_path)))
             for module_dir in args.module_dir:
@@ -106,7 +112,10 @@ def main(argv=None):
             for executable in args.executable:
                 command.extend(("--executable", executable))
             command.append(str(args.input))
-            result = subprocess.run(command, capture_output=True, text=True)
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout_seconds)
+            except subprocess.TimeoutExpired:
+                raise ValueError(f"catalog entry {number}: relinker verification exceeded {args.timeout_seconds} seconds") from None
             if result.returncode:
                 detail = (result.stdout + result.stderr).strip()
                 print(f"Catalog entry {number} ({entry['patch']}): rejected by relinker: {detail}")
