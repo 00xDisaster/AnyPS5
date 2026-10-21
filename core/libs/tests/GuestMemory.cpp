@@ -129,6 +129,8 @@ static void CheckReleaseFlexibleMemory() {
     Require(sceKernelReleaseFlexibleMemory(nullptr, 0) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelReleaseFlexibleMemory(static_cast<unsigned char*>(mapped) + 1, 0) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelReleaseFlexibleMemory(mapped, 1) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelReleaseFlexibleMemory(static_cast<unsigned char*>(mapped) + 0x1000, 0x4000) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelReleaseFlexibleMemory(mapped, 0x6000) == SCE_KERNEL_ERROR_EINVAL);
     Require(sceKernelReleaseFlexibleMemory(reinterpret_cast<void*>(~std::uintptr_t{0x3fff}), 0x8000) == SCE_KERNEL_ERROR_EINVAL);
     void* again = mapped;
     Require(sceKernelMapFlexibleMemory(&again, length, 3, 0x90) == SCE_KERNEL_ERROR_ENOMEM);
