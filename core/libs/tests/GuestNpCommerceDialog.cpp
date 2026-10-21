@@ -45,7 +45,15 @@ int main() {
     param2.size = sizeof(param2);
     param2.userId = 1;
     Require(sceNpCommerceDialogGetStatus() == statusNone);
+    Require(sceNpCommerceDialogTerminate() == static_cast<int>(0x80B80003u));
+    Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B80003u));
+    Require(sceNpCommerceDialogGetResult(nullptr) == static_cast<int>(0x80B8000Du));
+    std::uint8_t result[48]{};
+    Require(sceNpCommerceDialogGetResult(result) == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogInitialize() == 0);
+    Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B8000Bu));
+    Require(sceNpCommerceDialogGetResult(result) == static_cast<int>(0x80B80005u));
+    Require(sceNpCommerceDialogGetResult(nullptr) == static_cast<int>(0x80B8000Du));
     Require(sceNpCommerceDialogGetStatus() == statusInitialized);
 
     Require(sceNpCommerceDialogOpen2(&param2) == 0);
@@ -53,7 +61,7 @@ int main() {
     Require(sceNpCommerceDialogGetStatus() == statusFinished);
     RequireCanceledResult();
 
-    Require(sceNpCommerceDialogClose() == 0);
+    Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B8000Bu));
     Require(sceNpCommerceDialogGetStatus() == statusFinished);
     Require(sceNpCommerceDialogTerminate() == 0);
     Require(sceNpCommerceDialogGetStatus() == statusNone);
