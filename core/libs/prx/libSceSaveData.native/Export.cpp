@@ -327,7 +327,7 @@ static bool isMountedDirectory(const std::string& path) {
 
 static int deleteSave(const SaveDataDelete* del) {
     if (del == nullptr || del->dir_name == nullptr) {
-        return SAVE_DATA_ERROR_PARAMETER;
+        throw std::runtime_error("sceSaveDataDelete: null argument");
     }
     const auto* nameEnd = static_cast<const char*>(std::memchr(del->dir_name->data, '\0', sizeof(del->dir_name->data)));
     if (nameEnd == nullptr) {

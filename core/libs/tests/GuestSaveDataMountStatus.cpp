@@ -10,6 +10,8 @@
 
 extern "C" {
 int APS5_VABI sceSaveDataInitialize3(const void*);
+int APS5_VABI sceSaveDataBackup(const SaveDataBackup*);
+int APS5_VABI sceSaveDataGetEventResult(const void*, SaveDataEvent*);
 int APS5_VABI sceSaveDataMount3(const SaveDataMount3*, SaveDataMountResult*);
 int APS5_VABI sceSaveDataUmount2(std::uint32_t, const SaveDataMountPoint*);
 int APS5_VABI sceSaveDataGetMountInfo(const SaveDataMountPoint*, SaveDataMountInfo*);
@@ -17,8 +19,6 @@ int APS5_VABI sceSaveDataGetParam(const SaveDataMountPoint*, std::uint32_t, void
 int APS5_VABI sceSaveDataSetParam(const SaveDataMountPoint*, std::uint32_t, const void*, std::size_t);
 int APS5_VABI sceSaveDataLoadIcon(const SaveDataMountPoint*, SaveDataIcon*);
 int APS5_VABI sceSaveDataSaveIcon(const SaveDataMountPoint*, const SaveDataIcon*);
-int APS5_VABI sceSaveDataBackup(const SaveDataBackup*);
-int APS5_VABI sceSaveDataGetEventResult(const void*, SaveDataEvent*);
 }
 
 namespace {

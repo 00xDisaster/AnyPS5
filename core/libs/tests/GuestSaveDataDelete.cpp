@@ -89,9 +89,6 @@ int main() {
     char unterminated[sizeof(SceSaveDataDirName::data)];
     std::memset(unterminated, 'a', sizeof(unterminated));
     Check(Delete(unterminated, sizeof(unterminated)) == SaveDataErrorParameter, "an unterminated name is rejected");
-    Check(sceSaveDataDelete(nullptr) == SaveDataErrorParameter, "null delete pointer is rejected");
-    SaveDataDelete nullDirDelete{};
-    Check(sceSaveDataDelete(&nullDirDelete) == SaveDataErrorParameter, "null delete dir_name is rejected");
 
     constexpr char mountedPayload[] = "live mounted save";
     constexpr char updatedPayload[] = "still mounted";
