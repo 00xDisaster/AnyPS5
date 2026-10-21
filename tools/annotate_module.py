@@ -23,13 +23,19 @@ DT_RELA = 7
 DT_RELASZ = 8
 DT_JMPREL = 23
 DT_PLTRELSZ = 2
+DT_PLTREL = 20
+DT_STRSZ = 10
+DT_RELAENT = 9
+DT_REL = 17
+DT_RELA_KIND = 7
+STT_TLS = 6
 DT_GNU_HASH = 0x6ffffef5
 SYMBOL_SIZE = 24
 RELA_SIZE = 24
 
 LINE_ADDRESS = re.compile(r"^\s*([0-9a-f]+):")
-STUB = re.compile(r"^\s*([0-9a-f]+):\s+jmp\s+\*(?:-?0x[0-9a-f]+)?\(%rip\)\s+# 0x([0-9a-f]+)")
-BRANCH = re.compile(r"\b(?:call|callq|jmp|jmpq)\s+0x([0-9a-f]+)")
+STUB = re.compile(r"^\s*([0-9a-f]+):\s+(?:\w+\s+)?jmpq?\s+\*(?:-?0x[0-9a-f]+)?\(%rip\)\s+# 0x([0-9a-f]+)")
+BRANCH = re.compile(r"\b(?:call|jmp)q?\s+0x([0-9a-f]+)")
 REFERENCE = re.compile(r"# 0x([0-9a-f]+)")
 
 
@@ -46,7 +52,9 @@ class Module:
         self.tags = self.read_tags()
         self.strtab = self.address(self.require_tag(DT_STRTAB, "DT_STRTAB"))
         self.symtab = self.address(self.require_tag(DT_SYMTAB, "DT_SYMTAB"))
+        self.strsz = self.require_tag(DT_STRSZ, "DT_STRSZ")
         self.symbol_count = self.count_symbols()
+        self.check_relocation_tags()
 
     def unpack(self, form, offset):
         size = struct.calcsize(form)
@@ -114,22 +122,36 @@ class Module:
     def symbol(self, index):
         if index >= self.symbol_count:
             raise ModuleError("symbol index %d is outside the %d symbols of the module" % (index, self.symbol_count))
-        name, _, _, shndx, value, _ = self.unpack("<IBBHQQ", self.symtab + index * SYMBOL_SIZE)
+        name, info, _, shndx, value, _ = self.unpack("<IBBHQQ", self.symtab + index * SYMBOL_SIZE)
+        if name >= self.strsz:
+            raise ModuleError("symbol %d has a name offset %#x outside DT_STRSZ %#x" % (index, name, self.strsz))
         start = self.strtab + name
         end = self.data.find(b"\0", start)
         if end < 0:
             raise ModuleError("symbol %d has an unterminated name" % index)
-        return self.data[start:end].decode("utf-8", errors="replace"), shndx, value
+        return self.data[start:end].decode("utf-8", errors="replace"), shndx, value, info & 0xF
+
+    def check_relocation_tags(self):
+        if DT_REL in self.tags:
+            raise ModuleError("DT_REL relocations are not supported")
+        if DT_RELA in self.tags:
+            self.require_tag(DT_RELASZ, "DT_RELASZ")
+        if DT_JMPREL in self.tags:
+            self.require_tag(DT_PLTRELSZ, "DT_PLTRELSZ")
+            if self.require_tag(DT_PLTREL, "DT_PLTREL") != DT_RELA_KIND:
+                raise ModuleError("DT_PLTREL is not DT_RELA")
+        if self.tags.get(DT_RELAENT, RELA_SIZE) != RELA_SIZE:
+            raise ModuleError("DT_RELAENT is not %d" % RELA_SIZE)
 
     def relocation_tables(self):
-        yield self.tags.get(DT_RELA), self.tags.get(DT_RELASZ, 0)
-        yield self.tags.get(DT_JMPREL), self.tags.get(DT_PLTRELSZ, 0)
+        if DT_RELA in self.tags:
+            yield self.tags[DT_RELA], self.tags[DT_RELASZ]
+        if DT_JMPREL in self.tags:
+            yield self.tags[DT_JMPREL], self.tags[DT_PLTRELSZ]
 
     def imports(self):
         slots = {}
         for table, size in self.relocation_tables():
-            if table is None:
-                continue
             start = self.address(table)
             for position in range(start, start + size - size % RELA_SIZE, RELA_SIZE):
                 offset, info, _ = self.unpack("<QQq", position)
@@ -139,19 +161,24 @@ class Module:
 
     def exports(self):
         found = {}
+        thread_local = {}
         for index in range(1, self.symbol_count):
-            name, shndx, value = self.symbol(index)
-            if shndx != 0 and value and name:
-                found.setdefault(value, name)
-        return found
+            name, shndx, value, kind = self.symbol(index)
+            if shndx == 0 or not name:
+                continue
+            (thread_local if kind == STT_TLS else found).setdefault(value, name)
+        return found, thread_local
 
-    def code_segment(self):
-        for vaddr, offset, size, flags in self.loads:
-            if flags & PF_X and not flags & PF_W:
+    def code_segments(self):
+        segments = []
+        for vaddr, offset, size, flags in sorted(self.loads):
+            if flags & PF_X:
                 if offset + size > len(self.data):
-                    raise ModuleError("the executable PT_LOAD segment extends past the end of the file")
-                return vaddr, self.data[offset:offset + size]
-        raise ModuleError("no executable, non-writable PT_LOAD segment")
+                    raise ModuleError("the executable PT_LOAD segment at %#x extends past the end of the file" % vaddr)
+                segments.append((vaddr, self.data[offset:offset + size]))
+        if not segments:
+            raise ModuleError("no executable PT_LOAD segment")
+        return segments
 
 
 class Namer:
@@ -213,17 +240,25 @@ def write_lines(path, lines):
             handle.write(line + "\n")
 
 
+def export_lines(exports, thread_local, namer):
+    lines = ["%#x %s %s" % (address, exports[address], namer.resolve(exports[address])) for address in sorted(exports)]
+    lines += ["tls+%#x %s %s" % (offset, thread_local[offset], namer.resolve(thread_local[offset])) for offset in sorted(thread_local)]
+    return lines
+
+
 def annotate(module_path, prefix, namer):
     module = Module(Path(module_path).read_bytes())
     slots = module.imports()
-    exports = module.exports()
-    vaddr, code = module.code_segment()
-    listing = disassemble(code, vaddr)
+    exports, thread_local = module.exports()
+    listing = []
+    for vaddr, code in module.code_segments():
+        listing.append("; ===== segment %#x" % vaddr)
+        listing.extend(disassemble(code, vaddr))
     stubs = find_stubs(listing, slots, namer)
     write_lines(prefix + ".imports.txt", ["%#x %s %s" % (slot, slots[slot], namer.resolve(slots[slot])) for slot in sorted(slots)])
-    write_lines(prefix + ".exports.txt", ["%#x %s %s" % (address, exports[address], namer.resolve(exports[address])) for address in sorted(exports)])
+    write_lines(prefix + ".exports.txt", export_lines(exports, thread_local, namer))
     write_lines(prefix + ".asm", annotate_listing(listing, slots, exports, stubs, namer))
-    return "%s: %d imports, %d exports, %d stubs, %d lines" % (prefix, len(slots), len(exports), len(stubs), len(listing))
+    return "%s: %d imports, %d exports, %d tls, %d stubs, %d lines" % (prefix, len(slots), len(exports), len(thread_local), len(stubs), len(listing))
 
 
 def parse_arguments(argv):
