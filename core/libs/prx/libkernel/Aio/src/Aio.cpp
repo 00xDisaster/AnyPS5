@@ -61,6 +61,23 @@ void SetState(std::int32_t id, std::int32_t state) {
     g_states[id] = state;
 }
 
+std::int32_t StateLocked(std::int32_t id) {
+    return ValidId(id) && g_states[id] != 0 ? g_states[id] : SCE_KERNEL_ERROR_ESRCH;
+}
+
+std::int32_t CancelLocked(std::int32_t id) {
+    const std::int32_t state = StateLocked(id);
+    if (state != AioProcessing) return state;
+    g_states[id] = AioAborted;
+    return AioAborted;
+}
+
+std::int32_t DeleteLocked(std::int32_t id) {
+    if (StateLocked(id) == SCE_KERNEL_ERROR_ESRCH) return SCE_KERNEL_ERROR_ESRCH;
+    g_states[id] = 0;
+    return 0;
+}
+
 std::int64_t NativePread(std::int32_t fd, void* buf, std::size_t nbyte, std::int64_t offset) {
     const GuestArena::HostWrite destination(buf, nbyte);
     if (!destination.Open()) {
@@ -151,9 +168,6 @@ int SubmitCommandsMultiple(KernelAioRwRequest* req, std::int32_t size, std::int3
 int ValidateIds(const std::int32_t* id, std::int32_t num, const void* out) {
     if (id == nullptr || out == nullptr) return SCE_KERNEL_ERROR_EFAULT;
     if (num <= 0 || num > AioIdNumMax) return SCE_KERNEL_ERROR_EINVAL;
-    for (std::int32_t i = 0; i < num; ++i) {
-        if (!ValidId(id[i])) return SCE_KERNEL_ERROR_EINVAL;
-    }
     return 0;
 }
 
@@ -163,48 +177,31 @@ extern "C" {
 
 int APS5_VABI sceKernelAioDeleteRequest(int32_t id, int32_t* ret) {
     if (ret == nullptr) return SCE_KERNEL_ERROR_EFAULT;
-    if (!ValidId(id)) return SCE_KERNEL_ERROR_EINVAL;
-    SetState(id, AioAborted);
-    *ret = 0;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    *ret = DeleteLocked(id);
     return 0;
 }
 
 int APS5_VABI sceKernelAioDeleteRequests(int32_t* id, int32_t num, int32_t* ret) {
     const int error = ValidateIds(id, num, ret);
     if (error != 0) return error;
-    for (int32_t i = 0; i < num; ++i) {
-        SetState(id[i], AioAborted);
-        ret[i] = 0;
-    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (int32_t i = 0; i < num; ++i) ret[i] = DeleteLocked(id[i]);
     return 0;
 }
 
 int APS5_VABI sceKernelAioCancelRequest(int32_t id, int32_t* state) {
     if (state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
-    if (id == 0) {
-        *state = AioProcessing;
-        return 0;
-    }
-    if (!ValidId(id)) return SCE_KERNEL_ERROR_EINVAL;
-    SetState(id, AioAborted);
-    *state = AioAborted;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    *state = CancelLocked(id);
     return 0;
 }
 
 int APS5_VABI sceKernelAioCancelRequests(int32_t* id, int32_t num, int32_t* state) {
-    if (id == nullptr || state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
-    if (num <= 0 || num > AioIdNumMax) return SCE_KERNEL_ERROR_EINVAL;
-    for (int32_t i = 0; i < num; ++i) {
-        if (id[i] != 0 && !ValidId(id[i])) return SCE_KERNEL_ERROR_EINVAL;
-    }
-    for (int32_t i = 0; i < num; ++i) {
-        if (id[i] == 0) {
-            state[i] = AioProcessing;
-            continue;
-        }
-        SetState(id[i], AioAborted);
-        state[i] = AioAborted;
-    }
+    const int error = ValidateIds(id, num, state);
+    if (error != 0) return error;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (int32_t i = 0; i < num; ++i) state[i] = CancelLocked(id[i]);
     return 0;
 }
 
@@ -254,9 +251,8 @@ int APS5_VABI sceKernelAioSubmitWriteCommandsMultiple(KernelAioRwRequest* req, i
 
 int APS5_VABI sceKernelAioPollRequest(int32_t id, int32_t* state) {
     if (state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
-    if (!ValidId(id)) return SCE_KERNEL_ERROR_EINVAL;
     std::lock_guard<std::mutex> lock(g_mutex);
-    *state = g_states[id];
+    *state = StateLocked(id);
     return 0;
 }
 
@@ -271,7 +267,7 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             for (int32_t i = 0; i < num; ++i) {
-                state[i] = g_states[id[i]];
+                state[i] = StateLocked(id[i]);
                 if (state[i] == AioProcessing) allDone = false;
                 if (state[i] == AioCompleted) anyCompleted = true;
             }
@@ -287,13 +283,12 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
 
 int APS5_VABI sceKernelAioWaitRequest(int32_t id, int32_t* state, uint32_t* usec) {
     if (state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
-    if (!ValidId(id)) return SCE_KERNEL_ERROR_EINVAL;
     const auto start = std::chrono::steady_clock::now();
     for (;;) {
         std::int32_t current;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            current = g_states[id];
+            current = StateLocked(id);
         }
         if (current != AioProcessing) {
             *state = current;
@@ -314,7 +309,7 @@ int APS5_VABI sceKernelAioPollRequests(int32_t* id, int32_t num, int32_t* state)
     const int error = ValidateIds(id, num, state);
     if (error != 0) return error;
     std::lock_guard<std::mutex> lock(g_mutex);
-    for (int32_t i = 0; i < num; ++i) state[i] = g_states[id[i]];
+    for (int32_t i = 0; i < num; ++i) state[i] = StateLocked(id[i]);
     return 0;
 }
 
