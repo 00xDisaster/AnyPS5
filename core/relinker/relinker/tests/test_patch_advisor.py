@@ -25,11 +25,11 @@ def main():
         metadata = root / "param.json"
         metadata.write_text(json.dumps({"titleId": "TEST00001", "contentVersion": "01.000.000"}))
 
-        def advise(digest):
+        def advise(digest, patches=("patch.toml",)):
             (catalog / "index.json").write_text(json.dumps({"format": 1, "entries": [{
-                "titleId": "TEST00001", "contentVersion": "01.000.000", "patch": "patch.toml",
+                "titleId": "TEST00001", "contentVersion": "01.000.000", "patch": name,
                 "targets": {"eboot.bin": digest}
-            }]}))
+            } for name in patches]}))
             return subprocess.run([sys.executable, str(advisor), "--catalog", str(catalog),
                                    "--param-json", str(metadata), "--input", str(source),
                                    "--relinker", f"./{relinker.name}", "--skip-sce-module"],
@@ -37,6 +37,13 @@ def main():
 
         result = advise(hashlib.sha256(image).hexdigest())
         assert result.returncode == 0 and f"Recommended: {patch}" in result.stdout, (result.stdout, result.stderr)
+        broken = catalog / "broken.toml"
+        broken.write_text(patch_text(address, expected, "broken").replace('description = "flip one bit"',
+                                                                     r'description = "flip \"one\" bit"'))
+        result = advise(hashlib.sha256(image).hexdigest(), ("broken.toml", "patch.toml"))
+        assert result.returncode == 0 and "relinker error (exit 2)" in result.stdout and f"Recommended: {patch}" in result.stdout, (result.stdout, result.stderr)
+        result = advise(hashlib.sha256(image).hexdigest(), ("broken.toml",))
+        assert result.returncode == 2 and "relinker error (exit 2)" in result.stdout, (result.stdout, result.stderr)
         patch.write_text(patch_text(address, expected ^ 1, "wrong_byte"))
         result = advise(hashlib.sha256(image).hexdigest())
         assert result.returncode == 1 and "rejected by relinker" in result.stdout, (result.stdout, result.stderr)

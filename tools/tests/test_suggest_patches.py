@@ -156,11 +156,41 @@ class PatchAdvisorTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
 
     @patch.object(suggest_patches.subprocess, "run")
-    def test_relinker_error_is_not_a_patch_rejection(self, run):
+    def test_relinker_error_without_verified_entries_exits_two(self, run):
         run.return_value.returncode = 2
         run.return_value.stdout = ""
         run.return_value.stderr = "FAIL: broken input"
         self.assertEqual(self.advise(), 2)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_relinker_error_does_not_block_verified_entry(self, run):
+        self.write_index([self.entry, self.entry])
+        run.side_effect = [subprocess.CompletedProcess([], 2, "", "FAIL: invalid patch"),
+                           subprocess.CompletedProcess([], 0, VERIFIED, "")]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise(), 0)
+        self.assertIn("Catalog entry 1 ('patch.toml'): relinker error (exit 2)", output.getvalue())
+        self.assertIn("Recommended:", output.getvalue())
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_relinker_error_and_mismatch_exit_two(self, run):
+        self.write_index([self.entry, self.entry])
+        run.side_effect = [subprocess.CompletedProcess([], 2, "", "FAIL: invalid patch"),
+                           subprocess.CompletedProcess([], 1, "Verified 1 patches: 0 ok, 0 not-checked, 1 mismatch\n", "")]
+        self.assertEqual(self.advise(), 2)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_multiple_verified_entries_are_ambiguous(self, run):
+        self.write_index([self.entry, self.entry])
+        run.return_value.returncode = 0
+        run.return_value.stdout = VERIFIED
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise(), 1)
+        self.assertIn("multiple verified catalog entries", output.getvalue())
+        self.assertEqual(run.call_count, 2)
 
     @patch.object(suggest_patches.subprocess, "run")
     def test_not_checked_patch_is_not_recommended(self, run):

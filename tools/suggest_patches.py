@@ -104,6 +104,7 @@ def main(argv=None):
         if not entries:
             print(f"No recommendation: no catalog entry for {title} {version}.")
             return 1
+        relinker_errors = False
         for number, entry in entries:
             label = f"Catalog entry {number} ({entry.get('patch')!r})"
             try:
@@ -145,6 +146,10 @@ def main(argv=None):
                 if result.returncode == 1 and verified and verified[3] > 0:
                     print(f"{label}: rejected by relinker: {detail}")
                     continue
+                if result.returncode == 2:
+                    print(f"{label}: relinker error (exit 2): {detail}")
+                    relinker_errors = True
+                    continue
                 raise ValueError(f"{label}: relinker error (exit {result.returncode}): {detail}")
             if not verified:
                 raise ValueError(f"{label}: relinker produced no verification summary")
@@ -171,6 +176,9 @@ def main(argv=None):
         if len(matches) > 1:
             print("No recommendation: multiple verified catalog entries match.")
             return 1
+        if relinker_errors:
+            print("No recommendation: relinker errors occurred; see catalog entries above.", file=sys.stderr)
+            return 2
         print("No recommendation: no catalog entry passed all checks.")
         return 1
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
