@@ -144,4 +144,12 @@ int APS5_VABI sceNpAuthWaitAsync(int req_id, int* result) {
  return NP_POLL_ASYNC_FINISHED;
 }
 
+int APS5_VABI sceNpAuthGetAuthorizationCodeA(int req_id, const void* param, void* auth_code, int* issuer_id) {
+    return sceNpAuthGetAuthorizationCodeV3(req_id, param, auth_code, issuer_id);
+}
+
+int APS5_VABI sceNpAuthGetIdTokenA(int req_id, const void* param, void* token) {
+    return sceNpAuthGetIdTokenV3(req_id, param, token);
+}
+
 }
