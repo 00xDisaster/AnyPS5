@@ -1,5 +1,9 @@
 # libScePad technical debt
 
+### Silent stubs
+
+- [scePadEnableExtensionPort](../../../core/libs/prx/libScePad/Export.cpp) returns success without changing extension-port state. The boolean argument is recovered; connected-device behavior is not modeled.
+
 ### Unknown function info
 
 - [libScePad profile and device-setting exports](../../../core/libs/prx/libScePad/Export.cpp) - profile getters, tuning, saved settings, USB state, shared output and virtual-device setting arguments are recovered. Hunt and Leonardo reset each consume only a handle; physical VR USB status consumes only an output pointer. Remote settings output is 64 bytes and license-controller information is 1224 bytes. Kernel ioctl payload fields remain incomplete.
