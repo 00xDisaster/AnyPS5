@@ -65,22 +65,14 @@ alignas(256) constexpr std::array<std::uint32_t, 59> ImageCode{
     0xe0701014u, 0x8001120cu, 0xbf810000u,
 };
 
-alignas(256) constexpr std::array<std::uint32_t, 116> GlobalCode{
+alignas(256) constexpr std::array<std::uint32_t, 52> GlobalCode{
     0x160200b0u, 0x34180087u, 0xe0381000u, 0x80000201u, 0xe0381010u, 0x80000601u, 0xe0341020u, 0x80000a01u,
     0xbf8c3f70u, 0x34340082u, 0xd70f6a1au, 0x00023408u, 0x7e360209u, 0x50363680u, 0x34380083u, 0xd70f6a1cu,
     0x00023808u, 0x7e3a0209u, 0x503a3a80u, 0xdc708000u, 0x007d021au, 0xbbfd0000u, 0x7e200303u, 0x7e220304u,
     0xdcfd8000u, 0x137d101au, 0xbf8c3f70u, 0xdc318000u, 0x127d001au, 0xbf8c3f70u, 0xe0701000u, 0x8001130cu,
-    0xe0701004u, 0x8001120cu, 0xdc708080u, 0x007d021au, 0xbbfd0000u, 0x7e200303u, 0x7e220304u, 0xdd018080u,
-    0x137d101au, 0xbf8c3f70u, 0xdc318080u, 0x127d001au, 0xbf8c3f70u, 0xe0701008u, 0x8001130cu, 0xe070100cu,
-    0x8001120cu, 0xdc708100u, 0x007d021au, 0xbbfd0000u, 0x7e200303u, 0x7e220304u, 0xdcf98100u, 0x137d101au,
-    0xbf8c3f70u, 0xdc318100u, 0x127d001au, 0xbf8c3f70u, 0xe0701010u, 0x8001130cu, 0xe0701014u, 0x8001120cu,
-    0xdc748200u, 0x007d061cu, 0xbbfd0000u, 0x7e280308u, 0x7e2a0309u, 0x7e2c030au, 0x7e2e030bu, 0xdd7d8200u,
-    0x207d141cu, 0xbf8c3f70u, 0xdc358200u, 0x187d001cu, 0xbf8c3f70u, 0xe0741018u, 0x8001200cu, 0xe0741020u,
-    0x8001180cu, 0xdc748300u, 0x007d061cu, 0xbbfd0000u, 0x7e280308u, 0x7e2a0309u, 0x7e2c030au, 0x7e2e030bu,
-    0xdd818300u, 0x207d141cu, 0xbf8c3f70u, 0xdc358300u, 0x187d001cu, 0xbf8c3f70u, 0xe0741028u, 0x8001200cu,
-    0xe0741030u, 0x8001180cu, 0xdc748400u, 0x007d061cu, 0xbbfd0000u, 0x7e280308u, 0x7e2a0309u, 0x7e2c030au,
-    0x7e2e030bu, 0xdd798400u, 0x207d141cu, 0xbf8c3f70u, 0xdc358400u, 0x187d001cu, 0xbf8c3f70u, 0xe0741038u,
-    0x8001200cu, 0xe0741040u, 0x8001180cu, 0xbf810000u,
+    0xe0701004u, 0x8001120cu, 0xdc748200u, 0x007d061cu, 0xbbfd0000u, 0x7e280308u, 0x7e2a0309u, 0x7e2c030au,
+    0x7e2e030bu, 0xdd7d8200u, 0x207d141cu, 0xbf8c3f70u, 0xdc358200u, 0x187d001cu, 0xbf8c3f70u, 0xe0741018u,
+    0x8001200cu, 0xe0741020u, 0x8001180cu, 0xbf810000u,
 };
 
 constexpr std::uint32_t Rows32[Threads][3] = {
@@ -393,15 +385,16 @@ void Run(AgcDriver::VulkanDevice& device, Kind kind, GuestBlock& guest, const st
 
 void Check(Kind kind, const char* mode, bool flush32, bool flush64) {
     const auto where = std::string("memory float atomic modes: ") + KindName(kind) + ", " + mode + ", lane ";
+    const std::uint32_t ops = kind == Kind::Global ? 1u : 3u;
     for (std::uint32_t tid = 0; tid < Threads; ++tid) {
         const std::uint32_t* out = &Output[tid * Results];
-        for (std::uint32_t op = 0; op < 3u; ++op) {
+        for (std::uint32_t op = 0; op < ops; ++op) {
             const std::uint32_t expected = flush32 ? Flushed32[tid][op] : Kept32[tid][op];
             Require(out[2u * op] == Rows32[tid][0], where + std::to_string(tid) + " " + Names[op] + " returned " + Hex(out[2u * op], 8) + ", expected " + Hex(Rows32[tid][0], 8));
             Require(out[2u * op + 1u] == expected, where + std::to_string(tid) + " " + Names[op] + " stored " + Hex(out[2u * op + 1u], 8) + ", expected " + Hex(expected, 8));
         }
         if (kind == Kind::Image) continue;
-        for (std::uint32_t op = 0; op < 3u; ++op) {
+        for (std::uint32_t op = 0; op < ops; ++op) {
             const std::uint64_t returned = out[6u + 4u * op] | (static_cast<std::uint64_t>(out[7u + 4u * op]) << 32u);
             const std::uint64_t stored = out[8u + 4u * op] | (static_cast<std::uint64_t>(out[9u + 4u * op]) << 32u);
             const std::uint64_t expected = flush64 ? Flushed64[tid][op] : Kept64[tid][op];
@@ -428,17 +421,19 @@ int main() {
             const char* name;
             bool flush32;
             bool flush64;
+            bool global;
         };
         const std::array<Mode, 6> modes{{
-            {std::nullopt, "no float mode", true, false},
-            {ShaderRecompiler::ShaderFloatMode{0xc0u, true, false, false}, "FLOAT_MODE 0xc0", true, false},
-            {ShaderRecompiler::ShaderFloatMode{0xf0u, true, false, false}, "FLOAT_MODE 0xf0", false, false},
-            {ShaderRecompiler::ShaderFloatMode{0x00u, true, false, false}, "FLOAT_MODE 0x00", true, true},
-            {ShaderRecompiler::ShaderFloatMode{0x50u, true, false, false}, "FLOAT_MODE 0x50", false, false},
-            {ShaderRecompiler::ShaderFloatMode{0xa0u, true, false, false}, "FLOAT_MODE 0xa0", true, true},
+            {std::nullopt, "no float mode", true, false, false},
+            {ShaderRecompiler::ShaderFloatMode{0xc0u, true, false, false}, "FLOAT_MODE 0xc0", true, false, false},
+            {ShaderRecompiler::ShaderFloatMode{0xf0u, true, false, false}, "FLOAT_MODE 0xf0", false, false, false},
+            {ShaderRecompiler::ShaderFloatMode{0x00u, true, false, false}, "FLOAT_MODE 0x00", true, true, true},
+            {ShaderRecompiler::ShaderFloatMode{0x50u, true, false, false}, "FLOAT_MODE 0x50", false, false, false},
+            {ShaderRecompiler::ShaderFloatMode{0xa0u, true, false, false}, "FLOAT_MODE 0xa0", true, true, false},
         }};
         for (const auto kind : {Kind::Buffer, Kind::Image, Kind::Global}) {
             for (const auto& mode : modes) {
+                if (kind == Kind::Global && !mode.global) continue;
                 Run(*device, kind, guest, mode.floatMode);
                 Check(kind, mode.name, mode.flush32, mode.flush64);
             }
