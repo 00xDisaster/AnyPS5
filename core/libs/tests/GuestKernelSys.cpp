@@ -685,20 +685,22 @@ int main() {
     Require(junctionText.find('?') == std::string::npos && std::filesystem::equivalent(junctionText, junctionTarget, junctionError) && !junctionError);
     Require(std::filesystem::remove(junction) && std::filesystem::remove(junctionTarget));
 #endif
-#ifndef _WIN32
     if (created == 0) {
         const auto throughLink = (root / "through-link.bin").string();
         Require(link_nid_postfix(symbolic.c_str(), throughLink.c_str()) == 0);
+#ifdef _WIN32
+        Require((GetFileAttributesW(std::filesystem::path(throughLink).c_str()) & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
+#else
         Require(!std::filesystem::is_symlink(std::filesystem::symlink_status(throughLink)));
+#endif
         Require(std::filesystem::equivalent(throughLink, original) && std::filesystem::hard_link_count(original) == 2);
         Require(std::filesystem::remove(throughLink) && std::filesystem::hard_link_count(original) == 1);
         Require(link_nid_postfix((root / "dangling").string().c_str(), throughLink.c_str()) == -1 && Error() == 2);
-        const auto directoryLink = (root / "directory-link").string();
-        Require(symlink_nid_postfix(".", directoryLink.c_str()) == 0);
-        Require(link_nid_postfix(directoryLink.c_str(), throughLink.c_str()) == -1 && Error() == 1);
+        const auto dotLink = (root / "dot-link").string();
+        Require(symlink_nid_postfix(".", dotLink.c_str()) == 0);
+        Require(link_nid_postfix(dotLink.c_str(), throughLink.c_str()) == -1 && Error() == 1);
         Require(!std::filesystem::exists(std::filesystem::symlink_status(throughLink)));
     }
-#endif
     RemoveTree(root);
     return 0;
 }
