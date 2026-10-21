@@ -1,4 +1,5 @@
 #include "prx/libSceFont/include/FontDriver.hpp"
+#include "prx/libc/include/General.hpp"
 #include "tests/FontFixture.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -282,10 +283,13 @@ int main() {
         file.write(reinterpret_cast<const char*>(fontData.data()), static_cast<std::streamsize>(fontData.size()));
         Require(static_cast<bool>(file));
     }
-    const std::u8string fileFontText = fileFont.u8string();
+    const std::u8string fontRootText = fontRoot.u8string();
+    AddPathAlias_nid_no_patch("/font-test", reinterpret_cast<const char*>(fontRootText.c_str()));
+    const std::u8string fileFontText = u8"/font-test/external-a\u00e7\u00e3o-\u65e5\u672c/font.ttf";
     FontHandle fileHandle = nullptr;
     Require(sceFontOpenFontFile(library, reinterpret_cast<const char*>(fileFontText.c_str()), 1, nullptr, &fileHandle) == SCE_FONT_OK && fileHandle != nullptr);
     Require(sceFontCloseFont(fileHandle) == SCE_FONT_OK);
+    RemovePathAlias_nid_no_patch("/font-test");
     Require(sceFontOpenFontMemory(library, fontData.data(), static_cast<std::uint32_t>(fontData.size()), nullptr, &font) == SCE_FONT_OK && font != nullptr);
     int setting = -1;
     Require(sceFontGetScriptLanguage(font, 3, &setting) == SCE_FONT_OK && setting == 0);
