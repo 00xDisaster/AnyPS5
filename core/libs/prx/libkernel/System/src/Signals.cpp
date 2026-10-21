@@ -37,6 +37,7 @@ using GuestHandler = void (APS5_VABI *)(int);
 constexpr int MaxSignal = 128;
 constexpr int GuestSigkill = 9;
 constexpr int GuestSigstop = 17;
+constexpr std::uint32_t UnblockableSignals = (1u << (GuestSigkill - 1)) | (1u << (GuestSigstop - 1));
 constexpr int GuestSigalrm = 14;
 constexpr int GuestSigcont = 19;
 constexpr int SaRestart = 0x2;
@@ -562,7 +563,7 @@ int APS5_VABI _sigprocmask_nid_postfix(int how, const GuestSignalSet* set, Guest
         if (set != nullptr) {
             switch (how) {
                 case 1:
-                    blockedMask.fetch_or(set->bits[0]);
+                    blockedMask.fetch_or(set->bits[0] & ~UnblockableSignals);
                     for (int word = 1; word < 4; ++word) blockedMaskExtra[word - 1].fetch_or(set->bits[word]);
                     break;
                 case 2:
@@ -570,7 +571,7 @@ int APS5_VABI _sigprocmask_nid_postfix(int how, const GuestSignalSet* set, Guest
                     for (int word = 1; word < 4; ++word) blockedMaskExtra[word - 1].fetch_and(~set->bits[word]);
                     break;
                 case 3:
-                    blockedMask.store(set->bits[0]);
+                    blockedMask.store(set->bits[0] & ~UnblockableSignals);
                     for (int word = 1; word < 4; ++word) blockedMaskExtra[word - 1].store(set->bits[word]);
                     break;
             }
@@ -635,7 +636,7 @@ int APS5_VABI sigsuspend_nid_postfix(const GuestSignalSet* set) {
     GuestSignalSet previous{{0, 0, 0, 0}};
     {
         std::lock_guard lock(registration);
-        previous.bits[0] = blockedMask.exchange(set->bits[0]);
+        previous.bits[0] = blockedMask.exchange(set->bits[0] & ~UnblockableSignals);
         for (int word = 1; word < 4; ++word) previous.bits[word] = blockedMaskExtra[word - 1].exchange(set->bits[word]);
     }
     WaitForDeliverableSignal();
