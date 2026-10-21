@@ -46,6 +46,26 @@ std::uint32_t* Nop(std::uint32_t* at, std::uint32_t bodyWords) {
     return at + 1 + bodyWords;
 }
 
+constexpr std::uint32_t ShaderStageCount = 7;
+constexpr std::uint32_t StageVs = 2;
+constexpr std::uint32_t StageEs = 4;
+constexpr std::uint32_t StageLs = 6;
+constexpr std::uint32_t IndirectSgprBase[ShaderStageCount] = {0, 0, 0x4c, 0, 0xcc, 0, 0x14c};
+constexpr std::uint32_t DrawIndirectArgsBytes = 0x10;
+constexpr std::uint32_t DrawIndexedIndirectArgsBytes = 0x14;
+
+std::uint32_t IndirectSgpr(std::uint32_t stage, std::uint32_t offset) {
+    return offset == 0 ? 0 : (offset & 0xffffu) + IndirectSgprBase[stage];
+}
+
+bool ValidIndirect(std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr) {
+    return stage < ShaderStageCount && vertexSgpr < 0x10 && instanceSgpr < 0x10;
+}
+
+bool IndexedIndirectStage(std::uint32_t stage) {
+    return stage == StageVs || stage == StageEs || stage == StageLs;
+}
+
 } // namespace
 
 extern "C" {
@@ -140,18 +160,44 @@ int APS5_VABI sceGnmDrawIndexAuto(std::uint32_t* cmdbuf, std::uint32_t size, std
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexIndirect(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndexIndirect(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 9 || !ValidIndirect(stage, vertexSgpr, instanceSgpr)) return CommandFailed;
+    cmdbuf[0] = Header(0x25, 4, false, flags & 1);
+    cmdbuf[1] = dataOffset;
+    cmdbuf[2] = IndirectSgpr(stage, vertexSgpr);
+    cmdbuf[3] = IndirectSgpr(stage, instanceSgpr);
+    cmdbuf[4] = flags & NeoDrawFlags;
+    Nop(cmdbuf + 5, 3);
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexIndirectCountMulti(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndexIndirectCountMulti(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t maxCount, std::uint64_t countAddress, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 0x10 || vertexSgpr >= 0x10 || instanceSgpr >= 0x10 || !IndexedIndirectStage(stage)) return CommandFailed;
+    auto* at = Nop(cmdbuf, 2);
+    at[0] = Header(0x9d, 9, false, flags & 1);
+    at[1] = dataOffset;
+    at[2] = IndirectSgpr(stage, vertexSgpr);
+    at[3] = IndirectSgpr(stage, instanceSgpr);
+    at[4] = countAddress != 0 ? 1u << 30 : 0;
+    at[5] = maxCount;
+    at[6] = static_cast<std::uint32_t>(countAddress);
+    at[7] = static_cast<std::uint32_t>(countAddress >> 32);
+    at[8] = DrawIndexedIndirectArgsBytes;
+    at[9] = flags & NeoDrawFlags;
+    Nop(at + 10, 2);
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexIndirectMulti(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndexIndirectMulti(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t maxCount, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 11 || vertexSgpr >= 0x10 || instanceSgpr >= 0x10 || !IndexedIndirectStage(stage)) return CommandFailed;
+    cmdbuf[0] = Header(0x38, 6, false, flags & 1);
+    cmdbuf[1] = dataOffset;
+    cmdbuf[2] = IndirectSgpr(stage, vertexSgpr);
+    cmdbuf[3] = IndirectSgpr(stage, instanceSgpr);
+    cmdbuf[4] = maxCount;
+    cmdbuf[5] = DrawIndexedIndirectArgsBytes;
+    cmdbuf[6] = flags & NeoDrawFlags;
+    Nop(cmdbuf + 7, 3);
     return 0;
 }
 
@@ -171,18 +217,44 @@ int APS5_VABI sceGnmDrawIndexOffset(std::uint32_t* cmdbuf, std::uint32_t size, s
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndirect(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndirect(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 9 || !ValidIndirect(stage, vertexSgpr, instanceSgpr)) return CommandFailed;
+    cmdbuf[0] = Header(0x24, 4, false, flags & 1);
+    cmdbuf[1] = dataOffset;
+    cmdbuf[2] = IndirectSgpr(stage, vertexSgpr);
+    cmdbuf[3] = IndirectSgpr(stage, instanceSgpr);
+    cmdbuf[4] = (flags & NeoDrawFlags) | AutoIndex;
+    Nop(cmdbuf + 5, 3);
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndirectCountMulti(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndirectCountMulti(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t maxCount, std::uint64_t countAddress, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 0x10 || !ValidIndirect(stage, vertexSgpr, instanceSgpr)) return CommandFailed;
+    auto* at = Nop(cmdbuf, 2);
+    at[0] = Header(0x9c, 9, false, flags & 1);
+    at[1] = dataOffset;
+    at[2] = IndirectSgpr(stage, vertexSgpr);
+    at[3] = IndirectSgpr(stage, instanceSgpr);
+    at[4] = countAddress != 0 ? 1u << 30 : 0;
+    at[5] = maxCount;
+    at[6] = static_cast<std::uint32_t>(countAddress);
+    at[7] = static_cast<std::uint32_t>(countAddress >> 32);
+    at[8] = DrawIndirectArgsBytes;
+    at[9] = (flags & NeoDrawFlags) | AutoIndex;
+    Nop(at + 10, 2);
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndirectMulti(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmDrawIndirectMulti(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t dataOffset, std::uint32_t maxCount, std::uint32_t stage, std::uint32_t vertexSgpr, std::uint32_t instanceSgpr, std::uint32_t flags) {
+    if (!cmdbuf || size != 11 || !ValidIndirect(stage, vertexSgpr, instanceSgpr)) return CommandFailed;
+    cmdbuf[0] = Header(0x2c, 6, false, flags & 1);
+    cmdbuf[1] = dataOffset;
+    cmdbuf[2] = IndirectSgpr(stage, vertexSgpr);
+    cmdbuf[3] = IndirectSgpr(stage, instanceSgpr);
+    cmdbuf[4] = maxCount;
+    cmdbuf[5] = DrawIndirectArgsBytes;
+    cmdbuf[6] = (flags & NeoDrawFlags) | AutoIndex;
+    Nop(cmdbuf + 7, 3);
     return 0;
 }
 
