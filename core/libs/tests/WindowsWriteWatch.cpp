@@ -223,6 +223,7 @@ void CheckComparedWhenShared() {
     auto* first = static_cast<unsigned char*>(mappings.Reserve(nullptr, 2 * Bytes));
     auto* second = static_cast<unsigned char*>(mappings.Reserve(nullptr, 2 * Bytes));
     Require(section && first && second, "cannot allocate compared sharing test memory");
+    mappings.ForgetSection(section);
     const auto collect = [&](unsigned char* address, std::size_t bytes) {
         std::array<void*, 32> pages{};
         std::size_t count = pages.size();
