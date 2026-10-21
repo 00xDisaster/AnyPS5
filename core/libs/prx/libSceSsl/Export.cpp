@@ -1152,25 +1152,30 @@ int APS5_VABI sceSslGetFingerprint(int sslCtxId, void* sslCert, int hashType, un
 }
 
 int APS5_VABI sceSslGetPem(int sslCtxId, void* sslCert, char* buf, std::size_t* bufLen) {
-    if (!bufLen) return ErrorInvalidArg;
+    if (!sslCert || !bufLen) return ErrorInvalidValue;
     std::lock_guard lock(State().mutex);
-    auto& context = GetContext(sslCtxId);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
     const auto* crt = RequireCertificate(__func__, sslCtxId, sslCert);
-    PoolScope scope(context.pool);
-    std::size_t required = 0;
-    const auto encode = [&](unsigned char* output, std::size_t capacity, std::size_t* written) {
-        return mbedtls_pem_write_buffer("-----BEGIN CERTIFICATE-----\n", "-----END CERTIFICATE-----\n", crt->raw.p, crt->raw.len, output, capacity, written);
-    };
-    const int sizing = encode(nullptr, 0, &required);
-    if (sizing != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) CheckBackend(sizing, "SSL PEM sizing failed");
-    if (!buf) {
-        *bufLen = required;
-        return 0;
+    const std::size_t encodedLength = Add(crt->raw.len, 2) / 3 * 4;
+    const std::size_t lineCount = Add(encodedLength, 63) / 64;
+    const std::size_t required = Add(57, Add(encodedLength, lineCount * 2));
+    const std::size_t capacity = *bufLen;
+    if (buf && capacity != 0) std::memset(buf, 0, capacity);
+    *bufLen = required;
+    if (!buf) return 0;
+    if (capacity < required) return static_cast<int>(0x8095f008);
+    constexpr char header[] = "-----BEGIN CERTIFICATE-----\r\n";
+    constexpr char footer[] = "-----END CERTIFICATE-----\r\n";
+    std::memcpy(buf, header, sizeof(header) - 1);
+    std::size_t offset = sizeof(header) - 1;
+    for (std::size_t position = 0; position < crt->raw.len; position += 48) {
+        std::size_t written = 0;
+        CheckBackend(mbedtls_base64_encode(reinterpret_cast<unsigned char*>(buf + offset), capacity - offset, &written, crt->raw.p + position, std::min<std::size_t>(48, crt->raw.len - position)), "SSL PEM encoding failed");
+        offset += written;
+        buf[offset++] = '\r';
+        buf[offset++] = '\n';
     }
-    if (*bufLen < required) throw std::length_error("SSL PEM buffer is too small");
-    std::size_t written = 0;
-    CheckBackend(encode(reinterpret_cast<unsigned char*>(buf), required, &written), "SSL PEM encoding failed");
-    *bufLen = written;
+    std::memcpy(buf + offset, footer, sizeof(footer));
     return 0;
 }
 

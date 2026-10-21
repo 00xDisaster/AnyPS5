@@ -297,14 +297,14 @@ void CertificateReaders() {
     std::size_t writtenLen = pemBuf.size();
     Check(sceSslGetPem(id, cert, pemBuf.data(), &writtenLen) == 0, "write pem failed");
     Check(writtenLen == pemLen, "written pem length mismatch");
-    Check(std::strstr(pemBuf.data(), "-----BEGIN CERTIFICATE-----\n") != nullptr, "pem header missing");
-    Check(std::strstr(pemBuf.data(), "-----END CERTIFICATE-----\n") != nullptr, "pem footer missing");
+    Check(std::strstr(pemBuf.data(), "-----BEGIN CERTIFICATE-----\r\n") != nullptr, "pem header missing");
+    Check(std::strstr(pemBuf.data(), "-----END CERTIFICATE-----\r\n") != nullptr, "pem footer missing");
 
     char smallPem[8]{};
     std::size_t smallPemLen = sizeof(smallPem);
-    Throws([&] { sceSslGetPem(id, cert, smallPem, &smallPemLen); });
-    Check(sceSslGetPem(id, cert, pemBuf.data(), nullptr) == static_cast<int>(0x8095177a), "null pem len accepted");
-    Throws([&] { sceSslGetPem(id, nullptr, pemBuf.data(), &writtenLen); });
+    Check(sceSslGetPem(id, cert, smallPem, &smallPemLen) == static_cast<int>(0x8095f008) && smallPemLen == pemLen, "short PEM size error mismatch");
+    Check(sceSslGetPem(id, cert, pemBuf.data(), nullptr) == static_cast<int>(0x8095f007), "null pem len accepted");
+    Check(sceSslGetPem(id, nullptr, pemBuf.data(), &writtenLen) == static_cast<int>(0x8095f007), "null PEM certificate error mismatch");
     Throws([&] { sceSslGetPem(id, fake, pemBuf.data(), &writtenLen); });
 
     Check(sceSslClose(1) == InvalidId, "closing an unknown connection did not report an invalid id");
@@ -317,7 +317,7 @@ void CertificateReaders() {
     Throws([&] { sceSslGetNotBefore(id, cert, &begin); });
     Throws([&] { sceSslGetNotAfter(id, cert, &limit); });
     Throws([&] { sceSslGetFingerprint(id, cert, 3, sha256); });
-    Throws([&] { sceSslGetPem(id, cert, pemBuf.data(), &writtenLen); });
+    Check(sceSslGetPem(id, cert, pemBuf.data(), &writtenLen) == InvalidId, "terminated PEM context error mismatch");
 
     const int id2 = sceSslInit_nid_postfix(1024 * 1024);
     Check(sceSslLoadCert(id2, 1, &pointer, nullptr, nullptr) == 0, "CA load failed");
