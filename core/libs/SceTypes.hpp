@@ -975,12 +975,59 @@ struct AudiodecM4aacInfo {
     std::int32_t i_result;
 };
 
+struct VoiceEvent {
+    std::int32_t type;
+    std::uint32_t reserved;
+    void* userData;
+    union {
+        struct {
+            std::uint16_t count;
+            std::uint16_t ports[7];
+        } dataReady;
+        struct {
+            std::uint16_t port;
+            std::uint8_t state;
+            std::uint8_t reserved[13];
+        } deviceState;
+    };
+};
+
+using VoiceEventHandler = void (APS5_VABI*)(const VoiceEvent* event);
+
+struct VoiceThreadsParams {
+    std::uint32_t mode;
+    std::int32_t firstPriority;
+    std::uint64_t firstAffinity;
+    std::int32_t secondPriority;
+    std::uint32_t reserved20;
+    std::uint64_t secondAffinity;
+    std::int32_t thirdPriority;
+    std::uint32_t reserved36;
+    std::uint64_t thirdAffinity;
+};
+
+static_assert(sizeof(VoiceEvent) == 32);
+static_assert(offsetof(VoiceEvent, userData) == 8);
+static_assert(offsetof(VoiceEvent, dataReady) == 16);
+static_assert(offsetof(VoiceEvent, deviceState) == 16);
+static_assert(sizeof(VoiceThreadsParams) == 48);
+static_assert(offsetof(VoiceThreadsParams, firstAffinity) == 8);
+static_assert(offsetof(VoiceThreadsParams, secondPriority) == 16);
+static_assert(offsetof(VoiceThreadsParams, secondAffinity) == 24);
+static_assert(offsetof(VoiceThreadsParams, thirdPriority) == 32);
+static_assert(offsetof(VoiceThreadsParams, thirdAffinity) == 40);
+
 struct VoiceInitParam {
     std::int32_t app_type;
-    std::uint64_t on_event;
+    VoiceEventHandler on_event;
     void* user_data;
-    std::uint8_t reserved[32 - sizeof(std::int32_t) - sizeof(std::uint64_t) - sizeof(void*)];
+    std::uint8_t reserved[16];
 };
+
+static_assert(sizeof(VoiceInitParam) == 40);
+static_assert(offsetof(VoiceInitParam, on_event) == 8);
+static_assert(offsetof(VoiceInitParam, user_data) == 16);
+static_assert(offsetof(VoiceInitParam, reserved) == 24);
 
 struct VoicePortParam {
     std::int32_t port_type;

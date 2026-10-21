@@ -7,7 +7,8 @@
 #include <stdexcept>
 
 extern "C" {
-int APS5_VABI sceVoiceInit(VoiceInitParam*, std::int32_t);
+int APS5_VABI sceVoiceInit(const VoiceInitParam*, std::int32_t);
+int APS5_VABI sceVoiceSetThreadsParams(const VoiceThreadsParams*);
 int APS5_VABI sceVoiceStart(const VoiceStartParam*);
 int APS5_VABI sceVoiceEnd_nid_postfix();
 int APS5_VABI sceVoiceCreatePort(std::uint32_t*, const VoicePortParam*);
@@ -89,12 +90,37 @@ int main() {
     Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
     Require(sceVoiceEnableChat() == notInitialized);
     Require(sceVoiceDisableChat() == notInitialized);
+    Require(sceVoiceSetThreadsParams(nullptr) == notInitialized);
+    VoiceThreadsParams threads{};
+    Require(sceVoiceSetThreadsParams(&threads) == notInitialized);
     VoiceInitParam init{};
+    Require(sceVoiceInit(nullptr, 100) == invalidArgument);
+    for (const auto mode : {-1, 0, 1, 3, 5, 0x07ffffff, 0x08000001, 0x10000001, 0x20000001, INT32_MAX}) {
+        init.app_type = mode;
+        Require(sceVoiceInit(&init, 100) == invalidArgument);
+        Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
+    }
     init.app_type = 0x10000000;
+    for (const auto version : {-1, 0, 99, 101, INT32_MAX}) {
+        Require(sceVoiceInit(&init, version) == invalidArgument);
+        Require(sceVoiceGetResourceInfo(nullptr) == notInitialized);
+    }
     VoiceStartParam start{};
     Require(sceVoiceInit(&init, 100) == 0);
-    Require(sceVoiceInit(&init, 100) == AlreadyInitialized);
+    Require(sceVoiceInit(nullptr, 0) == static_cast<std::int32_t>(0x804e0802u));
+    Require(sceVoiceInit(&init, 100) == static_cast<std::int32_t>(0x804e0802u));
+    Require(sceVoiceSetThreadsParams(nullptr) == invalidArgument);
+    Require(sceVoiceSetThreadsParams(&threads) == 0);
+    threads.mode = 2;
+    Require(sceVoiceSetThreadsParams(&threads) == invalidArgument);
+    threads.mode = UINT32_MAX;
+    Require(sceVoiceSetThreadsParams(&threads) == invalidArgument);
+    threads.mode = 1;
+    RequireThrows([&] { sceVoiceSetThreadsParams(&threads); });
+    threads.mode = 0;
     Require(sceVoiceStart(&start) == 0);
+    Require(sceVoiceSetThreadsParams(nullptr) == invalidArgument);
+    Require(sceVoiceSetThreadsParams(&threads) == static_cast<std::int32_t>(0x804e080bu));
     Require(sceVoiceGetResourceInfo(nullptr) == invalidArgument);
     struct ResourceOutput {
         VoiceResourceInfo info;

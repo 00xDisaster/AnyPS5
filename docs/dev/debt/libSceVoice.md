@@ -2,7 +2,7 @@
 
 ### Functional
 
-- [Voice resource and port state](../../../core/libs/prx/libSceVoice/Export.cpp): resource information is eight bytes containing four 16-bit limits selected by initialization mode. Reset, pause and resume use confirmed initialization, range and missing-port errors; repeated pause/resume succeed. The host has no buffered voice processing or device reset backend, so reset only covers empty software ports and pause flags currently affect no audio. Initialization still lacks native mode/version validation, allocator callbacks and backend creation; port creation does not enforce native resource limits.
+- [Voice resource and port state](../../../core/libs/prx/libSceVoice/Export.cpp): resource information is eight bytes containing four 16-bit limits selected by initialization mode. Reset, pause and resume use confirmed initialization, range and missing-port errors; repeated pause/resume succeed. The host has no buffered voice processing or device reset backend, so reset only covers empty software ports and pause flags currently affect no audio. Initialization validates native modes and version 100, but still lacks event callback delivery and backend creation; port creation does not enforce native resource limits.
 - [sceVoiceEnableChat and sceVoiceDisableChat](../../../core/libs/prx/libSceVoice/Export.cpp): zero-argument signatures and the not-initialized error are confirmed. Initialized calls throw because the required audio chat backend is not implemented; they no longer report success for a local flag change.
 
 ### Unknown function info
@@ -20,3 +20,5 @@
 - [sceVoiceSetBitRate](../../../core/libs/prx/libSceVoice/Export.cpp) (libSceVoice) - unknown signature
 - [sceVoiceUpdatePort](../../../core/libs/prx/libSceVoice/Export.cpp) (libSceVoice) - unknown signature
 - [sceVoiceGetPortAttr](../../../core/libs/prx/libSceVoice/Export.cpp): native initialization, port-range, pointer, attribute-size and port-type validation is implemented. Supported device attributes throw because the host has no device state or voice-activity processing. The former constant-zero voice-activity fallback is removed; failed calls leave output untouched.
+
+- [sceVoiceSetThreadsParams](../../../core/libs/prx/libSceVoice/Export.cpp): the 48-byte mode/priority/affinity layout and initialization, null, started-state and mode validation are recovered. Mode 1 throws because worker scheduling is not implemented; mode 0 is the native no-op. The 32-byte event callback union is recovered, but callback delivery and device-state byte semantics remain unimplemented.

@@ -68,20 +68,26 @@ bool IsInput(std::int32_t type) { return type == PortInDevice || type == PortInP
 
 extern "C" {
 
-int APS5_VABI sceVoiceInit(VoiceInitParam* param, int32_t version) {
-    (void)version;
-    if (param == nullptr) APS5_INVALID_ARG_EX;
+int APS5_VABI sceVoiceInit(const VoiceInitParam* param, std::int32_t version) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (voice.initialized) return VoiceErrorAlreadyInitialized;
+    if (voice.initialized) return static_cast<std::int32_t>(0x804e0802u);
+    if (!param || version != 100) return InvalidArgument;
+    if (param->app_type != 4 && param->app_type != 0x08000000 && param->app_type != 0x10000000 && param->app_type != 0x20000000) return InvalidArgument;
     voice.appType = param->app_type;
     voice.initialized = true;
     return 0;
 }
 
-int APS5_VABI sceVoiceSetThreadsParams(void* params) {
-    if (params == nullptr) APS5_INVALID_ARG_EX;
-    return 0;
+int APS5_VABI sceVoiceSetThreadsParams(const VoiceThreadsParams* params) {
+    auto& voice = State();
+    std::lock_guard lock(voice.mutex);
+    if (!voice.initialized) return NotInitialized;
+    if (!params) return InvalidArgument;
+    if (voice.started) return static_cast<std::int32_t>(0x804e080bu);
+    if (params->mode == 0) return 0;
+    if (params->mode != 1) return InvalidArgument;
+    Fail(__func__, "worker priority and affinity are not implemented");
 }
 
 int APS5_VABI sceVoiceStart(const VoiceStartParam* param) {

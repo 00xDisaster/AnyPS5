@@ -9,7 +9,7 @@
 #include <string_view>
 
 extern "C" {
-int APS5_VABI sceVoiceInit(VoiceInitParam*, int32_t);
+int APS5_VABI sceVoiceInit(const VoiceInitParam*, int32_t);
 int APS5_VABI sceVoiceEnd_nid_postfix(void);
 int APS5_VABI sceVoiceCreatePort(uint32_t*, const VoicePortParam*);
 int APS5_VABI sceVoiceDeletePort(uint32_t);
