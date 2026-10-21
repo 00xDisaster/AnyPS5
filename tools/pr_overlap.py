@@ -111,9 +111,6 @@ def exports(diff):
             text += nxt[1:]
         semi, brace = text.find(";"), text.find("{")
         if semi < 0 or 0 <= brace < semi:
-            # `_nid_postfix` names resolve to the same NID as their plain
-            # export name. Compare the canonical name so a stub cannot hide
-            # a duplicate behind this implementation suffix.
             name = m.group(1).removesuffix("_nid_postfix")
             found.add(NID_DISAMBIG.sub("", name))
     return found
