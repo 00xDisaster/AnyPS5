@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pr_overlap
+import nid_names
 
 TRAILING = "+extern \"C\" std::int64_t APS5_VABI recv_nid_postfix(int, void*, std::uint64_t, int) noexcept;   \n"
 DIFF = """diff --git a/core/libs/prx/libkernel/File/src/Open.cpp b/core/libs/prx/libkernel/File/src/Open.cpp
@@ -51,6 +52,45 @@ class ExportTests(unittest.TestCase):
         self.assertNotIn("removed_nid_postfix", found)
         self.assertNotIn("context_nid_postfix", found)
         self.assertNotIn("Helper_nid_no_patch", found)
+
+    def test_added_definitions_match_base_names_with_nid_postfix(self):
+        nid = nid_names.compute_nid("sceKernelRead")
+        base = {nid: {"sceKernelRead_nid_postfix"}}
+        added = pr_overlap.source_changed_exports(
+            "diff --git a/a.cpp b/a.cpp\n+int APS5_VABI sceKernelRead(int fd) { return fd; }\n", "+")
+        self.assertEqual(set(added) & set(base), {nid})
+
+    def test_added_assembly_export_matches_base_definition(self):
+        nid = nid_names.compute_nid("sceKernelRead")
+        added = pr_overlap.source_changed_exports(
+            'diff --git a/a.cpp b/a.cpp\n+APS5_ASM_FUNCTION("sceKernelRead")\n', "+")
+        self.assertIn(nid, added)
+
+    def test_added_raw_export_matches_base_definition(self):
+        nid = nid_names.compute_nid("sceKernelRead")
+        added = pr_overlap.source_changed_exports(
+            f'diff --git a/a.cpp b/a.cpp\n+APS5_EXPORT("{nid}", sceKernelReadAlias);\n', "+")
+        self.assertEqual(added[nid], {"sceKernelReadAlias"})
+
+    def test_raw_main_export_is_preserved_as_literal_nid(self):
+        nid = "123456789ab"
+        self.assertEqual(pr_overlap.source_exports(f'APS5_EXPORT("{nid}", alias);'), {nid: {"alias"}})
+
+    def test_report_includes_exports_already_on_main(self):
+        report = pr_overlap.report(
+            {9: {"added": set(), "main_exports": {"sceKernelRead"}}},
+            "https://example.invalid/blob/base")
+        self.assertIn("Already on `main`", report)
+        self.assertIn("`sceKernelRead`", report)
+
+    def test_replacing_an_export_in_place_cancels_the_same_nid(self):
+        diff = """diff --git a/a.cpp b/a.cpp
+-int APS5_VABI sceKernelRead_nid_postfix(int fd) { throw std::runtime_error("not implemented"); }
++int APS5_VABI sceKernelRead(int fd) { return fd; }
+"""
+        added = pr_overlap.source_changed_exports(diff, "+")
+        removed = pr_overlap.source_changed_exports(diff, "-")
+        self.assertEqual(set(added) - set(removed), set())
 
 
     def test_explicit_export_aliases_are_collected(self):
