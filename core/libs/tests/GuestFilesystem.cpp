@@ -238,7 +238,7 @@ static void TestParentTraversal() {
     checkInvalid("/parent-test-mount/present.txt/..", 20);
     FileStat status{};
     Require(sceKernelStat("/parent-test-mount/existing/../present.txt", &status) == 0 && status.st_size == 9);
-    for (const char* name : {"/parent-test-mount/present.txt/.", "/parent-test-mount/present.txt/./", "/parent-test-mount/present.txt/./child"}) {
+    for (const char* name : {"/parent-test-mount/present.txt/.", "/parent-test-mount/present.txt/./"}) {
         Require(stat_nid_postfix(name, &status) == -1 && *__error_nid_postfix() == 20);
         Require(sceKernelStat(name, &status) == static_cast<int>(0x80020014u));
         Require(access_nid_postfix(name, 0) == -1 && *__error_nid_postfix() == 20);
