@@ -43,6 +43,10 @@ std::uint32_t compiledSdkVersion() {
     return version;
 }
 
+bool validEntitlementLabel(const NpUnifiedEntitlementLabel& label, std::uint32_t minimumSdkVersion) {
+    return compiledSdkVersion() < minimumSdkVersion || std::all_of(std::begin(label.padding), std::end(label.padding), [](char value) { return value == 0; });
+}
+
 struct TemporaryData {
     std::mutex mutex;
     const std::filesystem::path directory = ResolvePath_nid_no_patch(TEMPORARY_MOUNT_POINT);
@@ -73,6 +77,7 @@ int APS5_VABI sceAppContentAddcontMount(uint32_t service_label, const NpUnifiedE
     if (!initialized.load()) return SCE_APP_CONTENT_ERROR_NOT_INITIALIZED;
  (void)service_label;
  if (!entitlement_label || !mount_point) return SCE_APP_CONTENT_ERROR_PARAMETER;
+    if (!validEntitlementLabel(*entitlement_label, 0x01500000)) return SCE_APP_CONTENT_ERROR_PARAMETER;
  return SCE_APP_CONTENT_ERROR_NOT_FOUND;
 }
 
@@ -86,6 +91,7 @@ int APS5_VABI sceAppContentGetAddcontInfo(uint32_t service_label, const NpUnifie
     if (!initialized.load()) return SCE_APP_CONTENT_ERROR_NOT_INITIALIZED;
     (void)service_label;
     if (!entitlement_label || !info) return SCE_APP_CONTENT_ERROR_PARAMETER;
+    if (!validEntitlementLabel(*entitlement_label, 0x01500000)) return SCE_APP_CONTENT_ERROR_PARAMETER;
     return SCE_APP_CONTENT_ERROR_DRM_NO_ENTITLEMENT;
 }
 
@@ -208,6 +214,7 @@ int APS5_VABI sceAppContentAddcontEnqueueDownload(uint32_t service_label, const 
     if (!initialized.load()) return SCE_APP_CONTENT_ERROR_NOT_INITIALIZED;
     (void)service_label;
     if (!entitlement_label) return SCE_APP_CONTENT_ERROR_PARAMETER;
+    if (!validEntitlementLabel(*entitlement_label, 0x01500000)) return SCE_APP_CONTENT_ERROR_PARAMETER;
     return SCE_APP_CONTENT_ERROR_NOT_FOUND;
 }
 
@@ -215,6 +222,7 @@ int APS5_VABI sceAppContentAddcontDelete(uint32_t service_label, const NpUnified
     if (!initialized.load()) return SCE_APP_CONTENT_ERROR_NOT_INITIALIZED;
     (void)service_label;
     if (!entitlement_label) return SCE_APP_CONTENT_ERROR_PARAMETER;
+    if (!validEntitlementLabel(*entitlement_label, 0x03500000)) return SCE_APP_CONTENT_ERROR_PARAMETER;
     return SCE_APP_CONTENT_ERROR_NOT_FOUND;
 }
 
@@ -222,6 +230,7 @@ int APS5_VABI sceAppContentGetAddcontDownloadProgress(uint32_t service_label, co
     if (!initialized.load()) return SCE_APP_CONTENT_ERROR_NOT_INITIALIZED;
     (void)service_label;
     if (!entitlement_label || !progress) return SCE_APP_CONTENT_ERROR_PARAMETER;
+    if (!validEntitlementLabel(*entitlement_label, 0x03500000)) return SCE_APP_CONTENT_ERROR_PARAMETER;
     return SCE_APP_CONTENT_ERROR_NOT_FOUND;
 }
 int APS5_VABI sceAppContentAddcontEnqueueDownloadByEntitlemetId(void) {

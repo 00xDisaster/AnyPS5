@@ -200,6 +200,24 @@ int main() {
     Require(sceAppContentGetAddcontInfo(0, nullptr, info) == ErrorParameter);
     Require(sceAppContentGetAddcontInfo(0, &label, nullptr) == ErrorParameter);
 
+    for (const std::uint32_t version : {0x014fffffu, 0x01500000u, 0x034fffffu, 0x03500000u}) {
+        std::memcpy(process.data() + 16, &version, sizeof(version));
+        for (char& padding : label.padding) {
+            padding = 1;
+            const int earlyError = version >= 0x01500000 ? ErrorParameter : ErrorNotFound;
+            const int infoError = version >= 0x01500000 ? ErrorParameter : ErrorDrmNoEntitlement;
+            const int lateError = version >= 0x03500000 ? ErrorParameter : ErrorNotFound;
+            Require(sceAppContentAddcontMount(0, &label, &mountPoint) == earlyError);
+            Require(sceAppContentGetAddcontInfo(0, &label, info) == infoError);
+            Require(sceAppContentAddcontEnqueueDownload(0, &label) == earlyError);
+            Require(sceAppContentAddcontDelete(0, &label) == lateError);
+            Require(sceAppContentGetAddcontDownloadProgress(0, &label, progress) == lateError);
+            Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
+            Require(std::memcmp(progress, progressBefore, sizeof(progress)) == 0);
+            padding = 0;
+        }
+    }
+
     uint32_t hitNum = 0x5a5a5a5a;
     Require(sceAppContentGetAddcontInfoList(0, nullptr, 0, &hitNum) == 0);
     Require(hitNum == 0);
