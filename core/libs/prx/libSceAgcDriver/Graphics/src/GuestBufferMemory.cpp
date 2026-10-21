@@ -3333,6 +3333,13 @@ std::uint64_t HostImportLiveBytes() {
     return state.liveBytes;
 }
 
+std::uint64_t HostImportBudgetRemaining(const Context& context) {
+    auto& state = Imports();
+    std::lock_guard lock(state.mutex);
+    const auto budget = effectiveBudget(context, state);
+    return budget > state.liveBytes ? budget - state.liveBytes : 0;
+}
+
 const char* ImportRequesterName(ImportRequester requester) {
     switch (requester) {
         case ImportRequester::Map: return "map";

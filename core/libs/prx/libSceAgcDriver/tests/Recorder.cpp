@@ -2505,6 +2505,12 @@ int reimportBench(const Device& device) {
     constexpr std::size_t moves = 5;
     constexpr std::size_t page = 4096;
     constexpr std::size_t alignment = 2ull << 20u;
+    constexpr std::size_t requiredImportBytes = bytes + inside;
+    const auto availableImportBytes = HostImportBudgetRemaining(context);
+    if (availableImportBytes < requiredImportBytes) {
+        std::cout << "skipped, the re-import bench needs " << (requiredImportBytes >> 20u) << " MiB of simultaneous host imports; the current budget has " << (availableImportBytes >> 20u) << " MiB available\n";
+        return 77;
+    }
     struct Release {
         void* mapping = nullptr;
         std::int64_t physical = -1;
