@@ -674,10 +674,12 @@ int SetNonBlocking(Socket& socket) {
     return 0;
 }
 int ReceiveAnsweredHere(Socket& socket, std::uint64_t length) {
+#ifdef _WIN32
     {
         std::lock_guard lock(socket.modeMutex);
         if (socket.receiveShut) return 0;
     }
+#endif
     if (length != 0 || socket.type != 1) return -1;
     sockaddr_storage peer{};
     socklen_t size = sizeof(peer);

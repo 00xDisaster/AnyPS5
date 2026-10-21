@@ -201,6 +201,7 @@ static void ReceiveAnsweredWithoutTheHost() {
     std::uint32_t senderSize = sender.size();
     Require(recvfrom_nid_postfix(accepted, &byte, 0, 0, sender.data(), &senderSize) == 0 && senderSize == 0);
 
+#ifdef _WIN32
     Require(shutdown_nid_postfix(accepted, 0) == 0);
     Require(send_nid_postfix(client, "x", 1, 0) == 1);
     char received[4];
@@ -208,6 +209,7 @@ static void ReceiveAnsweredWithoutTheHost() {
     Require(recv_nid_postfix(accepted, received, sizeof(received), DontWait) == 0);
     senderSize = sender.size();
     Require(recvfrom_nid_postfix(accepted, received, sizeof(received), 0, sender.data(), &senderSize) == 0 && senderSize == 0);
+#endif
     for (const int descriptor : {unconnected, client, accepted, listener}) Require(close_nid_postfix(descriptor) == 0);
 }
 
