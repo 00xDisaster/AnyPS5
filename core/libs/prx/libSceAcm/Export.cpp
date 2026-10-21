@@ -79,7 +79,7 @@ int APS5_VABI sceAcmContextDestroy(AcmContextId context) {
     return 0;
 }
 
-int APS5_VABI sceAcm_ConvReverb_SharedInput(void) {
+int APS5_VABI sceAcm_ConvReverb_SharedInput(AcmBatchInfo* batch, std::uint32_t mode, AcmReverbInput* input, std::uint32_t outputCount, const AcmReverbFilter* const* filters, const float* gains, const AcmReverbOutput* const* outputs) {
     return 0;
 }
 

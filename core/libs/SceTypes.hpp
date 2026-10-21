@@ -432,6 +432,48 @@ struct AcmBatchError {
     std::uint32_t reserved[8];
 };
 
+struct AcmReverbBuffer {
+    void* samples;
+    const void* blockMetadata;
+};
+
+struct AcmReverbInput {
+    std::uint32_t blockSize;
+    std::uint32_t blockCount;
+    std::uint32_t channelCount;
+    std::uint32_t sampleFormat;
+    std::uint32_t currentBlock;
+    std::uint32_t availableBlocks;
+    const AcmReverbBuffer* const* history;
+    const void* const* inputChannels;
+    std::uint32_t pendingBlocks;
+};
+
+struct AcmReverbFilter {
+    std::uint32_t blockSize;
+    std::uint32_t blockCount;
+    std::uint32_t channelCount;
+    std::uint32_t sampleFormat;
+    const void* blockMetadata;
+    const AcmReverbBuffer* const* channels;
+};
+
+struct AcmReverbOutput {
+    std::uint32_t blockSize;
+    std::uint32_t channelCount;
+    void* const* samples;
+    void* const* workspace;
+    float gain;
+    float previousGain;
+    void* const* previousSamples;
+};
+
+static_assert(sizeof(AcmReverbBuffer) == 16);
+static_assert(offsetof(AcmReverbInput, history) == 24);
+static_assert(offsetof(AcmReverbInput, pendingBlocks) == 40);
+static_assert(sizeof(AcmReverbFilter) == 32);
+static_assert(offsetof(AcmReverbOutput, previousSamples) == 32);
+
 struct AcmBatchInfo {
     void* buffer;
     std::size_t offset;
