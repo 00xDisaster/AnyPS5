@@ -2,6 +2,8 @@
 
 ### Unknown function info
 
+- [sceVideoRecordingGetInfo, sceVideoRecordingSetInfo](../../../core/libs/prx/libSceVideoRecordingP/Export.cpp) support native validation and errors before a recording context exists. Open and initialization remain protected unimplemented exports; live recording queries, control and volume changes are unavailable.
+
 - [_sceVideoRecordingQueryParam_nid_postfix](../../../core/libs/prx/libSceVideoRecordingP/Export.cpp): the supplied module reads a 64-bit size and writes a 32-bit mode at offset 12 for sizes at least 16, plus a 32-bit option at offset 28 for sizes at least 64. Mode/option meanings remain unresolved; the protected implementation is unchanged.
 - [sceVideoRecordingCloseByHandle, sceVideoRecordingGetInfoByHandle](../../../core/libs/prx/libSceVideoRecordingP/Export.cpp) - native handles are context pointers. Recording state and per-handle queries remain unimplemented.
 - [sceVideoRecordingCopyBGRAtoNV12](../../../core/libs/prx/libSceVideoRecordingP/Export.cpp) - the destination, source, 32-bit width and height arguments are confirmed. Pixel conversion remains unimplemented.
