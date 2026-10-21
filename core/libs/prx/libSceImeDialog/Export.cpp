@@ -17,6 +17,7 @@ constexpr std::uint32_t EndStatusUserCanceled = 1;
 constexpr std::uint32_t EndStatusAborted = 2;
 constexpr std::uint32_t MaxTextLength = 2048;
 constexpr int ErrorBusy = static_cast<int>(0x80bc0001u);
+constexpr int ErrorSuspending = static_cast<int>(0x80bc0009u);
 constexpr int ErrorNotOpened = static_cast<int>(0x80bc0002u);
 constexpr int ErrorNotInUse = static_cast<int>(0x80bc0107u);
 constexpr int ErrorInvalidMaxTextLength = static_cast<int>(0x80bc0016u);
@@ -201,9 +202,9 @@ int APS5_VABI sceImeDialogInitInternal(Param* param, ExtendedParam* extended) {
     return sceImeDialogInit(param, extended);
 }
 
-int APS5_VABI sceImeDialogSetPanelPosition(int32_t posx, int32_t posy) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceImeDialogSetPanelPosition(int32_t, int32_t) {
+    std::lock_guard lock(g_mutex);
+    return g_dialog.status == StatusNone ? ErrorNotInUse : ErrorSuspending;
 }
 
 
