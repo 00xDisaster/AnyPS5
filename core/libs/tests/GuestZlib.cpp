@@ -108,7 +108,21 @@ int main() {
     Require(sceZlibFinalize() == 0);
     Require(sceZlibInitialize(nullptr, 0) == 0);
     Require(sceZlibGetResult(id, &produced, &status) == static_cast<std::int32_t>(0x81120002));
+    bool interrupted = false;
+    std::thread interruptedWaiter([&] {
+        std::uint32_t longTimeout = 5000000;
+        const auto waitStart = std::chrono::steady_clock::now();
+        try {
+            interrupted = sceZlibWaitForDone(&completed, &longTimeout) == static_cast<std::int32_t>(0x81120032);
+        } catch (const std::runtime_error&) {
+            interrupted = true;
+        }
+        Require(std::chrono::steady_clock::now() - waitStart < std::chrono::seconds(1));
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
     Require(sceZlibFinalize() == 0);
+    interruptedWaiter.join();
+    Require(interrupted);
     Require(sceZlibGetResult(id, &produced, &status) == static_cast<std::int32_t>(0x81120032));
     std::array<std::uint8_t, 65536> scratch{};
     Require(sceZlibInitialize(scratch.data(), scratch.size()) == 0);

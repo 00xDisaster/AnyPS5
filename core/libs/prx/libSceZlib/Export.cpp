@@ -28,6 +28,7 @@ struct Result {
 std::mutex serviceMutex;
 bool initialized = false;
 std::uint64_t nextId = 1;
+std::uint64_t session = 0;
 std::unordered_map<std::uint64_t, Result> results;
 std::deque<std::uint64_t> completed;
 std::condition_variable completion;
@@ -50,6 +51,8 @@ std::int32_t APS5_VABI sceZlibFinalize() {
     results.clear();
     completed.clear();
     initialized = false;
+    ++session;
+    completion.notify_all();
     return 0;
 }
 
@@ -86,9 +89,11 @@ std::int32_t APS5_VABI sceZlibWaitForDone(std::uint64_t* requestId, std::uint32_
     std::unique_lock lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
     if (!requestId) throw std::runtime_error("sceZlibWaitForDone: invalid output");
-    const auto finished = [] { return !completed.empty(); };
+    const std::uint64_t waitSession = session;
+    const auto finished = [waitSession] { return !completed.empty() || session != waitSession; };
     if (!timeout) completion.wait(lock, finished);
     else if (!completion.wait_for(lock, std::chrono::microseconds(*timeout), finished)) return TIMED_OUT;
+    if (session != waitSession) throw std::runtime_error("sceZlibWaitForDone: finalization during a wait semantics unknown");
     *requestId = completed.front();
     completed.pop_front();
     return 0;
