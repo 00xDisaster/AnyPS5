@@ -221,6 +221,29 @@ struct VrTracker2TimingDiagnostics;
 struct VrTracker2MapConfiguration;
 struct VrTracker2SensorSummary;
 
+struct VrTracker2CoordinateResultParameter {
+    std::uint32_t coordinateSystem;
+    std::uint32_t reserved;
+    VrTracker2ResultParameter parameter;
+};
+
+struct VrTracker2BoundaryFitResult {
+    std::uint8_t flags[4];
+    float dimensions[4];
+};
+
+struct VrTracker2VectorResult {
+    std::uint32_t size;
+    float value[3];
+};
+
+struct VrTracker2ExtendedTrackingResult;
+
+static_assert(sizeof(VrTracker2CoordinateResultParameter) == 56);
+static_assert(offsetof(VrTracker2CoordinateResultParameter, parameter) == 8);
+static_assert(sizeof(VrTracker2BoundaryFitResult) == 20);
+static_assert(sizeof(VrTracker2VectorResult) == 16);
+
 extern "C" {
 
 std::int32_t APS5_VABI sceVrTracker2Finalize() {
@@ -288,7 +311,7 @@ std::int32_t APS5_VABI sceVrTracker2Initialize(const VrTracker2InitializeParamet
 }
 
 APS5_EXPORT("1m6DD9BBmSE", VrTracker2GetRelativePose);
-std::int32_t APS5_VABI VrTracker2GetRelativePose(std::int32_t firstDeviceHandle, std::int32_t secondDeviceHandle, VrTracker2RelativePoseResult* result) {
+std::int32_t APS5_VABI VrTracker2GetRelativePose(std::uint32_t firstCoordinateSystem, std::uint32_t secondCoordinateSystem, VrTracker2RelativePoseResult* result) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
@@ -423,13 +446,13 @@ std::int32_t APS5_VABI VrTracker2GetScalarOption(float* value) {
 ;
 APS5_EXPORT("LQV4nz6wteY", VrTracker2NotInitialized);
 APS5_EXPORT("x0pGthEwf88", VrTracker2NotInitialized);
-APS5_EXPORT("d5Fjs0rHkBg", VrTracker2SelectDevice);
-std::int32_t APS5_VABI VrTracker2SelectDevice(std::int32_t deviceHandle) {
+APS5_EXPORT("d5Fjs0rHkBg", VrTracker2SelectCoordinateSystem);
+std::int32_t APS5_VABI VrTracker2SelectCoordinateSystem(std::uint32_t coordinateSystem) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 ;
-APS5_EXPORT("Yed3ZONcuMk", VrTracker2GetSelectedDevice);
-std::int32_t APS5_VABI VrTracker2GetSelectedDevice(std::int32_t* deviceHandle) {
+APS5_EXPORT("Yed3ZONcuMk", VrTracker2GetSelectedCoordinateSystem);
+std::int32_t APS5_VABI VrTracker2GetSelectedCoordinateSystem(std::uint32_t* coordinateSystem) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 ;
@@ -493,11 +516,31 @@ std::int32_t APS5_VABI VrTracker2InitializeMap(std::int32_t deviceHandle, const 
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-APS5_EXPORT("-HFx+dnDSOI", VrTracker2NotInitialized);
-APS5_EXPORT("wgDeDXirl0g", VrTracker2NotInitialized);
-APS5_EXPORT("a1kWSTYGBxg", VrTracker2NotInitialized);
-APS5_EXPORT("zUwxBEKr3fc", VrTracker2NotInitialized);
-APS5_EXPORT("TC7VTVzj0xc", VrTracker2NotInitialized);
+APS5_EXPORT("-HFx+dnDSOI", VrTracker2GetCoordinateTrackingResult);
+std::int32_t APS5_VABI VrTracker2GetCoordinateTrackingResult(const VrTracker2CoordinateResultParameter* parameter, VrTracker2ExtendedTrackingResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("wgDeDXirl0g", VrTracker2GetExtendedTrackingResult);
+std::int32_t APS5_VABI VrTracker2GetExtendedTrackingResult(const VrTracker2ResultParameter* parameter, VrTracker2ExtendedTrackingResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("a1kWSTYGBxg", VrTracker2FitBoundary);
+std::int32_t APS5_VABI VrTracker2FitBoundary(const VrTracker2BoundaryGeometry* boundary, VrTracker2BoundaryFitResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("zUwxBEKr3fc", VrTracker2FitBoundaryWithBounds);
+std::int32_t APS5_VABI VrTracker2FitBoundaryWithBounds(const VrTracker2BoundaryGeometry* boundary, VrTracker2OrientedBoundingBox* firstBounds, VrTracker2OrientedBoundingBox* secondBounds, VrTracker2BoundaryFitResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("TC7VTVzj0xc", VrTracker2GetDeviceCenter);
+std::int32_t APS5_VABI VrTracker2GetDeviceCenter(std::int32_t deviceHandle, VrTracker2VectorResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("1DwROxtuANs", VrTracker2GetRuntimeStatus);
 std::int32_t APS5_VABI VrTracker2GetRuntimeStatus(VrTracker2RuntimeStatus* status) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
