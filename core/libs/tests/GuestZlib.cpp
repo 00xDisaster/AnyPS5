@@ -1,10 +1,12 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <thread>
 
 extern "C" {
 std::int32_t APS5_VABI sceZlibInitialize(const void*, std::uint64_t);
@@ -45,12 +47,11 @@ int main() {
         Require(sceZlibInflate(input, inputLength, output, capacity, &id) == 0);
         Require(id > previous);
         previous = id;
-        std::uint32_t timeout = 0;
-        RequireThrows([&] { sceZlibWaitForDone(&id, &timeout); });
         std::uint64_t completed;
         Require(sceZlibWaitForDone(&completed, nullptr) == 0);
         Require(completed == id);
-        RequireThrows([&] { sceZlibWaitForDone(&completed, nullptr); });
+        std::uint32_t timeout = 0;
+        Require(sceZlibWaitForDone(&completed, &timeout) == static_cast<std::int32_t>(0x81120027));
         Require(sceZlibGetResult(id + 1, &produced, &status) == static_cast<std::int32_t>(0x81120002));
         RequireThrows([&] { sceZlibGetResult(id, nullptr, &status); });
         Require(sceZlibGetResult(id, &produced, &status) == 0);
@@ -88,6 +89,21 @@ int main() {
         Require(status == 0 && produced == expectedLength);
         Require(std::memcmp(batch.data() + index * 8192, text, sizeof(text) - 1) == 0);
     }
+    std::uint64_t completed = 0;
+    std::uint32_t timeout = 0;
+    Require(sceZlibInflate(compressed.data(), compressed.size(), output, expectedLength, &id) == 0);
+    Require(sceZlibWaitForDone(&completed, &timeout) == 0);
+    Require(completed == id);
+    timeout = 20000;
+    const auto start = std::chrono::steady_clock::now();
+    Require(sceZlibWaitForDone(&completed, &timeout) == static_cast<std::int32_t>(0x81120027));
+    const auto waited = std::chrono::steady_clock::now() - start;
+    Require(waited >= std::chrono::microseconds(20000) && waited < std::chrono::seconds(1));
+    std::thread waiter([&] { Require(sceZlibWaitForDone(&completed, nullptr) == 0); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    Require(sceZlibInflate(compressed.data(), compressed.size(), output, expectedLength, &id) == 0);
+    waiter.join();
+    Require(completed == id);
     Require(sceZlibInflate(compressed.data(), compressed.size(), output, expectedLength, &id) == 0);
     Require(sceZlibFinalize() == 0);
     Require(sceZlibInitialize(nullptr, 0) == 0);

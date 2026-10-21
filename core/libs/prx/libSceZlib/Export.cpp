@@ -1,5 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "zlib.h"
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <limits>
@@ -14,6 +16,7 @@ static_assert(sizeof(std::uint32_t) == 4 && sizeof(std::uint64_t) == 8 && sizeof
 constexpr std::int32_t NOT_FOUND = static_cast<std::int32_t>(0x81120002);
 constexpr std::int32_t NOT_INITIALIZED = static_cast<std::int32_t>(0x81120032);
 constexpr std::int32_t ALREADY_INITIALIZED = static_cast<std::int32_t>(0x81120033);
+constexpr std::int32_t TIMED_OUT = static_cast<std::int32_t>(0x81120027);
 constexpr std::int32_t NO_SPACE = static_cast<std::int32_t>(0x8112001C);
 constexpr std::int32_t FATAL = static_cast<std::int32_t>(0x811200FF);
 
@@ -27,6 +30,7 @@ bool initialized = false;
 std::uint64_t nextId = 1;
 std::unordered_map<std::uint64_t, Result> results;
 std::deque<std::uint64_t> completed;
+std::condition_variable completion;
 
 } // namespace
 
@@ -73,15 +77,18 @@ std::int32_t APS5_VABI sceZlibInflate(const void* source, std::uint32_t sourceLe
     const std::uint64_t id = nextId++;
     results[id] = Result{produced, status};
     completed.push_back(id);
+    completion.notify_one();
     *requestId = id;
     return 0;
 }
 
 std::int32_t APS5_VABI sceZlibWaitForDone(std::uint64_t* requestId, std::uint32_t* timeout) {
-    std::lock_guard lock(serviceMutex);
+    std::unique_lock lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
-    if (timeout) throw std::runtime_error("sceZlibWaitForDone: timeout semantics unknown");
-    if (!requestId || completed.empty()) throw std::runtime_error("sceZlibWaitForDone: no outstanding request");
+    if (!requestId) throw std::runtime_error("sceZlibWaitForDone: invalid output");
+    const auto finished = [] { return !completed.empty(); };
+    if (!timeout) completion.wait(lock, finished);
+    else if (!completion.wait_for(lock, std::chrono::microseconds(*timeout), finished)) return TIMED_OUT;
     *requestId = completed.front();
     completed.pop_front();
     return 0;
