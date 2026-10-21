@@ -5,8 +5,10 @@ import shutil
 import struct
 import sys
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import annotate_module
@@ -94,9 +96,31 @@ def instruction(listing, mnemonic):
     return next(line for line in listing if pattern.search(line))
 
 
+class ObjdumpDiscoveryTests(unittest.TestCase):
+    def discover(self, versions):
+        def which(name):
+            return "/bin/" + name if name in versions else None
+
+        def run(command, **kwargs):
+            return subprocess.CompletedProcess(command, 0, versions[Path(command[0]).name], "")
+
+        with mock.patch.object(annotate_module.shutil, "which", which), mock.patch.object(annotate_module.subprocess, "run", run):
+            return annotate_module.gnu_objdump()
+
+    def test_llvm_objdump_is_passed_over_for_gnu_gobjdump(self):
+        found = self.discover({"objdump": "Apple LLVM version 21.0.0\n", "gobjdump": "GNU objdump (GNU Binutils) 2.45\n"})
+        self.assertEqual(found, "/bin/gobjdump")
+
+    def test_only_llvm_objdump_is_refused_by_name(self):
+        self.assertIsNone(self.discover({"objdump": "Apple LLVM version 21.0.0\n"}))
+        with mock.patch.object(annotate_module, "gnu_objdump", lambda: None):
+            with self.assertRaisesRegex(annotate_module.ModuleError, "GNU binutils objdump was not found as any of objdump, gobjdump"):
+                annotate_module.disassemble(b"\xc3", 0x1000)
+
+
 class AnnotateModuleTests(unittest.TestCase):
     def setUp(self):
-        self.assertIsNotNone(shutil.which("objdump"), "binutils objdump is required to run these tests")
+        self.assertIsNotNone(annotate_module.gnu_objdump(), "GNU binutils objdump (objdump or gobjdump) is required to run these tests")
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)

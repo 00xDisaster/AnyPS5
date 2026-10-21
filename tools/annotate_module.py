@@ -191,11 +191,28 @@ class Namer:
         return name if name and nid_names.compute_nid(name) == nid else nid
 
 
+OBJDUMP_NAMES = ("objdump", "gobjdump", "x86_64-linux-gnu-objdump", "x86_64-elf-objdump")
+
+
+def gnu_objdump():
+    for name in OBJDUMP_NAMES:
+        path = shutil.which(name)
+        if path is None:
+            continue
+        result = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if result.returncode == 0 and result.stdout.startswith("GNU objdump"):
+            return path
+    return None
+
+
 def disassemble(code, vaddr):
+    objdump = gnu_objdump()
+    if objdump is None:
+        raise ModuleError("GNU binutils objdump was not found as any of %s" % ", ".join(OBJDUMP_NAMES))
     with tempfile.TemporaryDirectory() as directory:
         blob = Path(directory) / "text.bin"
         blob.write_bytes(code)
-        command = ["objdump", "-D", "-b", "binary", "-m", "i386:x86-64", "--no-show-raw-insn",
+        command = [objdump, "-D", "-b", "binary", "-m", "i386:x86-64", "--no-show-raw-insn",
                    "--adjust-vma=%d" % vaddr, str(blob)]
         result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0:
@@ -265,7 +282,7 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser(
         description="Annotated disassembly of a relinked guest module (no section headers). Writes PREFIX.imports.txt, "
                     "PREFIX.exports.txt and PREFIX.asm, with imports, PLT stubs, GOT references and exports named "
-                    "through the NID database. Requires binutils objdump.")
+                    "through the NID database. Requires GNU binutils objdump (objdump, or gobjdump from Homebrew binutils).")
     parser.add_argument("module", help="relinked guest module, for example libc.prx.guest.prx")
     parser.add_argument("--out", help="output prefix (default: the module path)")
     parser.add_argument("--db", help="NID database CSV (downloaded to a cache dir by default)")
@@ -275,8 +292,8 @@ def parse_arguments(argv):
 
 def main(argv=None):
     args = parse_arguments(sys.argv[1:] if argv is None else argv)
-    if shutil.which("objdump") is None:
-        sys.exit("binutils objdump is required but was not found in PATH")
+    if gnu_objdump() is None:
+        sys.exit("GNU binutils objdump is required but none of %s in PATH is GNU objdump" % ", ".join(OBJDUMP_NAMES))
     try:
         db = {} if args.no_names else nid_names.load_db(Path(args.db) if args.db else nid_names.DEFAULT_CACHE)
         print(annotate(args.module, args.out or args.module, Namer(db)))
