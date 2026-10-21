@@ -79,6 +79,25 @@ static_assert(offsetof(LoginDialogParam, reserved) == 44);
 static_assert(sizeof(LoginDialogResult) == 16);
 static_assert(offsetof(LoginDialogResult, errorCode) == 4);
 
+struct NetCtlApDialogParam {
+    CommonDialogBaseParam base;
+    std::uint64_t size;
+    std::uint32_t value56;
+    std::uint32_t reserved60;
+    char option[9];
+    std::uint8_t reserved[31];
+};
+
+struct NetCtlApDialogResult {
+    std::int32_t result;
+    std::uint8_t reserved[36];
+};
+
+static_assert(sizeof(NetCtlApDialogParam) == 104);
+static_assert(offsetof(NetCtlApDialogParam, option) == 64);
+static_assert(offsetof(NetCtlApDialogParam, reserved) == 73);
+static_assert(sizeof(NetCtlApDialogResult) == 40);
+
 struct G2PDialogParam {
     CommonDialogBaseParam base;
     std::int32_t userId;
