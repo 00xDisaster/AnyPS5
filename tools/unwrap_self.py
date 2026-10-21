@@ -95,12 +95,6 @@ def read_records(data):
     return records
 
 
-def align_up(value, alignment):
-    if alignment <= 1:
-        return value
-    return (value + alignment - 1) // alignment * alignment
-
-
 def parse_elf(data):
     inner = data.find(b"\x7fELF")
     if inner < 0:
@@ -275,9 +269,7 @@ def unwrap(path, output, verbose=False):
     cursor = max(FIRST_REGION, program_offset + len(headers) * 56)
     for region in regions:
         alignment = region["align"] if region["align"] and (region["align"] & (region["align"] - 1)) == 0 else 1
-        placed = align_up(cursor, alignment)
-        if region["vaddr"] % alignment != placed % alignment:
-            placed += (region["vaddr"] % alignment - placed % alignment) % alignment
+        placed = cursor + (region["vaddr"] - cursor) % alignment
         region["new"] = placed
         cursor = placed + region["size"]
 
