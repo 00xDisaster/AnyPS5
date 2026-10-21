@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -216,15 +217,31 @@ static Ngs2SystemOption DefaultSystemOption() {
     return option;
 }
 
-static Ngs2SystemOption CheckedSystemOption(const Ngs2SystemOption* option) {
-    if (option == nullptr) return DefaultSystemOption();
-    if (option->size != sizeof(Ngs2SystemOption)) throw std::invalid_argument("NGS2: unexpected system option size " + std::to_string(option->size));
-    if (option->flags != 0) throw std::runtime_error("NGS2: system option flags are not implemented");
-    if (option->sample_rate == 0 || option->max_grain_samples < MIN_GRAIN_SAMPLES || option->num_grain_samples == 0 ||
-        option->num_grain_samples > option->max_grain_samples) {
-        throw std::invalid_argument("NGS2: invalid system grain or sample rate");
+static constexpr std::uint32_t MAX_GRAIN_SAMPLES = 2048;
+static constexpr std::uint32_t MAX_VOICE_CHANNELS = 37;
+
+static bool ValidGrainSamples(std::uint32_t grainSamples, std::uint32_t maxSamples) {
+    return grainSamples >= MIN_GRAIN_SAMPLES && grainSamples <= maxSamples && grainSamples % MIN_GRAIN_SAMPLES == 0;
+}
+
+static bool ValidSampleRate(std::uint32_t sampleRate) {
+    static constexpr std::uint32_t rates[] = {11025, 12000, 22050, 24000, 44100, 48000, 88200, 96000, 176400, 192000};
+    return std::find(std::begin(rates), std::end(rates), sampleRate) != std::end(rates);
+}
+
+static int CheckSystemOption(const Ngs2SystemOption* option, Ngs2SystemOption& checked) {
+    if (option == nullptr) {
+        checked = DefaultSystemOption();
+        return SCE_NGS2_OK;
     }
-    return *option;
+    if (option->size != sizeof(Ngs2SystemOption)) return SCE_NGS2_ERROR_INVALID_OPTION_SIZE;
+    if (option->flags != 0) throw std::runtime_error("NGS2: system option flags are not implemented");
+    if (!ValidGrainSamples(option->max_grain_samples, MAX_GRAIN_SAMPLES)) return SCE_NGS2_ERROR_INVALID_MAX_GRAIN_SAMPLES;
+    if (!ValidGrainSamples(option->num_grain_samples, option->max_grain_samples)) return SCE_NGS2_ERROR_INVALID_NUM_GRAIN_SAMPLES;
+    if (!ValidSampleRate(option->sample_rate)) return SCE_NGS2_ERROR_INVALID_SAMPLE_RATE;
+    if (option->max_voice_channels < 1 || option->max_voice_channels > MAX_VOICE_CHANNELS) return SCE_NGS2_ERROR_INVALID_NUM_CHANNELS;
+    checked = *option;
+    return SCE_NGS2_OK;
 }
 
 static int CreateSystem(const Ngs2SystemOption& option, const Ngs2ContextBufferInfo& bufferInfo, const Ngs2BufferAllocator& allocator, Ngs2Handle* handle) {
@@ -247,15 +264,19 @@ extern "C" {
 
 int APS5_VABI sceNgs2SystemQueryBufferSize(const Ngs2SystemOption* option, Ngs2ContextBufferInfo* buffer_info) {
     if (buffer_info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
-    CheckedSystemOption(option);
-    *buffer_info = {};
+    std::memset(buffer_info, 0, offsetof(Ngs2ContextBufferInfo, user_data));
+    Ngs2SystemOption checked{};
+    const int result = CheckSystemOption(option, checked);
+    if (result != SCE_NGS2_OK) return result;
     buffer_info->host_buffer_size = sizeof(Ngs2System);
     return SCE_NGS2_OK;
 }
 
 int APS5_VABI sceNgs2SystemCreate(const Ngs2SystemOption* option, const Ngs2ContextBufferInfo* buffer_info, uintptr_t* handle) {
     if (handle == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
-    const auto checked = CheckedSystemOption(option);
+    Ngs2SystemOption checked{};
+    const int result = CheckSystemOption(option, checked);
+    if (result != SCE_NGS2_OK) return result;
     if (buffer_info == nullptr) APS5_INVALID_ARG_EX;
     const Ngs2Lock lock;
     return CreateSystem(checked, *buffer_info, {}, handle);
@@ -263,7 +284,9 @@ int APS5_VABI sceNgs2SystemCreate(const Ngs2SystemOption* option, const Ngs2Cont
 
 int APS5_VABI sceNgs2SystemCreateWithAllocator(const Ngs2SystemOption* option, const Ngs2BufferAllocator* allocator, uintptr_t* handle) {
     if (handle == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
-    const auto checked = CheckedSystemOption(option);
+    Ngs2SystemOption checked{};
+    const int result = CheckSystemOption(option, checked);
+    if (result != SCE_NGS2_OK) return result;
     const auto bufferInfo = Allocate(allocator, sizeof(Ngs2System));
     const Ngs2Lock lock;
     return CreateSystem(checked, bufferInfo, *allocator, handle);
