@@ -1636,7 +1636,7 @@ static int fill_sock_info6(int s, NetSockInfo6& record, bool includeIpv4) {
     if (const int error = sock_buffer_size(socket, true, record.send_buffer_size)) return error;
     record.s = s;
     record.socket_type = static_cast<std::int8_t>(socket.type);
-    record.flags = NET_SOCKINFO_F_SELF | (socket.nonblock ? NET_SOCKINFO_F_NONBLOCK : 0);
+    record.flags = NET_SOCKINFO_F_SELF | (socket.native->nonblock ? NET_SOCKINFO_F_NONBLOCK : 0);
     if (ipv6) {
         const auto& local6 = reinterpret_cast<const sockaddr_in6&>(local);
         const auto& remote6 = reinterpret_cast<const sockaddr_in6&>(remote);
