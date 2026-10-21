@@ -108,6 +108,12 @@ static std::uint32_t APS5_VABI CoarsePixelResolution() {
     return 16;
 }
 
+static int APS5_VABI WideFontResolution(Font::FontObj*, std::uint32_t* resolution, float* scale) {
+    *resolution = 0x12345678;
+    *scale = 12.5f;
+    return SCE_FONT_OK;
+}
+
 using FontFixture::BuildFont;
 using FontFixture::Words;
 
@@ -355,6 +361,16 @@ int main() {
     Require(sceFontGetAttribute(otherFont, 0, &attribute) == SCE_FONT_OK && attribute == 7);
     Require(sceFontGetAttribute(font, 0, &attribute) == SCE_FONT_OK && attribute == 5);
     Require(sceFontCloseFont(otherFont) == SCE_FONT_OK);
+    auto* resolutionLibrary = static_cast<Font::FontLibNative*>(library);
+    const Font::SysDriver* originalDriver = resolutionLibrary->sys_driver;
+    Font::SysDriver wideResolutionDriver = *originalDriver;
+    wideResolutionDriver.scale = WideFontResolution;
+    resolutionLibrary->sys_driver = &wideResolutionDriver;
+    std::uint32_t wideResolution = 0;
+    float wideScale = 0;
+    Require(sceFontGetFontResolution(font, &wideResolution, &wideScale) == SCE_FONT_OK);
+    Require(wideResolution == 0x12345678 && wideScale == 12.5f);
+    resolutionLibrary->sys_driver = originalDriver;
     std::uint32_t hDpi = 1;
     std::uint32_t vDpi = 1;
     Require(sceFontGetResolutionDpi(font, &hDpi, &vDpi) == SCE_FONT_OK && hDpi == 72 && vDpi == 72);
