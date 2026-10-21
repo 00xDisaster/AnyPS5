@@ -60,6 +60,25 @@ static_assert(sizeof(UsbStorageDialogResult) == 80);
 static_assert(offsetof(UsbStorageDialogResult, result) == 8);
 static_assert(offsetof(UsbStorageDialogResult, status) == 12);
 
+struct LoginDialogParam {
+    std::uint32_t size;
+    std::uint32_t mode;
+    std::int32_t userIds[9];
+    std::uint32_t reserved[5];
+};
+
+struct LoginDialogResult {
+    std::int32_t result;
+    std::int32_t errorCode;
+    std::uint8_t data[8];
+};
+
+static_assert(sizeof(LoginDialogParam) == 64);
+static_assert(offsetof(LoginDialogParam, userIds) == 8);
+static_assert(offsetof(LoginDialogParam, reserved) == 44);
+static_assert(sizeof(LoginDialogResult) == 16);
+static_assert(offsetof(LoginDialogResult, errorCode) == 4);
+
 struct G2PDialogParam {
     CommonDialogBaseParam base;
     std::int32_t userId;
