@@ -353,6 +353,26 @@ void CheckStrip(AgcDriver::VulkanDevice& device, Emulation emulation, const std:
     std::printf("barycentric emulation through the %s passed for a triangle strip: %u and %u pixels of its even and odd triangle\n", name.c_str(), checked[0], checked[1]);
 }
 
+void CheckStripFlatLast(AgcDriver::VulkanDevice& device, Emulation emulation, const std::string& name) {
+    Draw(device, emulation, FlatBarycentricPixelCode, PixelInputBit(PixelInput::PerspectiveCenter), VK_CULL_MODE_NONE, true, VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT, true);
+    const auto positions = StripPositions();
+    std::array<std::uint32_t, 2> checked{};
+    for (std::uint32_t y = 0; y < Height; ++y) {
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            const auto expected = StripBarycentrics(x, y, false);
+            if (!expected.inside) continue;
+            const auto triangle = expected.order[0];
+            const auto provoking = triangle == 0u ? 2u : 3u;
+            for (std::uint32_t channel = 2; channel < 4; ++channel) {
+                Require(Pixel(x, y, channel) == positions[provoking][0], name + " flat last-provoking strip: pixel (" + std::to_string(x) + ", " + std::to_string(y) + ") flat channel " + std::to_string(channel) + " is " + std::to_string(Pixel(x, y, channel)) + ", expected vertex " + std::to_string(provoking) + " value " + std::to_string(positions[provoking][0]));
+            }
+            ++checked[triangle];
+        }
+    }
+    Require(checked[0] > 200u && checked[1] > 200u, name + " flat last-provoking strip: too few pixels of each triangle were checked");
+    std::printf("flat last-provoking strip through %s passed: %u and %u pixels of its even and odd triangle\n", name.c_str(), checked[0], checked[1]);
+}
+
 void RunEmulation(AgcDriver::VulkanDevice& device, Emulation emulation) {
     const std::string name = emulation == Emulation::Geometry ? "geometry stage" : "tessellation stages";
     const auto perspective = PixelInputBit(PixelInput::PerspectiveCenter);
@@ -376,6 +396,7 @@ void RunEmulation(AgcDriver::VulkanDevice& device, Emulation emulation) {
     if (emulation == Emulation::Tessellation) {
         Draw(device, emulation, FlatBarycentricPixelCode, perspective, VK_CULL_MODE_NONE, true, VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT);
         CheckFlat(name + " flat input, last provoking vertex", 2u);
+        CheckStripFlatLast(device, emulation, name);
     }
     CheckStrip(device, emulation, name);
     std::printf("barycentric emulation through the %s passed: %u perspective and %u linear I/J pixels, raw vertex values, host interpolation, face culling, flat inputs and triangle strips\n", name.c_str(), smooth, noPerspective);
