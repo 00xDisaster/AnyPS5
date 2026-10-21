@@ -212,6 +212,15 @@ static_assert(offsetof(VrTracker2SpatialQueryResult, value) == 32);
 struct VrTracker2MapData;
 struct VrTracker2MapStatus;
 
+struct VrTracker2RuntimeStatus;
+struct VrTracker2DiagnosticState;
+struct VrTracker2ExtendedDiagnosticState;
+struct VrTracker2SensorDiagnostics;
+struct VrTracker2DeviceDiagnostics;
+struct VrTracker2TimingDiagnostics;
+struct VrTracker2MapConfiguration;
+struct VrTracker2SensorSummary;
+
 extern "C" {
 
 std::int32_t APS5_VABI sceVrTracker2Finalize() {
@@ -489,19 +498,51 @@ APS5_EXPORT("wgDeDXirl0g", VrTracker2NotInitialized);
 APS5_EXPORT("a1kWSTYGBxg", VrTracker2NotInitialized);
 APS5_EXPORT("zUwxBEKr3fc", VrTracker2NotInitialized);
 APS5_EXPORT("TC7VTVzj0xc", VrTracker2NotInitialized);
-APS5_EXPORT("1DwROxtuANs", VrTracker2NotInitialized);
+APS5_EXPORT("1DwROxtuANs", VrTracker2GetRuntimeStatus);
+std::int32_t APS5_VABI VrTracker2GetRuntimeStatus(VrTracker2RuntimeStatus* status) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("wwbt4s8cbMQ", VrTracker2GetTrackingFlags);
 std::int32_t APS5_VABI VrTracker2GetTrackingFlags(bool* active, std::uint8_t* flags) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-APS5_EXPORT("eGxBJ0IolOA", VrTracker2NotInitialized);
-APS5_EXPORT("9BaFhspHF+E", VrTracker2NotInitialized);
-APS5_EXPORT("lb9q5nJ4vzk", VrTracker2NotInitialized);
-APS5_EXPORT("ZsD1-thjXS4", VrTracker2NotInitialized);
-APS5_EXPORT("QdHQnM0XICI", VrTracker2NotInitialized);
-APS5_EXPORT("Ek4WMOvwv6g", VrTracker2NotInitialized);
-APS5_EXPORT("W1YAO6G+hNc", VrTracker2NotInitialized);
+APS5_EXPORT("eGxBJ0IolOA", VrTracker2GetDiagnosticState);
+std::int32_t APS5_VABI VrTracker2GetDiagnosticState(VrTracker2DiagnosticState* state) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("9BaFhspHF+E", VrTracker2GetExtendedDiagnosticState);
+std::int32_t APS5_VABI VrTracker2GetExtendedDiagnosticState(VrTracker2ExtendedDiagnosticState* state) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("lb9q5nJ4vzk", VrTracker2GetSensorDiagnostics);
+std::int32_t APS5_VABI VrTracker2GetSensorDiagnostics(VrTracker2SensorDiagnostics* diagnostics) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("ZsD1-thjXS4", VrTracker2GetDeviceDiagnostics);
+std::int32_t APS5_VABI VrTracker2GetDeviceDiagnostics(VrTracker2DeviceDiagnostics* diagnostics) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("QdHQnM0XICI", VrTracker2GetTimingDiagnostics);
+std::int32_t APS5_VABI VrTracker2GetTimingDiagnostics(VrTracker2TimingDiagnostics* diagnostics) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("Ek4WMOvwv6g", VrTracker2GetMapConfiguration);
+std::int32_t APS5_VABI VrTracker2GetMapConfiguration(VrTracker2MapConfiguration* configuration) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("W1YAO6G+hNc", VrTracker2SetMapConfiguration);
+std::int32_t APS5_VABI VrTracker2SetMapConfiguration(const VrTracker2MapConfiguration* configuration) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("HAJB7irjl+0", VrTracker2GetMapStatus);
 std::int32_t APS5_VABI VrTracker2GetMapStatus(VrTracker2MapStatus* status) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
@@ -526,7 +567,11 @@ std::int32_t APS5_VABI VrTracker2GetMapData(VrTracker2MapData* data, std::uint32
 APS5_EXPORT("N1P+melAgb8", VrTracker2NotInitialized);
 APS5_EXPORT("-e7A3rAM3Yk", VrTracker2NotInitialized);
 APS5_EXPORT("RefT1spBleg", VrTracker2NotInitialized);
-APS5_EXPORT("DsOfryhbm4U", VrTracker2NotInitialized);
+APS5_EXPORT("DsOfryhbm4U", VrTracker2GetSensorSummary);
+std::int32_t APS5_VABI VrTracker2GetSensorSummary(VrTracker2SensorSummary* summary) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 std::int32_t APS5_VABI VrTracker2NotInitialized() {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
