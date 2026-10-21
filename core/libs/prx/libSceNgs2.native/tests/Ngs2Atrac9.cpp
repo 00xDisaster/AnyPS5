@@ -9,6 +9,7 @@
 #include <iterator>
 #include <random>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -314,7 +315,7 @@ static void TestParseLoops() {
             Require(sceNgs2ParseWaveformData(file.data(), file.size(), &info) == SCE_NGS2_OK);
             Require(info.loop_begin_position == begin && info.loop_end_position == end && info.num_samples == samples);
             Require(info.num_blocks == 1 + (begin != 0) + (end != samples));
-            Require(info.block[begin != 0].num_repeats == 1);
+            Require(info.block[begin != 0].num_repeats == UINT32_MAX);
             const auto system = CreateSystem();
             const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
             Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{{}, info.format});
@@ -322,12 +323,12 @@ static void TestParseLoops() {
                 Ngs2SamplerVoiceWaveformBlocksParam{{}, file.data(), 0, info.num_blocks, info.block});
             Patch(voice, Mastering(system, 1));
             Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
-            const auto rendered = Render(system, samples + end - begin + Grain);
+            const auto loop = end - begin;
+            const auto rendered = Render(system, end + 2 * loop);
             for (std::uint32_t i = 0; i < rendered.size(); ++i) {
-                const auto index = i < end ? i : i - (end - begin);
-                Require(rendered[i] == (i < samples + end - begin ? reference[256 + index] : 0.0f));
+                const auto index = i < end ? i : begin + (i - end) % loop;
+                Require(rendered[i] == reference[256 + index]);
             }
-            Require(Flags(voice) == 0);
             Require(sceNgs2SystemDestroy(system, nullptr) == 0);
         }
     }
@@ -355,28 +356,55 @@ static void TestParseLoops() {
     Require(sceNgs2SystemDestroy(system, nullptr) == 0);
 }
 
+static bool ParseThrows(const std::vector<std::uint8_t>& file) {
+    Ngs2WaveformInfo info{};
+    try {
+        sceNgs2ParseWaveformData(file.data(), file.size(), &info);
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+    return false;
+}
+
+static std::vector<std::uint8_t> ShortSampler(std::vector<std::uint8_t> file, std::uint32_t size) {
+    file.erase(file.begin() + 100 + size, file.begin() + 160);
+    Set32(file, 96, size);
+    Set32(file, 4, static_cast<std::uint32_t>(file.size() - 8));
+    return file;
+}
+
 static void TestMalformedLoops() {
     const auto original = LoopedFile(100, 700, 0);
-    Ngs2WaveformInfo info{};
-    for (const auto [offset, value] : {std::pair<std::size_t, std::uint32_t>{128, 2}, {144, 0}, {148, 255}, {148, 5000}}) {
+    Ngs2WaveformInfo expected{};
+    Require(sceNgs2ParseWaveformData(original.data(), original.size(), &expected) == SCE_NGS2_OK && expected.num_blocks == 3);
+    for (const auto [offset, value] : {std::pair<std::size_t, std::uint32_t>{128, 2}, {140, 1}, {140, 2}, {152, 0x80000000u}, {156, 5}}) {
         auto file = original;
         Set32(file, offset, value);
-        Require(sceNgs2ParseWaveformData(file.data(), file.size(), &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA);
+        Ngs2WaveformInfo info{};
+        Require(sceNgs2ParseWaveformData(file.data(), file.size(), &info) == SCE_NGS2_OK);
+        Require(info.loop_begin_position == 100 && info.loop_end_position == 700 && info.num_blocks == 3);
+        for (std::uint32_t block = 0; block < 3; ++block) Require(std::memcmp(&info.block[block], &expected.block[block], sizeof(Ngs2WaveformBlock)) == 0);
     }
-    for (const auto offset : {140u, 152u}) {
+    for (const auto [start, last, begin, end] : {std::tuple<std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t>{0, 955, 0xffffff00u, 700}, {356, 255, 100, 0}, {956, 955, 700, 700}, {956, 700, 700, 445}}) {
         auto file = original;
-        Set32(file, offset, 1);
-        bool rejected = false;
-        try { sceNgs2ParseWaveformData(file.data(), file.size(), &info); } catch (const std::runtime_error&) { rejected = true; }
-        Require(rejected);
+        Set32(file, 144, start);
+        Set32(file, 148, last);
+        Ngs2WaveformInfo info{};
+        Require(sceNgs2ParseWaveformData(file.data(), file.size(), &info) == SCE_NGS2_OK);
+        Require(info.loop_begin_position == begin && info.loop_end_position == end && info.num_blocks == 1);
+        Require(info.block[0].num_repeats == 0 && info.block[0].num_samples == info.num_samples);
     }
+    for (const std::uint32_t last : {4096u, 5000u, 0xffffffffu}) {
+        auto file = original;
+        Set32(file, 148, last);
+        Require(ParseThrows(file));
+    }
+    Ngs2WaveformInfo info{};
     for (std::size_t size = 92; size < 168; ++size)
         Require(sceNgs2ParseWaveformData(original.data(), size, &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA);
-    auto shortSampler = original;
-    shortSampler.erase(shortSampler.begin() + 100 + 35, shortSampler.begin() + 160);
-    Set32(shortSampler, 96, 35);
-    Set32(shortSampler, 4, static_cast<std::uint32_t>(shortSampler.size() - 8));
-    Require(sceNgs2ParseWaveformData(shortSampler.data(), shortSampler.size(), &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA);
+    for (const std::uint32_t size : {28u, 36u, 50u}) Require(ParseThrows(ShortSampler(original, size)));
+    const auto minimal = ShortSampler(original, 52);
+    Require(sceNgs2ParseWaveformData(minimal.data(), minimal.size(), &info) == SCE_NGS2_OK && info.num_blocks == 3);
 }
 
 static std::uint8_t* SuperframeBeforeGuardPage() {

@@ -305,44 +305,28 @@ static int ReadChunks(std::size_t size, TRead&& read, RiffChunks& chunks) {
     return SCE_NGS2_OK;
 }
 
-static bool AddAtrac9Range(Ngs2WaveformInfo& info, std::uint64_t begin, std::uint32_t samples, std::uint32_t repeats) {
-    if (samples == 0) return true;
-    const auto preroll = std::min<std::uint64_t>(begin, info.num_audio_unit_samples);
-    const auto firstFrame = (begin - preroll) / info.num_audio_frame_samples;
-    const auto skip = begin - firstFrame * info.num_audio_frame_samples;
-    const auto frames = (skip + samples + info.num_audio_frame_samples - 1) / info.num_audio_frame_samples;
-    const auto offset = firstFrame * info.audio_frame_size;
-    const auto bytes = frames * info.audio_frame_size;
-    if (offset > info.data_size || bytes > info.data_size - offset) return false;
+static void AddAtrac9Block(Ngs2WaveformInfo& info, std::uint32_t begin, std::uint32_t samples, std::uint32_t repeats) {
     auto& block = info.block[info.num_blocks++];
-    block = {info.data_offset + offset, bytes, repeats, static_cast<std::uint32_t>(skip), samples, 0, 0};
-    return true;
+    block = Atrac9Block(info.format.config_data, begin, samples);
+    block.data_offset += info.data_offset;
+    block.num_repeats = repeats;
 }
 
 static int ParseAtrac9Loop(const RiffChunks& chunks, Ngs2WaveformInfo& info) {
     if (chunks.sampler == nullptr) return SCE_NGS2_OK;
-    if (chunks.samplerSize < 36) return SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA;
-    const auto count = ReadLe32(chunks.sampler + 28);
-    if (count > (chunks.samplerSize - 36) / 24) return SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA;
-    if (count == 0) return SCE_NGS2_OK;
-    if (count != 1) throw std::runtime_error("NGS2: multiple waveform loops are not implemented");
-    const auto* loop = chunks.sampler + 36;
-    if (ReadLe32(loop + 4) != 0 || ReadLe32(loop + 16) != 0)
-        throw std::runtime_error("NGS2: non-forward or fractional waveform loops are not implemented");
-    const std::uint64_t begin = ReadLe32(loop + 8);
-    const std::uint64_t end = static_cast<std::uint64_t>(ReadLe32(loop + 12)) + 1;
-    const auto skip = info.block[0].num_skip_samples;
-    const std::uint64_t waveformEnd = static_cast<std::uint64_t>(skip) + info.num_samples;
-    if (begin < skip || begin >= end || end > waveformEnd) return SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA;
-    const auto plays = ReadLe32(loop + 20);
-    info.loop_begin_position = static_cast<std::uint32_t>(begin - skip);
-    info.loop_end_position = static_cast<std::uint32_t>(end - skip);
+    if (chunks.samplerSize < 32) throw std::runtime_error("NGS2: a smpl chunk too short for its loop count is not implemented");
+    if (ReadLe32(chunks.sampler + 28) == 0) return SCE_NGS2_OK;
+    if (chunks.samplerSize < 52) throw std::runtime_error("NGS2: a smpl chunk too short for its first loop is not implemented");
+    const std::uint32_t begin = ReadLe32(chunks.sampler + 44) - info.num_delay_samples;
+    const std::uint32_t end = ReadLe32(chunks.sampler + 48) - info.num_delay_samples + 1u;
+    info.loop_begin_position = begin;
+    info.loop_end_position = end;
+    if (end <= begin) return SCE_NGS2_OK;
+    if (end > info.num_samples) throw std::runtime_error("NGS2: a waveform loop ending past the last sample is not implemented");
     info.num_blocks = 0;
-    info.block[0] = {};
-    if (!AddAtrac9Range(info, skip, info.loop_begin_position, 0) ||
-        !AddAtrac9Range(info, begin, static_cast<std::uint32_t>(end - begin), plays == 0 ? UINT32_MAX : plays - 1) ||
-        !AddAtrac9Range(info, end, static_cast<std::uint32_t>(waveformEnd - end), 0))
-        return SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA;
+    if (begin != 0) AddAtrac9Block(info, 0, begin, 0);
+    AddAtrac9Block(info, begin, end - begin, UINT32_MAX);
+    if (end != info.num_samples) AddAtrac9Block(info, end, info.num_samples - end, 0);
     return SCE_NGS2_OK;
 }
 
