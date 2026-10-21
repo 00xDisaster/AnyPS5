@@ -2,6 +2,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/FileStream.hpp"
+#include "prx/libc/include/RenameDot.hpp"
 #include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/File/include/NativeStat.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
@@ -248,6 +249,14 @@ static void TestParentTraversal() {
     Require(stat_nid_postfix("/parent-test-mount/missing/.", &status) == -1 && *__error_nid_postfix() == 2);
     Require(stat_nid_postfix("/parent-test-mount/existing/.", &status) == 0 && (status.st_mode & 0170000) == 0040000);
     Require(access_nid_postfix("/parent-test-mount/existing/./", 0) == 0);
+    Require(TrimTrailingSeparators_nid_no_patch("/") == "/");
+    Require(TrimTrailingSeparators_nid_no_patch("/mount/dir//") == "/mount/dir");
+    Require(TrimTrailingSeparators_nid_no_patch("dir/") == "dir");
+#ifdef _WIN32
+    Require(TrimTrailingSeparators_nid_no_patch("C:\\") == "C:\\");
+    Require(TrimTrailingSeparators_nid_no_patch("C:/") == "C:/");
+    Require(TrimTrailingSeparators_nid_no_patch("C:\\dir\\") == "C:\\dir");
+#endif
     std::filesystem::create_directory(root / "dot-victim");
     for (const char* name : {"/parent-test-mount/dot-victim/.", "/parent-test-mount/dot-victim/..", "/parent-test-mount/dot-victim/./", "/parent-test-mount/dot-victim/../"}) {
         Require(unlink_nid_postfix(name) == -1 && *__error_nid_postfix() == 22);
