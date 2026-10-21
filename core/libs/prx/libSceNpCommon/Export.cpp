@@ -105,4 +105,51 @@ int APS5_VABI sceNpIntIsValidOnlineId(const NpOnlineId* onlineId) {
     return 1;
 }
 
+int APS5_VABI sceNpMutexInit(PthreadMutex* mutex, const char* name, std::uint64_t flags) {
+    PthreadMutexattr attr = nullptr;
+    int result = scePthreadMutexattrInit(&attr);
+    if (result != 0) return result;
+    if (flags & 1) result = scePthreadMutexattrSettype(&attr, MUTEX_TYPE_RECURSIVE);
+    if (result == 0) result = scePthreadMutexInit(mutex, &attr, name);
+    scePthreadMutexattrDestroy(&attr);
+    return result;
+}
+
+int APS5_VABI sceNpMutexDestroy(PthreadMutex* mutex) {
+    return scePthreadMutexDestroy(mutex);
+}
+
+int APS5_VABI sceNpMutexLock(PthreadMutex* mutex) {
+    return scePthreadMutexLock(mutex);
+}
+
+int APS5_VABI sceNpMutexTryLock(PthreadMutex* mutex) {
+    const int result = scePthreadMutexTrylock(mutex);
+    return result == KERNEL_ERROR_EBUSY ? NP_LW_MUTEX_ERROR_BUSY : result;
+}
+
+int APS5_VABI sceNpMutexUnlock(PthreadMutex* mutex) {
+    return scePthreadMutexUnlock(mutex);
+}
+
+int APS5_VABI sceNpLwMutexInit(PthreadMutex* mutex, const char* name, std::uint64_t flags) {
+    return sceNpMutexInit(mutex, name, flags);
+}
+
+int APS5_VABI sceNpLwMutexDestroy(PthreadMutex* mutex) {
+    return sceNpMutexDestroy(mutex);
+}
+
+int APS5_VABI sceNpLwMutexLock(PthreadMutex* mutex) {
+    return sceNpMutexLock(mutex);
+}
+
+int APS5_VABI sceNpLwMutexTryLock(PthreadMutex* mutex) {
+    return sceNpMutexTryLock(mutex);
+}
+
+int APS5_VABI sceNpLwMutexUnlock(PthreadMutex* mutex) {
+    return sceNpMutexUnlock(mutex);
+}
+
 }
