@@ -1,6 +1,5 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "zlib.h"
-#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <limits>
@@ -21,7 +20,6 @@ constexpr std::int32_t FATAL = static_cast<std::int32_t>(0x811200FF);
 struct Result {
     std::uint32_t produced;
     std::int32_t status;
-    bool retrieved = false;
 };
 
 std::mutex serviceMutex;
@@ -29,10 +27,6 @@ bool initialized = false;
 std::uint64_t nextId = 1;
 std::unordered_map<std::uint64_t, Result> results;
 std::deque<std::uint64_t> completed;
-
-bool hasUnreadResult() {
-    return std::any_of(results.begin(), results.end(), [](const auto& entry) { return !entry.second.retrieved; });
-}
 
 } // namespace
 
@@ -49,7 +43,6 @@ std::int32_t APS5_VABI sceZlibInitialize(const void* buffer, std::uint64_t lengt
 std::int32_t APS5_VABI sceZlibFinalize() {
     std::lock_guard lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
-    if (hasUnreadResult()) throw std::runtime_error("sceZlibFinalize: outstanding result semantics unknown");
     results.clear();
     completed.clear();
     initialized = false;
@@ -101,10 +94,8 @@ std::int32_t APS5_VABI sceZlibGetResult(std::uint64_t requestId, std::uint32_t* 
     if (!destinationLength || !status) throw std::runtime_error("sceZlibGetResult: invalid output");
     const auto found = results.find(requestId);
     if (found == results.end()) return NOT_FOUND;
-    Result& result = found->second;
-    *destinationLength = result.produced;
-    *status = result.status;
-    result.retrieved = true;
+    *destinationLength = found->second.produced;
+    *status = found->second.status;
     return 0;
 }
 

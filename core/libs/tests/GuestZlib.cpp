@@ -45,7 +45,6 @@ int main() {
         Require(sceZlibInflate(input, inputLength, output, capacity, &id) == 0);
         Require(id > previous);
         previous = id;
-        RequireThrows([&] { sceZlibFinalize(); });
         std::uint32_t timeout = 0;
         RequireThrows([&] { sceZlibWaitForDone(&id, &timeout); });
         std::uint64_t completed;
@@ -89,6 +88,10 @@ int main() {
         Require(status == 0 && produced == expectedLength);
         Require(std::memcmp(batch.data() + index * 8192, text, sizeof(text) - 1) == 0);
     }
+    Require(sceZlibInflate(compressed.data(), compressed.size(), output, expectedLength, &id) == 0);
+    Require(sceZlibFinalize() == 0);
+    Require(sceZlibInitialize(nullptr, 0) == 0);
+    Require(sceZlibGetResult(id, &produced, &status) == static_cast<std::int32_t>(0x81120002));
     Require(sceZlibFinalize() == 0);
     Require(sceZlibGetResult(id, &produced, &status) == static_cast<std::int32_t>(0x81120032));
     std::array<std::uint8_t, 65536> scratch{};
