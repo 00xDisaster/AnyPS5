@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstring>
 #include "SceTypes.hpp"
+#include "prx/libSceCommonDialog/CommonDialog.hpp"
 #include "prx/libc/include/General.hpp"
 
 namespace {
@@ -11,7 +12,6 @@ constexpr int COMMON_DIALOG_STATUS_INITIALIZED = 1;
 constexpr int COMMON_DIALOG_STATUS_FINISHED = 3;
 constexpr int COMMON_DIALOG_RESULT_USER_CANCELED = 1;
 constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u);
-constexpr int COMMON_DIALOG_ERROR_ALREADY_INITIALIZED = static_cast<int>(0x80B80004u);
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80006u);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B80009u);
 
@@ -79,7 +79,7 @@ int APS5_VABI sceNpCommerceSetPsStoreIconLayout(int layout) {
  return 0;
 }
 
-int APS5_VABI sceNpCommerceDialogOpen2(void) {
+int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param) {
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }

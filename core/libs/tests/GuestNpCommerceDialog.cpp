@@ -1,4 +1,5 @@
 #include "SceTypes.hpp"
+#include "prx/libSceCommonDialog/CommonDialog.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -7,7 +8,7 @@
 extern "C" {
 int APS5_VABI sceNpCommerceDialogInitialize();
 int APS5_VABI sceNpCommerceDialogOpen(const void* param);
-int APS5_VABI sceNpCommerceDialogOpen2(void);
+int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param);
 int APS5_VABI sceNpCommerceDialogUpdateStatus(void);
 int APS5_VABI sceNpCommerceDialogGetStatus(void);
 int APS5_VABI sceNpCommerceDialogGetResult(void* result);
@@ -38,11 +39,16 @@ void RequireCanceledResult() {
 }
 
 int main() {
+    NpCommerceDialogParam2 param2{};
+    param2.base.size = sizeof(param2.base);
+    param2.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param2)) - 1060003575u;
+    param2.size = sizeof(param2);
+    param2.userId = 1;
     Require(sceNpCommerceDialogGetStatus() == statusNone);
     Require(sceNpCommerceDialogInitialize() == 0);
     Require(sceNpCommerceDialogGetStatus() == statusInitialized);
 
-    Require(sceNpCommerceDialogOpen2() == 0);
+    Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
     Require(sceNpCommerceDialogGetStatus() == statusFinished);
     RequireCanceledResult();
@@ -55,7 +61,7 @@ int main() {
     alignas(8) std::uint8_t param[0x40] = {};
     Require(sceNpCommerceDialogInitialize() == 0);
     Require(sceNpCommerceDialogOpen(param) == 0);
-    Require(sceNpCommerceDialogOpen2() == 0);
+    Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
     RequireCanceledResult();
     Require(sceNpCommerceDialogTerminate() == 0);

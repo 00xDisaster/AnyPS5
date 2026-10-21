@@ -29,6 +29,26 @@ struct PlayerReviewDialogParam {
     std::uint8_t reserved[64];
 };
 
+struct NpCommerceDialogParam2 {
+    CommonDialogBaseParam base;
+    std::uint32_t size;
+    std::int32_t userId;
+    std::uint32_t mode;
+    std::uint32_t option;
+    std::uint32_t contentMode;
+    std::uint32_t padding0;
+    const char* const* products;
+    std::uint32_t productCount;
+    std::uint32_t padding1;
+    std::uint64_t argument;
+    std::uint64_t userData;
+    std::uint8_t reserved[32];
+};
+
+static_assert(sizeof(NpCommerceDialogParam2) == 136);
+static_assert(offsetof(NpCommerceDialogParam2, products) == 72);
+static_assert(offsetof(NpCommerceDialogParam2, userData) == 96);
+
 struct WebBrowserDialogExtendedResult {
     std::uint64_t size;
     std::uint32_t type;
