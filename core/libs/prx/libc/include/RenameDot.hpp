@@ -15,7 +15,8 @@ inline int RenameDotError_nid_no_patch(const char* path) {
     const bool dot = name == 1 && path[start] == '.';
     const bool dotDot = name == 2 && path[start] == '.' && path[start + 1] == '.';
     if (!dot && !dotDot) return 0;
-    const std::string parent = start == 0 ? std::string(".") : std::string(path, start);
+    std::string parent = start == 0 ? std::string(".") : std::string(path, start);
+    while (parent.size() > 1 && separator(parent.back())) parent.pop_back();
     std::filesystem::path resolved;
     if (const int error = ResolvePathError_nid_no_patch(parent.c_str(), resolved)) return error;
     std::error_code status;

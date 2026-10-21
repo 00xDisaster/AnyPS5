@@ -256,6 +256,8 @@ static void TestParentTraversal() {
         Require(sceKernelRmdir(name) == static_cast<int>(0x80020016u));
     }
     Require(unlink_nid_postfix("/parent-test-mount/present.txt/.") == -1 && *__error_nid_postfix() == 20);
+    Require(rename_nid_postfix("/parent-test-mount/present.txt/.", "/parent-test-mount/dot-renamed") == -1 && *__error_nid_postfix() == 20);
+    Require(rename_nid_postfix("/parent-test-mount/present.txt/..", "/parent-test-mount/dot-renamed") == -1 && *__error_nid_postfix() == 20);
     Require(rmdir_nid_postfix("/parent-test-mount/missing/..") == -1 && *__error_nid_postfix() == 2);
     Require(std::filesystem::is_directory(root / "dot-victim") && std::filesystem::is_regular_file(root / "present.txt"));
     std::filesystem::remove(root / "dot-victim");
