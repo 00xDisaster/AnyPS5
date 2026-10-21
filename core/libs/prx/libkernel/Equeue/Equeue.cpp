@@ -127,9 +127,10 @@ int KernelEqueuePrivate::CollectTriggered(KernelEvent* ev, int num) {
         return CollectOncePerWait(ev, num);
     }
     int ret = 0;
+    std::list<KernelEqueueEvent> requeued;
     for (auto it = m_events.begin(); it != m_events.end() && ret < num;) {
         auto& e = *it;
-        if (!e.enabled) {
+        if (!e.triggered || !e.enabled) {
             ++it;
             continue;
         }
@@ -161,8 +162,15 @@ int KernelEqueuePrivate::CollectTriggered(KernelEvent* ev, int num) {
             e.pendingEvents.pop_front();
             e.triggered = true;
         }
-        it = erase ? m_events.erase(it) : std::next(it);
+        const auto next = std::next(it);
+        if (erase) {
+            m_events.erase(it);
+        } else {
+            requeued.splice(requeued.end(), m_events, it);
+        }
+        it = next;
     }
+    m_events.splice(m_events.end(), requeued);
     return ret;
 }
 
