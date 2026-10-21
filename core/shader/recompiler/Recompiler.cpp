@@ -40,6 +40,7 @@
 #include "Optimization/include/Optimization/ResourceMaterializer.hpp"
 #include "Optimization/ResourceProgram.hpp"
 #include "Optimization/include/Optimization/ResourceTracker.hpp"
+#include "Optimization/include/Optimization/VectorWindowStoreEliminator.hpp"
 #include "Optimization/include/Optimization/ShaderInfoCollector.hpp"
 #include "Optimization/include/Optimization/SrtWalker.hpp"
 #include "Optimization/include/Optimization/SsaBuilder.hpp"
@@ -265,6 +266,7 @@ IrProgram PrepareResourceProgram(const RecompileRequest& request, ShaderPreparat
     constexpr DeadCodeEliminator deadCodeEliminator;
     constexpr ReadLaneEliminator readLaneEliminator;
     constexpr MaskedSelectEliminator maskedSelectEliminator;
+    constexpr VectorWindowStoreEliminator vectorWindowStoreEliminator;
     const auto simplify = [&] {
         dumpIr("translate");
         ssaBuilder.Rewrite(program);
@@ -281,6 +283,10 @@ IrProgram PrepareResourceProgram(const RecompileRequest& request, ShaderPreparat
             constantFolder.Fold(program);
             ResolveControlFlowIdentities(program);
             deadCodeEliminator.RemoveIdentities(program);
+            deadCodeEliminator.Eliminate(program);
+        }
+
+        if (vectorWindowStoreEliminator.Eliminate(program).removedStores != 0u) {
             deadCodeEliminator.Eliminate(program);
         }
 
@@ -597,6 +603,7 @@ CompiledVariant emitVariant(const RecompileRequest& request, IrProgram& program)
     targetOptions.spannedWaves = request.target.spannedWaves;
     targetOptions.robustBufferAccess2 = request.target.robustBufferAccess2;
     targetOptions.float32FlushToZero = request.target.float32FlushToZero;
+    targetOptions.float32DenormPreserve = request.target.float32DenormPreserve;
     targetOptions.meshBarycentricPixel = request.shader.stage == ShaderStage::Fragment && request.graphics && request.graphics->mesh;
     if (request.shader.stage == ShaderStage::Mesh && request.graphics && request.graphics->meshBarycentrics) {
         const auto& paired = *request.graphics->meshBarycentrics;
@@ -630,6 +637,7 @@ CompiledVariant emitVariant(const RecompileRequest& request, IrProgram& program)
         if (budget.components > limits.maxOutputComponents) throw std::runtime_error("barycentric emulation on the mesh path needs " + std::to_string(budget.components) + " mesh output components (" + std::to_string(budget.vertexLocations) + " per-vertex and " + std::to_string(budget.primitiveLocations) + " per-primitive locations), the device allows " + std::to_string(limits.maxOutputComponents));
         if (budget.bytes > limits.maxOutputMemoryBytes) throw std::runtime_error("barycentric emulation on the mesh path needs " + std::to_string(budget.bytes) + " bytes of mesh output memory, the device allows " + std::to_string(limits.maxOutputMemoryBytes));
     }
+    targetOptions.waveLdsMemoryBarriers = request.target.waveLdsMemoryBarriers;
 
     constexpr SpirvEmitter spirvEmitter;
     CompiledShaderArtifact result;
