@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <random>
 #include <stdexcept>
 #include <utility>
@@ -174,6 +175,15 @@ static void TestParse() {
     Require(info.num_audio_unit_per_frame == 4 && info.audio_frame_size == SuperframeBytes && info.num_audio_frame_samples == SuperframeSamples);
     Require(info.num_blocks == 1 && info.block[0].data_offset == info.data_offset && info.block[0].data_size == SuperframeBytes);
     Require(info.block[0].num_skip_samples == 256 && info.block[0].num_samples == 900);
+    for (const std::uint32_t factDelay : {0u, 1u, 900u, 0xffffffffu}) {
+        auto other = file;
+        constexpr char factTag[] = {'f', 'a', 'c', 't'};
+        const auto fact = static_cast<std::size_t>(std::search(other.begin(), other.end(), std::begin(factTag), std::end(factTag)) - other.begin());
+        std::memcpy(other.data() + fact + 12, &factDelay, sizeof(factDelay));
+        Ngs2WaveformInfo parsed{};
+        Require(sceNgs2ParseWaveformData(other.data(), other.size(), &parsed) == SCE_NGS2_OK);
+        Require(parsed.num_delay_samples == 256 && parsed.block[0].num_skip_samples == 256 && parsed.num_samples == 900);
+    }
 
     Require(sceNgs2ParseWaveformData(file.data(), 11, &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA);
     Require(sceNgs2ParseWaveformData(Superframe, SuperframeBytes, &info) == SCE_NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT);

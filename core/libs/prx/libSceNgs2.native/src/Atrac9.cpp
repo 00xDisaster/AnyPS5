@@ -366,7 +366,7 @@ static int ParseAtrac9(const RiffChunks& chunks, Ngs2WaveformInfo& info) {
     info.num_audio_unit_per_frame = static_cast<std::uint32_t>(codec.framesInSuperframe);
     info.audio_frame_size = static_cast<std::uint32_t>(codec.superframeSize);
     info.num_audio_frame_samples = static_cast<std::uint32_t>(codec.frameSamples * codec.framesInSuperframe);
-    info.num_delay_samples = ReadLe32(chunks.fact + 4);
+    info.num_delay_samples = static_cast<std::uint32_t>(codec.frameSamples);
     info.num_blocks = 1;
     info.block[0].data_offset = chunks.dataOffset;
     info.block[0].data_size = chunks.dataSize;
