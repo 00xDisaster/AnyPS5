@@ -29,6 +29,14 @@ struct PlayerReviewDialogParam {
     std::uint8_t reserved[64];
 };
 
+struct WebBrowserDialogAllowList {
+    std::uint64_t size;
+    const char* addresses[20];
+    std::uint8_t reserved[256];
+};
+
+static_assert(sizeof(WebBrowserDialogAllowList) == 424);
+
 struct CommonDialogResultPrefix {
     std::uint8_t untouched[8];
     std::int32_t result;

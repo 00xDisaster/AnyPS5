@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "SceTypes.hpp"
+#include "prx/libSceCommonDialog/CommonDialog.hpp"
 #include "prx/libc/include/General.hpp"
 
 struct WebBrowserDialogCookieParam {
@@ -29,9 +30,9 @@ constexpr int COMMON_DIALOG_STATUS_RUNNING = 2;
 constexpr int COMMON_DIALOG_STATUS_FINISHED = 3;
 constexpr int COMMON_DIALOG_RESULT_USER_CANCELED = 1;
 constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u);
-constexpr int COMMON_DIALOG_ERROR_ALREADY_INITIALIZED = static_cast<int>(0x80B80004u);
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80005u);
 constexpr int COMMON_DIALOG_ERROR_BUSY = static_cast<int>(0x80B80007u);
+constexpr int COMMON_DIALOG_ERROR_PARAMETER = static_cast<int>(0x80B8000Au);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B8000Du);
 }
 
@@ -90,11 +91,22 @@ int APS5_VABI sceWebBrowserDialogSetCookie(const WebBrowserDialogCookieParam* pa
     return 0;
 }
 
-int APS5_VABI sceWebBrowserDialogOpenForPredeterminedContent(const void* param) {
+int APS5_VABI sceWebBrowserDialogOpenForPredeterminedContent(const void* param, const WebBrowserDialogAllowList* allowList) {
     const int status = g_status.load();
     if (status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
-    if (status == COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_BUSY;
+    if (allowList == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
+    if (allowList->size != sizeof(*allowList)) return COMMON_DIALOG_ERROR_PARAMETER;
+    bool hasAddress = false;
+    for (const char* address : allowList->addresses) {
+        if (address == nullptr) continue;
+        hasAddress = true;
+        std::size_t length = 0;
+        while (length < 256 && address[length] != '\0') ++length;
+        if (length == 0 || length == 256) return COMMON_DIALOG_ERROR_PARAMETER;
+    }
+    if (!hasAddress || std::any_of(std::begin(allowList->reserved), std::end(allowList->reserved), [](std::uint8_t value) { return value != 0; })) return COMMON_DIALOG_ERROR_PARAMETER;
     if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
+    if (status == COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_BUSY;
     g_status = COMMON_DIALOG_STATUS_FINISHED;
     return 0;
 }
