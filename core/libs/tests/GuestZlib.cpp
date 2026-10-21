@@ -52,10 +52,14 @@ int main() {
         Require(sceZlibWaitForDone(&completed, nullptr) == 0);
         Require(completed == id);
         RequireThrows([&] { sceZlibWaitForDone(&completed, nullptr); });
-        RequireThrows([&] { sceZlibGetResult(id + 1, &produced, &status); });
+        Require(sceZlibGetResult(id + 1, &produced, &status) == static_cast<std::int32_t>(0x81120002));
+        RequireThrows([&] { sceZlibGetResult(id, nullptr, &status); });
         Require(sceZlibGetResult(id, &produced, &status) == 0);
         Require(status == expectedStatus && produced <= capacity);
-        RequireThrows([&] { sceZlibGetResult(id, &produced, &status); });
+        std::uint32_t producedAgain = 0;
+        std::int32_t statusAgain = 0;
+        Require(sceZlibGetResult(id, &producedAgain, &statusAgain) == 0);
+        Require(producedAgain == produced && statusAgain == status);
         Require(std::all_of(storage.begin(), storage.begin() + 2048, [](auto byte) { return byte == 0xA5; }));
         Require(std::all_of(storage.begin() + 2048 + capacity, storage.end(), [](auto byte) { return byte == 0xA5; }));
     };

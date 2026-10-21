@@ -12,6 +12,7 @@ namespace {
 
 static_assert(sizeof(std::uint32_t) == 4 && sizeof(std::uint64_t) == 8 && sizeof(std::int32_t) == 4);
 
+constexpr std::int32_t NOT_FOUND = static_cast<std::int32_t>(0x81120002);
 constexpr std::int32_t NOT_INITIALIZED = static_cast<std::int32_t>(0x81120032);
 constexpr std::int32_t ALREADY_INITIALIZED = static_cast<std::int32_t>(0x81120033);
 constexpr std::int32_t NO_SPACE = static_cast<std::int32_t>(0x8112001C);
@@ -97,11 +98,10 @@ std::int32_t APS5_VABI sceZlibGetResult(std::uint64_t requestId, std::uint32_t* 
                                        std::int32_t* status) {
     std::lock_guard lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
+    if (!destinationLength || !status) throw std::runtime_error("sceZlibGetResult: invalid output");
     const auto found = results.find(requestId);
-    if (!destinationLength || !status || found == results.end())
-        throw std::runtime_error("sceZlibGetResult: invalid request or output");
+    if (found == results.end()) return NOT_FOUND;
     Result& result = found->second;
-    if (result.retrieved) throw std::runtime_error("sceZlibGetResult: repeated retrieval semantics unknown");
     *destinationLength = result.produced;
     *status = result.status;
     result.retrieved = true;
