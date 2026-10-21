@@ -89,8 +89,62 @@ struct GazeUserCalibrationStatus {
     float point[3];
 };
 struct GazeRawData;
-struct GazeObjectSelectionParameter;
-struct GazeObjectSelectionResult;
+struct GazeObjectSelectionTransform {
+    float values[16];
+};
+
+struct GazeObjectSelectionObject {
+    std::uint64_t id;
+    std::uint32_t enabled;
+    std::uint32_t reserved12;
+    GazeObjectSelectionTransform transform;
+    const GazeObjectSelectionTransform* boundingBoxes;
+    std::uint32_t boundingBoxCount;
+    std::uint32_t reserved92;
+};
+
+struct GazeObjectSelectionParameter {
+    std::uint32_t size;
+    std::uint32_t reserved4;
+    std::uint64_t reserved8;
+    std::uint64_t gazeTimestamp;
+    GazeObjectSelectionTransform transform;
+    std::uint32_t selectionMode;
+    std::uint32_t filterMode;
+    std::uint64_t timestamp;
+    const GazeObjectSelectionObject* objects;
+    std::uint32_t objectCount;
+    std::uint32_t reserved116;
+};
+
+struct GazeObjectSelectionResult {
+    std::uint32_t size;
+    std::uint32_t selected;
+    std::uint64_t objectId;
+    std::uint64_t gazeTimestamp;
+    std::uint32_t gazeValid;
+    float origin[3];
+    float direction[3];
+    float distance;
+};
+
+static_assert(sizeof(GazeObjectSelectionTransform) == 64);
+static_assert(sizeof(GazeObjectSelectionObject) == 96);
+static_assert(offsetof(GazeObjectSelectionObject, transform) == 16);
+static_assert(offsetof(GazeObjectSelectionObject, boundingBoxes) == 80);
+static_assert(offsetof(GazeObjectSelectionObject, boundingBoxCount) == 88);
+static_assert(sizeof(GazeObjectSelectionParameter) == 120);
+static_assert(offsetof(GazeObjectSelectionParameter, transform) == 24);
+static_assert(offsetof(GazeObjectSelectionParameter, selectionMode) == 88);
+static_assert(offsetof(GazeObjectSelectionParameter, timestamp) == 96);
+static_assert(offsetof(GazeObjectSelectionParameter, objects) == 104);
+static_assert(offsetof(GazeObjectSelectionParameter, objectCount) == 112);
+static_assert(sizeof(GazeObjectSelectionResult) == 56);
+static_assert(offsetof(GazeObjectSelectionResult, objectId) == 8);
+static_assert(offsetof(GazeObjectSelectionResult, gazeTimestamp) == 16);
+static_assert(offsetof(GazeObjectSelectionResult, origin) == 28);
+static_assert(offsetof(GazeObjectSelectionResult, direction) == 40);
+static_assert(offsetof(GazeObjectSelectionResult, distance) == 52);
 struct GazeObjectSelectionInitializeParameter {
     std::uint32_t size;
     std::uint32_t maxObjects;
