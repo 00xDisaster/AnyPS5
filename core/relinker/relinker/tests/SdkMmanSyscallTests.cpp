@@ -1,6 +1,8 @@
+#include "TestProgress.hpp"
 #include <relinker/analysis/SyscallScanner.hpp>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -30,7 +32,7 @@ void Require(bool value, const std::string& message) {
 
 bool Rejected(const Bytes& code, bool trap, std::size_t size) {
     try {
-        Relinker::MakeSyscallScanner(trap)->ScanCodeSectionForSyscalls(code, 0, size);
+        Relinker::MakeSyscallScanner(testProgress, trap)->ScanCodeSectionForSyscalls(code, 0, size);
         return false;
     } catch (const std::runtime_error&) {
         return true;
@@ -44,7 +46,7 @@ void CheckFixtures() {
         for (const auto padding : {std::size_t{0}, std::size_t{1}, std::size_t{7}, std::size_t{64}}) {
             Bytes code(padding, 0x90);
             code.insert(code.end(), fixture.code.begin(), fixture.code.end());
-            const auto trapped = Relinker::MakeSyscallScanner(true)->ScanCodeSectionForSyscalls(code, 0x123400, code.size());
+            const auto trapped = Relinker::MakeSyscallScanner(testProgress, true)->ScanCodeSectionForSyscalls(code, 0x123400, code.size());
             Require(trapped == std::vector<std::size_t>{padding + fixture.syscall}, "SDK inline syscall returned the wrong patch offset");
         }
         for (std::size_t length = fixture.syscall + 2; length < fixture.code.size(); ++length)
@@ -72,6 +74,20 @@ void CheckFixtures() {
     Require(Rejected(embedded, true, embedded.size()), "SDK matching accepted a prefix that starts inside an immediate");
     for (const auto& code : std::vector<Bytes>{{0xB8, 0xDD, 0x01, 0x00, 0x00, 0x0F, 0x05, 0xC3}, {0xCD, 0x80}, {0x0F, 0x34}, {0x0F, 0x07}})
         Require(Rejected(code, true, code.size()), "SDK trap mode accepted an unrelated privileged instruction");
+    bool overflowRejected = false;
+    try {
+        Relinker::MakeSyscallScanner(testProgress, true)->ScanCodeSectionForSyscalls(Fixtures.front().code, std::numeric_limits<Domain::FileByteOffset>::max(), 1);
+    } catch (const Domain::RelinkerException& error) {
+        overflowRejected = std::string(error.what()) == "Code section offset overflow";
+    }
+    Require(overflowRejected, "Scanner accepted code section offset overflow");
+    bool sizeExceededRejected = false;
+    try {
+        Relinker::MakeSyscallScanner(testProgress, true)->ScanCodeSectionForSyscalls(Fixtures.front().code, 0, Fixtures.front().code.size() + 1);
+    } catch (const Domain::RelinkerException& error) {
+        sizeExceededRejected = std::string(error.what()) == "Code section exceeds the input buffer";
+    }
+    Require(sizeExceededRejected, "Scanner accepted code section size exceeding input");
     std::cout << "SDK inline syscall checks passed, " << rejectedMutations << " near-match rejections\n";
 }
 

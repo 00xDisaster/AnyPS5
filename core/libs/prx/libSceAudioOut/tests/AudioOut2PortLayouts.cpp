@@ -9,10 +9,15 @@
 #include <iterator>
 #include <limits>
 #include <random>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C" {
+int APS5_VABI sceAudioOut2UserCreate(std::uint32_t, AudioOut2UserHandle*);
+int APS5_VABI sceAudioOut2UserDestroy(AudioOut2UserHandle);
+int APS5_VABI sceAudioOut2UserGetSupportedAttributes(AudioOut2UserHandle, std::uint32_t*, std::uint32_t*);
 int APS5_VABI sceAudioOut2ContextResetParam(AudioOut2ContextParam*);
 int APS5_VABI sceAudioOut2ContextCreate(const AudioOut2ContextParam*, void*, std::size_t, AudioOut2ContextHandle*);
 int APS5_VABI sceAudioOut2ContextDestroy(AudioOut2ContextHandle);
@@ -47,6 +52,57 @@ constexpr std::uint32_t silentGrains = 32;
 constexpr float masterGain = 0.5f;
 constexpr float fold = 0.70710678f;
 constexpr float tolerance = 1e-5f;
+
+void TestUserAttributes() {
+    struct Output {
+        std::uint32_t before = 0x12345678u;
+        std::uint32_t value = 0xFFFFFFFFu;
+        std::uint32_t after = 0x87654321u;
+    } context, port;
+    AudioOut2UserHandle first = 0;
+    AudioOut2UserHandle second = 0;
+    Require(sceAudioOut2UserCreate(1, &first) == 0);
+    Require(sceAudioOut2UserCreate(2, &second) == 0 && second != first);
+    Require(sceAudioOut2UserGetSupportedAttributes(first, &context.value, &port.value) == 0);
+    Require(context.value == 0 && port.value == ((1u << attributeData) | (1u << attributeVolume)));
+    Require(context.before == 0x12345678u && context.after == 0x87654321u);
+    Require(port.before == 0x12345678u && port.after == 0x87654321u);
+    const auto rejects = [&](AudioOut2UserHandle handle, bool nullContext, bool nullPort) {
+        context.value = port.value = 0xFFFFFFFFu;
+        bool threw = false;
+        try {
+            sceAudioOut2UserGetSupportedAttributes(handle, nullContext ? nullptr : &context.value, nullPort ? nullptr : &port.value);
+        } catch (const std::runtime_error& error) {
+            threw = std::string(error.what()).find("sceAudioOut2UserGetSupportedAttributes") != std::string::npos;
+        }
+        Require(threw && context.value == 0xFFFFFFFFu && port.value == 0xFFFFFFFFu);
+    };
+    context.value = port.value = 0xFFFFFFFFu;
+    Require(sceAudioOut2UserGetSupportedAttributes(first, nullptr, &port.value) == 0);
+    Require(context.value == 0xFFFFFFFFu && port.value == 3);
+    Require(sceAudioOut2UserGetSupportedAttributes(first, &context.value, nullptr) == 0 && context.value == 0);
+    context.value = port.value = 0xFFFFFFFFu;
+    Require(sceAudioOut2UserGetSupportedAttributes(first, nullptr, nullptr) == static_cast<int>(0x80268001));
+    for (const AudioOut2UserHandle handle : {AudioOut2UserHandle{0}, std::numeric_limits<AudioOut2UserHandle>::max()}) {
+        Require(sceAudioOut2UserGetSupportedAttributes(handle, &context.value, &port.value) == static_cast<int>(0x80268010));
+        Require(sceAudioOut2UserGetSupportedAttributes(handle, nullptr, nullptr) == static_cast<int>(0x80268010));
+        Require(context.value == 0xFFFFFFFFu && port.value == 0xFFFFFFFFu);
+    }
+    Require(sceAudioOut2UserDestroy(first) == 0);
+    rejects(first, false, false);
+    std::thread([&] {
+        Require(sceAudioOut2UserGetSupportedAttributes(second, &context.value, &port.value) == 0);
+    }).join();
+    Require(context.value == 0 && port.value == 3);
+    AudioOut2UserHandle next = 0;
+    Require(sceAudioOut2UserCreate(1, &next) == 0 && next != first && next != second);
+    rejects(first, false, false);
+    Require(sceAudioOut2UserGetSupportedAttributes(next, &context.value, &port.value) == 0);
+    Require(context.value == 0 && port.value == 3);
+    Require(sceAudioOut2UserDestroy(next) == 0 && sceAudioOut2UserDestroy(second) == 0);
+    Require(context.before == 0x12345678u && context.after == 0x87654321u);
+    Require(port.before == 0x12345678u && port.after == 0x87654321u);
+}
 
 struct Layout {
     std::uint32_t channels;
@@ -282,6 +338,7 @@ void TestMeasuredMainPortFormats() {
 }
 
 int main() {
+    TestUserAttributes();
     SetEnvironment("SDL_AUDIODRIVER", "disk");
     for (const Layout* layout : {&mono, &stereo, &surround71, &surround714}) {
         TestFloatLayout(*layout);

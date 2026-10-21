@@ -1,5 +1,8 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Queues/SubmissionRing.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Synchronization/DeferredLabels.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Synchronization/SynchronizationStatistics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Queues/WorkerAffinity.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Synchronization/WaitMemory.hpp"
@@ -7,9 +10,16 @@
 #include "prx/libSceAgcDriver/Execution/include/WorkerSampler.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 
 namespace AgcDriver::DriverDetail {
+
+namespace {
+
+constexpr auto IdleResultsQuietPeriod = std::chrono::milliseconds(50);
+
+}
 
 FrameTiming* Driver::frameTiming() {
     if (!APS5_ENABLE_TIMING_LOG) return nullptr;
@@ -45,6 +55,61 @@ void Driver::markCompleted(std::uint64_t serial) {
         completed = *completedOutOfOrder.begin();
         completedOutOfOrder.erase(completedOutOfOrder.begin());
     }
+}
+
+bool& Driver::completionDeferred() {
+    static thread_local bool deferred = false;
+    return deferred;
+}
+
+void Driver::deferCompletion(const Submission& submission) {
+    std::uint64_t received = submission.received;
+    {
+        std::lock_guard lock(mutex);
+        if (queue0Executing != 0) received = std::min(received, queue0Executing);
+        queue0Uncommitted.push_back(received);
+    }
+    completionDeferred() = true;
+    DrawPipeline::Queue0().Enqueue([this, serial = submission.serial, received, labelWrites = submission.labelWrites] {
+        completeSubmission(serial, received, labelWrites);
+    }, {});
+}
+
+void Driver::submitOpenWork() {
+    if (deferredLabels().labels.empty() && !Graphics::Recorder::PendingLabelSince().has_value() && Graphics::Recorder::RecordedWorkSinceSubmit() == 0) return;
+    ++submissionCosts(0).endSubmits;
+    GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::End);
+    std::lock_guard gpuLock(GuestMemory::GpuMutex());
+    const auto localDevice = device.Load();
+    recordDeferredLabels(localDevice.get(), 0);
+    if (localDevice != nullptr) localDevice->SubmitRecorded(true);
+}
+
+void Driver::wakeQueueZeroForCompletions() {
+    if (!completionsPending()) return;
+    std::lock_guard lock(mutex);
+    changed.notify_all();
+}
+
+void Driver::completeSubmission(std::uint64_t serial, std::uint64_t received, std::span<const std::uint64_t> labelWrites) {
+    struct Complete {
+        Driver& driver;
+        std::uint64_t serial, received;
+        std::span<const std::uint64_t> labelWrites;
+        ~Complete() {
+            bool notify = true;
+            {
+                std::lock_guard lock(driver.mutex);
+                driver.markCompleted(serial);
+                driver.forgetUnfinishedWrites(driver.workers.at(0), labelWrites);
+                const auto found = std::find(driver.queue0Uncommitted.begin(), driver.queue0Uncommitted.end(), received);
+                if (found != driver.queue0Uncommitted.end()) driver.queue0Uncommitted.erase(found);
+                notify = driver.idleWaiters != 0 || driver.orderHolders.load(std::memory_order_acquire) != 0 || completionsPending();
+            }
+            if (notify) driver.changed.notify_all();
+        }
+    } complete{*this, serial, received, labelWrites};
+    submitOpenWork();
 }
 
 const std::atomic<std::uint64_t>*& Driver::workerQueued() {
@@ -113,6 +178,9 @@ void Driver::run(std::uint32_t id) noexcept {
                     return runningWorkers.load(std::memory_order_acquire) == 0
                         && std::all_of(workers.begin(), workers.end(), [](const auto& item) { return item.second.pending.empty(); });
                 };
+                const auto idleResultsPending = [&] {
+                    return id == 0 && Graphics::StorageTexture::AnyPending() && allQueuesIdle() && !completionsPending();
+                };
                 const auto poll = [&](const auto& done) {
 #ifdef _WIN32
                     lock.unlock();
@@ -127,7 +195,21 @@ void Driver::run(std::uint32_t id) noexcept {
                 while (!ready()) {
                     if (!completionsPending() || (id != 0 && Graphics::Recorder::PendingCompletionLabels() == 0)) {
                         const auto idleEpochAtCheck = idleEpoch.load(std::memory_order_acquire);
-                        const bool storeIdleResults = id == 0 && allQueuesIdle() && !completionsPending();
+                        const bool storeIdleResults = idleResultsPending();
+                        if (storeIdleResults) {
+                            queue0Dormant.store(true, std::memory_order_relaxed);
+                            const auto quietUntil = std::chrono::steady_clock::now() + IdleResultsQuietPeriod;
+                            const auto idleEpochAtWait = idleEpoch.load(std::memory_order_acquire);
+                            changed.wait_until(lock, quietUntil, [&] {
+                                return ready() || idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait;
+                            });
+                            queue0Dormant.store(false, std::memory_order_relaxed);
+                            if (ready()) break;
+                            if (idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait) {
+                                continue;
+                            }
+                            if (!idleResultsPending()) continue;
+                        }
                         lock.unlock();
                         if (storeIdleResults) {
                             if (const auto localDevice = device.Load()) localDevice->StoreIdleResults();
@@ -135,12 +217,12 @@ void Driver::run(std::uint32_t id) noexcept {
                         lock.lock();
                         if (ready()) break;
                         if (id == 0 && allQueuesIdle() && !completionsPending()
-                            && (!storeIdleResults || idleEpoch.load(std::memory_order_acquire) != idleEpochAtCheck)) continue;
+                            && ((!storeIdleResults && Graphics::StorageTexture::AnyPending()) || idleEpoch.load(std::memory_order_acquire) != idleEpochAtCheck)) continue;
                         if (id == 0) queue0Dormant.store(true, std::memory_order_relaxed);
                         const auto idleEpochAtWait = idleEpoch.load(std::memory_order_acquire);
-                        changed.wait(lock, [&] { return ready() || (id == 0 && idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait); });
+                        changed.wait(lock, [&] { return ready() || (id == 0 && (idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait || completionsPending())); });
                         if (id == 0) queue0Dormant.store(false, std::memory_order_relaxed);
-                        if (id == 0 && !ready() && idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait) continue;
+                        if (id == 0 && !ready() && (idleEpoch.load(std::memory_order_acquire) != idleEpochAtWait || completionsPending())) continue;
                         break;
                     }
                     if (poll(ready)) break;
@@ -158,10 +240,18 @@ void Driver::run(std::uint32_t id) noexcept {
                 if (APS5_ENABLE_TIMING_LOG) submission.dequeuedAt = std::chrono::steady_clock::now();
                 if (id == 0) queue0Executing = submission.suspend ? 0 : submission.received;
                 if (submission.waitFree) {
-                    orderHolders.fetch_add(1, std::memory_order_acq_rel);
-                    const auto released = [&] { return failure || stopping || orderReleased(id, submission.received); };
-                    while (!released()) poll(released);
-                    orderHolders.fetch_sub(1, std::memory_order_acq_rel);
+                    {
+                        struct OrderHold {
+                            std::atomic<std::uint32_t>& holders;
+                            explicit OrderHold(std::atomic<std::uint32_t>& holders) : holders(holders) { holders.fetch_add(1, std::memory_order_acq_rel); }
+                            ~OrderHold() { holders.fetch_sub(1, std::memory_order_acq_rel); }
+                            OrderHold(const OrderHold&) = delete;
+                            OrderHold& operator=(const OrderHold&) = delete;
+                        } hold{orderHolders};
+                        const auto released = [&] { return failure || stopping || orderReleased(id, submission.received); };
+                        StallWatch stall(id);
+                        while (!released() && !poll(released)) stall.Check("order behind queue 0 for event", submission.received);
+                    }
                     rethrowFailure();
                 }
                 if (APS5_ENABLE_TIMING_LOG) submission.orderedAt = std::chrono::steady_clock::now();
@@ -179,8 +269,10 @@ void Driver::run(std::uint32_t id) noexcept {
             {
                 std::lock_guard lock(mutex);
                 rethrowFailure();
-                markCompleted(submission.serial);
-                forgetUnfinishedWrites(workers.at(id), submission);
+                if (!std::exchange(completionDeferred(), false)) {
+                    markCompleted(submission.serial);
+                    forgetUnfinishedWrites(workers.at(id), submission);
+                }
                 if (id == 0) queue0Executing = 0;
 
                 notify = idleWaiters != 0 || orderHolders.load(std::memory_order_acquire) != 0;
