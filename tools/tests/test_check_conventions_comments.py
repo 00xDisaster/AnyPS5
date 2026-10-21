@@ -471,6 +471,18 @@ class TestFixtureExportTests(unittest.TestCase):
         self.assertIn("core/libs/prx/libSceLibcInternal/Export.cpp:1: error: [duplicate-export]", result.stdout)
         self.assertIn("setjmp_nid_postfix is also in libc", result.stdout)
 
+    def test_export_shadowing_a_spaced_or_split_assembly_export_is_a_duplicate(self):
+        for macro, call in (("APS5_ASM_FUNCTION", ' ("setjmp_nid_postfix")'),
+                            ("APS5_ASM_FUNCTION", '(\n        "setjmp_nid_postfix")'),
+                            ("APS5_SIGNAL_ASM_FUNCTION", ' (\n        "setjmp_nid_postfix")')):
+            with self.subTest(macro=macro, call=call):
+                result = self.check("core/libs/prx/libSceLibcInternal/Export.cpp",
+                                    "int APS5_VABI setjmp_nid_postfix(void) {\n    NotImplemented_nid_no_patch(__func__);\n    return 0;\n}\n",
+                                    base={"core/libs/prx/libc/src/JumpBuffer.cpp": 'asm(".text\\n"\n    ' + macro + call + '\n    "    ret\\n");\n'})
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("core/libs/prx/libSceLibcInternal/Export.cpp:1: error: [duplicate-export]", result.stdout)
+                self.assertIn("setjmp_nid_postfix is also in libc", result.stdout)
+
     def test_assembly_export_in_another_library_is_a_duplicate(self):
         result = self.check("core/libs/prx/libSceAudioOut/src/Clock.cpp",
                             'asm(".text\\n"\n    APS5_SIGNAL_ASM_FUNCTION("sceKernelGetProcessTime")\n    "    ret\\n");\n')
