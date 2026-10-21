@@ -43,7 +43,14 @@ int main() {
     Require(sceVoiceGetPortAttr(128, 1001, nullptr, 1) == invalidPort);
     Require(sceVoiceGetPortAttr(0, 1001, nullptr, 1) == invalidArgument);
     for (std::int32_t type = 0; type <= 5; ++type) {
+        param = {};
         param.port_type = type;
+        if (type == 1 || type == 3) {
+            param.pcmaudio.buffer_size = 1024;
+            param.pcmaudio.sample_rate = 16000;
+        }
+        if (type == 2 || type == 4) param.voice.bitrate = 16000;
+        if (type == 5) param.device.type = 2;
         std::uint32_t port = 0;
         Require(sceVoiceCreatePort(&port, &param) == 0);
         for (const auto attr : {1000, 1001, 1002, 1003, 2000, 2001, 2002}) {

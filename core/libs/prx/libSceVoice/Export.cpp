@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -32,6 +33,8 @@ struct Port {
     std::int32_t type;
     float volume;
     std::uint32_t bitrate;
+    std::uint16_t bufferSize;
+    std::uint16_t frameSize;
     bool muted = false;
     bool paused = false;
 };
@@ -41,7 +44,7 @@ struct Voice {
     bool initialized = false;
     bool started = false;
     std::int32_t appType = 0;
-    std::uint32_t nextId = 0;
+    std::deque<std::uint32_t> freePorts;
     std::map<std::uint32_t, Port> ports;
     std::set<std::pair<std::uint32_t, std::uint32_t>> connections;
 };
@@ -75,7 +78,8 @@ int APS5_VABI sceVoiceInit(const VoiceInitParam* param, std::int32_t version) {
     if (!param || version != 100) return InvalidArgument;
     if (param->app_type != 4 && param->app_type != 0x08000000 && param->app_type != 0x10000000 && param->app_type != 0x20000000) return InvalidArgument;
     voice.appType = param->app_type;
-    voice.nextId = 0;
+    voice.freePorts.clear();
+    for (std::uint32_t id = 0; id < 128; ++id) voice.freePorts.push_back(id);
     voice.initialized = true;
     return 0;
 }
@@ -123,16 +127,67 @@ int APS5_VABI sceVoiceEnd_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI sceVoiceCreatePort(uint32_t* port_id, const VoicePortParam* param) {
+int APS5_VABI sceVoiceCreatePort(std::uint32_t* portId, const VoicePortParam* param) {
     auto& voice = State();
     std::lock_guard lock(voice.mutex);
-    if (!voice.initialized) return VoiceErrorNotInitialized;
-    if (port_id == nullptr || param == nullptr) APS5_INVALID_ARG_EX;
-    if (param->port_type < PortInDevice || param->port_type > PortOutDevice) Fail(__func__, "unknown port type " + std::to_string(param->port_type));
-    const bool voicePort = param->port_type == PortInVoice || param->port_type == PortOutVoice;
-    const auto id = voice.nextId++;
-    voice.ports.emplace(id, Port{param->port_type, param->volume, voicePort ? static_cast<std::uint32_t>(param->voice.bitrate) : 0u});
-    *port_id = id;
+    if (!voice.initialized) return NotInitialized;
+    if (!portId || !param) return InvalidArgument;
+    *portId = 255;
+    std::uint16_t frameSize = 512;
+    std::uint16_t frameDuration = 16;
+    const auto type = param->port_type;
+    if (type < PortInDevice || type > PortOutDevice) return InvalidArgument;
+    if (type == PortInPcm || type == PortOutPcm) {
+        if (param->pcmaudio.sample_rate != 16000 || param->pcmaudio.data_type != 0) return InvalidArgument;
+    } else if (type == PortInVoice || type == PortOutVoice) {
+        switch (param->voice.bitrate) {
+        case 3850: frameSize = 20; frameDuration = 40; break;
+        case 4650: frameSize = 24; frameDuration = 40; break;
+        case 5700: frameSize = 15; frameDuration = 20; break;
+        case 7300: frameSize = 19; frameDuration = 20; break;
+        case 11800: frameSize = 15; frameDuration = 10; break;
+        case 12200: frameSize = 16; frameDuration = 10; break;
+        case 14400: frameSize = 27; frameDuration = 15; break;
+        case 16000: frameSize = 20; frameDuration = 10; break;
+        case 22533: frameSize = 43; frameDuration = 15; break;
+        default: return InvalidArgument;
+        }
+    }
+    constexpr auto resourceFull = static_cast<std::int32_t>(0x804e0808u);
+    if (voice.freePorts.empty()) return resourceFull;
+    std::uint32_t count = 0;
+    std::uint32_t pcmCount = 0;
+    std::uint32_t pcmBytes = 0;
+    for (const auto& [id, port] : voice.ports) {
+        if (port.type == type) ++count;
+        if (port.type == PortInPcm || port.type == PortOutPcm) {
+            ++pcmCount;
+            pcmBytes += 2u * port.bufferSize;
+        }
+    }
+    std::uint16_t bufferSize = 2048;
+    if (type == PortInDevice || type == PortOutDevice) {
+        const std::uint32_t limit = type == PortOutDevice && voice.appType == 4 ? 5 : 4;
+        if (count == limit) return resourceFull;
+        if (type == PortInDevice ? param->device.type != 0 : param->device.type != 2 && param->device.type != 14) return InvalidArgument;
+        bufferSize = 4096;
+    } else if (type == PortInPcm || type == PortOutPcm) {
+        bufferSize = static_cast<std::uint16_t>(param->pcmaudio.buffer_size - param->pcmaudio.buffer_size % frameSize);
+        if (bufferSize < 1024 || bufferSize > 64512) return InvalidArgument;
+        if (type == PortInPcm && bufferSize / frameSize * frameDuration < param->threshold) return resourceFull;
+        const std::uint32_t limit = voice.appType == 4 ? 128 : voice.appType == 0x08000000 ? 30 : 14;
+        const std::uint32_t byteLimit = voice.appType == 4 || voice.appType == 0x08000000 ? 0x80000 : voice.appType == 0x10000000 ? 0x5000 : 0x10000;
+        if (pcmCount == limit || pcmBytes + 2u * bufferSize > byteLimit) return resourceFull;
+    } else {
+        if (type == PortInVoice && bufferSize / frameSize * frameDuration < param->threshold) return resourceFull;
+        const std::uint32_t limit = voice.appType == 4 ? 0 : type == PortOutVoice ? 4 : voice.appType == 0x20000000 ? 7 : 15;
+        if (count == limit) return resourceFull;
+    }
+    const auto id = voice.freePorts.front();
+    const bool voicePort = type == PortInVoice || type == PortOutVoice;
+    voice.ports.emplace(id, Port{type, param->volume, voicePort ? static_cast<std::uint32_t>(param->voice.bitrate) : 0u, bufferSize, frameSize, param->mute != 0});
+    voice.freePorts.pop_front();
+    *portId = id;
     return 0;
 }
 
@@ -142,6 +197,7 @@ int APS5_VABI sceVoiceDeletePort(uint32_t port_id) {
     RequirePort(voice, port_id, __func__);
     std::erase_if(voice.connections, [port_id](const auto& link) { return link.first == port_id || link.second == port_id; });
     voice.ports.erase(port_id);
+    voice.freePorts.push_back(port_id);
     return 0;
 }
 

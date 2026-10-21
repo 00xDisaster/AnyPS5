@@ -2,7 +2,7 @@
 
 ### Functional
 
-- [Voice resource and port state](../../../core/libs/prx/libSceVoice/Export.cpp): resource information is eight bytes containing four 16-bit limits selected by initialization mode. Reset, pause and resume use confirmed initialization, range and missing-port errors; repeated pause/resume succeed. The host has no buffered voice processing or device reset backend, so reset only covers empty software ports and pause flags currently affect no audio. Initialization validates native modes and version 100, but still lacks event callback delivery and backend creation; port creation does not enforce native resource limits.
+- [Voice resource and port state](../../../core/libs/prx/libSceVoice/Export.cpp): resource information is eight bytes containing four 16-bit limits selected by initialization mode. Reset, pause and resume use confirmed initialization, range and missing-port errors; repeated pause/resume succeed. The host has no buffered voice processing or device reset backend, so reset only covers empty software ports and pause flags currently affect no audio. Initialization validates native modes and version 100, but still lacks event callback delivery and backend creation. Port creation enforces recovered format and resource limits, but does not allocate device or codec backends.
 - [sceVoiceEnableChat and sceVoiceDisableChat](../../../core/libs/prx/libSceVoice/Export.cpp): zero-argument signatures and the not-initialized error are confirmed. Initialized calls throw because the required audio chat backend is not implemented; they no longer report success for a local flag change.
 
 ### Unknown function info
