@@ -178,6 +178,22 @@ struct VrTracker2BoundaryParameter;
 static_assert(sizeof(VrTracker2ModeParameter) == 12);
 static_assert(sizeof(VrTracker2DiagnosticText) == 3072);
 
+struct VrTracker2CameraFrame {
+    std::uint32_t selector;
+    std::uint32_t identifiers[2];
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t pitch;
+    const void* pixels;
+    std::int32_t bufferIndex;
+};
+
+struct VrTracker2CameraFrameMetadata;
+
+static_assert(offsetof(VrTracker2CameraFrame, pixels) == 24);
+static_assert(offsetof(VrTracker2CameraFrame, bufferIndex) == 32);
+static_assert(sizeof(VrTracker2CameraFrame) == 40);
+
 extern "C" {
 
 std::int32_t APS5_VABI sceVrTracker2Finalize() {
@@ -353,15 +369,43 @@ APS5_EXPORT("4+B+TcHEHks", VrTracker2NotInitialized);
 APS5_EXPORT("cjDz4kYJKTw", VrTracker2NotInitialized);
 APS5_EXPORT("BjVg0fKV9VA", VrTracker2NotInitialized);
 APS5_EXPORT("oDV5j-2Luic", VrTracker2NotInitialized);
-APS5_EXPORT("t+86o9sCZ-Y", VrTracker2NotInitialized);
-APS5_EXPORT("TIpYP35JzUs", VrTracker2NotInitialized);
-APS5_EXPORT("LrSc+KuxIkg", VrTracker2NotInitialized);
-APS5_EXPORT("Ur+M5wy+QBY", VrTracker2NotInitialized);
-APS5_EXPORT("OvKC351Udqo", VrTracker2NotInitialized);
+APS5_EXPORT("t+86o9sCZ-Y", VrTracker2AcquireCameraFrame);
+std::int32_t APS5_VABI VrTracker2AcquireCameraFrame(std::uint32_t selector, VrTracker2CameraFrame* frame) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
+APS5_EXPORT("TIpYP35JzUs", VrTracker2AcquireCameraFrameWithMetadata);
+std::int32_t APS5_VABI VrTracker2AcquireCameraFrameWithMetadata(std::uint32_t selector, VrTracker2CameraFrame* frame, VrTracker2CameraFrameMetadata* metadata) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
+APS5_EXPORT("LrSc+KuxIkg", VrTracker2ReleaseCameraFrame);
+std::int32_t APS5_VABI VrTracker2ReleaseCameraFrame(const VrTracker2CameraFrame* frame) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
+APS5_EXPORT("Ur+M5wy+QBY", VrTracker2SetScalarOption);
+std::int32_t APS5_VABI VrTracker2SetScalarOption(float value) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
+APS5_EXPORT("OvKC351Udqo", VrTracker2GetScalarOption);
+std::int32_t APS5_VABI VrTracker2GetScalarOption(float* value) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
 APS5_EXPORT("LQV4nz6wteY", VrTracker2NotInitialized);
 APS5_EXPORT("x0pGthEwf88", VrTracker2NotInitialized);
-APS5_EXPORT("d5Fjs0rHkBg", VrTracker2NotInitialized);
-APS5_EXPORT("Yed3ZONcuMk", VrTracker2NotInitialized);
+APS5_EXPORT("d5Fjs0rHkBg", VrTracker2SelectDevice);
+std::int32_t APS5_VABI VrTracker2SelectDevice(std::int32_t deviceHandle) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
+APS5_EXPORT("Yed3ZONcuMk", VrTracker2GetSelectedDevice);
+std::int32_t APS5_VABI VrTracker2GetSelectedDevice(std::int32_t* deviceHandle) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+;
 APS5_EXPORT("fkptW6uRdWc", VrTracker2NotInitialized);
 APS5_EXPORT("HDlD-xE1Xuk", VrTracker2NotInitialized);
 APS5_EXPORT("IGdE6nsMTAY", VrTracker2NotInitialized);
