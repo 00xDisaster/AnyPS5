@@ -63,6 +63,11 @@ read that always reports no data, or a write that drops its data, is not UI.
    grep -nE 'call +0x1f2e480$' text.dis       # callers of the JUMP_SLOT stub at 0x1f2e480
    ```
 
+   For a relinked module (`*.guest.prx`), `tools/annotate_module.py <module> --out <prefix>` does this cut and
+   disassembly and writes `<prefix>.asm`, `<prefix>.imports.txt` and `<prefix>.exports.txt`. It names each import
+   call, PLT stub, GOT reference and export entry from the module's NIDs through the database of
+   `tools/nid_names.py` (`--db` picks the CSV, `--no-names` prints the NIDs). It needs binutils `objdump`.
+
    A disassembler that loads the program headers (Ghidra, IDA) does the same.
 4. Log strings near the call confirm which import it is: `strings -t x eboot.elf`, then the `lea` that loads that address.
 
