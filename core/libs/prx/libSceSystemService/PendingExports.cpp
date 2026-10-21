@@ -2117,11 +2117,6 @@ bool APS5_VABI sceSystemServiceIsBgmCpuBudgetAvailable() {
     return 0;
 }
 
-int APS5_VABI sceSystemServiceIsBgmPlaying() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceSystemServiceIsEyeToEyeDistanceAdjusted(std::uint32_t userId, std::uint8_t* adjusted) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
