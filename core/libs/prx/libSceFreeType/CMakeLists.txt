@@ -13,6 +13,18 @@ target_link_libraries(libSceFreeType PRIVATE freetype)
 target_sources(libSceFreeType PRIVATE src/SizeRequest.cpp)
 
 if(BUILD_TESTING)
+    add_test_executable(guest_freetype_outline_copy_tests ${LIBS_INCLUDE_DIR}/tests/GuestFreeTypeOutlineCopy.cpp)
+    target_include_directories(guest_freetype_outline_copy_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_freetype_outline_copy_tests PRIVATE libSceFreeType freetype libc)
+    configure_windows_unwind(guest_freetype_outline_copy_tests)
+    add_test(NAME guest_freetype_outline_copy COMMAND guest_freetype_outline_copy_tests)
+    if(WIN32)
+        set_tests_properties(guest_freetype_outline_copy PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceFreeType>")
+    endif()
+endif()
+
+if(BUILD_TESTING)
     add_test_executable(guest_freetype_request_size_tests ${LIBS_INCLUDE_DIR}/tests/GuestFreeTypeRequestSize.cpp)
     target_include_directories(guest_freetype_request_size_tests PRIVATE ${LIBS_INCLUDE_DIR})
     target_link_libraries(guest_freetype_request_size_tests PRIVATE libSceFreeType freetype libc)
@@ -81,14 +93,7 @@ if(BUILD_TESTING)
     target_link_libraries(guest_freetype_sfnt_names_tests PRIVATE libSceFreeType freetype libc)
     configure_windows_unwind(guest_freetype_sfnt_names_tests)
     add_test(NAME guest_freetype_sfnt_names COMMAND guest_freetype_sfnt_names_tests)
-    add_test_executable(guest_freetype_outline_copy_tests ${LIBS_INCLUDE_DIR}/tests/GuestFreeTypeOutlineCopy.cpp)
-    target_include_directories(guest_freetype_outline_copy_tests PRIVATE ${LIBS_INCLUDE_DIR})
-    target_link_libraries(guest_freetype_outline_copy_tests PRIVATE libSceFreeType freetype libc)
-    configure_windows_unwind(guest_freetype_outline_copy_tests)
-    add_test(NAME guest_freetype_outline_copy COMMAND guest_freetype_outline_copy_tests)
     if(WIN32)
-        set_tests_properties(guest_freetype_outline_copy PROPERTIES ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceFreeType>")
         set_tests_properties(guest_freetype_sfnt_names PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceFreeType>")
         set_tests_properties(guest_freetype_names PROPERTIES ENVIRONMENT_MODIFICATION
