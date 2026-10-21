@@ -86,12 +86,16 @@ void ClosingDropsQueuedPrebuilds() {
     SubmitLibraryPrebuild([&] { started.set_value(); opened.wait(); });
     for (int index = 0; index < 3; ++index) SubmitLibraryPrebuild([&] { queuedRan = true; });
     running.wait();
+    auto entering = std::make_shared<std::promise<void>>();
+    auto entered = entering->get_future();
     auto awaited = std::make_shared<std::promise<void>>();
     auto woken = awaited->get_future();
-    std::thread([awaited] {
+    std::thread([entering, awaited] {
+        entering->set_value();
         AwaitLibraryPrebuilds();
         awaited->set_value();
     }).detach();
+    entered.wait();
     const bool waiting = woken.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
     auto closing = std::async(std::launch::async, [] { CloseRegistrationPreparation(); });
     const bool waited = closing.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout;
