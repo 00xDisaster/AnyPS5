@@ -12,6 +12,7 @@ int APS5_VABI FT_New_Face_nid_postfix(FreeType::GuestLibrary* library, const cha
 int APS5_VABI FT_New_Memory_Face_nid_postfix(FreeType::GuestLibrary* library, const unsigned char* fileBase, std::int64_t fileSize, std::int64_t faceIndex, FreeType::GuestFaceRec** aface);
 int APS5_VABI FT_Reference_Face_nid_postfix(FreeType::GuestFaceRec* face);
 int APS5_VABI FT_Done_Face_nid_postfix(FreeType::GuestFaceRec* face);
+int APS5_VABI FT_Reference_Face_nid_postfix(FreeType::GuestFaceRec* face);
 int APS5_VABI FT_Select_Size_nid_postfix(FreeType::GuestFaceRec* face, std::int32_t strikeIndex);
 int APS5_VABI FT_Set_Pixel_Sizes_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t pixelWidth, std::uint32_t pixelHeight);
 int APS5_VABI FT_Set_Char_Size_nid_postfix(FreeType::GuestFaceRec* face, std::int64_t charWidth, std::int64_t charHeight, std::uint32_t horizontalResolution, std::uint32_t verticalResolution);
