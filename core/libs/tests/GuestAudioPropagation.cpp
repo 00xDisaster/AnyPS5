@@ -174,6 +174,9 @@ int main() {
         point.desc = {AudioPropagation::PathPointId, sizeof(point)};
         point.gain = 1.0f;
     }
+    configured.points[0].room = rooms[0];
+    configured.points[0].opaque[0] = std::byte{0x7f};
+    configured.opaque[0] = std::byte{0x55};
     configured.points[0].position[0] = 3.0f;
     Require(sceAudioPropagationSourceSetAudioPath(path, &configured, 1.0f) == 0, "path configuration");
     configured.pointCount = 0;
@@ -186,8 +189,11 @@ int main() {
     badPath.pointCount = AudioPropagation::MaxPathPoints + 1;
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceSetAudioPath(path, &badPath, 1.0f); }, "too many path points");
     badPath = configured;
-    badPath.points[0].room = materialHandle;
+    AudioPropagationHandle pathMaterial = 0;
+    Require(sceAudioPropagationSystemRegisterMaterial(system, material, &pathMaterial) == 0, "path material creation");
+    badPath.points[0].room = pathMaterial;
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceSetAudioPath(path, &badPath, 1.0f); }, "material used as a path room");
+    Require(sceAudioPropagationSystemUnregisterMaterial(pathMaterial) == 0, "path material cleanup");
     badPath = configured;
     badPath.points[0].position[0] = std::numeric_limits<float>::infinity();
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceSetAudioPath(path, &badPath, 1.0f); }, "nonfinite point position");
@@ -302,10 +308,28 @@ int main() {
     reset();
     infos[0].outputSize = 0;
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceRender(system, infos, 1); }, "render with an empty output");
+    for (const std::uint32_t format : {0u, 1u, 2u, 4u, 5u}) {
+        reset();
+        infos[0].format = format;
+        const std::size_t channels = format == 0 ? 4 : format == 1 ? 9 : format == 2 ? 16 : 8;
+        infos[0].outputSize = sizeof(float) * options.frameSamples * channels;
+        Require(sceAudioPropagationSourceRender(system, infos, 1) == 0, "render in a known format failed");
+        Require(untouched(), "empty source modified a mix in a known format");
+        infos[0].outputSize -= sizeof(float) * channels;
+        RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceRender(system, infos, 1); }, "known format accepted an undersized frame");
+        Require(untouched(), "undersized known-format output modified a mix");
+    }
     reset();
-    infos[1].format = 1;
-    RequireThrows<std::runtime_error>([&] { sceAudioPropagationSourceRender(system, infos, 2); }, "render with an unknown format");
-    Require(untouched(), "render with an unknown format wrote an output");
+    infos[0].format = 1;
+    infos[0].outputSize = sizeof(float) * (options.frameSamples * 9 + 1);
+    RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSourceRender(system, infos, 1); }, "render of a partial nine-channel frame");
+    Require(untouched(), "render of a partial frame wrote an output");
+    for (const std::uint32_t format : {3u, 6u}) {
+        reset();
+        infos[1].format = format;
+        RequireThrows<std::runtime_error>([&] { sceAudioPropagationSourceRender(system, infos, 2); }, "render with an unknown format");
+        Require(untouched(), "render with an unknown format wrote an output");
+    }
 
     reset();
     configured.flags = 0;

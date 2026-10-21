@@ -394,13 +394,22 @@ std::int32_t APS5_VABI sceAudioPropagationSourceRender(AudioPropagationHandle sy
     requireSystem(state, system, __func__);
     const auto& configuration = *reinterpret_cast<const SystemState*>(system);
     require(count <= configuration.maxSources, __func__);
-    const auto requiredBytes = static_cast<std::size_t>(configuration.frameSamples) * 16 * sizeof(float);
     for (std::uint32_t index = 0; index < count; ++index) {
         const auto& info = infos[index];
         requireDescriptor(&info.desc, RenderInfoId, RenderInfoSize, __func__);
         require(requireObject(state, info.source, Kind::Source, __func__).system == system, __func__);
-        require(info.output != nullptr && info.outputSize >= requiredBytes, __func__);
-        if (info.format != RenderFormat) throw std::runtime_error(std::string(__func__) + ": render format " + std::to_string(info.format) + " is unknown");
+        require(info.output != nullptr && info.outputSize != 0, __func__);
+        std::uint32_t channels = 0;
+        switch (info.format) {
+        case 0: channels = 4; break;
+        case 1: channels = 9; break;
+        case 2: channels = 16; break;
+        case 4:
+        case 5: channels = 8; break;
+        default: throw std::runtime_error(std::string(__func__) + ": render format " + std::to_string(info.format) + " is unknown");
+        }
+        const auto requiredBytes = static_cast<std::size_t>(configuration.frameSamples) * channels * sizeof(float);
+        require(info.outputSize >= requiredBytes && info.outputSize % (channels * sizeof(float)) == 0, __func__);
         for (const auto handle : state.sourcePaths.at(info.source)) {
             const auto& path = state.paths.at(handle);
             if (path.gain > 0.0f && path.data.pointCount != 0 && (path.data.flags & PathInvalid) == 0) {
