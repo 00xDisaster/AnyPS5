@@ -11,9 +11,8 @@ Set a switch before starting the emulator. Unless noted, any value enables it. M
 | `APS5_TRACE_APR` | APR file reads, including path, offset, size and destination. |
 | `APS5_TRACE_AUDIOOUT` | Audio output port parameters when a port is opened. |
 | `APS5_TRACE_AUDIOOUT2` | AudioOut2 context and port parameters, attributes, pushes, queue polls and periodic queue summaries. |
-| `APS5_TRACE_CALLS` | On Windows and Linux, records calls to the imports selected by this comma-separated library list (or `all`); crash and abort reports (abort only on Linux) include the last 64 calls and most-called imports. The executable must be converted with `--trace-imports`; see [Usage](../user/USAGE.md#tracing-system-library-calls). |
+>>>>>>> af74b35f84 (feat(relinker): trace function imports on macOS)
 | `APS5_TRACE_CALLS_FILE` | With `APS5_TRACE_CALLS`, a file rewritten every 10 seconds with every traced import called so far, most called first: number of calls, library and import name. |
-| `APS5_TRACE_EXIT` | Guest `exit` and `_Exit` calls and process-exit backtraces. |
 | `APS5_TRACE_FIBER` | Fiber initialization, switches and returns. |
 | `APS5_TRACE_MEMORY` | Direct-memory allocation, mapping and protection operations. |
 | `APS5_TRACE_PREPARATION_WAIT` | Shader preparation tasks moved to the front of the queue to satisfy a waiting caller. |
