@@ -501,9 +501,11 @@ int APS5_VABI clock_gettime_nid_postfix(int clockId, KernelTimespec* tp) {
     return 0;
 }
 
-int APS5_VABI gettimeofday_nid_postfix(KernelTimeval* tv, KernelTimezone* tz) {
-    KernelTimeval ignoredTime{};
-    if (tv == nullptr) tv = &ignoredTime;
+int APS5_VABI gettimeofday_nid_postfix(KernelTimeval* output, KernelTimezone* zoneOutput) {
+    KernelTimeval current{};
+    auto* tv = &current;
+    KernelTimezone zone{};
+    auto* tz = zoneOutput == nullptr ? nullptr : &zone;
 #ifdef _WIN32
     FILETIME ft{};
     GetSystemTimePreciseAsFileTime(&ft);
@@ -522,6 +524,14 @@ int APS5_VABI gettimeofday_nid_postfix(KernelTimeval* tv, KernelTimezone* tz) {
     if (tz != nullptr) {
         tz->tz_minuteswest = 0;
         tz->tz_dsttime = 0;
+    }
+    if (output != nullptr && !GuestCopyOut_nid_no_patch(output, &current, sizeof(current))) {
+        *__error_nid_postfix() = 14;
+        return -1;
+    }
+    if (zoneOutput != nullptr && !GuestCopyOut_nid_no_patch(zoneOutput, &zone, sizeof(zone))) {
+        *__error_nid_postfix() = 14;
+        return -1;
     }
     return 0;
 }
@@ -705,13 +715,14 @@ int APS5_VABI sceKernelConvertUtcToLocaltime(int64_t utc_time, int64_t* local_ti
 
 int APS5_VABI sceKernelGettimeofday(KernelTimeval* tp) {
     if (tp == nullptr) return SceKernelErrorEfault;
-    return gettimeofday_nid_postfix(tp, nullptr);
+    const int result = gettimeofday_nid_postfix(tp, nullptr);
+    return result != 0 && *__error_nid_postfix() == 14 ? SceKernelErrorEfault : result;
 }
 
 int APS5_VABI sceKernelGettimezone(KernelTimezone* tz) {
     if (tz == nullptr) return SceKernelErrorEfault;
-    *tz = {0, 0};
-    return 0;
+    const KernelTimezone zone{0, 0};
+    return GuestCopyOut_nid_no_patch(tz, &zone, sizeof(zone)) ? 0 : SceKernelErrorEfault;
 }
 
 uint64_t APS5_VABI sceKernelReadTsc(void) {
