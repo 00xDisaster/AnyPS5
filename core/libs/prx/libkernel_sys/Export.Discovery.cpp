@@ -14,6 +14,10 @@ int APS5_VABI pthread_barrierattr_getpshared_nid_postfix(void* const* attr, int*
 int APS5_VABI pthread_barrierattr_setpshared_nid_postfix(void** attr, int pshared);
 int APS5_VABI pthread_getcpuclockid_nid_postfix(void* thread, int* clockId);
 int APS5_VABI pthread_getconcurrency_nid_postfix();
+int APS5_VABI pthread_setconcurrency_nid_postfix(int level);
+int APS5_VABI pthread_attr_getscope_nid_postfix(void* const* attr, int* scope);
+int APS5_VABI pthread_attr_setscope_nid_postfix(void** attr, int scope);
+int APS5_VABI pthread_atfork_nid_postfix(void (APS5_VABI* prepare)(), void (APS5_VABI* parent)(), void (APS5_VABI* child)());
 int APS5_VABI msync_nid_postfix(void* address, std::size_t length, int flags);
 }
 
@@ -2311,14 +2315,12 @@ int APS5_VABI sceLibcMspaceCreateForMonoMutex(void) {
     return 0;
 }
 
-int APS5_VABI scePthreadAtfork(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI scePthreadAtfork(void (APS5_VABI* prepare)(), void (APS5_VABI* parent)(), void (APS5_VABI* child)()) {
+    return SceResult(pthread_atfork_nid_postfix(prepare, parent, child));
 }
 
-int APS5_VABI scePthreadAttrGetscope(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI scePthreadAttrGetscope(void* const* attr, int* scope) {
+    return SceResult(pthread_attr_getscope_nid_postfix(attr, scope));
 }
 
 int APS5_VABI scePthreadAttrSetcreatesuspend(void) {
@@ -2326,9 +2328,8 @@ int APS5_VABI scePthreadAttrSetcreatesuspend(void) {
     return 0;
 }
 
-int APS5_VABI scePthreadAttrSetscope(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI scePthreadAttrSetscope(void** attr, int scope) {
+    return SceResult(pthread_attr_setscope_nid_postfix(attr, scope));
 }
 
 int APS5_VABI scePthreadBarrierDestroy(void** barrier) {
@@ -2454,9 +2455,8 @@ int APS5_VABI scePthreadSetName(void) {
     return 0;
 }
 
-int APS5_VABI scePthreadSetconcurrency(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI scePthreadSetconcurrency(int level) {
+    return SceResult(pthread_setconcurrency_nid_postfix(level));
 }
 
 int APS5_VABI scePthreadSingle(void) {
