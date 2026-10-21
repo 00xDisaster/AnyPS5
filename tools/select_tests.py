@@ -258,7 +258,10 @@ def main():
                           "full_run_paths": full, "reasons": {name: sorted(set(why)) for name, why in reasons.items()}},
                          indent=2, sort_keys=True))
         return 0
-    build = Build(args.build)
+    try:
+        build = Build(args.build)
+    except (OSError, KeyError) as error:
+        parser.error(f"{args.build}: not a configured CMake build directory ({error})")
     if args.command == "dump":
         dump(build, args.graph)
         return 0

@@ -200,6 +200,30 @@ class FixtureBuildTests(unittest.TestCase):
             self.assertIn(name, output)
 
 
+class BuildErrorTests(unittest.TestCase):
+    def run_tool(self, *args):
+        return subprocess.run([sys.executable, "-I", str(TOOL), *map(str, args)], capture_output=True, text=True, timeout=60)
+
+    def test_missing_build_directory_is_reported_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for command in (("dump", root / "no build", root / "graph.json"),
+                            ("select", root / "no build", root / "graph.json", root / "changed.txt")):
+                with self.subTest(command[0]):
+                    result = self.run_tool(*command)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("not a configured CMake build directory", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_cache_without_the_build_locations_is_reported_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "CMakeCache.txt").write_text("# empty\n", encoding="utf-8")
+            result = self.run_tool("dump", directory, Path(directory) / "graph.json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("CMAKE_CACHEFILE_DIR", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 class CaseInsensitivePathTests(unittest.TestCase):
     def build(self):
         build = object.__new__(select_tests.Build)
