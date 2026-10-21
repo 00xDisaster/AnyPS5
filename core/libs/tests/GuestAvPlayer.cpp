@@ -1605,6 +1605,36 @@ void TestVideoSyncTolerance() {
     Check(allocations.blocks.empty(), "sync tolerance allocations leaked");
 }
 
+void TestAudioClockDriftGating() {
+    Events events;
+    AvPlayerInitData init = InitData(&events);
+    auto* player = sceAvPlayerInit(&init);
+    Check(player != nullptr, "audio drift gating init failed");
+    Check(sceAvPlayerAddSource(player, "/app0/avplayer.mp4") == 0, "audio drift gating source failed");
+    Check(WaitFor([&] { return events.Seen(EventReady); }), "audio drift gating ready missing");
+    Check(sceAvPlayerEnableStream(player, EnglishAudioStream) == 0, "audio drift gating audio failed");
+    Check(sceAvPlayerStart(player) == 0, "audio drift gating start failed");
+    Check(WaitFor([&] { return events.Seen(EventPlay); }), "audio drift gating play missing");
+    AvPlayerFrameInfo sound{};
+    Check(WaitFor([&] { return sceAvPlayerGetAudioData(player, &sound) != 0; }), "first audio frame missing");
+    Check(sound.timestamp == 0, "first audio frame timestamp unexpected");
+    Check(WaitFor([&] { return sceAvPlayerGetAudioData(player, &sound) != 0; }), "second audio frame missing");
+    Check(sound.timestamp > 0 && sound.timestamp <= 30, "second audio frame timestamp unexpected");
+    const auto clockWithinThreshold = sceAvPlayerCurrentTime(player);
+    Check(clockWithinThreshold < sound.timestamp, "clock rebased despite audio being within drift threshold");
+    Check(WaitFor([&] {
+        while (sceAvPlayerGetAudioData(player, &sound)) {
+            if (sound.timestamp >= 60) return true;
+        }
+        return false;
+    }), "audio frame beyond drift threshold not delivered");
+    const auto clockBeyondThreshold = sceAvPlayerCurrentTime(player);
+    Check(clockBeyondThreshold >= 50, "clock was not rebased after audio drifted beyond threshold");
+    Check(sceAvPlayerClose(player) == 0, "audio drift gating close failed");
+    std::lock_guard lock(allocations.mutex);
+    Check(allocations.blocks.empty(), "audio drift gating allocations leaked");
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -1644,6 +1674,7 @@ int main(int argc, char** argv) {
         TestLoopWarningWaitsForPlayback();
         TestEofStopLatency();
         TestVideoSyncTolerance();
+        TestAudioClockDriftGating();
         std::puts("AvPlayer tests passed");
         return 0;
     } catch (const std::exception& error) {

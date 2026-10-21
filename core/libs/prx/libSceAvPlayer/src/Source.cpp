@@ -544,9 +544,13 @@ private:
         if (frames.empty()) return false;
         const auto epoch = frames.front().epoch;
         present(audio, info);
+        const auto currentClock = presentationClock.Now();
+        const auto timestamp = static_cast<double>(info.timestamp);
+        const bool drifted = currentClock > timestamp + 50.0 || timestamp > currentClock + 50.0;
+        const bool shouldRebase = !audioDriving || epoch > clockEpoch || drifted;
         audioDriving = true;
         clockEpoch = std::max(clockEpoch, epoch);
-        presentationClock.Rebase(static_cast<double>(info.timestamp));
+        if (shouldRebase) presentationClock.Rebase(timestamp);
         return true;
     }
 
