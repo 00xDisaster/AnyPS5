@@ -469,7 +469,7 @@ int APS5_VABI freopen_s_nid_postfix(FileStream** result, const char* filename, c
     constexpr int GuestEinval = 22;
     if (!result) return GuestEinval;
     *result = nullptr;
-    if (!filename || !mode || !stream) return GuestEinval;
+    if (!mode || !stream) return GuestEinval;
     *result = freopen_nid_postfix(filename, mode, stream);
     return *result ? 0 : errno;
 }
