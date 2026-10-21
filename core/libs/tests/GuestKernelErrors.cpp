@@ -296,6 +296,27 @@ int main() {
     Require(sceKernelPollEventFlag(ef, 0x08, EVF_WAITMODE_AND, &pattern) == SCE_OK && pattern == 0x08);
     Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
 
+    Require(sceKernelCreateEventFlag(&ef, "multi_cancel", EVF_ATTR_MULTI, 0x01, nullptr) == SCE_OK);
+    std::atomic<int> cancelRes1{-1};
+    std::atomic<int> cancelRes2{-1};
+    std::uint64_t cancelPat1 = 0xdeadbeef;
+    std::uint64_t cancelPat2 = 0xdeadbeef;
+    std::thread cancelT1([&] {
+        cancelRes1 = sceKernelWaitEventFlag(ef, 0x02, EVF_WAITMODE_AND, &cancelPat1, nullptr);
+    });
+    std::thread cancelT2([&] {
+        cancelRes2 = sceKernelWaitEventFlag(ef, 0x04, EVF_WAITMODE_OR, &cancelPat2, nullptr);
+    });
+    WaitForEventFlagWaiters(ef, 2);
+    waitThreads = -1;
+    Require(sceKernelCancelEventFlag(ef, 0x05, &waitThreads) == SCE_OK && waitThreads == 2);
+    cancelT1.join();
+    cancelT2.join();
+    Require(cancelRes1 == SCE_KERNEL_ERROR_ECANCELED && cancelPat1 == 0);
+    Require(cancelRes2 == SCE_KERNEL_ERROR_ECANCELED && cancelPat2 == 0);
+    Require(sceKernelPollEventFlag(ef, 0x05, EVF_WAITMODE_AND, &pattern) == SCE_OK && pattern == 0x05);
+    Require(sceKernelDeleteEventFlag(ef) == SCE_OK);
+
     Require(sceKernelCreateEventFlag(&ef, "imm_sat", EVF_ATTR_MULTI, 0x05, nullptr) == SCE_OK);
     pattern = 0;
     Require(sceKernelWaitEventFlag(ef, 0x01, EVF_WAITMODE_AND | EVF_WAITMODE_CLEAR_PAT, &pattern, nullptr) == SCE_OK);
