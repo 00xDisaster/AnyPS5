@@ -66,7 +66,7 @@ void Readers() {
     Check(sceSslGetNameEntryCount(context, subject) == 3 && sceSslGetNameEntryCount(context, issuer) == 3, "PS5 name entry count failed");
     Throws([&] { sceSslGetSubjectName(other, certificate); });
     Throws([&] { sceSslGetNameEntryCount(other, subject); });
-    Throws([&] { sceSslFreeSslCertName(other, subject); });
+    Check(sceSslFreeSslCertName(other, subject) == 0, "non-null name release checked ownership");
     std::array<char, 32> oid{}, value{};
     length = SIZE_MAX;
     Check(sceSslGetNameEntryInfo(context, subject, 1, oid.data(), oid.size(), value.data(), value.size(), &length) == 0, "PS5 eight-argument name query failed");
@@ -91,7 +91,7 @@ void Readers() {
     Check(sceSslGetSerialNumber(context, certificate, nullptr, &length) == 0 && length == 3, "CA snapshot lost its certificate on unload");
     Check(sceSslFreeCaList(context, &list) == 0, "CA list free failed");
     Throws([&] { sceSslGetSerialNumber(context, certificate, nullptr, &length); });
-    Check(sceSslGetNameEntryCount(context, subject) == 3, "owned name depended on freed certificate storage");
+    Throws([&] { sceSslGetNameEntryCount(context, subject); });
     Check(sceSslFreeSslCertName(context, subject) == 0, "name free failed");
     Throws([&] { sceSslGetNameEntryCount(context, subject); });
     Check(sceSslTerm_nid_postfix(context) == 0, "context term failed");

@@ -222,6 +222,9 @@ struct CertNameEntry {
 };
 
 struct CertName {
+    void* certificate = nullptr;
+    bool subject = false;
+    std::weak_ptr<CertificateChain> owner;
     std::vector<CertNameEntry> entries;
 };
 
@@ -582,10 +585,17 @@ const char* LongAttributeName(const char* shortName) {
 
 void* ExtractCertName(const char* function, int sslCtxId, void* sslCert, bool subject) {
     std::lock_guard lock(State().mutex);
+    if (!sslCert || !State().contexts.contains(sslCtxId)) return nullptr;
     auto& context = GetContext(sslCtxId);
     const auto* crt = RequireCertificate(function, sslCtxId, sslCert);
+    for (const auto& [handle, stored] : context.certNames) {
+        if (stored->certificate == sslCert && stored->subject == subject) return handle;
+    }
     const auto* name = subject ? &crt->subject : &crt->issuer;
     auto certName = std::make_unique<CertName>();
+    certName->certificate = sslCert;
+    certName->subject = subject;
+    certName->owner = static_cast<CertificateHandle*>(sslCert)->owner;
     for (const auto* node = name; node; node = node->next) {
         if (!node->oid.p || node->oid.len == 0) continue;
         std::string oid;
@@ -1006,14 +1016,9 @@ int APS5_VABI sceSslGetSerialNumber(int sslCtxId, void* sslCert, unsigned char* 
 }
 
 int APS5_VABI sceSslFreeSslCertName(int sslCtxId, void* certName) {
-    if (!certName) return ErrorInvalidArg;
-    auto& state = State();
-    std::lock_guard lock(state.mutex);
-    auto& context = GetContext(sslCtxId);
-    const auto found = context.certNames.find(certName);
-    if (found == context.certNames.end()) throw std::invalid_argument("sceSslFreeSslCertName: unknown cert name");
-    context.certNames.erase(found);
-    return 0;
+    std::lock_guard lock(State().mutex);
+    if (!State().contexts.contains(sslCtxId)) return ErrorInvalidId;
+    return certName ? 0 : ErrorInvalidValue;
 }
 
 int APS5_VABI sceSslEnableVerifyOption(int sslConnectionId, std::uint32_t option) {
@@ -1090,7 +1095,7 @@ int APS5_VABI sceSslGetNameEntryCount(int sslCtxId, void* certName) {
     if (!certName) return ErrorInvalidValue;
     auto& context = GetContext(sslCtxId);
     const auto found = context.certNames.find(certName);
-    if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryCount: unknown cert name");
+    if (found == context.certNames.end() || found->second->owner.expired()) throw std::invalid_argument("sceSslGetNameEntryCount: unknown or expired cert name");
     return static_cast<int>(found->second->entries.size());
 }
 
@@ -1101,7 +1106,7 @@ int APS5_VABI sceSslGetNameEntryInfo(int sslCtxId, void* certName, int entryNum,
     if (!certName || !oidname || !value || !valueLen) return ErrorInvalidValue;
     auto& context = GetContext(sslCtxId);
     const auto found = context.certNames.find(certName);
-    if (found == context.certNames.end()) throw std::invalid_argument("sceSslGetNameEntryInfo: unknown cert name");
+    if (found == context.certNames.end() || found->second->owner.expired()) throw std::invalid_argument("sceSslGetNameEntryInfo: unknown or expired cert name");
     const auto& entries = found->second->entries;
     if (entryNum < 0 || static_cast<std::size_t>(entryNum) >= entries.size()) return ErrorInvalidValue;
     const auto& entry = entries[static_cast<std::size_t>(entryNum)];

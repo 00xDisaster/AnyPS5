@@ -200,14 +200,15 @@ void CertificateReaders() {
 
     void* subject = sceSslGetSubjectName(id, cert);
     Check(subject != nullptr, "get subject failed");
+    Check(sceSslGetSubjectName(id, cert) == subject, "subject handle identity changed");
     void* issuer = sceSslGetIssuerName(id, cert);
     Check(issuer != nullptr, "get issuer failed");
-    Throws([&] { sceSslGetSubjectName(id, nullptr); });
-    Throws([&] { sceSslGetIssuerName(id, nullptr); });
+    Check(sceSslGetSubjectName(id, nullptr) == nullptr, "invalid name query returned a handle");
+    Check(sceSslGetIssuerName(id, nullptr) == nullptr, "invalid name query returned a handle");
     Throws([&] { sceSslGetSubjectName(id, fake); });
     Throws([&] { sceSslGetIssuerName(id, fake); });
-    Throws([&] { sceSslGetSubjectName(9999, cert); });
-    Throws([&] { sceSslGetIssuerName(9999, cert); });
+    Check(sceSslGetSubjectName(9999, cert) == nullptr, "invalid name query returned a handle");
+    Check(sceSslGetIssuerName(9999, cert) == nullptr, "invalid name query returned a handle");
 
     Check(sceSslGetNameEntryCount(id, subject) == 3, "subject entry count mismatch");
     Check(sceSslGetNameEntryCount(id, issuer) == 3, "issuer entry count mismatch");
@@ -247,10 +248,11 @@ void CertificateReaders() {
 
     Check(sceSslFreeSslCertName(id, subject) == 0, "free subject name failed");
     Check(sceSslFreeSslCertName(id, issuer) == 0, "free issuer name failed");
-    Check(sceSslFreeSslCertName(id, nullptr) == static_cast<int>(0x8095177a), "null cert name free accepted");
-    Throws([&] { sceSslFreeSslCertName(id, subject); });
-    Throws([&] { sceSslFreeSslCertName(id, fake); });
-    Throws([&] { sceSslFreeSslCertName(9999, subject); });
+    Check(sceSslGetNameEntryCount(id, subject) == 3, "name release invalidated a live certificate name");
+    Check(sceSslFreeSslCertName(id, nullptr) == static_cast<int>(0x8095f007), "null cert name free accepted");
+    Check(sceSslFreeSslCertName(id, subject) == 0, "non-null name release failed");
+    Check(sceSslFreeSslCertName(id, fake) == 0, "non-null name release failed");
+    Check(sceSslFreeSslCertName(9999, subject) == InvalidId, "invalid name release context error mismatch");
 
     SceSsl::RtcTick begin{};
     Check(sceSslGetNotBefore(0, nullptr, nullptr) == InvalidId, "date validation precedence mismatch");
@@ -315,8 +317,8 @@ void CertificateReaders() {
     Check(sceSslFreeCaList(id, &handles) == 0, "free ca list failed");
     Check(sceSslTerm_nid_postfix(id) == 0, "term failed");
     Check(sceSslGetSerialNumber(id, cert, serialData, &serialLen) == InvalidId, "terminated context error mismatch");
-    Throws([&] { sceSslGetSubjectName(id, cert); });
-    Throws([&] { sceSslGetIssuerName(id, cert); });
+    Check(sceSslGetSubjectName(id, cert) == nullptr, "invalid name query returned a handle");
+    Check(sceSslGetIssuerName(id, cert) == nullptr, "invalid name query returned a handle");
     Check(sceSslGetNotBefore(id, cert, &begin) == InvalidId, "invalid date context error mismatch");
     Check(sceSslGetNotAfter(id, cert, &limit) == InvalidId, "invalid date context error mismatch");
     Check(sceSslGetFingerprint(id, cert, 3, sha256) == InvalidId, "invalid fingerprint context error mismatch");
@@ -340,7 +342,7 @@ void CertificateReaders() {
     Throws([&] { sceSslGetPem(id2, cert2, pemBuf.data(), &writtenLen); });
     Check(sceSslTerm_nid_postfix(id2) == 0, "term failed");
     Check(sceSslGetNameEntryCount(id2, subject2) == InvalidId, "terminated name context error mismatch");
-    Throws([&] { sceSslFreeSslCertName(id2, subject2); });
+    Check(sceSslFreeSslCertName(id2, subject2) == InvalidId, "invalid name release context error mismatch");
 }
 
 }
