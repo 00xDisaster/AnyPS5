@@ -155,7 +155,7 @@ public:
             const std::array<VkFormat, 2> viewFormats{target.format, twinFormat};
             VkImageFormatListCreateInfo formatList{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO};
             if (twinFormat != VK_FORMAT_UNDEFINED) {
-                if ((flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) == 0) {
+                if ((flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) == 0 && context.imageFormatList) {
                     formatList.viewFormatCount = static_cast<std::uint32_t>(viewFormats.size());
                     formatList.pViewFormats = viewFormats.data();
                     info.pNext = &formatList;
