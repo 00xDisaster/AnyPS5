@@ -66,6 +66,9 @@ bool IndexedIndirectStage(std::uint32_t stage) {
     return stage == StageVs || stage == StageEs || stage == StageLs;
 }
 
+constexpr std::uint32_t OpSetUconfigReg = 0x79;
+constexpr std::uint32_t IaMultiVgtParam = 0x40000258u;
+
 } // namespace
 
 extern "C" {
@@ -535,8 +538,11 @@ int APS5_VABI sceGnmRequestFlipAndSubmitDoneForWorkload(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmResetVgtControl(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmResetVgtControl(std::uint32_t* cmdbuf, std::uint32_t size) {
+    if (!cmdbuf || size != 3) return CommandFailed;
+    cmdbuf[0] = Header(OpSetUconfigReg, 2);
+    cmdbuf[1] = IaMultiVgtParam;
+    cmdbuf[2] = 0x6d007fu;
     return 0;
 }
 
@@ -608,8 +614,16 @@ int APS5_VABI sceGnmSetSpiEnableSqCountersForUnitInstance(void) {
     return Failure;
 }
 
-int APS5_VABI sceGnmSetVgtControl(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceGnmSetVgtControl(std::uint32_t* cmdbuf, std::uint32_t size, std::uint32_t primGroupSizeMinusOne, std::uint32_t partialVsWaveMode, std::uint32_t switchOnlyOnEop) {
+    if (!cmdbuf || size != 3 || primGroupSizeMinusOne >= 0x100 || (switchOnlyOnEop | partialVsWaveMode) >= 2) return CommandFailed;
+    const std::uint32_t switchOnEop = static_cast<std::uint32_t>(switchOnlyOnEop != 0) << 20;
+    const std::uint32_t switchOnEoi = static_cast<std::uint32_t>(switchOnlyOnEop == 0) << 19;
+    const std::uint32_t value = switchOnlyOnEop != 0
+        ? ((partialVsWaveMode & 1) << 16) | primGroupSizeMinusOne | switchOnEop | switchOnEoi | 0x40000u
+        : (primGroupSizeMinusOne & 0x1cffffu) | switchOnEop | switchOnEoi | 0x50000u;
+    cmdbuf[0] = Header(OpSetUconfigReg, 2);
+    cmdbuf[1] = IaMultiVgtParam;
+    cmdbuf[2] = value | 0x600000u;
     return 0;
 }
 
