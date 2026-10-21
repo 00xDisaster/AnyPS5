@@ -212,7 +212,9 @@ static void TestFrameInfo() {
     for (const auto& format : supported) {
         Ngs2WaveformBlock block{};
         Require(sceNgs2CalcWaveformBlock(&format, 0, SuperframeSamples, &block) == SCE_NGS2_OK && block.data_size == SuperframeBytes);
-        Require(FrameInfoThrows(format));
+        std::uint32_t values[4] = {0xa1, 0xa2, 0xa3, 0xa4};
+        Require(sceNgs2GetWaveformFrameInfo(&format, &values[0], &values[1], &values[2], &values[3]) == SCE_NGS2_OK);
+        Require(values[0] == SuperframeBytes && values[1] == SuperframeSamples && values[2] == 4 && values[3] == SuperframeSamples / 4);
     }
     for (const auto& format : rejected) {
         Ngs2WaveformBlock block{};
