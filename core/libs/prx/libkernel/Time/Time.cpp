@@ -14,6 +14,7 @@
 #include <cstring>
 #include <ctime>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <unordered_map>
 #include <utility>
@@ -276,7 +277,18 @@ void KernelTraceWait_nid_postfix(const char* kind, const void* caller, std::uint
 
 static void CancellableSleep(std::uint64_t nanos) {
     ThreadCancel::Check();
-    SleepWake::Sleep(nanos);
+    if (nanos <= SleepWake::MAX_WAKEABLE_NANOS) {
+        SleepWake::Sleep(nanos);
+    } else {
+        const auto now = TimedWait::NowNanos();
+        const auto deadline = now + std::min(nanos, std::numeric_limits<std::uint64_t>::max() - now);
+        std::mutex mutex;
+        TimedWait::Condition condition;
+        std::unique_lock lock(mutex);
+        while (!ThreadCancel::Requested() && TimedWait::NowNanos() < deadline) {
+            ThreadCancel::Wait(condition, lock, deadline);
+        }
+    }
     ThreadCancel::Check();
 }
 
