@@ -29,6 +29,17 @@ struct PlayerReviewDialogParam {
     std::uint8_t reserved[64];
 };
 
+struct NpCommerceDialogResult {
+    std::int32_t result;
+    std::uint8_t authorized;
+    std::uint8_t padding[3];
+    std::uint64_t userData;
+    std::uint8_t reserved[32];
+};
+
+static_assert(sizeof(NpCommerceDialogResult) == 48);
+static_assert(offsetof(NpCommerceDialogResult, userData) == 8);
+
 struct NpCommerceDialogParam {
     CommonDialogBaseParam base;
     std::uint32_t size;

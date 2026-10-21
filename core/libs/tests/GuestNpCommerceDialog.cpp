@@ -17,7 +17,7 @@ int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param);
 int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param);
 int APS5_VABI sceNpCommerceDialogUpdateStatus(void);
 int APS5_VABI sceNpCommerceDialogGetStatus(void);
-int APS5_VABI sceNpCommerceDialogGetResult(void* result);
+int APS5_VABI sceNpCommerceDialogGetResult(NpCommerceDialogResult* result);
 int APS5_VABI sceNpCommerceDialogClose(void);
 int APS5_VABI sceNpCommerceDialogTerminate();
 }
@@ -33,15 +33,15 @@ constexpr int statusInitialized = 1;
 constexpr int statusFinished = 3;
 constexpr std::int32_t resultUserCanceled = 1;
 
-void RequireCanceledResult() {
-    std::uint8_t result[0x20];
-    std::memset(result, 0x33, sizeof(result));
-    Require(sceNpCommerceDialogGetResult(result) == 0);
-    std::int32_t value = 0;
-    std::memcpy(&value, result, sizeof(value));
-    Require(value == resultUserCanceled);
-    Require(result[4] == 0);
-    Require(result[5] == 0x33);
+void RequireCanceledResult(std::uint64_t userData, bool clearsReserved) {
+    NpCommerceDialogResult result;
+    std::memset(&result, 0x33, sizeof(result));
+    Require(sceNpCommerceDialogGetResult(&result) == resultUserCanceled);
+    Require(result.result == resultUserCanceled);
+    Require(result.authorized == 0);
+    Require(result.userData == userData);
+    for (const auto value : result.padding) Require(value == 0x33);
+    for (const auto value : result.reserved) Require(value == (clearsReserved ? 0 : 0x33));
 }
 
 }
@@ -56,6 +56,7 @@ int main() {
     param2.base.magic = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&param2)) - 1060003575u;
     param2.size = sizeof(param2);
     param2.userId = USER_SERVICE_INITIAL_USER_ID;
+    param2.userData = 0x123456789abcdef0;
     Require(sceNpCommerceDialogGetStatus() == statusNone);
     Require(sceNpCommerceDialogOpen(nullptr) == static_cast<int>(0x80B8000Du));
     Require(sceNpCommerceDialogOpen2(nullptr) == static_cast<int>(0x80B8000Du));
@@ -69,18 +70,18 @@ int main() {
     Require(sceNpCommerceDialogTerminate() == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogGetResult(nullptr) == static_cast<int>(0x80B8000Du));
-    std::uint8_t result[48]{};
-    Require(sceNpCommerceDialogGetResult(result) == static_cast<int>(0x80B80003u));
+    NpCommerceDialogResult result{};
+    Require(sceNpCommerceDialogGetResult(&result) == static_cast<int>(0x80B80003u));
     Require(sceNpCommerceDialogInitialize() == 0);
     Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B8000Bu));
-    Require(sceNpCommerceDialogGetResult(result) == static_cast<int>(0x80B80005u));
+    Require(sceNpCommerceDialogGetResult(&result) == static_cast<int>(0x80B80005u));
     Require(sceNpCommerceDialogGetResult(nullptr) == static_cast<int>(0x80B8000Du));
     Require(sceNpCommerceDialogGetStatus() == statusInitialized);
 
     Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
     Require(sceNpCommerceDialogGetStatus() == statusFinished);
-    RequireCanceledResult();
+    RequireCanceledResult(param2.userData, true);
 
     Require(sceNpCommerceDialogClose() == static_cast<int>(0x80B8000Bu));
     Require(sceNpCommerceDialogGetStatus() == statusFinished);
@@ -158,6 +159,7 @@ int main() {
     param2.userId = -1;
     Require(sceNpCommerceDialogOpen2(&param2) == static_cast<int>(0x80B8000Au));
     param2.userId = USER_SERVICE_INITIAL_USER_ID;
+    param2.userData = 0x123456789abcdef0;
     for (std::uint32_t mode : {1000u, 1001u}) {
         param.mode = mode;
         param.productCount = 0;
@@ -174,7 +176,9 @@ int main() {
     sdkVersion = 0x01700000;
     std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
     param.argument = 3;
+    param.userData = 0xfedcba9876543210;
     Require(sceNpCommerceDialogOpen(&param) == 0);
+    RequireCanceledResult(param.userData, true);
     sdkVersion = 0x01600000;
     std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
     param.size = 0;
@@ -183,9 +187,10 @@ int main() {
     param.reserved[31] = 1;
     param.argument = 7;
     Require(sceNpCommerceDialogOpen(&param) == 0);
+    RequireCanceledResult(param.userData, false);
     Require(sceNpCommerceDialogOpen2(&param2) == 0);
     Require(sceNpCommerceDialogUpdateStatus() == statusFinished);
-    RequireCanceledResult();
+    RequireCanceledResult(param2.userData, false);
     Require(sceNpCommerceDialogTerminate() == 0);
     Require(sceNpCommerceDialogGetStatus() == statusNone);
     Require(sceUserServiceTerminate() == 0);

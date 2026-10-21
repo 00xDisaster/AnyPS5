@@ -24,6 +24,7 @@ constexpr int COMMON_DIALOG_ERROR_INVALID_ARGUMENT = static_cast<int>(0x80B8000A
 constexpr int COMMON_DIALOG_ERROR_NOT_RUNNING = static_cast<int>(0x80B8000Bu);
 
 int g_status = COMMON_DIALOG_STATUS_NONE;
+std::uint64_t g_userData = 0;
 
 std::uint32_t compiledSdkVersion() {
  const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
@@ -106,6 +107,7 @@ int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param) {
  if (!ValidateCommonDialogBaseParam(param->base)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
  if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
  if (!validateParam(*param)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
+ g_userData = param->userData;
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }
@@ -118,16 +120,16 @@ int APS5_VABI sceNpCommerceDialogGetStatus(void) {
  return g_status;
 }
 
-int APS5_VABI sceNpCommerceDialogGetResult(void* result) {
+int APS5_VABI sceNpCommerceDialogGetResult(NpCommerceDialogResult* result) {
  if (result == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
  if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
  if (g_status != COMMON_DIALOG_STATUS_FINISHED) return COMMON_DIALOG_ERROR_NOT_FINISHED;
- // SceNpCommerceDialogResult: int32 result, bool authorized, then reserved bytes.
- std::int32_t value = COMMON_DIALOG_RESULT_USER_CANCELED;
- std::memcpy(result, &value, sizeof(value));
- std::uint8_t authorized = 0;
- std::memcpy(static_cast<std::uint8_t*>(result) + sizeof(value), &authorized, sizeof(authorized));
- return 0;
+ const auto sdkVersion = compiledSdkVersion();
+ result->result = COMMON_DIALOG_RESULT_USER_CANCELED;
+ result->authorized = 0;
+ result->userData = g_userData;
+ if (sdkVersion >= 0x01700000) std::fill(std::begin(result->reserved), std::end(result->reserved), 0);
+ return COMMON_DIALOG_RESULT_USER_CANCELED;
 }
 
 int APS5_VABI sceNpCommerceDialogClose(void) {
@@ -162,6 +164,7 @@ int APS5_VABI sceNpCommerceDialogOpen2(const NpCommerceDialogParam2* param) {
  if (!ValidateCommonDialogBaseParam(param->base)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
  if (g_status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
  if (!validateParam2(*param)) return COMMON_DIALOG_ERROR_INVALID_ARGUMENT;
+ g_userData = param->userData;
  g_status = COMMON_DIALOG_STATUS_FINISHED;
  return 0;
 }
