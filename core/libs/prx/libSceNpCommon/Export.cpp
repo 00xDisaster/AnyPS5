@@ -152,4 +152,46 @@ int APS5_VABI sceNpLwMutexUnlock(PthreadMutex* mutex) {
     return sceNpMutexUnlock(mutex);
 }
 
+int APS5_VABI sceNpCondInit(PthreadCond* cond, const char* name, std::uint64_t) {
+    PthreadCondattr attr = nullptr;
+    int result = scePthreadCondattrInit(&attr);
+    if (result != 0) return result;
+    result = scePthreadCondInit(cond, &attr, name);
+    scePthreadCondattrDestroy(&attr);
+    return result;
+}
+
+int APS5_VABI sceNpCondDestroy(PthreadCond* cond) {
+    return scePthreadCondDestroy(cond);
+}
+
+int APS5_VABI sceNpCondSignal(PthreadCond* cond) {
+    return scePthreadCondSignal(cond);
+}
+
+int APS5_VABI sceNpCondTimedwait(PthreadCond* cond, PthreadMutex* mutex, std::uint32_t usec) {
+    if (usec == 0) return scePthreadCondWait(cond, mutex);
+    const int result = scePthreadCondTimedwait(cond, mutex, usec);
+    return result == KERNEL_ERROR_ETIMEDOUT ? NP_LW_COND_ERROR_TIMEDOUT : result;
+}
+
+int APS5_VABI sceNpJoinThread(Pthread thread, void** retval) {
+    return scePthreadJoin(thread, retval);
+}
+
+int APS5_VABI sceNpGetSystemClockUsec(std::int64_t* usec) {
+    KernelTimespec now{};
+    const int result = sceKernelClockGettime(CLOCK_MONOTONIC_ID, &now);
+    if (result == 0) *usec = now.tv_sec * 1000000 + now.tv_nsec / 1000;
+    return result;
+}
+
+void APS5_VABI sceNpGetSdkVersion(char* version) {
+    SystemSwVersion swVersion{};
+    swVersion.size = sizeof(swVersion);
+    sceKernelGetSystemSwVersion_nid_postfix(&swVersion);
+    const std::uint32_t hex = swVersion.version;
+    std::snprintf(version, 8, "%u.%02u", ((hex >> 24) & 0xF) + (hex >> 28) * 10, ((hex >> 16) & 0xF) + ((hex >> 20) & 0xF) * 10);
+}
+
 }
