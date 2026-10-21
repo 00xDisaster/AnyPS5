@@ -594,6 +594,7 @@ def audit(imports, exports, stubs, libraries, modules, module_imports=None, modu
         record["providers"] = providers
         record["library_mismatch"] = kind in ("implemented", "stub") and bool(library) and library not in providers and "libc.prx" not in providers
         record["name"] = next((stubs[(provider, resolved_nid)] for provider in providers if (provider, resolved_nid) in stubs), None) if kind == "stub" else None
+        record["symbol_mismatch"] = kind in ("implemented", "stub") and resolved_nid != nid and bool(library)
     ordered = sorted(records.values(), key=lambda record: (record["class"], record["library"] or "", record.get("module") or "", record["nid"]))
     check_conservation(len(imports) + sum(len(symbols) for symbols, _ in (module_imports or {}).values()), ordered)
     missing = defaultdict(int)
@@ -618,7 +619,7 @@ def current_stop(imports, records):
         if weak:
             continue
         record = classes.get((nid, library))
-        if record is not None and record["class"] == "absent":
+        if record is not None and (record["class"] == "absent" or record["symbol_mismatch"]):
             return record
     return None
 
@@ -677,6 +678,7 @@ def summarize(records, references, missing, missing_hosts=()):
         "missing_libraries": missing,
         "missing_host_dependencies": [{"importer": entry["importer"], "chain": list(entry["chain"])} for entry in missing_hosts],
         "library_mismatch": sum(1 for record in records if record["library_mismatch"]),
+        "symbol_mismatch": sum(1 for record in records if record["symbol_mismatch"]),
     }
 
 
@@ -722,6 +724,10 @@ def render(summary, records, missing, stops, missing_hosts=(), located=None):
                     current = record["library"]
                     lines.append(f"  [{current or 'library not named'}]")
                 lines.append(f"    {label(record)}")
+    mismatched = [record for record in records if record["symbol_mismatch"]]
+    if mismatched:
+        lines.extend(["", f"Qualified import names exported only as their NID ({len(mismatched)}): the loader cannot resolve these names"])
+        lines.extend(f"  {label(record)} -> {nid_names.compute_nid(record['nid'])}" for record in mismatched)
     if stops:
         lines.append("")
         lines.append("Current stop (first unresolved import, in registry order)")
@@ -800,7 +806,7 @@ def main(argv=None):
         return 2
     located = locate_missing(missing, {path.resolve().parent for path in args.registries}) if missing else None
     print(render(summary, records, missing, stops, missing_hosts, located))
-    return 1 if summary["unique_by_class"]["absent"] or missing or missing_hosts or (args.strict_providers and summary["library_mismatch"]) or (args.strict_stubs and summary["unique_by_class"]["stub"]) else 0
+    return 1 if summary["unique_by_class"]["absent"] or summary["symbol_mismatch"] or missing or missing_hosts or (args.strict_providers and summary["library_mismatch"]) or (args.strict_stubs and summary["unique_by_class"]["stub"]) else 0
 
 
 if __name__ == "__main__":
