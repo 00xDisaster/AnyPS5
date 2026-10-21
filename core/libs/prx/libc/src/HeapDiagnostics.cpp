@@ -3,12 +3,17 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <stdexcept>
 
 namespace {
 
 std::uint64_t mspaceAtomicIdMask = 0;
-std::array<std::uint64_t, 64> mstateTable{};
+constexpr std::size_t MspaceTableCapacity = 65;
+std::array<std::uint64_t, MspaceTableCapacity> mstateTable{};
+
+static_assert(MspaceTableCapacity == 65);
+static_assert(mstateTable.size() == MspaceTableCapacity);
 
 static_assert(sizeof(LibcHeapInfo) == 32);
 static_assert(offsetof(LibcHeapInfo, mspace_atomic_id_mask) == 16);
@@ -28,18 +33,14 @@ void LibcHeapTraceInfo_nid_no_patch(LibcHeapInfo* info) {
     info->mstate_table = mstateTable.data();
 }
 
-// unknown signature
 void APS5_VABI sceLibcInternalBacktraceForGame_nid_postfix(const char* heapName) {
-    (void)heapName;
-    NotImplemented_nid_no_patch(__func__);
+    std::fprintf(stderr, "[%s] backtrace requested from guest 0x%llx\n", heapName ? heapName : "",
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(__builtin_return_address(0))));
 }
 
-// unknown signature
 void APS5_VABI sceLibcInternalHeapErrorReportForGame_nid_postfix(void* heap, void* block, std::uint32_t error) {
-    (void)heap;
-    (void)block;
-    (void)error;
-    NotImplemented_nid_no_patch(__func__);
+    std::fprintf(stderr, "[libc] heap error 0x%x: heap %p, block %p, reported from guest 0x%llx\n", error, heap, block,
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(__builtin_return_address(0))));
 }
 
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "prx/libSceFont/include/FontInternal.hpp"
+#include "prx/libc/include/FilesystemError.hpp"
 
 namespace {
 
@@ -226,6 +228,13 @@ std::shared_ptr<const std::vector<unsigned char>> SystemFontBytes(const std::fil
     return bytes;
 }
 
+void WarnMissingSystemFont(std::uint32_t fontSetType) {
+    static std::once_flag warned;
+    std::call_once(warned, [&] {
+        std::fprintf(stderr, "[libSceFont] no file for system font set 0x%08X in %s. Titles that lay out text in system fonts can fail far from here without them: put the console's fonts or the Noto substitutes from docs/user/USAGE.md there, or set ANYPS5_SYSTEM_FONTS to their directory.\n", fontSetType, SystemFontDirectory().string().c_str());
+    });
+}
+
 void CopyStyleToCache(FontHandleNative* font) {
     std::memcpy(&font->cached_style.state, &font->style, sizeof(StyleStateBlock));
 }
@@ -280,7 +289,11 @@ int APS5_VABI sceFontOpenFontFile(FontLibrary library, const char* path, std::ui
         return SCE_FONT_ERROR_INVALID_LIBRARY;
     }
     if (!pFontHandle) return SCE_FONT_ERROR_INVALID_PARAMETER;
-    const std::filesystem::path hostPath = path ? ResolvePath_nid_no_patch(path) : std::filesystem::path{};
+    std::filesystem::path hostPath;
+    if (path && ResolvePathError_nid_no_patch(path, hostPath) != 0) {
+        *pFontHandle = nullptr;
+        return SCE_FONT_ERROR_FS_OPEN_FAILED;
+    }
     const std::string hostPathString = hostPath.string();
     std::uint32_t libraryLock = 0;
     const int beginRc = BeginOpen(library, pFontHandle, libraryLock);
@@ -387,6 +400,7 @@ int APS5_VABI sceFontOpenFontInstance(FontHandle fontHandle, FontHandle setupFon
         targetState.scaleW = sourceState->scaleW;
         targetState.scaleH = sourceState->scaleH;
         if (sourceState->faceData && !sourceState->faceData->empty()) LoadStateFace(targetState, sourceState->faceData, subFontIndex);
+        for (const FallbackFace& fallback : sourceState->fallbacks) AddStateFallbackFace(targetState, fallback.data, fallback.subFontIndex);
     }
     if (pFontHandle) *pFontHandle = target;
     return SCE_FONT_OK;
@@ -402,6 +416,7 @@ int APS5_VABI sceFontOpenFontSet(FontLibrary library, std::uint32_t fontSetType,
     if (!pFontHandle) return SCE_FONT_ERROR_INVALID_PARAMETER;
     const std::optional<SystemFontFile> file = FindSystemFontFile(fontSetType);
     APS5_LOG_OUT("fontSetType=0x%08X file=%s", fontSetType, file ? file->path.string().c_str() : "(none)");
+    if (!file && IsSystemFontSet(fontSetType)) WarnMissingSystemFont(fontSetType);
     std::uint32_t libraryLock = 0;
     if (!AcquireLibraryLock(lib, libraryLock)) {
         *pFontHandle = nullptr;
@@ -427,8 +442,13 @@ int APS5_VABI sceFontOpenFontSet(FontLibrary library, std::uint32_t fontSetType,
         if (openRc == SCE_FONT_ERROR_FS_OPEN_FAILED || openRc == SCE_FONT_ERROR_NO_SUPPORT_FORMAT) return SCE_FONT_ERROR_FONT_OPEN_FAILED;
         if (openRc != SCE_FONT_OK) return openRc;
         GetNativeFont(*pFontHandle)->open_info.fontset_flags = fontSetType;
+        const std::vector<SystemFontFile> fallbackFiles = FindSystemFontFallbackFiles(fontSetType);
+        for (const SystemFontFile& fallback : fallbackFiles) APS5_LOG_OUT("fontSetType=0x%08X fallback=%s", fontSetType, fallback.path.string().c_str());
         FontState& state = ResetState(*pFontHandle);
         if (auto bytes = SystemFontBytes(file->path)) LoadStateFace(state, std::move(bytes), file->subFontIndex);
+        for (const SystemFontFile& fallback : fallbackFiles) {
+            if (auto bytes = SystemFontBytes(fallback.path)) AddStateFallbackFace(state, std::move(bytes), fallback.subFontIndex);
+        }
         return SCE_FONT_OK;
     }
     ReleaseLibraryLock(lib, libraryLock);

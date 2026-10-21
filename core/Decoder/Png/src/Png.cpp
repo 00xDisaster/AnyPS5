@@ -138,9 +138,9 @@ std::optional<Header> ParseHeader(std::span<const std::uint8_t> png) {
     while (png.size() - offset >= CHUNK_OVERHEAD) {
         const std::uint32_t length = readBigEndian32(&png[offset]);
         const std::uint8_t* type = &png[offset + 4];
+        if (length > png.size() - offset - CHUNK_OVERHEAD) break;
         if (isChunkType(type, "tRNS")) header.hasTransparency = true;
         if (isChunkType(type, "tRNS") || isChunkType(type, "IDAT") || isChunkType(type, "IEND")) break;
-        if (length > png.size() - offset - CHUNK_OVERHEAD) break;
         offset += CHUNK_OVERHEAD + length;
     }
     return header;
@@ -152,12 +152,12 @@ std::optional<Image> Decode(std::span<const std::uint8_t> png) {
     int width = 0;
     int height = 0;
     int channels = 0;
-    stbi_uc* decoded = stbi_load_from_memory(png.data(), static_cast<int>(png.size()), &width, &height, &channels, 4);
+    const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> decoded(
+        stbi_load_from_memory(png.data(), static_cast<int>(png.size()), &width, &height, &channels, 4), stbi_image_free);
     if (!decoded) return std::nullopt;
 
     Image image{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), {}};
-    image.pixels.assign(decoded, decoded + static_cast<std::size_t>(image.width) * image.height * 4);
-    stbi_image_free(decoded);
+    image.pixels.assign(decoded.get(), decoded.get() + static_cast<std::size_t>(image.width) * image.height * 4);
     return image;
 }
 

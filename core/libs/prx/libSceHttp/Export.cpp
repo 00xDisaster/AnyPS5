@@ -1,18 +1,120 @@
 #include <cstdint>
 #include <cstddef>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceHttp/src/HttpErrors.hpp"
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string_view>
-#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 // No network is emulated: contexts, templates and requests can be created, but any request
 // that would touch the network fails with the library's network error.
 static std::atomic<int> g_nextHandle{1};
+using HttpRequestStatusCallback = void (APS5_VABI *)(int, int, void*);
+struct RequestStatusRegistration {
+    HttpRequestStatusCallback callback;
+    void* argument;
+};
+static std::mutex g_statusMutex;
+static std::map<int, RequestStatusRegistration> g_statusCallbacks;
+struct HttpsCaList {
+    void* certs;
+    int certsNum;
+};
+
+#ifdef _WIN32
+struct HostMutex {
+    SRWLOCK native = SRWLOCK_INIT;
+
+    HostMutex() = default;
+    HostMutex(const HostMutex&) = delete;
+    HostMutex& operator=(const HostMutex&) = delete;
+
+    void lock() { AcquireSRWLockExclusive(&native); }
+    void unlock() { ReleaseSRWLockExclusive(&native); }
+};
+#else
+using HostMutex = std::mutex;
+#endif
+
+class HostCondition {
+public:
+    HostCondition() = default;
+    HostCondition(const HostCondition&) = delete;
+    HostCondition& operator=(const HostCondition&) = delete;
+
+    void NotifyAll() {
+#ifdef _WIN32
+        WakeAllConditionVariable(&native);
+#else
+        native.notify_all();
+#endif
+    }
+
+    void Wait(std::unique_lock<HostMutex>& lock) {
+#ifdef _WIN32
+        if (!SleepConditionVariableSRW(&native, &lock.mutex()->native, INFINITE, 0))
+            throw std::runtime_error("libSceHttp: native condition wait failed");
+#else
+        native.wait(lock);
+#endif
+    }
+
+    void WaitUntil(std::unique_lock<HostMutex>& lock, std::chrono::steady_clock::time_point deadline) {
+#ifdef _WIN32
+        const auto now = std::chrono::steady_clock::now();
+        if (deadline <= now) return;
+        const auto milliseconds = std::chrono::ceil<std::chrono::milliseconds>(deadline - now).count();
+        if (!SleepConditionVariableSRW(&native, &lock.mutex()->native, static_cast<DWORD>(milliseconds), 0) &&
+            GetLastError() != ERROR_TIMEOUT)
+            throw std::runtime_error("libSceHttp: native condition wait failed");
+#else
+        native.wait_until(lock, deadline);
+#endif
+    }
+
+private:
+#ifdef _WIN32
+    CONDITION_VARIABLE native = CONDITION_VARIABLE_INIT;
+#else
+    std::condition_variable native;
+#endif
+};
+
+struct HttpEpoll {
+    HostMutex mutex;
+    HostCondition wake;
+    bool aborted = false;
+    bool destroyed = false;
+};
+
+static std::mutex g_stateMutex;
+static std::unordered_set<int> g_contexts;
+static std::unordered_map<HttpEpollHandle, std::shared_ptr<HttpEpoll>> g_epolls;
+
+static std::shared_ptr<HttpEpoll> FindEpoll(HttpEpollHandle eh) {
+    const auto it = g_epolls.find(eh);
+    return it == g_epolls.end() ? nullptr : it->second;
+}
+
+static void MarkDestroyed(HttpEpoll& epoll) {
+    std::lock_guard lock(epoll.mutex);
+    epoll.destroyed = true;
+    epoll.wake.NotifyAll();
+}
 
 extern "C" {
 
@@ -26,6 +128,20 @@ int APS5_VABI sceHttpAddRequestHeader(int id, const char* name, const char* valu
     (void)name;
     (void)value;
     (void)mode;
+    return 0;
+}
+
+int APS5_VABI sceHttpAuthCacheFlush(int httpCtxId) {
+    std::lock_guard lock(g_stateMutex);
+    if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+    if (!g_contexts.contains(httpCtxId)) return ERROR_INVALID_ID;
+    return 0;
+}
+
+int APS5_VABI sceHttpCookieFlush(int httpCtxId) {
+    std::lock_guard lock(g_stateMutex);
+    if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+    if (!g_contexts.contains(httpCtxId)) return ERROR_INVALID_ID;
     return 0;
 }
 
@@ -46,9 +162,13 @@ int APS5_VABI sceHttpCreateConnectionWithURL(int tmpl_id, const char* url, int e
 }
 
 int APS5_VABI sceHttpCreateEpoll(int http_ctx_id, HttpEpollHandle* eh) {
-    (void)http_ctx_id;
+    std::lock_guard lock(g_stateMutex);
+    if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+    if (!g_contexts.contains(http_ctx_id)) return ERROR_INVALID_ID;
     if (!eh) return ERROR_INVALID_VALUE;
-    *eh = new HttpEpoll{};
+    auto epoll = std::make_shared<HttpEpoll>();
+    *eh = epoll.get();
+    g_epolls.emplace(epoll.get(), std::move(epoll));
     return 0;
 }
 
@@ -82,7 +202,8 @@ int APS5_VABI sceHttpDeleteConnection(int conn_id) {
 }
 
 int APS5_VABI sceHttpDeleteRequest(int req_id) {
-    (void)req_id;
+    std::lock_guard lock(g_statusMutex);
+    g_statusCallbacks.erase(req_id);
     return 0;
 }
 
@@ -92,8 +213,17 @@ int APS5_VABI sceHttpDeleteTemplate(int tmpl_id) {
 }
 
 int APS5_VABI sceHttpDestroyEpoll(int http_ctx_id, HttpEpollHandle eh) {
-    (void)http_ctx_id;
-    delete eh;
+    std::shared_ptr<HttpEpoll> epoll;
+    {
+        std::lock_guard lock(g_stateMutex);
+        if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+        if (!g_contexts.contains(http_ctx_id)) return ERROR_INVALID_ID;
+        if (!eh) return ERROR_INVALID_VALUE;
+        epoll = FindEpoll(eh);
+        if (!epoll) return ERROR_INVALID_ID;
+        g_epolls.erase(eh);
+    }
+    MarkDestroyed(*epoll);
     return 0;
 }
 
@@ -121,7 +251,10 @@ int APS5_VABI sceHttpInit_nid_postfix(int memid, int ssl_ctx_id, uint64_t pool_s
     (void)memid;
     (void)ssl_ctx_id;
     (void)pool_size;
-    return g_nextHandle.fetch_add(1, std::memory_order_relaxed);
+    const int id = g_nextHandle.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard lock(g_stateMutex);
+    g_contexts.insert(id);
+    return id;
 }
 
 int APS5_VABI sceHttpsDisableOption(int id, uint32_t ssl_flags) {
@@ -188,6 +321,12 @@ int APS5_VABI sceHttpSetRecvTimeOut(int id, uint32_t usec) {
     return 0;
 }
 
+int APS5_VABI sceHttpSetRecvBlockSize(int id, uint32_t block_size) {
+    (void)id;
+    (void)block_size;
+    return 0;
+}
+
 int APS5_VABI sceHttpSetResponseHeaderMaxSize(int id, uint64_t header_size) {
     (void)id;
     (void)header_size;
@@ -232,7 +371,16 @@ int APS5_VABI sceHttpsSetSslCallback(int id, HttpsCallback cbfunc, void* user_ar
 }
 
 int APS5_VABI sceHttpTerm_nid_postfix(int http_ctx_id) {
-    (void)http_ctx_id;
+    std::vector<std::shared_ptr<HttpEpoll>> epolls;
+    {
+        std::lock_guard lock(g_stateMutex);
+        if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+        if (g_contexts.erase(http_ctx_id) == 0) return ERROR_INVALID_ID;
+        if (!g_contexts.empty()) return 0;
+        for (auto& [handle, epoll] : g_epolls) epolls.push_back(std::move(epoll));
+        g_epolls.clear();
+    }
+    for (const auto& epoll : epolls) MarkDestroyed(*epoll);
     return 0;
 }
 
@@ -242,10 +390,23 @@ int APS5_VABI sceHttpUnsetEpoll(int id) {
 }
 
 int APS5_VABI sceHttpWaitRequest(HttpEpollHandle eh, HttpNBEvent* nbev, int maxevents, int timeout) {
-    if (!eh || !nbev || maxevents <= 0) return ERROR_INVALID_VALUE;
-    if (timeout < 0) NotImplemented_nid_no_patch(__func__);
-    std::this_thread::sleep_for(std::chrono::microseconds(timeout));
-    return 0;
+    std::shared_ptr<HttpEpoll> epoll;
+    {
+        std::lock_guard lock(g_stateMutex);
+        if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+        if (!eh || !nbev || maxevents <= 0) return ERROR_INVALID_VALUE;
+        epoll = FindEpoll(eh);
+        if (!epoll) return ERROR_INVALID_ID;
+    }
+    std::unique_lock lock(epoll->mutex);
+    const auto woken = [&] { return epoll->aborted || epoll->destroyed; };
+    if (timeout < 0) {
+        while (!woken()) epoll->wake.Wait(lock);
+    } else {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(timeout);
+        while (!woken() && std::chrono::steady_clock::now() < deadline) epoll->wake.WaitUntil(lock, deadline);
+    }
+    return epoll->aborted ? ERROR_ABORTED : 0;
 }
 
 int APS5_VABI sceHttpCreateRequestWithURL(int conn_id, int method, const char* url, uint64_t content_length) {
@@ -281,8 +442,11 @@ int APS5_VABI sceHttpSetInflateGZIPEnabled(int id, int enable) {
     return 0;
 }
 
-int APS5_VABI sceHttpSetRequestStatusCallback(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceHttpSetRequestStatusCallback(int id, HttpRequestStatusCallback callback, void* argument) {
+    if (id <= 0 || id >= g_nextHandle.load(std::memory_order_relaxed)) return static_cast<int>(0x80431100u);
+    std::lock_guard lock(g_statusMutex);
+    if (callback) g_statusCallbacks[id] = {callback, argument};
+    else g_statusCallbacks.erase(id);
     return 0;
 }
 
@@ -317,35 +481,42 @@ int APS5_VABI sceHttpParseResponseHeader(const char* header, std::size_t headerL
     }
     if (!found) return notFound;
 
-    while (start < headerLen && isSpace(input[start])) {
-        if (input[start++] == '\n') break;
-    }
-    std::size_t end = headerLen;
-    std::size_t consumed = headerLen;
-    std::size_t scan = start;
-    while (scan < headerLen) {
-        const auto newline = input.find('\n', scan);
-        if (newline == std::string_view::npos) break;
-        const auto next = newline + 1;
-        if (next < headerLen && (input[next] == ' ' || input[next] == '\t')) {
-            scan = next;
-            continue;
-        }
-        end = newline > start && input[newline - 1] == '\r' ? newline - 1 : newline;
-        consumed = next;
-        break;
-    }
-    if (end == start) {
+    const auto continues = [&input, headerLen](std::size_t next) { return next < headerLen && (input[next] == ' ' || input[next] == '\t'); };
+    const auto empty = [fieldValue, valueLen] {
         *fieldValue = nullptr;
         *valueLen = 0;
         return 0;
+    };
+    while (start < headerLen) {
+        const std::size_t lineFeed = input[start] == '\r' && start + 1 < headerLen && input[start + 1] == '\n' ? start + 1 : start;
+        if (input[lineFeed] == '\n') {
+            if (!continues(lineFeed + 1)) return empty();
+            start = lineFeed + 1;
+        } else if (isSpace(input[start])) {
+            ++start;
+        } else {
+            break;
+        }
     }
-    if (consumed > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        throw std::out_of_range("sceHttpParseResponseHeader: consumed byte count exceeds int");
+    if (start == headerLen) return empty();
+    std::size_t end = headerLen;
+    std::size_t scan = start;
+    while (scan < headerLen) {
+        const auto newline = input.find('\n', scan);
+        if (newline == std::string_view::npos || newline + 1 == headerLen) break;
+        if (continues(newline + 1)) {
+            scan = newline + 1;
+            continue;
+        }
+        end = newline > start && input[newline - 1] == '\r' ? newline - 1 : newline;
+        break;
+    }
+    if (end > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        throw std::out_of_range("sceHttpParseResponseHeader: value end exceeds int");
     }
     *fieldValue = header + start;
     *valueLen = end - start;
-    return static_cast<int>(consumed);
+    return static_cast<int>(end);
 }
 
 int APS5_VABI sceHttpCreateRequest2(int conn_id, const char* method, const char* path, uint64_t content_length) {
@@ -412,6 +583,280 @@ int APS5_VABI sceHttpSetRedirectCallback(int id, HttpRedirectCallback cbfunc, vo
     (void)id;
     (void)cbfunc;
     (void)user_arg;
+    return 0;
+}
+
+int APS5_VABI sceHttpAbortWaitRequest(HttpEpollHandle eh) {
+    std::shared_ptr<HttpEpoll> epoll;
+    {
+        std::lock_guard lock(g_stateMutex);
+        if (g_contexts.empty()) return ERROR_BEFORE_INIT;
+        if (!eh) return ERROR_INVALID_VALUE;
+        epoll = FindEpoll(eh);
+        if (!epoll) return ERROR_INVALID_ID;
+    }
+    std::lock_guard lock(epoll->mutex);
+    epoll->aborted = true;
+    epoll->wake.NotifyAll();
+    return 0;
+}
+
+int APS5_VABI sceHttpsGetCaList(int http_ctx_id, HttpsCaList* ca_list) {
+    (void)http_ctx_id;
+    if (!ca_list) return ERROR_INVALID_VALUE;
+    ca_list->certs = nullptr;
+    ca_list->certsNum = 0;
+    return 0;
+}
+
+int APS5_VABI sceHttpsFreeCaList(int http_ctx_id, HttpsCaList* ca_list) {
+    (void)http_ctx_id;
+    if (!ca_list) return ERROR_INVALID_VALUE;
+    ca_list->certs = nullptr;
+    ca_list->certsNum = 0;
+    return 0;
+}
+
+int APS5_VABI sceHttpAuthCacheImport(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpAuthCacheExport(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgEnableProfile(void) {
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgSetPrintf(void) {
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgShowStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetMemoryPoolStats(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgShowConnectionStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgShowRequestStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgShowMemoryPoolStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgGetConnectionStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpDbgGetRequestStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpAbortRequestForce(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpAddRequestHeaderRaw(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpRemoveRequestHeader(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetAuthEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetAutoRedirect(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpTrySetNonblock(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetNonblock(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpTryGetNonblock(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetEpollId(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetEpollId(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetEpoll(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetCookie(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetCookieEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpAddCookie(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetCookieSendCallback(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpCookieExport(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpCookieImport(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetCookieTotalMaxSize(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetCookieMaxSize(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetCookieMaxNum(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetCookieMaxNumPerDomain(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetCookieStats(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpsEnableOptionPrivate(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpsDisableOptionPrivate(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetPriorityOption(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetPolicyOption(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpRequestGetAllHeaders(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetAcceptEncodingGZIPEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetAcceptEncodingGZIPEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetDefaultAcceptEncodingGZIPEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetProxy(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetSocketCreationCallback(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetHttp09Enabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetRegisteredCtxIds(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpGetConnectionStat(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpAddQuery(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpSetDelayBuildRequestEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceHttpCacheRedirectedConnectionEnabled(void) {
+    NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 

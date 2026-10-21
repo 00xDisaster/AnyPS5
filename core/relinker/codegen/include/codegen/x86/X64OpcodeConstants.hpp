@@ -146,6 +146,7 @@ inline constexpr std::uint8_t TwoByteMovdMovq = 0x7E;
 inline constexpr std::uint8_t TwoByteMovqMmxXmm = 0x6F;
 inline constexpr std::uint8_t TwoByteMovdqu = 0x7F;
 inline constexpr std::uint8_t TwoByteGrp7 = 0x01;
+inline constexpr std::uint8_t TwoByteMaskmov = 0xF7;
 inline constexpr std::uint8_t TwoByteShiftImm8Min = 0x70;
 inline constexpr std::uint8_t TwoByteShiftImm8Max = 0x73;
 inline constexpr std::uint8_t ThreeByteEscape38 = 0x38;
@@ -170,6 +171,7 @@ inline constexpr std::uint8_t TwoByteGrp6 = 0x00;
 inline constexpr std::uint8_t TwoByteLar = 0x02;
 inline constexpr std::uint8_t TwoByteLsl = 0x03;
 inline constexpr std::uint8_t TwoBytePrefetchw = 0x0D;
+inline constexpr std::uint8_t TwoByte3DNow = 0x0F;
 inline constexpr std::uint8_t TwoByteMovCrDrMin = 0x20;
 inline constexpr std::uint8_t TwoByteMovCrDrMax = 0x23;
 inline constexpr std::uint8_t TwoBytePopcnt = 0xB8;
@@ -220,6 +222,10 @@ inline constexpr std::size_t Vex2PrefixLength = 2;
 inline constexpr std::size_t Vex3PrefixLength = 3;
 inline constexpr std::uint8_t Vex3MapMask = 0x1F;
 inline constexpr std::uint8_t Vex3Map0F3A = 0x03;
+inline constexpr std::uint8_t XopPrefix = 0x8F;
+inline constexpr std::uint8_t XopMapMin = 0x08;
+inline constexpr std::uint8_t XopMap8 = 0x08;
+inline constexpr std::uint8_t XopMapA = 0x0A;
 
 }
 

@@ -42,7 +42,7 @@ public:
         {
             std::lock_guard lock(mutex);
             if (failure) std::rethrow_exception(failure);
-            if (stopping) throw std::runtime_error("profile output is stopping");
+            if (stopping) return false;
             if (text.empty()) return true;
             if (text.size() > capacity - bytes) {
                 ++dropped;
@@ -57,6 +57,8 @@ public:
         return true;
     }
 
+    void Print(const char* text) { Print("%s", text); }
+
     template<typename... TArgs>
     void Print(const char* format, TArgs... args) {
         std::array<char, 2048> local{};
@@ -67,6 +69,7 @@ public:
         } else if (static_cast<std::size_t>(size) > capacity) {
             std::lock_guard lock(mutex);
             if (failure) std::rethrow_exception(failure);
+            if (stopping) return;
             ++dropped;
             changed.notify_one();
         } else {

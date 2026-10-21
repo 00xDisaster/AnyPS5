@@ -25,13 +25,21 @@ constexpr std::uint32_t SAVE_DATA_MOUNT_MODE_RDWR = 2;
 constexpr std::uint32_t SAVE_DATA_MOUNT_MODE_CREATE = 4;
 constexpr std::uint32_t SAVE_DATA_MOUNT_MODE_CREATE2 = 32;
 
-constexpr std::uint64_t SAVE_DATA_BLOCKS_MAX = 32768;
+constexpr std::uint64_t SAVE_DATA_BLOCKS_MAX = 16384;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_ALL = 0;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_TITLE = 1;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_SUB_TITLE = 2;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_DETAIL = 3;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_USER_PARAM = 4;
 constexpr std::uint32_t SAVE_DATA_PARAM_TYPE_MTIME = 5;
+
+constexpr std::uint32_t SAVE_DATA_SORT_KEY_DIRNAME = 0;
+constexpr std::uint32_t SAVE_DATA_SORT_KEY_USER_PARAM = 1;
+constexpr std::uint32_t SAVE_DATA_SORT_KEY_BLOCKS = 2;
+constexpr std::uint32_t SAVE_DATA_SORT_KEY_MTIME = 3;
+constexpr std::uint32_t SAVE_DATA_SORT_KEY_FREE_BLOCKS = 5;
+constexpr std::uint32_t SAVE_DATA_SORT_ORDER_ASCENT = 0;
+constexpr std::uint32_t SAVE_DATA_SORT_ORDER_DESCENT = 1;
 
 constexpr std::size_t SAVE_DATA_MOUNT_SLOTS = 16;
 

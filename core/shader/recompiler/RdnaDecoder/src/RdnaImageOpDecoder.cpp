@@ -70,6 +70,7 @@ constexpr ImageOpcodeInfo imageOpcodes[] = {
     {0xa5u, RdnaOpcode::ImageSample, "image_sample_b_a", RdnaImageSampleFlagBias | RdnaImageSampleFlagAdjust, true, false, false},
     {0xa8u, RdnaOpcode::ImageSample, "image_sample_c_a", RdnaImageSampleFlagCompare | RdnaImageSampleFlagAdjust, true, false, false},
     {0xb0u, RdnaOpcode::ImageSample, "image_sample_o_a", RdnaImageSampleFlagOffset | RdnaImageSampleFlagAdjust, true, false, false},
+    {0xb8u, RdnaOpcode::ImageSample, "image_sample_c_o_a", RdnaImageSampleFlagCompare | RdnaImageSampleFlagOffset | RdnaImageSampleFlagAdjust, true, false, false},
     {0x3cu, RdnaOpcode::ImageSampleCLO, nullptr, RdnaImageSampleFlagCompare | RdnaImageSampleFlagLod | RdnaImageSampleFlagOffset, true, false, false},
     {0x3fu, RdnaOpcode::ImageSampleCLzO, nullptr, RdnaImageSampleFlagCompare | RdnaImageSampleFlagLevelZero | RdnaImageSampleFlagOffset, true, false, false},
     {0x3au, RdnaOpcode::ImageSampleCDO, nullptr, RdnaImageSampleFlagCompare | RdnaImageSampleFlagDerivative | RdnaImageSampleFlagOffset, true, false, false},
@@ -162,7 +163,9 @@ const ImageOpcodeInfo& lookupOpcode(std::uint32_t opcode) {
             return entry;
         }
     }
-    throw std::runtime_error("unsupported MIMG opcode");
+    char message[48];
+    std::snprintf(message, sizeof(message), "unsupported MIMG opcode 0x%02x", opcode);
+    throw UnsupportedInstructionError(message);
 }
 
 void validateFlags(std::uint32_t flags) {
@@ -323,7 +326,7 @@ RdnaInstruction DecodeRdnaImageOp(std::span<const std::uint32_t> code, std::uint
 RdnaInstruction DecodeRdnaMimg(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex) {
     const std::size_t index = wordIndex;
     if (index >= code.size() || code.size() - index < 2u) {
-        throw std::runtime_error("truncated MIMG instruction");
+        throw std::out_of_range("truncated MIMG instruction");
     }
     const auto word0 = code[index];
     const auto word1 = code[index + 1u];
@@ -343,7 +346,7 @@ RdnaInstruction DecodeRdnaMimg(std::uint32_t programCounter, std::span<const std
     const auto nsa = (word0 >> 1u) & 3u;
     const auto wordCount = 2u + nsa;
     if (code.size() - index < wordCount) {
-        throw std::runtime_error("truncated MIMG NSA payload");
+        throw std::out_of_range("truncated MIMG NSA payload");
     }
     if (programCounter % 4u != 0u || programCounter > std::numeric_limits<std::uint32_t>::max() - (wordCount * 4u - 1u)) {
         throw std::runtime_error("invalid MIMG program counter");
@@ -415,7 +418,7 @@ RdnaInstruction DecodeRdnaMimg(std::uint32_t programCounter, std::span<const std
     const auto resource = ((word1 >> 16u) & 31u) * 4u;
     const auto sampler = ((word1 >> 21u) & 31u) * 4u;
     const bool r128 = (word0 & 0x8000u) != 0u;
-    if (resource + (r128 ? 4u : 8u) > 106u || ((info.sample || info.gather || opcode == 0x60u) && sampler + 4u > 106u)) {
+    if (resource + (r128 ? 4u : 8u) > 106u || ((info.sample || info.gather || opcode == 0x60u) && sampler > 104u)) {
         throw std::runtime_error("MIMG descriptor register range overflow");
     }
     RdnaInstruction instruction{};
