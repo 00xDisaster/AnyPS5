@@ -6,6 +6,7 @@
 #endif
 
 #include "SslTypes.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libkernel/Socket/include/SocketPoll.hpp"
 
@@ -701,17 +702,26 @@ int APS5_VABI sceSslLoadCert(int sslCtxId, int caCertNum, SceSsl::Data** caList,
 int APS5_VABI sceSslUnloadCert(int sslCtxId) {
     auto& state = State();
     std::lock_guard lock(state.mutex);
-    auto& context = GetContext(sslCtxId);
+    const auto found = state.contexts.find(sslCtxId);
+    if (found == state.contexts.end()) {
+        const auto* parameters = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
+        std::uint32_t sdkVersion;
+        std::memcpy(&sdkVersion, parameters + 16, sizeof(sdkVersion));
+        return sdkVersion < 0x07500000 ? 0 : ErrorInvalidId;
+    }
+    auto& context = *found->second;
     context.authorities.clear();
     context.identity.reset();
     return 0;
 }
 
 int APS5_VABI sceSslGetCaList(int sslCtxId, SceSsl::CaList* output) {
-    if (!output) return ErrorInvalidArg;
+    if (!output) return ErrorInvalidValue;
     auto& state = State();
     std::lock_guard lock(state.mutex);
-    auto& context = GetContext(sslCtxId);
+    const auto found = state.contexts.find(sslCtxId);
+    if (found == state.contexts.end()) return ErrorInvalidId;
+    auto& context = *found->second;
     PoolScope scope(context.pool);
     const auto count = CertificateCount(context);
     if (!count) {
@@ -743,14 +753,11 @@ int APS5_VABI sceSslFreeCaList(int sslCtxId, SceSsl::CaList* list) {
 }
 
 int APS5_VABI sceSslGetCaCerts(int sslCtxId, SceSsl::CaCerts* output) {
-    if (!output) return ErrorInvalidArg;
     auto& state = State();
     std::lock_guard lock(state.mutex);
     const auto found = state.contexts.find(sslCtxId);
-    if (found == state.contexts.end()) {
-        *output = {};
-        return ErrorNotFound;
-    }
+    if (found == state.contexts.end()) return ErrorInvalidId;
+    if (!output) return ErrorInvalidValue;
     auto& context = *found->second;
     PoolScope scope(context.pool);
     const auto count = CertificateCount(context);
