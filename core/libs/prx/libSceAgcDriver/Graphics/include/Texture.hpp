@@ -198,6 +198,10 @@ public:
     // Deferred write-back (APS5_EAGER_WRITEBACK=1 stores at once instead).
     void MarkDirty();
     void MarkWholeWritten();
+    void MarkUnitsWritten(const std::vector<bool>& units);
+    std::vector<VkRect2D> UnitRects(const std::vector<bool>& units) const;
+    bool BlockUnits() const { return blockUnits; }
+    std::uint32_t TrackedUnits() const { return trackedLayers; }
     void MarkSliceDirty(std::uint32_t slice, std::uint32_t count = 1);
     void Flush();
     bool Dirty() const;
