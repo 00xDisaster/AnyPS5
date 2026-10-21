@@ -36,6 +36,14 @@ inline int InitializeOptParam(UltOptParam* optParam) {
     return ULT_OK;
 }
 
+struct alignas(8) UltCommonOptParam {
+    std::uint32_t header[3];
+    std::uint32_t buildVersion;
+    std::uint8_t reserved[112];
+};
+
+static_assert(sizeof(UltCommonOptParam) == 128);
+
 struct UltWaitingThreadInfo {
     std::uint64_t size;
     void* thread;

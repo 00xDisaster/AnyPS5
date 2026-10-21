@@ -36,6 +36,16 @@ std::unordered_map<void*, UltRuntimeState> gRuntimes;
 std::unordered_map<void*, std::shared_ptr<UltUlthreadState>> gUlthreads;
 
 
+int validateCommonOptParam(const void* optParam) {
+    if (optParam == nullptr) return ULT_OK;
+    if ((reinterpret_cast<std::uintptr_t>(optParam) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    UltCommonOptParam value;
+    std::memcpy(&value, optParam, sizeof(value));
+    if (value.header[0] != 0x6C696275 || value.header[1] != 0x6C746D61 || value.header[2] != 0x67696300) return ULT_ERROR_INVALID;
+    if (std::any_of(std::begin(value.reserved), std::end(value.reserved), [](std::uint8_t byte) { return byte != 0; })) return ULT_ERROR_INVALID;
+    return ULT_OK;
+}
+
 int semaphoreGetState(void* semaphore, std::shared_ptr<UltSemaphoreState>* out) {
     std::lock_guard<std::mutex> lock(gMutex);
     auto it = gSemaphores.find(semaphore);
@@ -586,7 +596,7 @@ int APS5_VABI sceUltQueueCreate(void* queue, const char* name, std::uint64_t dat
     auto& pool = *state->_pool;
     std::lock_guard stateLock(pool._mutex);
     if (dataSize > pool._dataSize || waitingQueueResourcePool != pool._waitingPool) return ULT_ERROR_INVALID;
-    if (pool._queues == pool._numQueueObject) return ULT_ERROR_AGAIN;
+    if (pool._queues == pool._numQueueObject) return ULT_ERROR_BUSY;
     gQueues.emplace(queue, std::move(state));
     ++pool._queues;
     std::memset(queue, 0, 512);
@@ -888,10 +898,20 @@ int APS5_VABI sceUltUlthreadRuntimeDestroy(void* runtime) {
 }
 
 int APS5_VABI _sceUltWaitingQueueResourcePoolCreate(void* pool, const char* name, std::uint32_t numThreads, std::uint32_t numSyncObjects, void* workArea, const void* optParam) {
+    if (pool == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(pool) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    if (name == nullptr) return ULT_ERROR_NULL;
+    if (const int result = validateCommonOptParam(optParam); result != ULT_OK) return result;
+    if (numThreads == 0 || numSyncObjects == 0) return ULT_ERROR_INVALID;
+    if ((reinterpret_cast<std::uintptr_t>(workArea) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    if (workArea == nullptr) return ULT_ERROR_NULL;
     return sceUltWaitingQueueResourcePoolCreate(pool, name, numThreads, numSyncObjects, workArea, optParam, 0);
 }
 
 int APS5_VABI _sceUltSemaphoreCreate(void* semaphore, const char* name, std::int32_t numInitialResource, void* waitingQueueResourcePool, const void* optParam) {
+    if (semaphore == nullptr || name == nullptr) return ULT_ERROR_NULL;
+    if (((reinterpret_cast<std::uintptr_t>(semaphore) | reinterpret_cast<std::uintptr_t>(waitingQueueResourcePool)) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    if (const int result = validateCommonOptParam(optParam); result != ULT_OK) return result;
     return sceUltSemaphoreCreate(semaphore, name, numInitialResource, waitingQueueResourcePool, optParam, 0);
 }
 
@@ -913,10 +933,26 @@ int APS5_VABI _sceUltMutexCreate(void* mutex, const char* name, void* waitingQue
 }
 
 int APS5_VABI _sceUltQueueDataResourcePoolCreate(void* pool, const char* name, std::uint32_t numData, std::uint64_t dataSize, std::uint32_t numQueueObject, void* waitingQueueResourcePool, void* workArea, const void* optParam) {
+    if (pool == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(pool) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    if (const int result = validateCommonOptParam(optParam); result != ULT_OK) return result;
+    if (numData == 0 || dataSize == 0 || numQueueObject == 0) return ULT_ERROR_INVALID;
+    if ((reinterpret_cast<std::uintptr_t>(workArea) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    if (workArea == nullptr || name == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(waitingQueueResourcePool) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     return sceUltQueueDataResourcePoolCreate(pool, name, numData, dataSize, numQueueObject, waitingQueueResourcePool, workArea, optParam, 0);
 }
 
 int APS5_VABI _sceUltQueueCreate(void* queue, const char* name, std::uint64_t dataSize, void* waitingQueueResourcePool, void* queueDataResourcePool, const void* optParam) {
+    if (queue == nullptr || name == nullptr || queueDataResourcePool == nullptr) return ULT_ERROR_NULL;
+    if (((reinterpret_cast<std::uintptr_t>(queue) | reinterpret_cast<std::uintptr_t>(waitingQueueResourcePool) | reinterpret_cast<std::uintptr_t>(queueDataResourcePool)) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
+    {
+        std::lock_guard lock(gMutex);
+        const auto it = gQueueDataPools.find(queueDataResourcePool);
+        if (it == gQueueDataPools.end()) return ULT_ERROR_INVALID;
+        if (dataSize == 0 || dataSize > it->second->_dataSize) return ULT_ERROR_INVALID;
+    }
+    if (const int result = validateCommonOptParam(optParam); result != ULT_OK) return result;
     return sceUltQueueCreate(queue, name, dataSize, waitingQueueResourcePool, queueDataResourcePool, optParam, 0);
 }
 
