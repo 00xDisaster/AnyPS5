@@ -1818,12 +1818,17 @@ std::optional<DepthCopyPass> DecodeDepthCopyPass(const QueueState& queue) {
     Require((read(cx, 0x200) & 0xfu) == 0, "DB depth copy with depth or stencil tests");
     Require((read(cx, 0x010) & 3u) == 3u, "DB depth copy from a depth plane that is not Z_32_FLOAT");
     Require(ColorWriteMask(cx) == 1u, "DB depth copy into anything but the red channel of color target 0");
+    const auto viewRegister = find(cx, 0x002);
+    const auto view = viewRegister == cx.end() ? 0u : viewRegister->second;
+    Require((read(cx, 0x010) & 0x000f1000u) == 0 && (view & 0x3c000000u) == 0, "DB depth copy from a mipmapped or partially resident depth plane");
     DepthCopyPass pass{};
     const auto high = find(cx, 0x01a);
     pass.depthAddress = (high == cx.end() ? 0ull : static_cast<std::uint64_t>(high->second & 0xffu) << 40u) | (static_cast<std::uint64_t>(read(cx, 0x012)) << 8u);
     const auto size = read(cx, 0x007);
     pass.extent = {(size & 0x3fffu) + 1u, ((size >> 16u) & 0x3fffu) + 1u};
     pass.samples = 1u << ((read(cx, 0x010) >> 2u) & 3u);
+    if (pass.samples != 1u) pass.depthAddress &= ~std::uint64_t{65535u};
+    if (const auto slice = view & 0x1fffu; slice != 0) pass.depthAddress += static_cast<std::uint64_t>(slice) * DepthSliceBytes(pass.extent, 4u);
     const auto maskLow = find(cx, 0x30e);
     const auto maskHigh = find(cx, 0x30f);
     Require((maskLow == cx.end() || maskLow->second == 0xffffffffu) && (maskHigh == cx.end() || maskHigh->second == 0xffffffffu), "DB depth copy with a sample mask is unsupported");
@@ -1832,6 +1837,7 @@ std::optional<DepthCopyPass> DecodeDepthCopyPass(const QueueState& queue) {
     pass.color = DecodeColorBuffer(cx, 0);
     Require(pass.color.format == VK_FORMAT_R32_SFLOAT && pass.color.samples == 1 && pass.color.mip == 0 && pass.color.layers == 1, "DB depth copy into a color target that is not a single-sample R32 float");
     Require(pass.color.extent.width == pass.extent.width && pass.color.extent.height == pass.extent.height, "DB depth copy into a color target of another size");
+    Require(pass.color.cmaskAddress == 0, "DB depth copy into a color target with CMASK fast clears is unsupported");
     Require(drawCovers(cx, pass.extent), "DB depth copy over part of the depth surface");
     return pass;
 }

@@ -2204,14 +2204,15 @@ std::shared_ptr<StorageTexture> DepthSurfaceStorage(const Context& context, std:
     return layeredDepthStorage(context, surface, resource, mip);
 }
 
-void CopyDepthSample(const Context& context, std::uint64_t depthAddress, std::uint32_t sample, StorageTexture& destination, VkImageView destinationView, VkExtent2D extent) {
+void CopyDepthSample(const Context& context, std::uint64_t depthAddress, std::uint32_t samples, std::uint32_t sample, StorageTexture& destination, VkImageView destinationView, VkExtent2D extent) {
     std::lock_guard lock(surfacesMutex());
-    const auto& list = surfaces();
-    const auto found = std::find_if(list.rbegin(), list.rend(), [&](const auto& surface) { return surface->context.device == context.device && surface->target.address == depthAddress; });
-    Require(found != list.rend(), "DB depth copy from a depth plane no draw rendered");
-    Require((*found)->target.extent.width == extent.width && (*found)->target.extent.height == extent.height, "DB depth copy from a depth surface of another size");
-    Require(sample < (*found)->target.samples, "DB depth copy of a sample the depth surface does not have");
-    (*found)->CopySample(sample, destination, destinationView);
+    auto* found = planeSurface(context.device, depthAddress);
+    Require(found != nullptr && found->target.address == depthAddress, "DB depth copy from a depth plane no draw rendered");
+    Require(found->target.format == VK_FORMAT_D32_SFLOAT || found->target.format == VK_FORMAT_D32_SFLOAT_S8_UINT, "DB depth copy from a depth surface that is not 32-bit float");
+    Require(found->target.samples == samples, "DB depth copy from a depth surface of another sample count");
+    Require(found->target.extent.width == extent.width && found->target.extent.height == extent.height, "DB depth copy from a depth surface of another size");
+    Require(sample < found->target.samples, "DB depth copy of a sample the depth surface does not have");
+    found->CopySample(sample, destination, destinationView);
 }
 
 bool DepthSurfaceStoreBack(const Context& context, const StorageTexture& storage) {

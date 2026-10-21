@@ -27,6 +27,7 @@ std::optional<DrawVerdict> Driver::precheckDraw(const QueueState& queue, const S
     }
     if (const auto copy = Graphics::DecodeDepthCopyPass(queue)) {
         require(!drawParameters.indirect, "indirect DB depth copies are unsupported");
+        if (DrawPipeline::Active()) DrawPipeline::Queue0().Drain(DrawPipeline::DrainReason::Packet, (packet[0] >> 8u) & 0xffu);
         GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Draw);
         std::lock_guard gpuLock(GuestMemory::GpuMutex());
         if (device == nullptr) device = std::make_shared<VulkanDevice>();

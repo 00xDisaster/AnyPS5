@@ -2728,6 +2728,17 @@ void depthCopyPassTests() {
     queue.context[0x10f] = std::bit_cast<std::uint32_t>(16.0f);
     expectFailure([&] { (void)DecodeDepthCopyPass(queue); }, "over part of the depth surface");
     queue.context[0x10f] = std::bit_cast<std::uint32_t>(32.0f);
+    queue.context[0x010] = 0x80001187;
+    expectFailure([&] { (void)DecodeDepthCopyPass(queue); }, "mipmapped or partially resident");
+    queue.context[0x010] = 0x80000187;
+    queue.context[0x012] = 0x00001003;
+    pass = DecodeDepthCopyPass(queue);
+    Require(pass.has_value() && pass->depthAddress == 0x100000, "a DB depth copy kept the pipe-bank XOR of a two-sample depth plane in its address");
+    queue.context[0x012] = 0x00001000;
+    queue.context[0x002] = 1u | (1u << 13u);
+    pass = DecodeDepthCopyPass(queue);
+    Require(pass.has_value() && pass->depthAddress == 0x100000 + AgcDriver::Graphics::DepthSliceBytes({64, 4}, 4u), "a DB depth copy of slice 1 did not address the slice the depth surface registers");
+    queue.context[0x002] = 0;
     Require(DecodeDepthCopyPass(queue).has_value(), "the restored DB depth copy was refused");
     queue.context[0x010] = 0x80000183;
     pass = DecodeDepthCopyPass(queue);
