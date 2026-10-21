@@ -244,6 +244,11 @@ static_assert(offsetof(VrTracker2CoordinateResultParameter, parameter) == 8);
 static_assert(sizeof(VrTracker2BoundaryFitResult) == 20);
 static_assert(sizeof(VrTracker2VectorResult) == 16);
 
+struct VrTracker2MeshVertex;
+struct VrTracker2TimedPoseResult;
+struct VrTracker2ImagePoseResult;
+struct VrTracker2ImageFrame;
+
 extern "C" {
 
 std::int32_t APS5_VABI sceVrTracker2Finalize() {
@@ -599,17 +604,41 @@ APS5_EXPORT("loU5lT92Zrw", VrTracker2NotInitialized);
 APS5_EXPORT("o6fsgA3R2Yc", VrTracker2NotInitialized);
 APS5_EXPORT("AeBtEIE0idk", VrTracker2NotInitialized);
 APS5_EXPORT("DBa3wov7dKQ", VrTracker2NotInitialized);
-APS5_EXPORT("ojTGClQ52r4", VrTracker2NotInitialized);
-APS5_EXPORT("oOLE62H66z0", VrTracker2NotInitialized);
-APS5_EXPORT("MHekhnRBKAw", VrTracker2NotInitialized);
+APS5_EXPORT("ojTGClQ52r4", VrTracker2BuildMesh);
+std::int32_t APS5_VABI VrTracker2BuildMesh(VrTracker2MeshVertex* vertices, std::uint16_t* indices, std::uint32_t format) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("oOLE62H66z0", VrTracker2GetMapScalar);
+std::int32_t APS5_VABI VrTracker2GetMapScalar(float* value, const VrTracker2MapData* data) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("MHekhnRBKAw", VrTracker2GetTimedPose);
+std::int32_t APS5_VABI VrTracker2GetTimedPose(VrTracker2TimedPoseResult* result, std::uint64_t timestamp, std::uint64_t userTag) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("JnSmj+5E8WY", VrTracker2GetMapData);
 std::int32_t APS5_VABI VrTracker2GetMapData(VrTracker2MapData* data, std::uint32_t size) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
 }
 
-APS5_EXPORT("N1P+melAgb8", VrTracker2NotInitialized);
-APS5_EXPORT("-e7A3rAM3Yk", VrTracker2NotInitialized);
-APS5_EXPORT("RefT1spBleg", VrTracker2NotInitialized);
+APS5_EXPORT("N1P+melAgb8", VrTracker2GetPoseScalar);
+std::int32_t APS5_VABI VrTracker2GetPoseScalar(float* value) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("-e7A3rAM3Yk", VrTracker2SubmitImageFrame);
+std::int32_t APS5_VABI VrTracker2SubmitImageFrame(const VrTracker2ImageFrame* frame) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
+APS5_EXPORT("RefT1spBleg", VrTracker2GetImagePose);
+std::int32_t APS5_VABI VrTracker2GetImagePose(VrTracker2ImagePoseResult* result) {
+    return VR_TRACKER2_ERROR_NOT_INITIALIZED;
+}
+
 APS5_EXPORT("DsOfryhbm4U", VrTracker2GetSensorSummary);
 std::int32_t APS5_VABI VrTracker2GetSensorSummary(VrTracker2SensorSummary* summary) {
     return VR_TRACKER2_ERROR_NOT_INITIALIZED;
