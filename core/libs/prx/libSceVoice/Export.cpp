@@ -21,10 +21,7 @@ constexpr std::int32_t PortOutPcm = 3;
 constexpr std::int32_t PortOutVoice = 4;
 constexpr std::int32_t PortOutDevice = 5;
 constexpr std::int32_t PortStateReady = 1;
-constexpr std::uint32_t VoiceFrameMs = 20;
-constexpr std::int32_t PortAttrVoiceActivity = 1001;
 constexpr int VoiceErrorNotInitialized = static_cast<int>(0x804E0801u);
-constexpr int VoiceErrorAlreadyInitialized = static_cast<int>(0x804E0802u);
 constexpr auto NotInitialized = static_cast<std::int32_t>(0x804e0801u);
 constexpr auto InvalidPort = static_cast<std::int32_t>(0x804e0804u);
 constexpr auto InvalidArgument = static_cast<std::int32_t>(0x804e0805u);
@@ -265,10 +262,10 @@ int APS5_VABI sceVoiceGetPortInfo(uint32_t port_id, VoicePortInfo* info) {
     if (!voice.initialized) return VoiceErrorNotInitialized;
     if (info == nullptr) APS5_INVALID_ARG_EX;
     const auto& port = RequirePort(voice, port_id, __func__);
-    *info = VoicePortInfo{};
     info->port_type = port.type;
     info->state = PortStateReady;
-    if (port.bitrate != 0) info->frame_size = (port.bitrate * VoiceFrameMs + 7999u) / 8000u;
+    info->byte_count = 0;
+    info->frame_size = port.bitrate != 0 ? port.frameSize : 2;
     return 0;
 }
 

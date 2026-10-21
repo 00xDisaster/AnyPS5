@@ -172,8 +172,16 @@ int main() {
     const auto output = CreatePort(3, 0.25f);
     Require(sceVoiceConnectIPortToOPort(input, output) == 0);
     Require(sceVoiceSetMuteFlag(output, true) == 0);
+    std::uint32_t portIdForInfo = 0;
     VoicePortInfo before{};
+    before.edge = &portIdForInfo;
+    before.edge_count = 0x1234;
+    before.reserved = 0x5678;
     Require(sceVoiceGetPortInfo(input, &before) == 0);
+    Require(before.frame_size == 20 && before.byte_count == 0);
+    Require(before.edge == &portIdForInfo && before.edge_count == 0x1234 && before.reserved == 0x5678);
+    VoicePortInfo pcmInfo{};
+    Require(sceVoiceGetPortInfo(output, &pcmInfo) == 0 && pcmInfo.frame_size == 2);
 
     Require(sceVoiceResetPort(input) == 0);
     Require(sceVoiceResetPort(output) == 0);
