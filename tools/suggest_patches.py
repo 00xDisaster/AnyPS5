@@ -1,14 +1,17 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
 
 
-SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
+VERIFY_SUMMARY = re.compile(r"^Verified (\d+) patches: (\d+) ok, (\d+) not-checked, (\d+) mismatch$", re.MULTILINE)
 
 
 def confined(root, name):
@@ -31,6 +34,10 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def command_line(arguments):
+    return subprocess.list2cmdline(arguments) if os.name == "nt" else shlex.join(arguments)
+
+
 def load_catalog(directory, title, version):
     data = json.loads(confined(directory, "index.json").read_text(encoding="utf-8"))
     if not isinstance(data, dict) or set(data) != {"format", "entries"} or type(data["format"]) is not int or data["format"] != 1 or not isinstance(data["entries"], list):
@@ -39,37 +46,39 @@ def load_catalog(directory, title, version):
     for number, entry in enumerate(data["entries"], 1):
         if not isinstance(entry, dict) or (entry.get("titleId"), entry.get("contentVersion")) != (title, version):
             continue
-        if set(entry) != {"titleId", "contentVersion", "patch", "targets"}:
-            raise ValueError(f"entry {number}: invalid fields")
-        if any(not isinstance(entry[key], str) or not entry[key] for key in ("titleId", "contentVersion")):
-            raise ValueError(f"entry {number}: invalid title or version")
-        patch = confined(directory, entry["patch"])
-        targets = entry["targets"]
-        if not isinstance(targets, dict) or not targets:
-            raise ValueError(f"entry {number}: targets must be a nonempty object")
-        if any(not isinstance(name, str) or not isinstance(digest, str) or not SHA256.fullmatch(digest) for name, digest in targets.items()):
-            raise ValueError(f"entry {number}: invalid target digest")
-        parsed = tomllib.loads(patch.read_text(encoding="utf-8"))
-        patches = parsed.get("patch")
-        if not isinstance(patches, list) or not patches or any(not isinstance(item, dict) or not isinstance(item.get("target"), str) for item in patches):
-            raise ValueError(f"entry {number}: patch file has no valid targets")
-        if set(targets) != {item["target"] for item in patches}:
-            raise ValueError(f"entry {number}: target hashes must cover exactly the patch targets")
-        entries.append((number, entry, patch))
+        entries.append((number, entry))
     return entries
+
+
+def validate_entry(directory, entry):
+    if set(entry) != {"titleId", "contentVersion", "patch", "targets"}:
+        raise ValueError("invalid fields")
+    patch = confined(directory, entry["patch"])
+    targets = entry["targets"]
+    if not isinstance(targets, dict) or not targets:
+        raise ValueError("targets must be a nonempty object")
+    if any(not isinstance(name, str) or not isinstance(digest, str) or not SHA256.fullmatch(digest) for name, digest in targets.items()):
+        raise ValueError("invalid target digest")
+    parsed = tomllib.loads(patch.read_text(encoding="utf-8"))
+    patches = parsed.get("patch")
+    if not isinstance(patches, list) or not patches or any(not isinstance(item, dict) or not isinstance(item.get("target"), str) for item in patches):
+        raise ValueError("patch file has no valid targets")
+    if set(targets) != {item["target"] for item in patches}:
+        raise ValueError("target hashes must cover exactly the patch targets")
+    return patch, {name: digest.lower() for name, digest in targets.items()}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Recommend a local patch only after metadata, hashes and relinker verification match")
-    parser.add_argument("--catalog", required=True, type=Path)
-    parser.add_argument("--param-json", required=True, type=Path)
-    parser.add_argument("--input", required=True, type=Path)
-    parser.add_argument("--relinker", required=True, type=Path)
-    parser.add_argument("--sce-module-path", type=Path)
-    parser.add_argument("--module-dir", action="append", default=[])
-    parser.add_argument("--executable", action="append", default=[])
-    parser.add_argument("--skip-sce-module", action="store_true")
-    parser.add_argument("--timeout-seconds", type=int, default=120)
+    parser.add_argument("--catalog", required=True, type=Path, help="directory containing index.json and patch files")
+    parser.add_argument("--param-json", required=True, type=Path, help="title metadata file")
+    parser.add_argument("--input", required=True, type=Path, help="unwrapped main ELF")
+    parser.add_argument("--relinker", required=True, type=Path, help="relinker executable to run")
+    parser.add_argument("--sce-module-path", type=Path, help="parent directory of bundled modules")
+    parser.add_argument("--module-dir", action="append", default=[], help="module directory relative to the module parent; repeatable")
+    parser.add_argument("--executable", action="append", default=[], help="additional title executable relative to the module parent; repeatable")
+    parser.add_argument("--skip-sce-module", action="store_true", help="skip bundled modules during verification")
+    parser.add_argument("--timeout-seconds", type=int, default=120, help="maximum seconds per relinker verification (default: 120)")
     args = parser.parse_args(argv)
     try:
         metadata = json.loads(args.param_json.read_text(encoding="utf-8"))
@@ -81,6 +90,8 @@ def main(argv=None):
             raise ValueError("param.json needs nonempty titleId and contentVersion")
         if not args.input.is_file() or not args.relinker.is_file():
             raise ValueError("input and relinker must be files")
+        if args.skip_sce_module and args.sce_module_path:
+            raise ValueError("--skip-sce-module conflicts with --sce-module-path")
         if args.timeout_seconds <= 0:
             raise ValueError("timeout-seconds must be positive")
         root = (args.sce_module_path or args.input.parent).resolve()
@@ -89,9 +100,19 @@ def main(argv=None):
         for executable in args.executable:
             confined(root, executable)
         matches = []
-        for number, entry, patch in load_catalog(args.catalog.resolve(), title, version):
+        entries = load_catalog(args.catalog.resolve(), title, version)
+        if not entries:
+            print(f"No recommendation: no catalog entry for {title} {version}.")
+            return 1
+        for number, entry in entries:
+            label = f"Catalog entry {number} ({entry.get('patch')!r})"
+            try:
+                patch, targets = validate_entry(args.catalog.resolve(), entry)
+            except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
+                print(f"{label}: rejected: {error}")
+                continue
             errors = []
-            for name, expected in entry["targets"].items():
+            for name, expected in targets.items():
                 try:
                     source = args.input.resolve() if name == args.input.name else confined(root, name)
                     actual = sha256(source)
@@ -100,9 +121,9 @@ def main(argv=None):
                 except (OSError, ValueError) as error:
                     errors.append(f"{name}: {error}")
             if errors:
-                print(f"Catalog entry {number} ({entry['patch']}): rejected: {'; '.join(errors)}")
+                print(f"{label}: rejected: {'; '.join(errors)}")
                 continue
-            command = [str(args.relinker), "--verify-patches", str(patch)]
+            command = [str(args.relinker.resolve()), "--verify-patches", str(patch)]
             if args.skip_sce_module:
                 command.append("--skip-sce-module")
             if args.sce_module_path:
@@ -115,18 +136,37 @@ def main(argv=None):
             try:
                 result = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout_seconds)
             except subprocess.TimeoutExpired:
-                raise ValueError(f"catalog entry {number}: relinker verification exceeded {args.timeout_seconds} seconds") from None
+                print(f"{label}: rejected: relinker verification exceeded {args.timeout_seconds} seconds")
+                continue
+            summary = VERIFY_SUMMARY.search(result.stdout)
+            verified = tuple(map(int, summary.groups())) if summary else None
             if result.returncode:
                 detail = (result.stdout + result.stderr).strip()
-                print(f"Catalog entry {number} ({entry['patch']}): rejected by relinker: {detail}")
+                if result.returncode == 1 and verified and verified[3] > 0:
+                    print(f"{label}: rejected by relinker: {detail}")
+                    continue
+                raise ValueError(f"{label}: relinker error (exit {result.returncode}): {detail}")
+            if not verified:
+                raise ValueError(f"{label}: relinker produced no verification summary")
+            if verified[0] == 0 or verified[1] != verified[0] or verified[2] or verified[3]:
+                print(f"{label}: rejected: relinker did not confirm every patch")
                 continue
-            matches.append((number, entry, patch))
+            matches.append((number, entry, patch, targets))
         if len(matches) == 1:
-            number, entry, patch = matches[0]
+            number, entry, patch, targets = matches[0]
             print(f"Recommended: {patch} (catalog entry {number})")
-            for name, digest in entry["targets"].items():
+            for name, digest in targets.items():
                 print(f"  {name} SHA-256 {digest}")
-            print(f"Use --patches {patch} explicitly when converting.")
+            conversion = ["--patches", str(patch)]
+            if args.skip_sce_module:
+                conversion.append("--skip-sce-module")
+            if args.sce_module_path:
+                conversion.extend(("--sce-module-path", str(args.sce_module_path)))
+            for module_dir in args.module_dir:
+                conversion.extend(("--module-dir", module_dir))
+            for executable in args.executable:
+                conversion.extend(("--executable", executable))
+            print(f"Use these options when converting:\n  {command_line(conversion)}")
             return 0
         if len(matches) > 1:
             print("No recommendation: multiple verified catalog entries match.")
