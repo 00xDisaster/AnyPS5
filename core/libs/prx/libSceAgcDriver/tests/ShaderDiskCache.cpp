@@ -169,6 +169,7 @@ void requireSameResult(const RecompileResult& left, const RecompileResult& right
     require(left.shaderDataUserWords == right.shaderDataUserWords, prefix + "shader-data user words differ");
     require(left.imageTableRanges == right.imageTableRanges && left.imageTableShader == right.imageTableShader && left.imageTableFaults == right.imageTableFaults && left.imageTablePoison.size() == right.imageTablePoison.size(), prefix + "image table invocation data differs");
     require(left.imageTableReadRanges == right.imageTableReadRanges, prefix + "image table read ranges differ");
+    require(left.userDataRegisterReads == right.userDataRegisterReads, prefix + "user data register read mask differs");
     for (std::size_t i = 0; i < left.imageTablePoison.size(); ++i) {
         const auto& a = left.imageTablePoison[i];
         const auto& b = right.imageTablePoison[i];
@@ -269,6 +270,7 @@ RecompileResult sampleResult() {
     result.imageTableReadRanges = {{{0x1000u, 32u}, {0x1040u, 32u}}, {}, {{0x5000000000ull, 16u}}};
     result.imageTableShader = 0x80003aa700ull;
     result.imageTableFaults = 3u;
+    result.userDataRegisterReads = (std::uint64_t{1} << 63u) | (std::uint64_t{1} << 32u) | 0x25u;
     return result;
 }
 
@@ -633,6 +635,43 @@ void verifyPrebuiltAcrossProcesses(const char* self, const std::filesystem::path
     require(std::system(command.c_str()) == 0, "the prebuilt loading process failed");
 }
 
+void verifyPrebuiltDiscovery(std::string_view layout, bool seed) {
+    using namespace ShaderRecompiler::ShaderDiskCache;
+    require(layout == "pack" || layout == "loose" || layout == "versioned" || layout == "file" || layout == "empty" || layout == "missing", "unknown prebuilt discovery layout");
+    Shutdown();
+    SampleRequest sample = prebuiltSample();
+    const auto key = sample.Key();
+    const auto variant = sampleVariant();
+    if (seed) {
+        const auto directory = ShaderRecompiler::ShaderCacheDirectory() / "prebuilt";
+        const auto entry = EncodeEntry(key, variant);
+        if (layout == "pack") {
+            auto otherKey = key;
+            otherKey.back() ^= std::byte{1};
+            require(WriteFileAtomically(directory / "a.pack", packBytes({{key, entry}})), "cannot seed the matching prebuilt pack");
+            require(WriteFileAtomically(directory / "z.pack", packBytes({{otherKey, EncodeEntry(otherKey, variant)}})), "cannot seed the other prebuilt pack");
+        } else if (layout == "loose") {
+            require(WriteFileAtomically(directory / EntryName(key), entry), "cannot seed the loose prebuilt entry");
+        } else if (layout == "versioned") {
+            require(WriteFileAtomically(directory / EntryDirectory().filename() / EntryName(key), entry), "cannot seed the versioned prebuilt entry");
+        } else if (layout == "file") {
+            require(WriteFileAtomically(directory, packBytes({{key, entry}})), "cannot seed the direct prebuilt pack");
+        } else if (layout == "empty") {
+            require(WriteFileAtomically(directory / "ignored.txt", entry), "cannot seed the ignored prebuilt file");
+        }
+        std::cout << "prebuilt discovery seeded " << layout << '\n';
+        return;
+    }
+    CompiledVariant loaded;
+    const bool expected = layout != "empty" && layout != "missing";
+    require(Load(key, loaded) == expected, "prebuilt discovery returned the wrong result for " + std::string(layout));
+    if (expected) requireSameVariant(variant, loaded, "prebuilt discovery");
+    const auto totals = Totals();
+    require(totals.prebuiltHits == (expected ? 1u : 0u) && totals.hits == 0 && totals.writes == 0 && Writers() == 0,
+            "prebuilt discovery did not remain a read-only prebuilt lookup");
+    std::cout << "prebuilt discovery verified " << layout << '\n';
+}
+
 void verifyArtifactStorageIsolation() {
     SampleRequest sample;
     const auto key = sample.Key();
@@ -704,6 +743,7 @@ void verifyKeySensitivity() {
     changes("the narrow subgroup clock", [](SampleRequest& sample) { sample.request.target.narrowSubgroupClock = true; });
     changes("f64 denormal preservation", [](SampleRequest& sample) { sample.request.target.float64DenormPreserve = true; });
     changes("f16 denormal preservation", [](SampleRequest& sample) { sample.request.target.float16DenormPreserve = true; });
+    changes("f32 denormal preservation", [](SampleRequest& sample) { sample.request.target.float32DenormPreserve = true; });
     changes("spanned waves", [](SampleRequest& sample) { sample.request.target.spannedWaves = true; });
     changes("robust buffer access 2", [](SampleRequest& sample) { sample.request.target.robustBufferAccess2 = true; });
     changes("the workgroup size limit", [](SampleRequest& sample) { sample.request.target.maxWorkgroupSize[2] = 128; });
@@ -2433,6 +2473,10 @@ int main(int argc, char** argv) {
             return 0;
         }
 #endif
+        if (argc == 3 && (std::string_view(argv[1]) == "--seed-prebuilt-discovery" || std::string_view(argv[1]) == "--verify-prebuilt-discovery")) {
+            verifyPrebuiltDiscovery(argv[2], std::string_view(argv[1]) == "--seed-prebuilt-discovery");
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--large-file") return runLargeFileWrite();
         if (argc == 2 && std::string_view(argv[1]) == "--load") return runLoadingProcess();
         if (argc == 2 && std::string_view(argv[1]) == "--load-prebuilt") return runPrebuiltLoadingProcess();

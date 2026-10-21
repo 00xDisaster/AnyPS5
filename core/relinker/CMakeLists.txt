@@ -31,6 +31,7 @@ add_library(relinker_core STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/ByteReader.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/BufferUtils.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/NativePath.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/FileIdentity.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/Amd64OnlyConverter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/InstructionScanner.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionDecoder.cpp
@@ -525,6 +526,8 @@ if(BUILD_TESTING)
         set_tests_properties(windows_runpath PROPERTIES TIMEOUT 30)
         add_test(NAME windows_trace_imports COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_trace_imports.py $<TARGET_FILE:relinker>)
+        add_test(NAME linux_trace_imports COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_trace_imports.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_address_space COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_windows_address_space.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_tls_thread_pointer COMMAND ${Python3_EXECUTABLE}

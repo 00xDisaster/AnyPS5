@@ -85,8 +85,8 @@ namespace ShaderRecompiler::ShaderDiskCache {
 
 #if defined(__linux__) && defined(__x86_64__) && defined(__GLIBCXX__)
 static_assert(sizeof(CompiledShaderArtifact) == 280, "CompiledShaderArtifact changed: update the artifact encoder");
-static_assert(sizeof(ShaderInvocation) == 208, "ShaderInvocation changed: update the invocation encoder");
-static_assert(sizeof(RecompileResult) == 520, "RecompileResult changed: update EncodeResult and DecodeResult");
+static_assert(sizeof(ShaderInvocation) == 216, "ShaderInvocation changed: update the invocation encoder");
+static_assert(sizeof(RecompileResult) == 528, "RecompileResult changed: update EncodeResult and DecodeResult");
 static_assert(sizeof(DescriptorBinding) == 656, "DescriptorBinding changed: update the binding encoder");
 static_assert(sizeof(VertexAttribute) == 32, "VertexAttribute changed: update the attribute encoder");
 static_assert(sizeof(VertexInput) == 16, "VertexInput changed: update the vertex input encoder");
@@ -602,6 +602,7 @@ void encodeInvocation(Writer& writer, const ShaderInvocation& invocation) {
         out.Value(attribute.fetchIndex);
         out.Value(attribute.formatComponents);
     });
+    writer.Value(invocation.userDataRegisterReads);
     writer.Value(invocation.poisonedSrtReads);
     writer.List(invocation.imageTablePoison, [](Writer& out, const ImageTableEntryPoison& poison) {
         for (const auto word : poison.words) out.Value(word);
@@ -642,6 +643,7 @@ void decodeInvocation(Reader& reader, ShaderInvocation& invocation) {
         in.Value(attribute.fetchIndex);
         in.Value(attribute.formatComponents);
     });
+    reader.Value(invocation.userDataRegisterReads);
     reader.Value(invocation.poisonedSrtReads);
     reader.List(invocation.imageTablePoison, 44, [](Reader& in, ImageTableEntryPoison& poison) {
         for (auto& word : poison.words) in.Value(word);
@@ -1475,17 +1477,33 @@ private:
             entries += pack->Count();
             packs.push_back(std::move(pack));
         };
-        for (const auto& path : PrebuiltCachePaths(root)) {
+        for (const auto& candidate : PrebuiltCachePaths(root)) {
             std::error_code error;
+#ifdef _WIN32
+            const auto path = NativeCachePath_nid_no_patch(candidate, error);
+            if (error) continue;
+#else
+            const auto& path = candidate;
+#endif
             if (std::filesystem::is_regular_file(path, error)) { addPack(path); continue; }
             if (!std::filesystem::is_directory(path, error)) continue;
             bool loose = false;
             std::vector<std::filesystem::path> packPaths;
-            for (std::filesystem::directory_iterator it(path, error), end; !error && it != end; it.increment(error)) {
-                const auto extension = it->path().extension();
-                if (extension == ".pack") packPaths.push_back(it->path());
-                if (extension == ".bin" && it->path().stem().string().size() == 32) loose = true;
+            const auto collect = [&](const std::filesystem::path& entry) {
+                const auto extension = entry.extension();
+                if (extension == ".pack") packPaths.push_back(entry);
+                if (extension == ".bin" && entry.stem().string().size() == 32) loose = true;
+            };
+#ifdef _WIN32
+            WIN32_FIND_DATAW data{};
+            const auto handle = FindFirstFileW((path / L"*").c_str(), &data);
+            if (handle != INVALID_HANDLE_VALUE) {
+                struct Search { HANDLE handle; ~Search() { FindClose(handle); } } search{handle};
+                do { collect(path / data.cFileName); } while (FindNextFileW(handle, &data));
             }
+#else
+            for (std::filesystem::directory_iterator it(path, error), end; !error && it != end; it.increment(error)) collect(it->path());
+#endif
             std::sort(packPaths.begin(), packPaths.end());
             for (const auto& item : packPaths) addPack(item);
             if (loose) looseDirectories.push_back(path);
