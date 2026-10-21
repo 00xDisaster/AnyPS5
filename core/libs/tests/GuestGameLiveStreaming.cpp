@@ -22,6 +22,7 @@ int APS5_VABI sceGameLiveStreamingInitialize(std::size_t heap_size);
 int APS5_VABI sceGameLiveStreamingTerminate(void);
 int APS5_VABI sceGameLiveStreamingGetCurrentStatus2(GameLiveStreamingStatus2* status);
 int APS5_VABI sceGameLiveStreamingGetProgramInfo(void);
+int APS5_VABI sceGameLiveStreamingEnableLiveStreaming(bool isEnableLiveStreaming);
 }
 
 namespace {
@@ -29,6 +30,15 @@ namespace {
 void Require(bool value) { if (!value) std::abort(); }
 
 constexpr std::int32_t kInvalidUserId = -1;
+
+bool EnableThrowsNotInitialized(bool isEnableLiveStreaming) {
+    try {
+        sceGameLiveStreamingEnableLiveStreaming(isEnableLiveStreaming);
+    } catch (const std::logic_error&) {
+        return true;
+    }
+    return false;
+}
 
 }
 
@@ -40,8 +50,11 @@ int main() {
         threwZeroHeap = true;
     }
     Require(threwZeroHeap);
+    Require(EnableThrowsNotInitialized(true));
 
     Require(sceGameLiveStreamingInitialize(1024 * 1024) == 0);
+
+    Require(sceGameLiveStreamingEnableLiveStreaming(true) == 0);
 
     bool threwNullStatus = false;
     try {
@@ -75,5 +88,7 @@ int main() {
     }
     Require(threwProgramInfo);
 
+    Require(sceGameLiveStreamingEnableLiveStreaming(false) == 0);
     Require(sceGameLiveStreamingTerminate() == 0);
+    Require(EnableThrowsNotInitialized(false));
 }
