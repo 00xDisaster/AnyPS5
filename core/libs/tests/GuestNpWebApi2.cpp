@@ -92,7 +92,7 @@ int main() {
     Require(presence > 0 && sceNpWebApi2GetMemoryPoolStats(presence, &stats) == 0 && stats.pool_size == 0x2000);
     for (const int created : {internal, internal2, presence}) {
         Require(sceNpWebApi2Terminate(created) == 0);
-        Require(Throws([&] { sceNpWebApi2GetMemoryPoolStats(created, &stats); }));
+        Require(sceNpWebApi2GetMemoryPoolStats(created, &stats) == invalidContext);
     }
     return 0;
 }
