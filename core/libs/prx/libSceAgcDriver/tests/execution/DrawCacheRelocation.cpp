@@ -135,6 +135,37 @@ void MovedDataHitsTheCache(bool libraries) {
     Require(again.lookups == 10 && again.hits == 5, mode + ": a draw at an address seen before did not reuse the cached draw (" + std::to_string(again.hits) + " hits)");
 }
 
+void EvictedEntriesServeNoRelocation(bool libraries) {
+    Registered(VertexHeader, VertexCode.data(), sizeof(VertexCode), 2);
+    Registered(PixelHeader, PixelCode.data(), sizeof(PixelCode), 1);
+    Registered(SecondVertexHeader, SecondVertexCode.data(), sizeof(SecondVertexCode), 2);
+    const auto mode = std::string(libraries ? "with" : "without") + " graphics pipeline libraries";
+    const auto draw = [&](const float* source, const std::uint32_t* vertexCode) {
+        auto commands = DrawFrom({source}, vertexCode);
+        Packet packet{commands.data(), static_cast<std::uint32_t>(commands.size()), 0, {}};
+        Require(sceAgcDriverSubmitDcb(&packet) == 0, "the draw submission failed");
+        AgcDriverWaitIdle_nid_postfix();
+        return AgcDriver::DriverDetail::Driver::Get().DrawCacheCounters();
+    };
+    static std::array<std::array<float, 4>, 6> same{};
+    for (auto& entry : same) entry = {1.0f, 0.0f, 0.0f, 0.0f};
+    alignas(16) static std::array<std::array<float, 4>, 3> others{};
+    for (std::size_t i = 0; i < others.size(); ++i) others[i] = {0.25f + 0.03125f * static_cast<float>(i), 0.0f, 0.0f, 0.0f};
+    AgcDriver::DriverDetail::DrawEntryCounters counters{};
+    for (std::size_t i = 0; i < 4; ++i) counters = draw(same[i].data(), VertexCode.data());
+    Require(counters.lookups == 4 && counters.hits == 0 && counters.inserts == 2, mode + ": the draws that teach the moved pointer and its contents made " + std::to_string(counters.hits) + " hits and " + std::to_string(counters.inserts) + " inserts, expected 0 and 2");
+    const auto relocated = draw(same[4].data(), VertexCode.data());
+    Require(relocated.hits == 1, mode + ": a draw whose data moved after the teaching draws did not reuse the cached draw (" + std::to_string(relocated.hits) + " hits)");
+    auto evicted = relocated;
+    for (const auto& entry : others) {
+        draw(entry.data(), SecondVertexCode.data());
+        evicted = draw(entry.data(), SecondVertexCode.data());
+    }
+    Require(evicted.evictions - relocated.evictions >= 2 && evicted.inserts - relocated.inserts >= 2, mode + ": draws of another vertex shader did not evict the two taught entries from the draw cache (" + std::to_string(evicted.inserts - relocated.inserts) + " inserts, " + std::to_string(evicted.evictions - relocated.evictions) + " evictions; run with APS5_DRAW_CACHE_ENTRIES=2)");
+    const auto after = draw(same[5].data(), VertexCode.data());
+    Require(after.lookups == evicted.lookups + 1 && after.hits == evicted.hits, mode + ": a draw whose data moved reused a draw the cache had evicted, through its relocation alias (" + std::to_string(after.hits - evicted.hits) + " hits)");
+}
+
 void SplitRunsNameTheirSharedWords() {
     alignas(16) static std::array<std::uint32_t, 4> data{1u, 2u, 3u, 4u};
     auto table = std::make_shared<ShaderRecompiler::SrtGuestWords>();
@@ -228,9 +259,10 @@ void MovedForwardedWordReachesStageDataHit(bool libraries) {
 
 }
 
-int main() {
+int main(int argc, char** argv) {
     try {
-        SplitRunsNameTheirSharedWords();
+        const bool evicted = argc == 2 && std::string(argv[1]) == "--evicted";
+        if (!evicted) SplitRunsNameTheirSharedWords();
         bool libraries = false;
         {
             const auto device = OpenVulkanTestDevice();
@@ -238,6 +270,12 @@ int main() {
             libraries = device->GraphicsPipelineLibraries();
         }
         if (!libraries && std::getenv("APS5_NO_GPL") == nullptr) return VulkanTestSkipped;
+        if (evicted) {
+            EvictedEntriesServeNoRelocation(libraries);
+            AgcDriverShutdown_nid_postfix();
+            std::cout << "An evicted draw served no relocation " << (libraries ? "with" : "without") << " graphics pipeline libraries\n";
+            return 0;
+        }
         MovedDataHitsTheCache(libraries);
         UnrelocatedAliasesStayOut(libraries);
         MovedForwardedWordReachesStageDataHit(libraries);
