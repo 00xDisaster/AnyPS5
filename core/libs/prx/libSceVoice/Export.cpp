@@ -411,9 +411,8 @@ int APS5_VABI sceVoiceDisableChat(void) {
     Fail(__func__, "audio chat backend is not implemented");
 }
 
-int APS5_VABI sceVoiceInitHQ(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceVoiceInitHQ(VoiceInitParam* param, int32_t version) {
+    return sceVoiceInit(param, version);
 }
 
 int APS5_VABI sceVoiceGetMemorySize(void) {
