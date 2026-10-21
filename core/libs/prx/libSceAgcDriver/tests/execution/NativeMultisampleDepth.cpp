@@ -8,6 +8,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Submit/include/Dcb.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
@@ -692,7 +693,7 @@ void CheckClearDispatch() {
     }
 }
 
-void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments, bool one, bool clearing, std::optional<bool> depthOnlyOverride, ClearFault fault, std::unique_lock<AgcDriver::GuestMemory::GpuMutexType>& gpuLock, bool iterate256 = true) {
+void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments, bool one, bool clearing, std::optional<bool> depthOnlyOverride, ClearFault fault, std::unique_lock<AgcDriver::GuestMemory::GpuMutexType>& gpuLock, bool iterate256 = true, const Context* importPolicyContext = nullptr) {
     const VkExtent2D extent{5u, 3u};
     const auto bytes = static_cast<std::size_t>(MultisampledDepthBytes_nid_no_patch(extent, format == VK_FORMAT_D16_UNORM ? 2u : 4u, fragments));
     TargetMemory memory(bytes), metadata(65536u, fault == ClearFault::DriverDispatch);
@@ -824,7 +825,8 @@ void CheckDepthTarget(Context context, VkFormat format, std::uint32_t fragments,
                     recorder.Activate();
                     Require(Recorder::Active() == &recorder, "driver idle did not restore the native depth fixture recorder");
                     if (!AgcDriver::GuestMemory::Watched(target.htileAddress, metadataBytes)) {
-                        Require(PrepareImportWatch(context) == ImportWatch::Unwatch,
+                        const auto& policyContext = importPolicyContext != nullptr ? *importPolicyContext : context;
+                        Require(PrepareImportWatch(policyContext) == ImportWatch::Unwatch,
                                 "the HTILE metadata range lost write-watch coverage on a device whose host imports stay watched");
                         std::puts("skipped native HTILE write-coverage assertion: the write tracker does not cover the imported metadata range; clear output checks still run");
                     } else {
@@ -1241,7 +1243,10 @@ int main(int argc, char** argv) {
             ++checked;
             CheckDepthTarget(context, VK_FORMAT_D32_SFLOAT, 4u, false, true, false, ClearFault::ImportWindowWrite, lock);
             ++checked;
-            CheckDepthTarget(context, VK_FORMAT_D32_SFLOAT, 4u, false, true, false, ClearFault::DriverDispatch, lock);
+            const auto driverDevice = AgcDriver::DriverDetail::Driver::Get().device.Load();
+            Require(driverDevice != nullptr, "native depth clear fixture did not initialize the driver Vulkan device");
+            const auto driverContext = driverDevice->graphicsContext();
+            CheckDepthTarget(context, VK_FORMAT_D32_SFLOAT, 4u, false, true, false, ClearFault::DriverDispatch, lock, true, &driverContext);
             ++checked;
             std::printf("Native depth completed clear cases checked=%u unavailable=%u\n", checked, unavailable);
             return 0;
