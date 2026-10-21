@@ -3232,6 +3232,9 @@ static void CheckAvailableDirectMemoryIsLargestFreeBlock() {
     Require(untouched(0, -1, 0, SCE_KERNEL_ERROR_ENOMEM));
     Require(untouched(run + 0x1000, run + 0x3000, 0, SCE_KERNEL_ERROR_ENOMEM));
     Require(untouched(static_cast<std::int64_t>(DIRECT_MEMORY_SIZE), std::numeric_limits<std::int64_t>::max(), 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(std::numeric_limits<std::int64_t>::max() - 0x3ffe, std::numeric_limits<std::int64_t>::max(), 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(std::numeric_limits<std::int64_t>::max(), run + 0x100000, 0, SCE_KERNEL_ERROR_ENOMEM));
+    Require(untouched(run, std::numeric_limits<std::int64_t>::max(), std::size_t{1} << 62, SCE_KERNEL_ERROR_ENOMEM));
     for (const std::size_t alignment : {std::size_t{3}, std::size_t{0x6000}, std::size_t{0xc000}, std::size_t{0x14000}, ~std::size_t{0x3fff}, std::numeric_limits<std::size_t>::max()}) {
         Require(untouched(top, top + window, alignment, SCE_KERNEL_ERROR_EINVAL));
         Require(untouched(top + window, top, alignment, SCE_KERNEL_ERROR_EINVAL));
@@ -3250,6 +3253,10 @@ static void CheckAvailableDirectMemoryIsLargestFreeBlock() {
     Require(sceKernelAvailableDirectMemorySize(run + 0x4000, run + 0x100000, 0x8000, &start, &size) == 0 && start == run + 0x8000 && size == 0xf8000);
     Require(sceKernelAvailableDirectMemorySize(top, top + window, std::size_t{1} << 63, &start, &size) == 0);
     Require(start == std::numeric_limits<std::int64_t>::min() && size == static_cast<std::size_t>(top + window) - (std::size_t{1} << 63));
+    std::int64_t divider = -1;
+    Require(sceKernelAllocateDirectMemory(run + 0x40000, run + 0x44000, 0x4000, 0, 0, &divider) == 0 && divider == run + 0x40000);
+    Require(sceKernelAvailableDirectMemorySize(run, run + 0x84000, 0, &start, &size) == 0 && start == run && size == 0x40000);
+    Require(sceKernelReleaseDirectMemory(divider, 0x4000) == 0);
 
     Require(sceKernelReleaseDirectMemory(first, 0x200000) == 0);
     Require(sceKernelReleaseDirectMemory(last, 0x200000) == 0);

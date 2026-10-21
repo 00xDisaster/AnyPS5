@@ -156,8 +156,7 @@ struct PhysicalMemoryPool {
     int LargestFree(int64_t searchStart, int64_t searchEnd, size_t alignment, int64_t* startOut, size_t* sizeOut) {
         if ((alignment & (alignment - 1)) != 0) return SCE_KERNEL_ERROR_EINVAL;
         const uint64_t alignMask = std::max<uint64_t>(alignment, kPage) - 1;
-        const int64_t first = static_cast<int64_t>((static_cast<uint64_t>(searchStart) + kPage - 1) & ~(kPage - 1));
-        uint64_t cur = first > 0 ? std::min<uint64_t>(static_cast<uint64_t>(first), kPoolBytes) : 0;
+        uint64_t cur = searchStart > 0 ? std::min<uint64_t>(static_cast<uint64_t>(searchStart) & ~(kPage - 1), kPoolBytes) : 0;
         const uint64_t limit = searchEnd > 0 ? std::min<uint64_t>((static_cast<uint64_t>(searchEnd) + kPage - 1) & ~(kPage - 1), kPoolBytes) : 0;
 
         std::lock_guard<std::mutex> lock(_mutex);
@@ -172,11 +171,11 @@ struct PhysicalMemoryPool {
             uint64_t runEnd = cur;
             while (runEnd < limit && !_used[runEnd / kPage]) runEnd += kPage;
 
-            const int64_t low = std::max(static_cast<int64_t>(cur), first);
+            const int64_t low = std::max(static_cast<int64_t>(cur), searchStart);
             const int64_t high = std::min(static_cast<int64_t>(runEnd), searchEnd);
             const int64_t alignedStart = static_cast<int64_t>((static_cast<uint64_t>(low) + alignMask) & ~alignMask);
             const uint64_t size = static_cast<uint64_t>(high) - static_cast<uint64_t>(alignedStart);
-            if (alignedStart < high && size > bestSize) {
+            if (low < high && alignedStart < high && size > bestSize) {
                 bestStart = static_cast<uint64_t>(alignedStart);
                 bestSize = size;
             }
