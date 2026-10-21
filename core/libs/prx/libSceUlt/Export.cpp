@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -636,7 +637,7 @@ int APS5_VABI sceUltQueueDestroy(void* queue) {
     return ULT_OK;
 }
 
-int APS5_VABI sceUltSemaphoreCreate(void* semaphore, const char* name, std::int32_t numInitialResource, void* waitingQueueResourcePool, const void* optParam, std::uint32_t buildVersion) {
+int APS5_VABI sceUltSemaphoreCreate(void* semaphore, const char* name, std::uint32_t numInitialResource, void* waitingQueueResourcePool, const void* optParam, std::uint32_t buildVersion) {
     (void)name;
     (void)optParam;
     (void)buildVersion;
@@ -646,11 +647,8 @@ int APS5_VABI sceUltSemaphoreCreate(void* semaphore, const char* name, std::int3
     if ((reinterpret_cast<std::uintptr_t>(semaphore) & 7u) != 0) {
         return ULT_ERROR_ALIGNMENT;
     }
-    if (numInitialResource < 0) {
-        return ULT_ERROR_RANGE;
-    }
     auto state = std::make_shared<UltSemaphoreState>();
-    state->_resources = numInitialResource;
+    state->_resources = std::bit_cast<std::int32_t>(numInitialResource);
     state->_waitingPool = waitingQueueResourcePool;
     std::lock_guard<std::mutex> lock(gMutex);
     if (waitingQueueResourcePool != nullptr && gResourcePools.find(waitingQueueResourcePool) == gResourcePools.end()) {
@@ -665,6 +663,8 @@ int APS5_VABI sceUltSemaphoreCreate(void* semaphore, const char* name, std::int3
 }
 
 int APS5_VABI sceUltSemaphoreAcquire(void* semaphore, std::int32_t numResource) {
+    if (semaphore == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(semaphore) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     if (numResource <= 0) {
         return ULT_ERROR_RANGE;
     }
@@ -687,6 +687,8 @@ int APS5_VABI sceUltSemaphoreAcquire(void* semaphore, std::int32_t numResource) 
 }
 
 int APS5_VABI sceUltSemaphoreTryAcquire(void* semaphore, std::int32_t numResource) {
+    if (semaphore == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(semaphore) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     if (numResource <= 0) {
         return ULT_ERROR_RANGE;
     }
@@ -706,6 +708,8 @@ int APS5_VABI sceUltSemaphoreTryAcquire(void* semaphore, std::int32_t numResourc
 }
 
 int APS5_VABI sceUltSemaphoreRelease(void* semaphore, std::int32_t numResource) {
+    if (semaphore == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(semaphore) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     if (numResource <= 0) {
         return ULT_ERROR_RANGE;
     }
@@ -728,9 +732,8 @@ int APS5_VABI sceUltSemaphoreRelease(void* semaphore, std::int32_t numResource) 
 }
 
 int APS5_VABI sceUltSemaphoreDestroy(void* semaphore) {
-    if (semaphore == nullptr) {
-        return ULT_ERROR_NULL;
-    }
+    if (semaphore == nullptr) return ULT_ERROR_NULL;
+    if ((reinterpret_cast<std::uintptr_t>(semaphore) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     std::lock_guard<std::mutex> globalLock(gMutex);
     auto it = gSemaphores.find(semaphore);
     if (it == gSemaphores.end()) {
@@ -739,7 +742,7 @@ int APS5_VABI sceUltSemaphoreDestroy(void* semaphore) {
     auto state = it->second;
     std::lock_guard<std::mutex> stateLock(state->_mutex);
     if (state->_waiters != 0) {
-        return ULT_ERROR_BUSY;
+        return ULT_ERROR_STATE;
     }
     state->_alive = false;
     gSemaphores.erase(it);
@@ -908,7 +911,7 @@ int APS5_VABI _sceUltWaitingQueueResourcePoolCreate(void* pool, const char* name
     return sceUltWaitingQueueResourcePoolCreate(pool, name, numThreads, numSyncObjects, workArea, optParam, 0);
 }
 
-int APS5_VABI _sceUltSemaphoreCreate(void* semaphore, const char* name, std::int32_t numInitialResource, void* waitingQueueResourcePool, const void* optParam) {
+int APS5_VABI _sceUltSemaphoreCreate(void* semaphore, const char* name, std::uint32_t numInitialResource, void* waitingQueueResourcePool, const void* optParam) {
     if (semaphore == nullptr || name == nullptr) return ULT_ERROR_NULL;
     if (((reinterpret_cast<std::uintptr_t>(semaphore) | reinterpret_cast<std::uintptr_t>(waitingQueueResourcePool)) & 7u) != 0) return ULT_ERROR_ALIGNMENT;
     if (const int result = validateCommonOptParam(optParam); result != ULT_OK) return result;
