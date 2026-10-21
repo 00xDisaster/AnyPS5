@@ -1,0 +1,108 @@
+#include <cctype>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include "SceTypes.hpp"
+#include "prx/libc/include/General.hpp"
+
+namespace {
+
+constexpr int NP_ERROR_INVALID_ARGUMENT = static_cast<int>(0x80550003);
+constexpr int NP_ERROR_INVALID_PLATFORM_TYPE = static_cast<int>(0x80550004);
+constexpr int NP_UTIL_ERROR_NOT_MATCH = static_cast<int>(0x80550609);
+constexpr int NP_LW_COND_ERROR_TIMEDOUT = static_cast<int>(0x8055800B);
+constexpr int NP_LW_MUTEX_ERROR_BUSY = static_cast<int>(0x8055800F);
+constexpr int KERNEL_ERROR_EBUSY = static_cast<int>(0x80020010);
+constexpr int KERNEL_ERROR_ETIMEDOUT = static_cast<int>(0x8002003C);
+constexpr std::size_t ONLINE_ID_MAX_LENGTH = 16;
+constexpr int MUTEX_TYPE_RECURSIVE = 2;
+constexpr KernelClockid CLOCK_MONOTONIC_ID = 4;
+
+struct NpIdFull {
+    NpOnlineId handle;
+    std::uint8_t opt[8];
+    std::uint8_t reserved[8];
+};
+static_assert(sizeof(NpIdFull) == 36);
+
+struct SystemSwVersion {
+    std::uint64_t size;
+    char versionString[0x1C];
+    std::uint32_t version;
+};
+static_assert(sizeof(SystemSwVersion) == 0x28);
+
+int compareBytes(const std::uint8_t* lhs, const std::uint8_t* rhs, std::size_t count) {
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lhs[i] != rhs[i]) return lhs[i] < rhs[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+}
+
+extern "C" int APS5_VABI scePthreadMutexattrInit(PthreadMutexattr* attr);
+extern "C" int APS5_VABI scePthreadMutexattrDestroy(PthreadMutexattr* attr);
+extern "C" int APS5_VABI scePthreadMutexattrSettype(PthreadMutexattr* attr, int type);
+extern "C" int APS5_VABI scePthreadMutexInit(PthreadMutex* mutex, const PthreadMutexattr* attr, const char* name);
+extern "C" int APS5_VABI scePthreadMutexDestroy(PthreadMutex* mutex);
+extern "C" int APS5_VABI scePthreadMutexLock(PthreadMutex* mutex);
+extern "C" int APS5_VABI scePthreadMutexUnlock(PthreadMutex* mutex);
+extern "C" int APS5_VABI scePthreadMutexTrylock(PthreadMutex* mutex);
+extern "C" int APS5_VABI scePthreadCondattrInit(PthreadCondattr* attr);
+extern "C" int APS5_VABI scePthreadCondattrDestroy(PthreadCondattr* attr);
+extern "C" int APS5_VABI scePthreadCondInit(PthreadCond* cond, const PthreadCondattr* attr, const char* name);
+extern "C" int APS5_VABI scePthreadCondDestroy(PthreadCond* cond);
+extern "C" int APS5_VABI scePthreadCondSignal(PthreadCond* cond);
+extern "C" int APS5_VABI scePthreadCondWait(PthreadCond* cond, PthreadMutex* mutex);
+extern "C" int APS5_VABI scePthreadCondTimedwait(PthreadCond* cond, PthreadMutex* mutex, KernelUseconds usec);
+extern "C" int APS5_VABI scePthreadJoin(Pthread thread, void** retval);
+extern "C" int APS5_VABI sceKernelClockGettime(KernelClockid clockId, KernelTimespec* tp);
+extern "C" int APS5_VABI sceKernelGetSystemSwVersion_nid_postfix(SystemSwVersion* version);
+
+extern "C" {
+
+int APS5_VABI sceNpCmpOnlineId(const NpOnlineId* onlineId1, const NpOnlineId* onlineId2) {
+    if (!onlineId1 || !onlineId2) return NP_ERROR_INVALID_ARGUMENT;
+    if (std::strncmp(onlineId1->data, onlineId2->data, ONLINE_ID_MAX_LENGTH) != 0) return NP_UTIL_ERROR_NOT_MATCH;
+    return 0;
+}
+
+int APS5_VABI sceNpCmpNpIdInOrder(const NpIdFull* npId1, const NpIdFull* npId2, std::int32_t* order) {
+    if (!npId1 || !npId2 || !order) return NP_ERROR_INVALID_ARGUMENT;
+    int compare = std::strncmp(npId1->handle.data, npId2->handle.data, ONLINE_ID_MAX_LENGTH);
+    if (compare == 0) compare = compareBytes(npId1->opt, npId2->opt, sizeof(npId1->opt));
+    if (compare == 0) compare = compareBytes(npId1->reserved, npId2->reserved, sizeof(npId1->reserved));
+    *order = compare < 0 ? -1 : compare > 0 ? 1 : 0;
+    return 0;
+}
+
+int APS5_VABI sceNpGetPlatformType(const NpIdFull* npId) {
+    constexpr std::uint32_t TAG_PS3 = 0x00337370;
+    constexpr std::uint32_t TAG_VITA = 0x32707370;
+    constexpr std::uint32_t TAG_PS4 = 0x00347370;
+    if (!npId) return NP_ERROR_INVALID_ARGUMENT;
+    if (npId->opt[4] == 0) return 0;
+    std::uint32_t tag = 0;
+    std::memcpy(&tag, npId->opt + 4, sizeof(tag));
+    switch (tag) {
+    case TAG_PS3: return 1;
+    case TAG_VITA: return 2;
+    case TAG_PS4: return 3;
+    default: return NP_ERROR_INVALID_PLATFORM_TYPE;
+    }
+}
+
+int APS5_VABI sceNpIntIsValidOnlineId(const NpOnlineId* onlineId) {
+    if (!onlineId || onlineId->data[ONLINE_ID_MAX_LENGTH] != 0) return 0;
+    const std::size_t length = strnlen(onlineId->data, ONLINE_ID_MAX_LENGTH + 1);
+    if (length < 3 || length > ONLINE_ID_MAX_LENGTH) return 0;
+    if (!std::isalnum(static_cast<unsigned char>(onlineId->data[0]))) return 0;
+    for (std::size_t i = 1; i < length; ++i) {
+        const unsigned char character = static_cast<unsigned char>(onlineId->data[i]);
+        if (!std::isalnum(character) && character != '_' && character != '-') return 0;
+    }
+    return 1;
+}
+
+}

@@ -120,16 +120,6 @@ int APS5_VABI sceNpCmpNpId(void) {
     return 0;
 }
 
-int APS5_VABI sceNpCmpNpIdInOrder(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpCmpOnlineId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceNpCondDestroy(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -211,11 +201,6 @@ int APS5_VABI sceNpFreeKernelMemory(void) {
 }
 
 int APS5_VABI sceNpGetNavSdkVersion(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpGetPlatformType(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -311,11 +296,6 @@ int APS5_VABI sceNpIntGetPlatformType(void) {
 }
 
 int APS5_VABI sceNpIntIsOnlineIdString(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceNpIntIsValidOnlineId(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
