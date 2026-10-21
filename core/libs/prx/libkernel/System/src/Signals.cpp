@@ -120,6 +120,10 @@ bool TakePending(int guest) {
     return (word.fetch_and(~bit, std::memory_order_relaxed) & bit) != 0;
 }
 
+void DiscardPendingIfIgnored(int guest, const GuestSigaction& action) {
+    if (action.handler == 1 || (action.handler == 0 && IgnoredByDefault(guest))) TakePending(guest);
+}
+
 bool PendingInSet(const GuestSignalSet& set, int* guest) {
     for (int candidate = 1; candidate <= MaxSignal; ++candidate) {
         if (!SignalInSet(set, candidate) || !TakePending(candidate)) continue;
@@ -485,6 +489,7 @@ GuestHandler APS5_VABI signal_nid_postfix(int guest, GuestHandler handler) {
     if (!Install(guest, action)) { *__error_nid_postfix() = 22; return invalid; }
     const auto previous = reinterpret_cast<GuestHandler>(dispositions[guest].handler);
     dispositions[guest] = action;
+    DiscardPendingIfIgnored(guest, action);
     return previous;
 }
 int APS5_VABI sigaction_nid_postfix(int guest, const GuestSigaction* action, GuestSigaction* previous) {
@@ -495,6 +500,7 @@ int APS5_VABI sigaction_nid_postfix(int guest, const GuestSigaction* action, Gue
     if (action) {
         if (!Install(guest, *action)) { *__error_nid_postfix() = 22; return -1; }
         dispositions[guest] = *action;
+        DiscardPendingIfIgnored(guest, *action);
     }
     if (previous) *previous = old;
     return 0;
