@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
 
 extern "C" {
@@ -27,6 +28,7 @@ constexpr int ErrorOverlayFile = static_cast<int>(0x80BE0003);
 constexpr int ErrorOverlaySize = static_cast<int>(0x80BE000E);
 
 alignas(16) std::array<std::byte, 0x40> process{};
+std::string pathPrefix;
 
 void Require(bool condition, const char* message) {
     if (condition) return;
@@ -45,7 +47,7 @@ void InstallProcessParameters(std::uint32_t sdkVersion) {
 
 class TempPath {
 public:
-    explicit TempPath(const char* tag) : name(std::string("anyps5-screenshot-") + tag + "-" + std::to_string(std::rand())) {}
+    explicit TempPath(const char* tag) : name(pathPrefix + tag) {}
     ~TempPath() {
         std::error_code error;
         std::filesystem::remove_all(name, error);
@@ -113,6 +115,7 @@ void TestOverlay(bool large) {
 
 int main(int argc, char** argv) {
     const bool large = argc > 1 && std::strcmp(argv[1], "large") == 0;
+    pathPrefix = std::string("anyps5-screenshot-") + (large ? "large-" : "small-") + std::to_string(std::random_device{}()) + "-";
     InstallProcessParameters(large ? 0x3500000u : 0x34fffffu);
     TestDisableState();
     TestOverlay(large);
