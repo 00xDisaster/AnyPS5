@@ -14,7 +14,6 @@ constexpr std::uint32_t AUDIO_OUT2_MASTERING_STRUCT_ID_COMPRESSOR_DEFAULT = 0x01
 constexpr std::uint32_t AUDIO_OUT2_MASTERING_STRUCT_ID_COMPRESSOR_V2 = 0x01020001;
 constexpr std::uint32_t AUDIO_OUT2_MASTERING_STRUCT_ID_LIMITER_DEFAULT = 0x01010003;
 
-constexpr std::uint32_t AUDIO_OUT_MASTERING_FLAG_SWAP_EQ_COMPRESSOR = 1u << 0;
 constexpr std::uint32_t AUDIO_OUT_MASTERING_PARAMS_ID_DEFAULT = 1;
 constexpr std::uint32_t AUDIO_OUT_MASTERING_STATES_ID_DEFAULT = 1;
 
@@ -36,7 +35,7 @@ static_assert(offsetof(AudioOut2MasteringStates, limiter_states) + offsetof(Audi
 extern "C" {
 
 int APS5_VABI sceAudioOutMasteringInit(uint32_t flags) {
-    if ((flags & ~AUDIO_OUT_MASTERING_FLAG_SWAP_EQ_COMPRESSOR) != 0) NotImplemented_nid_no_patch(__func__);
+    if (flags != 0) NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
@@ -58,7 +57,7 @@ int APS5_VABI sceAudioOutMasteringGetState(AudioOut2MasteringStatesHeader* state
 
 int APS5_VABI sceAudioOutMasteringSetParam(const AudioOut2MasteringParamsHeader* param, uint32_t flags) {
     if (param == nullptr) APS5_INVALID_ARG_EX;
-    if ((flags & ~AUDIO_OUT_MASTERING_FLAG_SWAP_EQ_COMPRESSOR) != 0) NotImplemented_nid_no_patch(__func__);
+    if (flags != 0) NotImplemented_nid_no_patch(__func__);
     if (param->params_id != AUDIO_OUT_MASTERING_PARAMS_ID_DEFAULT) NotImplemented_nid_no_patch(__func__);
     return 0;
 }

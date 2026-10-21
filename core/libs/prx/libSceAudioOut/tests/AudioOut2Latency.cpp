@@ -122,7 +122,7 @@ void TestMasteringGetState() {
 
 void TestLegacyMasteringInit() {
     Require(sceAudioOutMasteringInit(0) == 0, "legacy flags 0 must be accepted");
-    Require(sceAudioOutMasteringInit(1) == 0, "legacy flags SwapEqCompressor must be accepted");
+    Require(ThrowsException([] { sceAudioOutMasteringInit(1); }), "legacy flags SwapEqCompressor must throw");
     Require(sceAudioOutMasteringInit(0) == 0, "a repeated legacy initialization must be accepted");
     Require(ThrowsException([] { sceAudioOutMasteringInit(2); }), "legacy flags bit 1 must throw");
     Require(ThrowsException([] { sceAudioOutMasteringInit(3); }), "legacy flags bits 0 and 1 must throw");
@@ -140,7 +140,7 @@ void TestLegacyMasteringSetParam() {
     std::fill(params, params + 16, 0xA5A5A5A5u);
     params[0] = 1u;
     Require(sceAudioOutMasteringSetParam(params, 0) == 0, "legacy mastering parameters must be accepted");
-    Require(sceAudioOutMasteringSetParam(params, 1) == 0, "legacy mastering parameters with SwapEqCompressor must be accepted");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 1); }), "legacy parameters with SwapEqCompressor must throw");
     Require(params[0] == 1u && params[1] == 0xA5A5A5A5u && params[15] == 0xA5A5A5A5u, "legacy mastering parameters are not modified");
     Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 2); }), "legacy parameters with flags bit 1 must throw");
     Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 0xFFFFFFFFu); }), "legacy parameters with unknown flags must throw");
