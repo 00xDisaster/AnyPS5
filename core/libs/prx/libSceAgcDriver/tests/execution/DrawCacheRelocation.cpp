@@ -166,6 +166,38 @@ void EvictedEntriesServeNoRelocation(bool libraries) {
     Require(after.lookups == evicted.lookups + 1 && after.hits == evicted.hits, mode + ": a draw whose data moved reused a draw the cache had evicted, through its relocation alias (" + std::to_string(after.hits - evicted.hits) + " hits)");
 }
 
+void RelocatingDrawsKeepTheirDonor(bool libraries) {
+    Registered(VertexHeader, VertexCode.data(), sizeof(VertexCode), 2);
+    Registered(PixelHeader, PixelCode.data(), sizeof(PixelCode), 1);
+    Registered(SecondVertexHeader, SecondVertexCode.data(), sizeof(SecondVertexCode), 2);
+    const auto mode = std::string(libraries ? "with" : "without") + " graphics pipeline libraries";
+    const auto draw = [&](const float* source, const std::uint32_t* vertexCode) {
+        auto commands = DrawFrom({source}, vertexCode);
+        Packet packet{commands.data(), static_cast<std::uint32_t>(commands.size()), 0, {}};
+        Require(sceAgcDriverSubmitDcb(&packet) == 0, "the draw submission failed");
+        AgcDriverWaitIdle_nid_postfix();
+        return AgcDriver::DriverDetail::Driver::Get().DrawCacheCounters();
+    };
+    constexpr std::size_t Rounds = 3;
+    alignas(16) static std::array<std::array<float, 4>, Rounds> others{};
+    for (std::size_t i = 0; i < others.size(); ++i) others[i] = {0.25f + 0.03125f * static_cast<float>(i), 0.0f, 0.0f, 0.0f};
+    static std::array<std::array<float, 4>, 5 + Rounds> same{};
+    for (auto& entry : same) entry = {1.0f, 0.0f, 0.0f, 0.0f};
+    AgcDriver::DriverDetail::DrawEntryCounters counters{};
+    for (std::size_t i = 0; i < 4; ++i) counters = draw(same[i].data(), VertexCode.data());
+    Require(counters.lookups == 4 && counters.hits == 0 && counters.inserts == 2, mode + ": the draws that teach the moved pointer and its contents made " + std::to_string(counters.hits) + " hits and " + std::to_string(counters.inserts) + " inserts, expected 0 and 2");
+    const auto start = draw(same[4].data(), VertexCode.data());
+    Require(start.hits == 1, mode + ": a draw whose data moved after the teaching draws did not reuse the cached draw (" + std::to_string(start.hits) + " hits)");
+    auto relocated = start;
+    for (std::size_t i = 0; i < others.size(); ++i) {
+        draw(others[i].data(), SecondVertexCode.data());
+        const auto inserted = draw(others[i].data(), SecondVertexCode.data());
+        relocated = draw(same[5 + i].data(), VertexCode.data());
+        Require(relocated.hits == inserted.hits + 1, mode + ": a draw whose data moved again lost the cached draw it reused before each of " + std::to_string(i + 1) + " rounds of another vertex shader's draws (" + std::to_string(inserted.inserts - start.inserts) + " inserts, " + std::to_string(inserted.evictions - start.evictions) + " evictions)");
+    }
+    Require(relocated.evictions - start.evictions >= 2, mode + ": draws of another vertex shader evicted " + std::to_string(relocated.evictions - start.evictions) + " entries, expected at least 2 (run with APS5_DRAW_CACHE_ENTRIES=2)");
+}
+
 void SplitRunsNameTheirSharedWords() {
     alignas(16) static std::array<std::uint32_t, 4> data{1u, 2u, 3u, 4u};
     auto table = std::make_shared<ShaderRecompiler::SrtGuestWords>();
@@ -262,7 +294,8 @@ void MovedForwardedWordReachesStageDataHit(bool libraries) {
 int main(int argc, char** argv) {
     try {
         const bool evicted = argc == 2 && std::string(argv[1]) == "--evicted";
-        if (!evicted) SplitRunsNameTheirSharedWords();
+        const bool kept = argc == 2 && std::string(argv[1]) == "--kept";
+        if (!evicted && !kept) SplitRunsNameTheirSharedWords();
         bool libraries = false;
         {
             const auto device = OpenVulkanTestDevice();
@@ -274,6 +307,12 @@ int main(int argc, char** argv) {
             EvictedEntriesServeNoRelocation(libraries);
             AgcDriverShutdown_nid_postfix();
             std::cout << "An evicted draw served no relocation " << (libraries ? "with" : "without") << " graphics pipeline libraries\n";
+            return 0;
+        }
+        if (kept) {
+            RelocatingDrawsKeepTheirDonor(libraries);
+            AgcDriverShutdown_nid_postfix();
+            std::cout << "A draw relocated from a cached draw kept it cached " << (libraries ? "with" : "without") << " graphics pipeline libraries\n";
             return 0;
         }
         MovedDataHitsTheCache(libraries);
