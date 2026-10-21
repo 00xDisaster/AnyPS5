@@ -138,8 +138,8 @@ void windowsKernelVariantDependenciesLoadCanonicalKernel() {
         dynamic.DynamicSegmentData.resize(16);
         Io::WriteU64(dynamic.DynamicSegmentData, 0, 1);
         Io::WriteU64(dynamic.DynamicSegmentData, 8, 0);
-        require(WindowsImportBuilder().ReadLibraries(dynamic) == std::vector<std::string>{variant, "libkernel.prx"},
-                variant + ": canonical libkernel is not loaded after the requested module");
+        require(WindowsImportBuilder().ReadLibraries(dynamic) == std::vector<std::string>{variant, "libkernel.prx", "libc.prx"},
+                variant + ": canonical kernel fallback and its libc provider are not loaded after the requested module");
     }
 }
 
