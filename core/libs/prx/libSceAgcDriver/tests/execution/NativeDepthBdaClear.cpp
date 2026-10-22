@@ -16,6 +16,12 @@
 #include <windows.h>
 #else
 #include <sys/mman.h>
+#ifdef __linux__
+#include <fcntl.h>
+#include <unistd.h>
+#include <map>
+#include <iterator>
+#endif
 #endif
 #include <algorithm>
 #include <array>
@@ -44,6 +50,31 @@ namespace Memory = AgcDriver::GuestMemory;
 
 constexpr std::size_t BlockBytes = 1048576;
 
+#ifdef __linux__
+struct SharedBacking {
+    int file;
+    std::uint64_t offset;
+};
+std::map<std::uintptr_t, SharedBacking> sharedBlocks;
+
+bool ResolveSharedBlock(std::uintptr_t address, std::size_t bytes, int* file, std::uint64_t* offset) {
+    if (bytes == 0) return false;
+    const auto next = sharedBlocks.upper_bound(address);
+    if (next == sharedBlocks.begin()) return false;
+    const auto entry = std::prev(next);
+    const auto lead = address - entry->first;
+    if (lead >= BlockBytes || bytes > BlockBytes - lead) return false;
+    *file = fcntl(entry->second.file, F_DUPFD_CLOEXEC, 0);
+    *offset = entry->second.offset + lead;
+    return *file >= 0;
+}
+
+struct SharedBackingScope {
+    SharedBackingScope() { GuestArena::GuestArenaSetSharedBacking_nid_postfix(ResolveSharedBlock); }
+    ~SharedBackingScope() { GuestArena::GuestArenaSetSharedBacking_nid_postfix(nullptr); }
+};
+#endif
+
 class GuestBlock {
 public:
     GuestBlock() {
@@ -55,13 +86,27 @@ public:
         Require(section != nullptr, "cannot create the native depth BDA clear backing");
         GuestArena::GuestArenaMapDirect_nid_postfix(block, BlockBytes, section, 0, PAGE_READWRITE);
 #else
+#ifdef __linux__
+        backing = memfd_create("native-depth-bda-clear", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+        Require(backing >= 0, "cannot create the native depth BDA clear backing");
+        if (ftruncate(backing, 2 * BlockBytes) != 0 || fcntl(backing, F_ADD_SEALS, F_SEAL_SHRINK) != 0) {
+            close(backing);
+            Require(false, "cannot size or seal the native depth BDA clear backing");
+        }
+        void* raw = mmap(nullptr, 2 * BlockBytes, PROT_READ | PROT_WRITE, MAP_SHARED, backing, 0);
+        if (raw == MAP_FAILED) close(backing);
+#else
         void* raw = mmap(nullptr, 2 * BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
         Require(raw != MAP_FAILED, "cannot map the native depth BDA clear block");
         const auto begin = reinterpret_cast<std::uintptr_t>(raw);
         const auto aligned = (begin + BlockBytes - 1) & ~(static_cast<std::uintptr_t>(BlockBytes) - 1);
         if (aligned != begin) munmap(raw, aligned - begin);
         if (aligned != begin + BlockBytes) munmap(reinterpret_cast<void*>(aligned + BlockBytes), begin + BlockBytes - aligned);
         block = reinterpret_cast<std::uint8_t*>(aligned);
+#ifdef __linux__
+        sharedBlocks.emplace(aligned, SharedBacking{backing, aligned - begin});
+#endif
         GuestWriteWatch::GuestWriteWatchRegister_nid_postfix(block, BlockBytes);
 #endif
         Require(Memory::Watched(Address(), BlockBytes), "the native depth BDA clear block is not watched");
@@ -77,8 +122,12 @@ public:
         GuestArena::GuestArenaForgetSection_nid_postfix(section);
         CloseHandle(section);
 #else
-        munmap(block, BlockBytes);
         GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(block, BlockBytes);
+#ifdef __linux__
+        sharedBlocks.erase(Address());
+        close(backing);
+#endif
+        munmap(block, BlockBytes);
 #endif
     }
 
@@ -92,6 +141,8 @@ private:
     std::uint8_t* block = nullptr;
 #ifdef _WIN32
     HANDLE section = nullptr;
+#elif defined(__linux__)
+    int backing = -1;
 #endif
 };
 
@@ -199,6 +250,9 @@ int RunNativeClear(AgcDriver::VulkanDevice& device, ClearConsumer consumer) {
 
 int main() {
     try {
+#ifdef __linux__
+        const SharedBackingScope sharedBacking;
+#endif
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
         for (const auto consumer : {ClearConsumer::Owner, ClearConsumer::Texture, ClearConsumer::Attachment}) {
