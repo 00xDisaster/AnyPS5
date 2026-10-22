@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -131,6 +132,14 @@ int APS5_VABI scePthreadMutexattrDestroy(PthreadMutexattr* attr) {
     delete *attr;
     *attr = nullptr;
     return 0;
+}
+
+int APS5_VABI scePthreadMutexattrSetkind(PthreadMutexattr* attr, int kind) {
+    if (!attr || !*attr)
+        throw std::invalid_argument("Mutex attribute is null or uninitialized");
+    if (kind < static_cast<int>(MutexType::ErrorCheck) || kind > static_cast<int>(MutexType::Adaptive))
+        throw std::invalid_argument("Mutex kind " + std::to_string(kind) + " is not a mutex type");
+    return scePthreadMutexattrSettype(attr, kind);
 }
 
 int APS5_VABI scePthreadMutexattrSettype(PthreadMutexattr* attr, int type) {

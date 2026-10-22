@@ -6,6 +6,14 @@
 #include <string_view>
 
 extern "C" {
+int APS5_VABI pthread_mutex_init_nid_postfix(PthreadMutex* mutex, const PthreadMutexattr* attr);
+int APS5_VABI pthread_mutex_lock_nid_postfix(PthreadMutex* mutex);
+int APS5_VABI pthread_mutex_unlock_nid_postfix(PthreadMutex* mutex);
+int APS5_VABI pthread_mutex_destroy_nid_postfix(PthreadMutex* mutex);
+int APS5_VABI pthread_mutexattr_init_nid_postfix(PthreadMutexattr* attr);
+int APS5_VABI pthread_mutexattr_destroy_nid_postfix(PthreadMutexattr* attr);
+int APS5_VABI pthread_mutexattr_gettype_nid_postfix(const PthreadMutexattr* attr, int* type);
+int APS5_VABI scePthreadMutexattrSetkind(PthreadMutexattr* attr, int kind);
 int APS5_VABI pthread_rwlock_init_nid_postfix(PthreadRwlock* rwlock, const PthreadRwlockattr* attr);
 int APS5_VABI pthread_rwlock_wrlock_nid_postfix(PthreadRwlock* rwlock);
 int APS5_VABI pthread_rwlock_unlock_nid_postfix(PthreadRwlock* rwlock);
@@ -17,6 +25,12 @@ int APS5_VABI scePthreadRwlockattrSettype(PthreadRwlockattr* attr, int type);
 }
 
 namespace {
+
+constexpr int GUEST_EDEADLK = 11;
+constexpr int KIND_ERRORCHECK = 1;
+constexpr int KIND_RECURSIVE = 2;
+constexpr int KIND_NORMAL = 3;
+constexpr int KIND_ADAPTIVE = 4;
 
 int failures = 0;
 
@@ -41,6 +55,37 @@ bool Throws(TCall call) {
     return false;
 }
 
+bool HasKind(const PthreadMutexattr* attr, int kind) {
+    int type = -1;
+    return pthread_mutexattr_gettype_nid_postfix(attr, &type) == 0 && type == kind;
+}
+
+bool LocksTwice(const PthreadMutexattr* attr, int secondLock) {
+    PthreadMutex mutex = nullptr;
+    if (pthread_mutex_init_nid_postfix(&mutex, attr) != 0) return false;
+    const bool locked = pthread_mutex_lock_nid_postfix(&mutex) == 0 && pthread_mutex_lock_nid_postfix(&mutex) == secondLock;
+    if (secondLock == 0) pthread_mutex_unlock_nid_postfix(&mutex);
+    return locked && pthread_mutex_unlock_nid_postfix(&mutex) == 0 && pthread_mutex_destroy_nid_postfix(&mutex) == 0;
+}
+
+void TestKind() {
+    Case("scePthreadMutexattrSetkind", [] {
+        PthreadMutexattr attr = nullptr;
+        if (pthread_mutexattr_init_nid_postfix(&attr) != 0) return false;
+        for (const int kind : {KIND_RECURSIVE, KIND_NORMAL, KIND_ADAPTIVE, KIND_ERRORCHECK}) {
+            if (scePthreadMutexattrSetkind(&attr, kind) != 0 || !HasKind(&attr, kind)) return false;
+        }
+        if (!LocksTwice(&attr, GUEST_EDEADLK)) return false;
+        if (scePthreadMutexattrSetkind(&attr, KIND_RECURSIVE) != 0 || !LocksTwice(&attr, 0)) return false;
+        for (const int kind : {0, 5, -1}) {
+            if (!Throws<std::invalid_argument>([&] { return scePthreadMutexattrSetkind(&attr, kind); }) || !HasKind(&attr, KIND_RECURSIVE)) return false;
+        }
+        if (pthread_mutexattr_destroy_nid_postfix(&attr) != 0) return false;
+        return Throws<std::invalid_argument>([&] { return scePthreadMutexattrSetkind(&attr, KIND_NORMAL); }) &&
+            Throws<std::invalid_argument>([] { return scePthreadMutexattrSetkind(nullptr, KIND_NORMAL); });
+    });
+}
+
 void TestRwlockattr() {
     Case("pthread_rwlockattr_settype_np", [] {
         PthreadRwlockattr attr = nullptr;
@@ -63,6 +108,7 @@ void TestRwlockattr() {
 int main(int argc, char** argv) {
     const std::string_view mode = argc > 1 ? argv[1] : "";
     if (mode == "rwlockattr") TestRwlockattr();
+    else if (mode == "kind") TestKind();
     else return 2;
     if (failures == 0) std::printf("all cases passed\n");
     return failures == 0 ? 0 : 1;
