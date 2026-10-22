@@ -349,6 +349,7 @@ void decodeDepth(const Registers& cx, std::uint32_t depthControl, bool testValEx
     }
     const auto size = read(cx, 0x007);
     depth.extent = {(size & 0x3fffu) + 1u, ((size >> 16u) & 0x3fffu) + 1u};
+    if (maxMip == 0 && viewMip != 0) Require(false, "depth view mip " + std::to_string(viewMip) + " on a surface without mips");
     if (maxMip != 0) {
         char message[320];
         std::snprintf(message, sizeof(message), "depth view mip %u of %u at %ux%u (DB_Z_INFO 0x%08x, DB_DEPTH_VIEW 0x%08x)", viewMip, maxMip + 1u, depth.extent.width, depth.extent.height, read(cx, 0x010), view);
