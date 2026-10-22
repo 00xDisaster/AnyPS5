@@ -1,10 +1,8 @@
 # libSceJxr technical debt
 
-### Unknown function info
-
-- [PixelFormatLookup](../../../core/libs/prx/libSceJxr/Export.cpp) is listed in the [PS5 3.20 export table](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceJxr.c) and was cross-checked against firmware 13.60. Its signature and behaviour remain unverified; the declaration uses the no-parameter unknown-signature convention and throws through `NotImplemented_nid_no_patch`.
-
 ### Functional
+
+- [PixelFormatLookup](../../../core/libs/prx/libSceJxr/src/PixelFormatLookup.cpp) uses the pinned public jxrlib table and lookup algorithm through a C bridge. The signed 64-bit result and 56-byte LP64 pixel-info model, 16-byte GUID, 32-bit enums and TIFF fields, module/library versions and Sony table/configuration equivalence are inferred or unknown, not console-measured. Modes 0/1 follow forward GUID/reverse TIFF lookup; other modes and misses return the public unsupported-format error without modifying the record. Valid-mode null records and forward null GUIDs throw because console behavior is unknown. Success returns a borrowed read-only static GUID valid while the module remains loaded; the caller must not free it. Closes when: Sony prototypes, layouts, configuration, table and invalid-argument behavior are verified by attributable disassembly or console measurements
 
 - [PKFree](../../../core/libs/prx/libSceJxr/Export.cpp) (libSceJxr) follows Microsoft's jxrlib [JXRGlue.c](https://github.com/4creators/jxrlib/blob/f7521879862b9085318e814c6157490dd9dbbdb4/jxrgluelib/JXRGlue.c#L53-L62), whose four exported names the module shares: a non-null `ppv` has `*ppv` released with the guest `free` and set to null, and the result is always `WMP_errSuccess` (0) as a 64-bit `ERR` (`long`). That the console's module is built from jxrlib, and that its `PKFree` releases through libc's `free`, is inferred from the export names and not checked against the console's code. Closes when: the console's `PKFree` is disassembled or measured on a PS5
 
