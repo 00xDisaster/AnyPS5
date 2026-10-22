@@ -97,6 +97,8 @@ void TestRwlockattr() {
             const bool usable = pthread_rwlock_wrlock_nid_postfix(&rwlock) == 0 && pthread_rwlock_unlock_nid_postfix(&rwlock) == 0;
             if (!usable || pthread_rwlock_destroy_nid_postfix(&rwlock) != 0) return false;
         }
+        if (!Throws<std::runtime_error>([&] { return pthread_rwlockattr_settype_np_nid_postfix(&attr, 3); }) ||
+            !Throws<std::runtime_error>([&] { return pthread_rwlockattr_settype_np_nid_postfix(&attr, -1); })) return false;
         if (pthread_rwlockattr_destroy_nid_postfix(&attr) != 0) return false;
         return Throws<std::runtime_error>([&] { return pthread_rwlockattr_settype_np_nid_postfix(&attr, 1); }) &&
             Throws<std::runtime_error>([] { return pthread_rwlockattr_settype_np_nid_postfix(nullptr, 1); });

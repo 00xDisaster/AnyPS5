@@ -58,6 +58,7 @@ int APS5_VABI pthread_rwlockattr_init_nid_postfix(PthreadRwlockattr* attr) {
 }
 
 int APS5_VABI pthread_rwlockattr_settype_np_nid_postfix(PthreadRwlockattr* attr, int type) {
+    if (type < 0 || type > 2) NotImplemented_nid_no_patch("pthread_rwlockattr_settype_np with a type other than 0 to 2");
     return toPosix(scePthreadRwlockattrSettype(attr, type));
 }
 
