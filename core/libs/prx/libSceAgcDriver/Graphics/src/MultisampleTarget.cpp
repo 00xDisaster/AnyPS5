@@ -227,7 +227,7 @@ public:
             viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
             VkImageViewUsageCreateInfo viewUsage{VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO};
             viewUsage.usage = imageUsage & ~VK_IMAGE_USAGE_STORAGE_BIT;
-            if (orderFormat != VK_FORMAT_UNDEFINED) viewInfo.pNext = &viewUsage;
+            if ((imageUsage & VK_IMAGE_USAGE_STORAGE_BIT) != 0) viewInfo.pNext = &viewUsage;
             Check(context.Function<PFN_vkCreateImageView>("vkCreateImageView")(context.device, &viewInfo, nullptr, &created.view), "vkCreateImageView multisampled target");
         } catch (...) {
             destroy(created);
