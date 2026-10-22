@@ -4151,6 +4151,29 @@ void multisampledDepthTests() {
     Require(!DecodeState(queue).perSampleShading, "PS_ITER_SAMPLE requested sample shading for a single-sample scan");
     queue = singleSampleScan();
     queue.context[0x31d] = 0;
+    state = DecodeState(queue);
+    Require(state.truncatedCoverage && !state.mergedCoverage && state.colors.size() == 1 && state.colors[0].samples == 1, "a single-sample scan into a 4x depth target and a one-sample color target did not take the color from sample 0");
+    requireCentered(state, "a single-sample scan into a 4x depth target and a one-sample color target");
+    const auto truncatedTwoSample = [&] {
+        auto queue = singleSampleScan();
+        queue.context[0x2f8] = 0x00100001;
+        queue.context[0x292] = 3;
+        for (std::uint32_t pixel = 0; pixel < 4; ++pixel) queue.context[0x2fe + pixel * 4u] = 0xcc44;
+        queue.context[0x010] = 0x22900987;
+        queue.context[0x31d] = 0;
+        return queue;
+    };
+    queue = truncatedTwoSample();
+    state = DecodeState(queue);
+    Require(state.samples == 2 && state.depth && state.depth->samples == 2 && state.colors.size() == 1 && state.colors[0].samples == 1 && state.truncatedCoverage && !state.mergedCoverage && !state.perSampleShading, "a one-sample color target beside a 2x depth target under a 2x rasterizer with MSAA_ENABLE (PPSA02225's registers) did not take the color from sample 0");
+    Require(AgcDriver::Graphics::DrawRejection(queue, false).empty(), "the precheck refused a one-sample color target beside a 2x depth target");
+    queue = truncatedTwoSample();
+    queue.context[0x293] = 0x10000u;
+    queue.context[0x1b3] = queue.context[0x1b4] = ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::PerspectiveSample) | ShaderRecompiler::PixelInputBit(ShaderRecompiler::PixelInput::FrontFace);
+    state = DecodeState(queue);
+    Require(state.truncatedCoverage && state.perSampleShading && state.samples == 2 && state.colors[0].samples == 1, "PS_ITER_SAMPLE into a one-sample color target beside a 2x depth target (PPSA02225's registers) did not run per sample with sample 0's color");
+    queue = truncatedTwoSample();
+    queue.context[0x31d] = 0x12000;
     expectFailure([&] { DecodeState(queue); }, "a color target's sample count differs from the rasterizer's");
     queue = singleSampleScan();
     queue.context[0x010] = 0x22900983;
@@ -9642,6 +9665,18 @@ void unorm4_4_4_4TargetTests() {
             const auto merge = AgcDriver::Graphics::ExportTargetMerge(partial);
             Require(partial.depth.has_value() == ((control & 0xbu) != 0u) && partial.depthBoundsTest == ((control & 8u) != 0u) && merge.mask == 0xf000u && AgcDriver::Graphics::DepthStencilWrites(partial) == writes && merge.depthStencilWrites == writes && merge.depthStencilTests == ((control & 0xbu) != 0u), "a partial 4_4_4_4 write under " + what + (writes ? " did not report" : " reported") + " depth or stencil writes");
         }
+        auto truncated = depthQueue;
+        truncated.context[0x200] = 0x00700712u;
+        truncated.context[0x010] = 0x22900987u;
+        truncated.context[0x2f8] = 0x00100001u;
+        truncated.context[0x292] = 3;
+        for (std::uint32_t pixel = 0; pixel < 4; ++pixel) truncated.context[0x2fe + pixel * 4u] = 0xcc44;
+        truncated.context[0x31d] = truncated.context.at(0x31d) & ~0x3f000u;
+        truncated.context[0x8e] = 0xf;
+        const auto full = AgcDriver::Graphics::DecodeState(truncated);
+        Require(full.samples == 2 && full.truncatedCoverage && !full.mergedCoverage && full.color.samples == 1 && full.color.partialWriteMask == 0u, "a full write of a one-sample 4_4_4_4 unorm target beside a 2x depth target did not decode as truncated coverage");
+        truncated.context[0x8e] = 1;
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(truncated); }, "under merged or truncated coverage");
     }
     {
         auto smoothed = queue;
@@ -9654,7 +9689,7 @@ void unorm4_4_4_4TargetTests() {
         const auto merged = AgcDriver::Graphics::DecodeState(smoothed);
         Require(merged.samples == 4 && merged.mergedCoverage && merged.color.samples == 1 && merged.color.partialWriteMask == 0u, "a full write of a one-sample 4_4_4_4 unorm target under OVERRASTERIZATION_AMOUNT 2 did not decode as merged coverage");
         smoothed.context[0x8e] = 1;
-        expectFailure([&] { AgcDriver::Graphics::DecodeState(smoothed); }, "under merged coverage");
+        expectFailure([&] { AgcDriver::Graphics::DecodeState(smoothed); }, "under merged or truncated coverage");
     }
     {
         changed.context[0x8e] = 1;
