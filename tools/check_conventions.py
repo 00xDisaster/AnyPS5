@@ -220,12 +220,12 @@ class Check:
             assembly = asm_exports(text)
             for number, line in enumerate(source):
                 names = [match.group(1) for match in EXPORT.finditer(line)
-                         if match.group(1) in exports and function_body(source, number) is not None]
-                names += [name for name in assembly.get(number + 1, ()) if name in exports]
+                         if match.group(1) in exports and library(path) != library(exports[match.group(1)][0])
+                         and function_body(source, number) is not None]
+                names += [name for name in assembly.get(number + 1, ()) if name in exports and library(path) != library(exports[name][0])]
                 for name in names:
                     own, own_number = exports[name]
-                    if library(path) != library(own):
-                        self.report("duplicate-export", own, own_number, f"{name} is also in {library(path)}")
+                    self.report("duplicate-export", own, own_number, f"{name} is also in {library(path)}")
 
     def unknown_nids(self, unknowns, symbols):
         if not unknowns and not symbols:
