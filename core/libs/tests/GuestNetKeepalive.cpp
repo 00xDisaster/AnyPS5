@@ -16,6 +16,11 @@ extern "C" {
 int APS5_VABI sceNetInit_nid_postfix();
 int APS5_VABI sceNetSocket(const char*, int, int, int);
 int APS5_VABI sceNetSocketClose(int);
+int APS5_VABI sceNetBind_nid_postfix(int, const void*, std::uint32_t);
+int APS5_VABI sceNetGetsockname(int, void*, std::uint32_t*);
+int APS5_VABI sceNetListen(int, int);
+int APS5_VABI sceNetConnect(int, const void*, std::uint32_t);
+int APS5_VABI sceNetAccept(int, void*, std::uint32_t*);
 int APS5_VABI sceNetSetsockopt(int, int, int, const void*, std::uint32_t);
 int APS5_VABI sceNetGetsockopt(int, int, int, void*, std::uint32_t*);
 int* APS5_VABI sceNetErrnoLoc();
@@ -87,4 +92,37 @@ static void CheckKeepalive() {
 int main() {
     Require(sceNetInit_nid_postfix() == 0);
     CheckKeepalive();
+    const auto readFlag = [](int socket) {
+        int value = -1;
+        std::uint32_t size = sizeof(value);
+        Require(sceNetGetsockopt(socket, 0xffff, 8, &value, &size) == 0 && size == sizeof(value));
+        return value;
+    };
+    for (const int family : {2, 28}) {
+        const int listener = sceNetSocket("keepalive-listener", family, 1, 6);
+        const int client = sceNetSocket("keepalive-client", family, 1, 6);
+        Require(listener >= 0 && client >= 0);
+        const int on = 1;
+        const int off = 0;
+        Require(sceNetSetsockopt(listener, 0xffff, 8, &on, sizeof(on)) == 0);
+        std::array<std::uint8_t, 28> address{};
+        std::uint32_t size = family == 2 ? 16 : 28;
+        address[0] = size;
+        address[1] = family;
+        if (family == 2) {
+            address[4] = 127;
+            address[7] = 1;
+        } else {
+            address[23] = 1;
+        }
+        Require(sceNetBind_nid_postfix(listener, address.data(), size) == 0);
+        Require(sceNetListen(listener, 1) == 0);
+        Require(sceNetGetsockname(listener, address.data(), &size) == 0);
+        Require(sceNetConnect(client, address.data(), size) == 0);
+        const int accepted = sceNetAccept(listener, nullptr, nullptr);
+        Require(accepted >= 0 && readFlag(accepted) == 8 && readFlag(client) == 0);
+        Require(sceNetSetsockopt(listener, 0xffff, 8, &off, sizeof(off)) == 0);
+        Require(readFlag(listener) == 0 && readFlag(accepted) == 8);
+        for (const int socket : {accepted, client, listener}) Require(sceNetSocketClose(socket) == 0);
+    }
 }
