@@ -16,6 +16,6 @@ bool SameDirectory(const std::filesystem::path& first, const std::filesystem::pa
 
 NativeModules ReadModules(const std::filesystem::path& inputPath, const std::filesystem::path& sceModulePath, const std::set<std::string>& excludedModules, const std::vector<std::string>& moduleDirectories);
 
-void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std::string>& neededLibraries, std::ostream& out);
+void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std::string>& neededLibraries, bool foldCase, std::ostream& out);
 
 }

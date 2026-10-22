@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <string_view>
 #include <tuple>
 
@@ -21,12 +22,12 @@ struct CandidateHeader {
     std::uint16_t Type = 0;
 };
 
-CandidateHeader ReadCandidateHeader(const std::filesystem::path& path) {
+std::optional<CandidateHeader> TryReadCandidateHeader(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
-    if (!stream) throw Domain::RelinkerException("Cannot read guest candidate: " + Io::Utf8Path(path));
+    if (!stream) return std::nullopt;
     char header[18]{};
     stream.read(header, sizeof header);
-    if (stream.bad()) throw Domain::RelinkerException("Cannot read guest candidate magic: " + Io::Utf8Path(path));
+    if (stream.bad()) return std::nullopt;
     CandidateHeader result;
     if (stream.gcount() < 4) return result;
     const auto byte = [&](const std::size_t index) { return static_cast<unsigned char>(header[index]); };
@@ -34,6 +35,17 @@ CandidateHeader ReadCandidateHeader(const std::filesystem::path& path) {
     result.Elf = byte(0) == 0x7f && header[1] == 'E' && header[2] == 'L' && header[3] == 'F';
     if (result.Elf && stream.gcount() == sizeof header) result.Type = static_cast<std::uint16_t>(byte(16) | (byte(17) << 8));
     return result;
+}
+
+CandidateHeader ReadCandidateHeader(const std::filesystem::path& path) {
+    const auto header = TryReadCandidateHeader(path);
+    if (!header) throw Domain::RelinkerException("Cannot read guest candidate: " + Io::Utf8Path(path));
+    return *header;
+}
+
+std::string FoldedName(std::string name, const bool foldCase) {
+    if (foldCase) for (auto& character : name) if (character >= 'A' && character <= 'Z') character = static_cast<char>(character + ('a' - 'A'));
+    return name;
 }
 
 std::string_view ModuleStem(const std::string_view name) {
@@ -130,10 +142,12 @@ NativeModules ReadModules(const std::filesystem::path& inputPath, const std::fil
     return result;
 }
 
-void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std::string>& neededLibraries, std::ostream& out) {
+void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std::string>& neededLibraries, const bool foldCase, std::ostream& out) {
     std::map<std::string, std::vector<std::string>> stems;
-    for (const auto& name : neededLibraries)
-        if (!Domain::ModuleSuffix(name).empty()) stems[std::string(ModuleStem(name))].push_back(name);
+    for (const auto& name : neededLibraries) {
+        const auto folded = FoldedName(name, foldCase);
+        if (!Domain::ModuleSuffix(folded).empty()) stems[std::string(ModuleStem(folded))].push_back(name);
+    }
     if (stems.empty()) return;
     struct Found {
         std::filesystem::path Relative;
@@ -147,13 +161,13 @@ void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std
             continue;
         }
         if (!entry->is_regular_file()) continue;
-        const auto filename = Io::Utf8Path(entry->path().filename());
+        const auto filename = FoldedName(Io::Utf8Path(entry->path().filename()), foldCase);
         if (Domain::ModuleSuffix(filename).empty()) continue;
         const auto stem = stems.find(std::string(ModuleStem(filename)));
         if (stem == stems.end()) continue;
-        const auto header = ReadCandidateHeader(entry->path());
-        if (!header.Self && !(header.Elf && header.Type == 0xfe18)) continue;
-        for (const auto& name : stem->second) found.push_back({entry->path().lexically_relative(modules.Root), name, header.Self});
+        const auto header = TryReadCandidateHeader(entry->path());
+        if (!header || (!header->Self && !(header->Elf && header->Type == 0xfe18))) continue;
+        for (const auto& name : stem->second) found.push_back({entry->path().lexically_relative(modules.Root), name, header->Self});
     }
     std::sort(found.begin(), found.end(), [](const auto& left, const auto& right) { return std::tie(left.Relative, left.Name) < std::tie(right.Relative, right.Name); });
     for (const auto& [relative, name, self] : found) {

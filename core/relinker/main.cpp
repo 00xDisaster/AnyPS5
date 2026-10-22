@@ -76,7 +76,7 @@ ConvertedExecutable Convert(const Cli::Args& args, const std::string& inputPath,
     progress.IncludeFile(Io::Utf8Path(input.OutputPath));
     for (const auto& module : input.Modules) progress.IncludeFile(Io::Utf8Path(module.Path));
     auto converted = Relinker::Conversion(progress).Convert(std::move(input), options);
-    if (!args.skipSceModule) Cli::ReportUnconvertedNeeded(modules, converted.Analysis.DynamicSection.NeededLibraries, std::cout);
+    if (!args.skipSceModule) Cli::ReportUnconvertedNeeded(modules, converted.Analysis.DynamicSection.NeededLibraries, args.toWindows, std::cout);
     return {inputPath, absPath, std::move(converted.Analysis), std::move(converted.Modules), std::move(converted.Executable), std::move(converted.WindowsDiagnostics), std::move(converted.AppliedPatches), converted.LinuxBase};
 }
 

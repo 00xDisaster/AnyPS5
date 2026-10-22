@@ -143,6 +143,24 @@ def check_needed_outside(relinker, work):
     (case / "needed.prx").write_bytes(sce_module)
     assert convert(case, ["--skip-sce-module"]) == []
 
+    case = work / "outside-case"
+    (case / "sce_module").mkdir(parents=True)
+    (case / "Media").mkdir()
+    (case / "Media" / "NEEDED.PRX").write_bytes(sce_module)
+    assert convert(case) == []
+    assert convert(case, ["--windows"]) == [message + "needed.prx at Media/NEEDED.PRX; add --module-dir Media"]
+
+    if os.name != "nt" and os.geteuid() != 0:
+        case = work / "outside-unreadable"
+        (case / "sce_module").mkdir(parents=True)
+        (case / "Media").mkdir()
+        (case / "Media" / "needed.prx").write_bytes(sce_module)
+        (case / "needed.prx").write_bytes(self_container)
+        (case / "needed.prx").chmod(0)
+        try:
+            assert convert(case) == [message + "needed.prx at Media/needed.prx; add --module-dir Media"]
+        finally:
+            (case / "needed.prx").chmod(0o644)
 
 
 def main():
