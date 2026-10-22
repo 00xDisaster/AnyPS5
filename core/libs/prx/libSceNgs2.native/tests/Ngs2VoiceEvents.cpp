@@ -23,8 +23,8 @@ static void TestPlayWithoutSetup() {
     const Ngs2VoiceCommand playCommand{2, 0, 4, 0, {.u = SCE_NGS2_VOICE_EVENT_PLAY}};
     Event(voice, SCE_NGS2_VOICE_EVENT_STOP_IMM);
     Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS, Ngs2SamplerVoiceWaveformBlocksParam{{}, nullptr, 0, 0, nullptr});
-    Require(sceNgs2VoiceControl(voice, &play.header) == SCE_NGS2_ERROR_INVALID_NUM_CHANNELS);
-    Require(sceNgs2VoiceRunCommands(voice, &playCommand, 1) == SCE_NGS2_ERROR_INVALID_NUM_CHANNELS);
+    Require(sceNgs2VoiceControl(voice, &play.header) == SCE_NGS2_ERROR_INVALID_VOICE_ACCESS);
+    Require(sceNgs2VoiceRunCommands(voice, &playCommand, 1) == SCE_NGS2_ERROR_INVALID_VOICE_ACCESS);
 
     std::vector<float> out(Grain, -1.0f);
     const Ngs2RenderBufferInfo info{out.data(), out.size() * sizeof(float), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
@@ -61,22 +61,27 @@ static void TestPlayAfterSetupInOneList() {
     Reversed reversed{PlayParam(), SamplerSetup};
     reversed.play.header = {sizeof(reversed.play), static_cast<std::int16_t>(sizeof(reversed.play)), SCE_NGS2_VOICE_PARAM_EVENT};
     reversed.setup.header = {sizeof(reversed.setup), 0, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP};
-    Require(sceNgs2VoiceControl(other, &reversed.play.header) == SCE_NGS2_ERROR_INVALID_NUM_CHANNELS);
+    Require(sceNgs2VoiceControl(other, &reversed.play.header) == SCE_NGS2_ERROR_INVALID_VOICE_ACCESS);
     Require(Flags(other) == 0);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
-static void TestOtherRacksStillPlay() {
+static void TestNeverSetUpVoicesOfOtherRacks() {
     const auto system = CreateSystem();
-    const auto submixer = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
-    Event(submixer, SCE_NGS2_VOICE_EVENT_PLAY);
-    Require(Flags(submixer) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
+    const auto play = PlayParam();
+    for (const auto rackId : {SCE_NGS2_RACK_ID_SUBMIXER, SCE_NGS2_RACK_ID_REVERB, SCE_NGS2_RACK_ID_MASTERING}) {
+        const auto voice = Voice(CreateRack(system, rackId));
+        Require(sceNgs2VoiceControl(voice, &play.header) == SCE_NGS2_ERROR_INVALID_VOICE_ACCESS);
+        Require(Flags(voice) == 0);
+    }
+    const auto master = Mastering(system, 1);
+    Require(Flags(master) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
 int main() {
     TestPlayWithoutSetup();
     TestPlayAfterSetupInOneList();
-    TestOtherRacksStillPlay();
+    TestNeverSetUpVoicesOfOtherRacks();
     return 0;
 }

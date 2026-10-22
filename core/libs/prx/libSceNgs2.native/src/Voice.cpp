@@ -25,7 +25,7 @@ struct Ngs2ReturnCode {
 };
 
 static void SendEvent(Ngs2Voice& voice, std::uint32_t eventId) {
-    if (eventId == SCE_NGS2_VOICE_EVENT_PLAY && voice.rack->rackId == SCE_NGS2_RACK_ID_SAMPLER && voice.channels == 0) throw Ngs2ReturnCode{SCE_NGS2_ERROR_INVALID_NUM_CHANNELS};
+    if (eventId == SCE_NGS2_VOICE_EVENT_PLAY && voice.channels == 0) throw Ngs2ReturnCode{SCE_NGS2_ERROR_INVALID_VOICE_ACCESS};
     voice.SetEvent(eventId);
 }
 
