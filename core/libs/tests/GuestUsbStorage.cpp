@@ -18,10 +18,10 @@ namespace {
 
 int g_attr = 0;
 
-void CallbackStub() {}
+void APS5_VABI CallbackStub(const UsbStorageEvent*, void*) {}
 
-void* Callback() {
-    return reinterpret_cast<void*>(&CallbackStub);
+UsbStorageCallback Callback() {
+    return &CallbackStub;
 }
 
 void Require(bool condition, const char* message) {
@@ -126,14 +126,18 @@ void TestNoDevice() {
 
     std::uint8_t info[16];
     std::memset(info, 0x5a, sizeof(info));
-    Require(sceUsbStorageGetDeviceInfo(0, info) == UsbStorage::DeviceNotFound, "get device info of device 0");
-    Require(sceUsbStorageGetDeviceInfo(1, info) == UsbStorage::DeviceNotFound, "get device info of device 1");
+    auto* const infoRecord = reinterpret_cast<UsbStorageDeviceInfo*>(info);
+    Require(sceUsbStorageGetDeviceInfo(0, infoRecord) == UsbStorage::DeviceNotFound, "get device info of device 0");
+    Require(sceUsbStorageGetDeviceInfo(1, infoRecord) == UsbStorage::DeviceNotFound, "get device info of device 1");
     Require(info[0] == 0x5a && info[15] == 0x5a, "device info was written");
     Require(sceUsbStorageGetDeviceInfo(0, nullptr) == UsbStorage::InvalidArgument, "get device info without an info buffer");
 
-    Require(sceUsbStorageIsExist(0) == 0, "device 0 does not exist");
-    Require(sceUsbStorageIsExist(1) == 0, "device 1 does not exist");
-    Require(sceUsbStorageIsExist(0xffffffffu) == 0, "no device id exists");
+    std::uint8_t exists = 1;
+    Require(sceUsbStorageIsExist(0, "/mnt/usb0", &exists) == true && exists == 0, "device 0 does not exist");
+    exists = 1;
+    Require(sceUsbStorageIsExist(1, nullptr, &exists) == true && exists == 0, "device 1 does not exist");
+    exists = 1;
+    Require(sceUsbStorageIsExist(0xffffffffu, "/mnt/usb0", &exists) == true && exists == 0, "no device id exists");
 }
 
 void TestMapRequests() {
@@ -141,8 +145,8 @@ void TestMapRequests() {
     std::uint64_t mountId = 0x5a5a5a5a5a5a5a5aull;
     std::int32_t status = 0x5a5a5a5a;
     std::memset(mountPoint, 0x5a, sizeof(mountPoint));
-    Require(sceUsbStorageRequestMap(0, "/data", 0, 0, mountPoint, &mountId, nullptr, 0) == UsbStorage::DeviceNotFound, "request a map of device 0");
-    Require(sceUsbStorageRequestMap(1, nullptr, 0, 0, nullptr, nullptr, nullptr, 0) == UsbStorage::DeviceNotFound, "request a map of device 1");
+    Require(sceUsbStorageRequestMap(0, "/data", 0, 0, mountPoint, &mountId) == UsbStorage::DeviceNotFound, "request a map of device 0");
+    Require(sceUsbStorageRequestMap(1, nullptr, 0, 0, nullptr, nullptr) == UsbStorage::DeviceNotFound, "request a map of device 1");
     Require(mountId == 0x5a5a5a5a5a5a5a5aull && mountPoint[0] == static_cast<char>(0x5a), "the map request wrote its outputs");
     std::memset(mountPoint, 0x5a, sizeof(mountPoint));
     Require(sceUsbStorageRequestMapWSB(0, "/data", 0, 0, mountPoint, &status) == UsbStorage::DeviceNotFound, "request a WSB map of device 0");

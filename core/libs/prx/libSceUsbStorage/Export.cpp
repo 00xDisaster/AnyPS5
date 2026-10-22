@@ -16,7 +16,7 @@ std::int32_t APS5_VABI sceUsbStorageTerm(void) {
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageRegisterCallback(std::int32_t eventType, void* callback, void* arg) {
+std::int32_t APS5_VABI sceUsbStorageRegisterCallback(std::int32_t eventType, UsbStorageCallback callback, void* arg) {
     (void)arg;
     if (callback == nullptr) {
         return UsbStorage::InvalidArgument;
@@ -28,7 +28,7 @@ std::int32_t APS5_VABI sceUsbStorageRegisterCallback(std::int32_t eventType, voi
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageUnregisterCallback(std::int32_t eventType, void* callback) {
+std::int32_t APS5_VABI sceUsbStorageUnregisterCallback(std::int32_t eventType, UsbStorageCallback callback) {
     if (callback == nullptr) {
         return UsbStorage::InvalidArgument;
     }
@@ -39,7 +39,7 @@ std::int32_t APS5_VABI sceUsbStorageUnregisterCallback(std::int32_t eventType, v
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapAvailable(std::uint32_t device, const char* directory, void* callback, void* arg) {
+std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapAvailable(std::uint32_t device, const char* directory, UsbStorageCallback callback, void* arg) {
     (void)device;
     (void)arg;
     if (directory == nullptr || callback == nullptr) {
@@ -49,7 +49,7 @@ std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapAvailable(std::uint32_
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapAvailable(std::uint32_t device, const char* directory, void* callback) {
+std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapAvailable(std::uint32_t device, const char* directory, UsbStorageCallback callback) {
     (void)device;
     if (directory == nullptr || callback == nullptr) {
         return UsbStorage::InvalidArgument;
@@ -58,7 +58,7 @@ std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapAvailable(std::uint3
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, void* callback, void* arg) {
+std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, UsbStorageCallback callback, void* arg) {
     (void)device;
     (void)arg;
     if (directory == nullptr || callback == nullptr) {
@@ -68,7 +68,7 @@ std::int32_t APS5_VABI sceUsbStorageRegisterCallbackForMapUnavailable(std::uint3
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, void* callback) {
+std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapUnavailable(std::uint32_t device, const char* directory, UsbStorageCallback callback) {
     (void)device;
     if (directory == nullptr || callback == nullptr) {
         return UsbStorage::InvalidArgument;
@@ -77,7 +77,7 @@ std::int32_t APS5_VABI sceUsbStorageUnregisterCallbackForMapUnavailable(std::uin
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageGetDeviceInfo(std::uint32_t device, void* info) {
+std::int32_t APS5_VABI sceUsbStorageGetDeviceInfo(std::uint32_t device, UsbStorageDeviceInfo* info) {
     (void)device;
     if (info == nullptr) {
         return UsbStorage::InvalidArgument;
@@ -100,22 +100,21 @@ int APS5_VABI sceUsbStorageGetMountPointOfShellCore(uint32_t device, char* mount
     return 0;
 }
 
-std::int32_t APS5_VABI sceUsbStorageIsExist(std::uint32_t device) {
+bool APS5_VABI sceUsbStorageIsExist(std::uint32_t device, const char* directory, std::uint8_t* exists) {
     (void)device;
-    return 0;
+    (void)directory;
+    *exists = 0;
+    return true;
 }
 
 std::int32_t APS5_VABI sceUsbStorageRequestMap(std::uint32_t device, const char* directory, std::int32_t flags,
-                                               std::uint64_t volumeSize, char* mountPoint, std::uint64_t* mountId,
-                                               const void* reserved, std::size_t reservedSize) {
+                                               std::uint64_t volumeSize, char* mountPoint, std::uint64_t* mountId) {
     (void)device;
     (void)directory;
     (void)flags;
     (void)volumeSize;
     (void)mountPoint;
     (void)mountId;
-    (void)reserved;
-    (void)reservedSize;
     return UsbStorage::DeviceNotFound;
 }
 
