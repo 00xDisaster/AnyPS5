@@ -40,7 +40,6 @@ int APS5_VABI scePthreadCondDestroy(PthreadCond* cond);
 int APS5_VABI scePthreadCondWait(PthreadCond* cond, PthreadMutex* mutex);
 int APS5_VABI scePthreadCondSignal(PthreadCond* cond);
 int APS5_VABI scePthreadCondBroadcast(PthreadCond* cond);
-void APS5_VABI scePthreadYield();
 int APS5_VABI scePthreadCancel(Pthread thread);
 int APS5_VABI scePthreadSetcancelstate(int state, int* old_state);
 int APS5_VABI scePthreadSetcanceltype(int type, int* old_type);
