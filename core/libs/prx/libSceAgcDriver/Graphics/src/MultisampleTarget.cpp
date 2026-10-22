@@ -1134,6 +1134,12 @@ VkComponentMapping swapRedBlue(VkComponentMapping components) {
     return {swapped(components.r, VK_COMPONENT_SWIZZLE_R), swapped(components.g, VK_COMPONENT_SWIZZLE_G), swapped(components.b, VK_COMPONENT_SWIZZLE_B), swapped(components.a, VK_COMPONENT_SWIZZLE_A)};
 }
 
+bool sameStorageForm(const Context& context, VkFormat rendered, VkFormat requested) {
+    if (rendered == requested) return true;
+    const auto storage = HostStorageFormat(context, rendered);
+    return storage != VK_FORMAT_UNDEFINED && storage == HostStorageFormat(context, requested);
+}
+
 }
 
 std::shared_ptr<Texture> MultisampleTargetTexture(const Context& context, const GuestTextureResource& resource, VkComponentMapping components, VkImageViewType viewType) {
@@ -1173,7 +1179,7 @@ VkImageView MultisampleTargetStorageView(const Context& context, const GuestText
         if (!target->active->load(std::memory_order_acquire)) continue;
         if (target->context.device != context.device || target->target.surfaceAddress != resource.baseAddress) continue;
         const auto& rendered = target->target;
-        if (rendered.format == format && rendered.extent.width == resource.width && rendered.extent.height == resource.height && rendered.samples == resource.samples && rendered.mip == 0) return target->Storage(StorageFormatForGuest(context, resource.format));
+        if (sameStorageForm(context, rendered.format, format) && rendered.extent.width == resource.width && rendered.extent.height == resource.height && rendered.samples == resource.samples && rendered.mip == 0) return target->Storage(StorageFormatForGuest(context, resource.format));
         other = target.get();
     }
     if (other == nullptr) {
