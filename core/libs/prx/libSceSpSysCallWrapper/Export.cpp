@@ -5,6 +5,8 @@
 
 extern "C" {
 
+std::int64_t APS5_VABI GuestNetRecv_nid_no_patch(int s, void* buf, std::size_t len, int flags);
+std::int64_t APS5_VABI GuestNetSend_nid_no_patch(int s, const void* buf, std::size_t len, int flags);
 int APS5_VABI sceKernelGettimeofday(KernelTimeval* tp);
 int APS5_VABI sceKernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rmtp);
 int APS5_VABI sceNetConnect(int s, const void* addr, std::uint32_t addrlen);
@@ -16,13 +18,11 @@ int APS5_VABI sceNetEpollWait(int eid, void* events, int maxevents, int timeout)
 int* APS5_VABI sceNetErrnoLoc(void);
 int APS5_VABI sceNetPoolCreate(const char* name, int size, int flags);
 int APS5_VABI sceNetPoolDestroy(int memid);
-std::int64_t APS5_VABI sceNetRecv(int s, void* buf, std::size_t len, int flags);
 int APS5_VABI sceNetResolverAbort(int rid, int flags);
 int APS5_VABI sceNetResolverCreate(const char* name, int memid, int flags);
 int APS5_VABI sceNetResolverDestroy(int rid);
 int APS5_VABI sceNetResolverGetError(int rid, int* status);
 int APS5_VABI sceNetResolverStartNtoa(int rid, const char* hostname, void* addr, int timeout, int retry, int flags);
-std::int64_t APS5_VABI sceNetSend(int s, const void* buf, std::size_t len, int flags);
 int APS5_VABI sceNetSetsockopt(int s, int level, int optname, const void* optval, std::uint32_t optlen);
 int APS5_VABI sceNetSocket(const char* name, int family, int type, int protocol);
 int APS5_VABI sceNetSocketClose(int s);
@@ -101,7 +101,7 @@ int APS5_VABI sceSpNetPoolDestroy(int memid) {
 }
 
 std::int64_t APS5_VABI sceSpNetRecv(int s, void* buf, std::size_t len, int flags) {
-    return sceNetRecv(s, buf, len, flags);
+    return GuestNetRecv_nid_no_patch(s, buf, len, flags);
 }
 
 int APS5_VABI sceSpNetResolverAbort(int rid, int flags) {
@@ -125,7 +125,7 @@ int APS5_VABI sceSpNetResolverStartNtoa(int rid, const char* hostname, void* add
 }
 
 std::int64_t APS5_VABI sceSpNetSend(int s, const void* buf, std::size_t len, int flags) {
-    return sceNetSend(s, buf, len, flags);
+    return GuestNetSend_nid_no_patch(s, buf, len, flags);
 }
 
 int APS5_VABI sceSpNetSetsockopt(int s, int level, int optname, const void* optval, std::uint32_t optlen) {
