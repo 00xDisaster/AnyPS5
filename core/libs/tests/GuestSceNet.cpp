@@ -613,6 +613,36 @@ static void CheckReceiveTimeout(int receiver, int sender, const std::array<std::
     Require(sceNetSetsockopt(receiver, 0xffff, 0x1006, &disabled, sizeof(disabled)) == 0);
 }
 
+static void CheckStreamReceiveTimeout() {
+    const int listener = sceNetSocket("stream-timeout", 2, 1, 6);
+    Require(listener >= 0);
+    std::array<std::uint8_t, 16> address{16, 2, 0, 0, 127, 0, 0, 1};
+    Require(sceNetBind_nid_postfix(listener, address.data(), address.size()) == 0 && sceNetListen(listener, 1) == 0);
+    std::uint32_t size = address.size();
+    Require(sceNetGetsockname(listener, address.data(), &size) == 0);
+    const int client = sceNetSocket("stream-timeout-client", 2, 1, 6);
+    Require(client >= 0 && sceNetConnect(client, address.data(), address.size()) == 0);
+    const int accepted = sceNetAccept(listener, nullptr, nullptr);
+    Require(accepted >= 0);
+    const KernelTimeval timeout{0, 50000};
+    Require(sceNetSetsockopt(client, 0xffff, 0x1006, &timeout, sizeof(timeout)) == 0);
+    char buffer[8]{};
+    NetIovec in[] = {{buffer, sizeof(buffer)}};
+    NetMsghdr receive{nullptr, 0, in, 1, nullptr, 0, 0};
+    const auto start = std::chrono::steady_clock::now();
+    Require(Failed(sceNetRecv(client, buffer, sizeof(buffer), 0), 35));
+    Require(std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(40));
+    Require(Failed(sceNetRecvfrom(client, buffer, sizeof(buffer), 0, nullptr, nullptr), 35));
+    Require(Failed(sceNetRecvmsg(client, &receive, 0), 35));
+    const char payload[] = "late";
+    Require(sceNetSend(accepted, payload, sizeof(payload), 0) == sizeof(payload));
+    Require(sceNetRecv(client, buffer, sizeof(buffer), 0) == sizeof(payload) && std::strcmp(buffer, payload) == 0);
+    Require(sceNetSend(client, payload, sizeof(payload), 0) == sizeof(payload));
+    std::memset(buffer, 0, sizeof(buffer));
+    Require(sceNetRecv(accepted, buffer, sizeof(buffer), 0) == sizeof(payload) && std::strcmp(buffer, payload) == 0);
+    for (const int descriptor : {client, accepted, listener}) Require(sceNetSocketClose(descriptor) == 0);
+}
+
 static void CheckMicrosecondTimeouts(int receiver) {
     const int receiveTimeout = 50000;
     const int sendTimeout = 70000;
@@ -1784,6 +1814,7 @@ int main() {
     stdio_readable[0] = 1;
     Require(select_nid_postfix(1, stdio_readable, nullptr, nullptr, poll_now) == 0 && stdio_readable[0] == 0);
     CheckReceiveTimeout(udp_receiver, udp_sender, address);
+    CheckStreamReceiveTimeout();
     CheckMicrosecondTimeouts(udp_receiver);
     CheckMessages(udp_receiver, udp_sender, address);
     Require(sceNetSocketClose(udp_sender) == 0);
