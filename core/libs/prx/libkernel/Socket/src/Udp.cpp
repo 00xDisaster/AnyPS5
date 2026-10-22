@@ -538,6 +538,16 @@ constexpr short GuestPollWritable = 0x4;
 constexpr short GuestPollVnodeReady = GuestPollReadable | GuestPollWritable;
 constexpr short GuestPollHangUp = 0x10;
 constexpr short GuestPollError = 0x8;
+#ifdef _WIN32
+short ClosedStreamEvents(int descriptor, short revents, short requested) {
+    if ((revents & (POLLHUP | POLLERR)) != POLLHUP) return revents;
+    const auto socket = Find(descriptor);
+    if (!socket || socket->type != 1) return revents;
+    revents = static_cast<short>(revents | (requested & POLLRDNORM));
+    std::lock_guard lock(socket->modeMutex);
+    return socket->sendShut ? revents : static_cast<short>(revents & ~POLLHUP);
+}
+#endif
 [[noreturn]] void ThrowReadEndWritable(int descriptor) {
     throw std::runtime_error("poll: POLLOUT on the read end of pipe descriptor " + std::to_string(descriptor) + " is not supported");
 }
@@ -1742,6 +1752,9 @@ int APS5_VABI poll_nid_postfix(GuestPollDescriptor* descriptors, std::uint32_t c
     }
     const auto collect = [&](std::size_t i, bool pipe) {
         auto& entry = descriptors[owners[i]];
+#ifdef _WIN32
+        if (!pipe) native[i].revents = ClosedStreamEvents(entry.descriptor, native[i].revents, native[i].events);
+#endif
         for (const auto& flag : RequestFlags)
             if ((entry.events & flag.guest) && (native[i].revents & flag.native))
                 entry.revents = static_cast<short>(entry.revents | flag.guest);
