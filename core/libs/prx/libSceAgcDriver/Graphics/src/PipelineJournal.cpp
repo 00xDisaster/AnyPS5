@@ -327,6 +327,10 @@ std::uint64_t padded(std::uint64_t bytes) {
     return (bytes + RecordAlignment - 1u) / RecordAlignment * RecordAlignment;
 }
 
+std::uint64_t recordBytes(std::uint64_t payloadBytes) {
+    return padded(sizeof(RecordHeader) + payloadBytes);
+}
+
 bool profiling() {
     static const bool profile = std::getenv("APS5_PROFILE_DRAW") != nullptr;
     return profile;
@@ -873,33 +877,25 @@ private:
     // (it is indexed again, and the batch is rebuilt against that index).
     bool append(const Pending& pending) {
         const auto recordHash = ShaderRecompiler::HashBytes(pending.payload);
-        std::vector<std::byte> batch;
-        std::vector<ShaderRecompiler::PipelineIdentity> newModules;
         {
             std::lock_guard lock(mutex);
             if (writtenRecords.contains(recordHash)) return true;
-            for (const auto& module : pending.modules) {
-                if (!writtenModules.contains(module.identity) && std::ranges::find(newModules, module.identity) == newModules.end()) newModules.push_back(module.identity);
-            }
         }
-        const auto appendRecord = [&](std::uint32_t kind, std::span<const std::byte> payload) {
-            const RecordHeader header{kind, 0u, payload.size(), ShaderRecompiler::HashBytes(payload)};
-            Writer writer(batch);
-            writer.Raw(header);
-            batch.insert(batch.end(), payload.begin(), payload.end());
-            batch.resize(static_cast<std::size_t>(padded(batch.size())));
-        };
-        for (const auto& identity : newModules) {
-            const auto module = std::ranges::find_if(pending.modules, [&](const PendingModule& candidate) { return candidate.identity == identity; });
+        std::vector<ShaderRecompiler::PipelineIdentity> identities;
+        std::vector<std::vector<std::byte>> modulePayloads;
+        for (const auto& module : pending.modules) {
+            if (std::ranges::find(identities, module.identity) != identities.end()) continue;
             std::vector<std::byte> payload;
             Writer writer(payload);
-            writer.U64(identity.low);
-            writer.U64(identity.high);
-            writer.U32(static_cast<std::uint32_t>(module->stage));
-            ShaderRecompiler::ShaderDiskCache::EncodeResult(*module->result, payload);
-            appendRecord(ModuleRecord, payload);
+            writer.U64(module.identity.low);
+            writer.U64(module.identity.high);
+            writer.U32(static_cast<std::uint32_t>(module.stage));
+            ShaderRecompiler::ShaderDiskCache::EncodeResult(*module.result, payload);
+            identities.push_back(module.identity);
+            modulePayloads.push_back(std::move(payload));
         }
-        appendRecord(pending.kind, pending.payload);
+        std::uint64_t needed = recordBytes(pending.payload.size());
+        for (const auto& payload : modulePayloads) needed += recordBytes(payload.size());
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
         FileLock fileLock(lockPath);
@@ -924,14 +920,35 @@ private:
                     else validBytes = tail;
                 }
             }
-            overCap = !fresh && validBytes + batch.size() > maxBytes;
+            overCap = !fresh && validBytes + needed > maxBytes;
         }
-        if (overCap && !evictUnderLock(batch.size())) {
-            static std::atomic<bool> reported{false};
-            if (!reported.exchange(true)) std::fprintf(stderr, "[pipeline-journal] %s reached APS5_PIPELINE_JOURNAL_MAX_MIB; later pipelines are not recorded\n", path.string().c_str());
-            counters.writeFailures.fetch_add(1, std::memory_order_relaxed);
-            return true;
+        if (overCap) {
+            if (!evictUnderLock(needed)) {
+                static std::atomic<bool> reported{false};
+                if (!reported.exchange(true)) std::fprintf(stderr, "[pipeline-journal] %s reached APS5_PIPELINE_JOURNAL_MAX_MIB; later pipelines are not recorded\n", path.string().c_str());
+                counters.writeFailures.fetch_add(1, std::memory_order_relaxed);
+                return true;
+            }
+            return false;
         }
+        std::vector<std::byte> batch;
+        std::vector<ShaderRecompiler::PipelineIdentity> newModules;
+        const auto appendRecord = [&](std::uint32_t kind, std::span<const std::byte> payload) {
+            const RecordHeader header{kind, 0u, payload.size(), ShaderRecompiler::HashBytes(payload)};
+            Writer writer(batch);
+            writer.Raw(header);
+            batch.insert(batch.end(), payload.begin(), payload.end());
+            batch.resize(static_cast<std::size_t>(padded(batch.size())));
+        };
+        {
+            std::lock_guard lock(mutex);
+            for (std::size_t index = 0; index < identities.size(); ++index) {
+                if (writtenModules.contains(identities[index])) continue;
+                newModules.push_back(identities[index]);
+                appendRecord(ModuleRecord, modulePayloads[index]);
+            }
+        }
+        appendRecord(pending.kind, pending.payload);
         if (!fresh) {
             const auto size = std::filesystem::file_size(path, error);
             if (!error && size < validBytes) {

@@ -151,7 +151,7 @@ AgcDriver::Graphics::ColorTarget DecodeTarget(const Block& block) {
     return color;
 }
 
-void Draw(AgcDriver::VulkanDevice& device, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint32_t> pixelCode) {
+void Draw(AgcDriver::VulkanDevice& device, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint32_t> pixelCode, std::uint32_t colorWriteMask = 0xf) {
     const auto target = device.Target();
     constexpr std::uint32_t waveSize = 64;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
@@ -182,7 +182,7 @@ void Draw(AgcDriver::VulkanDevice& device, const AgcDriver::Graphics::ColorTarge
     state.cullMode = VK_CULL_MODE_NONE;
     state.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     VkPipelineColorBlendAttachmentState blend{};
-    blend.colorWriteMask = 0xf;
+    blend.colorWriteMask = colorWriteMask;
     state.blends = {blend};
     state.blend = blend;
     state.blendConstants = {};
@@ -544,6 +544,63 @@ void EvictionTests() {
     Require(newest, "the newest pipeline did not survive the rewrite");
 }
 
+// The record that triggers an eviction must keep the modules it shares with the records the
+// eviction drops: the eviction cannot know what the record about to be written needs.
+void EvictionKeepsPendingModules() {
+    using namespace NarrowConstantStoreFixture;
+    const auto path = AgcDriver::Graphics::PipelineJournalPath();
+    Block target(ColorTargetLayout(Width, Height, ColorTileMode::Linear, 2).Bytes());
+    const auto color = DecodeTarget(target);
+    const std::array<float, 4> red{1.0f, 0.0f, 0.0f, 1.0f};
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the pending module test could not be opened");
+        device->WaitForPipelineJournalReplay();
+        std::memset(target.data, 0, target.bytes);
+        Draw(*device, color, Program(red));
+        device->WaitIdle();
+        AgcDriver::Graphics::FlushPipelineJournal();
+    }
+    constexpr std::size_t FillerBytes = 600u * 1024u;
+    {
+        std::vector<std::byte> file;
+        std::vector<std::byte> module(20u + FillerBytes, std::byte{0x5a});
+        const std::uint64_t low = 0x5a5au;
+        const std::uint64_t high = 0u;
+        std::memcpy(module.data(), &low, sizeof(low));
+        std::memcpy(module.data() + 8, &high, sizeof(high));
+        AppendJournalRecord(file, JournalModuleRecord, module);
+        std::vector<std::byte> compute(17u + FillerBytes, std::byte{0});
+        std::memcpy(compute.data(), &low, sizeof(low));
+        std::memcpy(compute.data() + 8, &high, sizeof(high));
+        AppendJournalRecord(file, JournalComputeRecord, compute);
+        std::ofstream out(path, std::ios::binary | std::ios::app);
+        Require(static_cast<bool>(out), "the filler records could not be written");
+        out.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
+        out.flush();
+        Require(!out.fail(), "the filler records could not be written");
+    }
+    Require(std::filesystem::file_size(path) > 1024u * 1024u, "the journal is smaller than the cap");
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the pending module test could not be opened");
+        device->WaitForPipelineJournalReplay();
+        std::memset(target.data, 0, target.bytes);
+        Draw(*device, color, Program(red), 0x7);
+        device->WaitIdle();
+        AgcDriver::Graphics::FlushPipelineJournal();
+    }
+    const auto before = Snapshot();
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the pending module replay could not be opened");
+        device->WaitForPipelineJournalReplay();
+        const auto replayed = Snapshot();
+        Require(replayed.journal.replayedGraphics == before.journal.replayedGraphics + 1, "the record written after the eviction was not replayed: " + std::to_string(replayed.journal.replayedGraphics - before.journal.replayedGraphics) + " graphics built, " + std::to_string(replayed.journal.replayRejected - before.journal.replayRejected) + " rejected");
+        Require(replayed.journal.replayRejected == before.journal.replayRejected, "the record written after the eviction was rejected: the eviction dropped a module it needed");
+    }
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -574,6 +631,7 @@ int main(int argc, char** argv) {
         JournalTests();
         NewestEntriesTests();
         EvictionTests();
+        EvictionKeepsPendingModules();
         std::puts("pipeline journal record and replay passed");
         return 0;
     } catch (const std::exception& error) {
