@@ -10,11 +10,8 @@
 #include <list>
 #include <locale>
 #include <mutex>
-<<<<<<< HEAD
-#include <sstream>
-=======
 #include <memory>
->>>>>>> origin/main
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include "SceTypes.hpp"
