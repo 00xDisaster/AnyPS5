@@ -973,8 +973,9 @@ bool mergeLeavesContainingLoop(const ControlFlowGraph& graph, std::uint32_t head
     return false;
 }
 
-bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const std::vector<std::uint32_t>& constructBlocks, bool forceSplit = false) {
-    if (merge == InvalidControlFlowId || merge >= graph.blocks.size() || containsSorted(constructBlocks, merge)) {
+template <typename InConstruct>
+bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, InConstruct inConstruct, bool forceSplit = false) {
+    if (merge == InvalidControlFlowId || merge >= graph.blocks.size() || inConstruct(merge)) {
         return false;
     }
 
@@ -982,7 +983,7 @@ bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const s
     std::vector<std::uint32_t> constructPredecessors;
     bool hasExternalPredecessor = false;
     for (const auto predecessor : mergeBlock.predecessors) {
-        if (containsSorted(constructBlocks, predecessor)) {
+        if (inConstruct(predecessor)) {
             addUnique(constructPredecessors, predecessor);
         } else {
             hasExternalPredecessor = true;
@@ -1012,6 +1013,29 @@ bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const s
     sortUnique(oldMerge.predecessors);
 
     moveBlockBefore(graph, syntheticMerge, merge);
+    return true;
+}
+
+bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const std::vector<std::uint32_t>& constructBlocks, bool forceSplit = false) {
+    return splitSharedMergeBlock(graph, merge, [&](std::uint32_t blockId) { return containsSorted(constructBlocks, blockId); }, forceSplit);
+}
+
+bool constructsFollowDominance(const ControlFlowGraph& graph) {
+    if (!inPlaceIntersections() || !dominatorTrees() || graph.entryBlock >= graph.blocks.size() || reversePostOrder(graph).size() != graph.blocks.size()) {
+        return false;
+    }
+    for (const auto& block : graph.blocks) {
+        for (const auto successor : block.successors) {
+            if (!containsSorted(graph.blocks[successor].predecessors, block.id)) {
+                return false;
+            }
+        }
+        for (const auto predecessor : block.predecessors) {
+            if (!contains(graph.blocks[predecessor].successors, block.id)) {
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -1596,6 +1620,7 @@ bool splitOneSelectionMerge(ControlFlowGraph& graph, SplitBudget& budget, const 
             selectionHeaders.push_back(block.id);
         }
     }
+    const bool dominanceConstructs = constructsFollowDominance(graph);
     std::sort(selectionHeaders.begin(), selectionHeaders.end(), [&](std::uint32_t lhs, std::uint32_t rhs) {
         const auto lhsDepth = graph.FindBlock(lhs).dominators.size();
         const auto rhsDepth = graph.FindBlock(rhs).dominators.size();
@@ -1618,6 +1643,13 @@ bool splitOneSelectionMerge(ControlFlowGraph& graph, SplitBudget& budget, const 
             return true;
         }
 
+        if (dominanceConstructs && merge != blockId && graph.Dominates(blockId, blockId) && !graph.Dominates(merge, blockId)) {
+            const auto inConstruct = [&](std::uint32_t member) { return member != merge && graph.Dominates(blockId, member) && !graph.Dominates(merge, member); };
+            if (splitSharedMergeBlock(graph, merge, inConstruct, mergeLeavesContainingLoop(graph, blockId, merge))) {
+                return true;
+            }
+            continue;
+        }
         const auto constructBlocks = dominatedBlocks(graph, blockId, merge);
         const auto forceSplit = mergeLeavesContainingLoop(graph, blockId, merge);
         if (splitSharedMergeBlock(graph, merge, constructBlocks, forceSplit)) {
