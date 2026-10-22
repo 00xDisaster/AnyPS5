@@ -408,6 +408,16 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpParty>")
     endif()
 
+    add_test_executable(guest_np_ps4_imports_tests tests/GuestNpPs4Imports.cpp)
+    target_include_directories(guest_np_ps4_imports_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(guest_np_ps4_imports_tests PRIVATE libSceNpMatching2 libSceNpSignaling libc)
+    configure_windows_unwind(guest_np_ps4_imports_tests)
+    add_test(NAME guest_np_ps4_imports COMMAND guest_np_ps4_imports_tests)
+    if(WIN32)
+        set_tests_properties(guest_np_ps4_imports PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpMatching2>")
+    endif()
+
     add_test_executable(guest_offline_imports_tests tests/GuestOfflineImports.cpp)
     target_include_directories(guest_offline_imports_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(guest_offline_imports_tests PRIVATE libSceHttp libSceNpEntitlementAccess libSceRudp libSceVideoRecordingP libc)
