@@ -1,9 +1,13 @@
 #include "prx/libc/include/Api.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cfenv>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
+#include <stdexcept>
 #include <string>
 
 #include "prx/libc/include/General.hpp"
@@ -73,6 +77,76 @@ TInteger ParsedInteger(const char* text, char** end, int base, int* error, TInte
     return value;
 }
 
+constexpr short Denormal = -2, Finite = -1, Zero = 0, Infinite = 1, NotANumber = 2;
+
+short ClassifyDouble(double value) {
+    switch (std::fpclassify(value)) {
+    case FP_NAN:
+        return NotANumber;
+    case FP_INFINITE:
+        return Infinite;
+    case FP_ZERO:
+        return Zero;
+    case FP_SUBNORMAL:
+        return Denormal;
+    default:
+        return Finite;
+    }
+}
+
+short ClassifyFloat(float value) {
+    switch (std::fpclassify(value)) {
+    case FP_NAN:
+        return NotANumber;
+    case FP_INFINITE:
+        return Infinite;
+    case FP_ZERO:
+        return Zero;
+    case FP_SUBNORMAL:
+        return Denormal;
+    default:
+        return Finite;
+    }
+}
+
+void RaiseLibcError(int exceptions) {
+    if ((exceptions & (FE_OVERFLOW | FE_UNDERFLOW)) != 0) exceptions |= FE_INEXACT;
+    std::feraiseexcept(exceptions);
+    const bool range = (exceptions & FE_INVALID) == 0 &&
+        (exceptions & (FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW)) != 0;
+    errno = range ? ERANGE : EDOM;
+}
+
+short ScaleDouble(double& value, long exponent) {
+    const short kind = ClassifyDouble(value);
+    if (kind == NotANumber) return kind;
+    if (kind == Infinite) {
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (kind == Zero) return Zero;
+    value = std::scalbn(value, static_cast<int>(exponent));
+    const short result = ClassifyDouble(value);
+    if (result == Infinite) RaiseLibcError(FE_OVERFLOW);
+    if (result == Zero || result == Denormal) RaiseLibcError(FE_UNDERFLOW);
+    return result;
+}
+
+short ScaleFloat(float& value, long exponent) {
+    const short kind = ClassifyFloat(value);
+    if (kind == NotANumber) return kind;
+    if (kind == Infinite) {
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (kind == Zero) return Zero;
+    value = std::scalbn(value, static_cast<int>(exponent));
+    const short result = ClassifyFloat(value);
+    if (result == Infinite) RaiseLibcError(FE_OVERFLOW);
+    if (result == Zero || result == Denormal) RaiseLibcError(FE_UNDERFLOW);
+    return result;
+}
+
 }
 
 extern "C" {
@@ -129,6 +203,118 @@ std::int64_t APS5_VABI _Stolx_nid_postfix(const char* text, char** end, int base
 
 long long APS5_VABI _Stoll_nid_postfix(const char* text, char** end, int base) {
     return _Stollx_nid_postfix(text, end, base, nullptr);
+}
+
+short APS5_VABI _Exp_nid_postfix(double* value, double y, short offset) {
+    if (value == nullptr) throw std::invalid_argument("_Exp: null value");
+    const double x = *value;
+    constexpr double HugeExp = 1842.0;
+    constexpr double Eps = std::numeric_limits<double>::epsilon();
+    constexpr double InverseLn2 = 1.4426950408889634073599246810018921;
+    constexpr double Ln2High = 22713.0 / 32768.0;
+    constexpr double Ln2Low = 1.4286068203094172321214581765680755e-6;
+    constexpr double P1 = 420.30235984910635;
+    constexpr double P2 = 15132.70094680474802;
+    constexpr double Q0 = 30.01511290683317;
+    constexpr double Q1 = 3362.72154416553028;
+    constexpr double Q2 = 30265.40189360949691;
+    if (std::isnan(x)) {
+        *value = x;
+        return NotANumber;
+    }
+    if (std::isnan(y)) {
+        *value = y;
+        return NotANumber;
+    }
+    if (y == 0.0) {
+        *value = 0.0;
+        return Zero;
+    }
+    if (x < -HugeExp) {
+        *value = std::copysign(0.0, y);
+        RaiseLibcError(FE_UNDERFLOW);
+        return Zero;
+    }
+    if (x > HugeExp) {
+        *value = std::copysign(std::numeric_limits<double>::infinity(), y);
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (std::isinf(y)) {
+        *value = y;
+        return Infinite;
+    }
+    double g = x * InverseLn2;
+    short exponent = static_cast<short>(g + (g < 0.0 ? -0.5 : 0.5));
+    g = static_cast<double>(exponent);
+    g = (x - g * Ln2High) - g * Ln2Low;
+    double result;
+    if (-Eps < g && g < Eps) {
+        result = y;
+    } else {
+        const double z = g * g;
+        const double w = (Q0 * z + Q1) * z + Q2;
+        g *= (z + P1) * z + P2;
+        result = (w + g) / (w - g) * 2.0 * y;
+        --exponent;
+    }
+    *value = result;
+    return ScaleDouble(*value, static_cast<long>(exponent) + offset);
+}
+
+short APS5_VABI _FExp_nid_postfix(float* value, float y, short offset) {
+    if (value == nullptr) throw std::invalid_argument("_FExp: null value");
+    const float x = *value;
+    constexpr float HugeExp = 229.0f;
+    constexpr float Eps = std::numeric_limits<float>::epsilon();
+    constexpr float InverseLn2 = 1.4426950408889634073599246810018921f;
+    constexpr float Ln2High = 22713.0f / 32768.0f;
+    constexpr float Ln2Low = 1.4286068203094172321214581765680755e-6f;
+    constexpr float P1 = 60.09114349f;
+    constexpr float Q0 = 12.01517514f;
+    constexpr float Q1 = 120.18228722f;
+    if (std::isnan(x)) {
+        *value = x;
+        return NotANumber;
+    }
+    if (std::isnan(y)) {
+        *value = y;
+        return NotANumber;
+    }
+    if (y == 0.0f) {
+        *value = 0.0f;
+        return Zero;
+    }
+    if (x < -HugeExp) {
+        *value = std::copysign(0.0f, y);
+        RaiseLibcError(FE_UNDERFLOW);
+        return Zero;
+    }
+    if (x > HugeExp) {
+        *value = std::copysign(std::numeric_limits<float>::infinity(), y);
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (std::isinf(y)) {
+        *value = y;
+        return Infinite;
+    }
+    float g = x * InverseLn2;
+    short exponent = static_cast<short>(g + (g < 0.0f ? -0.5f : 0.5f));
+    g = static_cast<float>(exponent);
+    g = (x - g * Ln2High) - g * Ln2Low;
+    float result;
+    if (-Eps < g && g < Eps) {
+        result = y;
+    } else {
+        const float z = g * g;
+        const float w = Q0 * z + Q1;
+        g *= z + P1;
+        result = (w + g) / (w - g) * 2.0f * y;
+        --exponent;
+    }
+    *value = result;
+    return ScaleFloat(*value, static_cast<long>(exponent) + offset);
 }
 
 double APS5_VABI _Sin_nid_postfix(double x, unsigned int quadrant) {

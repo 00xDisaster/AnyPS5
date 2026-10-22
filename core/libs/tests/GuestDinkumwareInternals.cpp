@@ -1,5 +1,7 @@
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <cerrno>
+#include <cfenv>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -158,6 +160,160 @@ void TestIntegerErrors() {
     Require(_Stoullx_nid_postfix("18446744073709551616", &end, 10, &error) == 18446744073709551615ull && error == RangeError && *__error_nid_postfix() == RangeError, "_Stoullx overflow");
 }
 
+void TestDoubleHelpers() {
+    const double e = std::exp(1.0);
+    double result = 1.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == -1 && std::fabs(result - e) <= e * 1e-14, "_Exp e");
+    result = 0.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == -1 && result == 1.0, "_Exp zero exponent");
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, 3.0, 0) == -1 && std::fabs(result - 3.0 * e) <= 3.0 * e * 1e-14, "_Exp multiplier");
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, -2.0, 0) == -1 && std::fabs(result + 2.0 * e) <= 2.0 * e * 1e-14, "_Exp negative multiplier");
+    result = 0.0;
+    Require(_Exp_nid_postfix(&result, 5.0, 0) == -1 && result == 5.0, "_Exp multiplier at zero exponent");
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 10) == -1 && std::fabs(result - e * 1024.0) <= e * 1024.0 * 1e-14, "_Exp scale");
+    for (int i = -200; i <= 200; ++i) {
+        const double x = static_cast<double>(i) / 16.0;
+        result = x;
+        Require(_Exp_nid_postfix(&result, 1.0, 0) == -1 && std::fabs(result - std::exp(x)) <= std::fabs(std::exp(x)) * 1e-14, "_Exp finite sweep");
+    }
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, 0.0, 0) == 0 && result == 0.0, "_Exp zero multiplier");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = NAN;
+    Require(_Exp_nid_postfix(&result, 0.0, 0) == 2 && std::isnan(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_Exp NaN zero multiplier");
+    result = NAN;
+    Require(_Exp_nid_postfix(&result, 0.0, 17) == 2 && std::isnan(result), "_Exp scaled NaN zero multiplier");
+    result = 1843.0;
+    Require(_Exp_nid_postfix(&result, 0.0, 0) == 0 && result == 0.0, "_Exp overflow exponent with zero multiplier");
+    result = INFINITY;
+    Require(_Exp_nid_postfix(&result, 0.0, -17) == 0 && result == 0.0 && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_Exp infinite exponent with zero multiplier");
+    result = -INFINITY;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 0 && result == 0.0, "_Exp negative infinity");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1843.0;
+    Require(_Exp_nid_postfix(&result, -1.0, 0) == 1 && std::isinf(result) && std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_Exp overflow preserves multiplier sign");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = -1843.0;
+    Require(_Exp_nid_postfix(&result, -1.0, 0) == 0 && result == 0.0 && std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_Exp underflow preserves multiplier sign");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = -1843.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 0 && result == 0.0 && !std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_Exp negative cutoff reports underflow");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, std::numeric_limits<double>::max(), 0) == 1 && std::isinf(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_Exp finite multiplier overflow");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, std::numeric_limits<double>::denorm_min(), 0) == -2 && std::fpclassify(result) == FP_SUBNORMAL && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_Exp subnormal result classification");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = INFINITY;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 1 && std::isinf(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_Exp positive infinity");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = NAN;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 2 && std::isnan(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_Exp NaN exponent");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, NAN, 0) == 2 && std::isnan(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_Exp NaN multiplier");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, INFINITY, 0) == 1 && std::isinf(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_Exp infinite multiplier");
+    result = 1000.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 1 && std::isinf(result), "_Exp overflow");
+    result = -1000.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 0) == 0 && result == 0.0, "_Exp underflow");
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, 1.0, -2000) == 0 && result == 0.0, "_Exp scaled underflow");
+    result = 1.0;
+    Require(_Exp_nid_postfix(&result, 1.0, 2000) == 1 && std::isinf(result), "_Exp scaled overflow");
+
+    const float ef = std::exp(1.0f);
+    float resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == -1 && std::fabs(resultf - ef) <= ef * 1e-6f, "_FExp e");
+    resultf = 0.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == -1 && resultf == 1.0f, "_FExp zero exponent");
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 3.0f, 0) == -1 && std::fabs(resultf - 3.0f * ef) <= 3.0f * ef * 1e-6f, "_FExp multiplier");
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, -2.0f, 0) == -1 && std::fabs(resultf + 2.0f * ef) <= 2.0f * ef * 1e-6f, "_FExp negative multiplier");
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 10) == -1 && std::fabs(resultf - ef * 1024.0f) <= ef * 1024.0f * 1e-6f, "_FExp scale");
+    for (int i = -120; i <= 120; ++i) {
+        const float x = static_cast<float>(i) / 16.0f;
+        resultf = x;
+        Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == -1 && std::fabs(resultf - std::exp(x)) <= std::fabs(std::exp(x)) * 1e-6f, "_FExp finite sweep");
+    }
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 0.0f, 0) == 0 && resultf == 0.0f, "_FExp zero multiplier");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = NAN;
+    Require(_FExp_nid_postfix(&resultf, 0.0f, 0) == 2 && std::isnan(resultf) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_FExp NaN zero multiplier");
+    resultf = NAN;
+    Require(_FExp_nid_postfix(&resultf, 0.0f, 17) == 2 && std::isnan(resultf), "_FExp scaled NaN zero multiplier");
+    resultf = 230.0f;
+    Require(_FExp_nid_postfix(&resultf, 0.0f, 0) == 0 && resultf == 0.0f, "_FExp overflow exponent with zero multiplier");
+    resultf = INFINITY;
+    Require(_FExp_nid_postfix(&resultf, 0.0f, -17) == 0 && resultf == 0.0f && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_FExp infinite exponent with zero multiplier");
+    resultf = -INFINITY;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 0 && resultf == 0.0f, "_FExp negative infinity");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = 230.0f;
+    Require(_FExp_nid_postfix(&resultf, -1.0f, 0) == 1 && std::isinf(resultf) && std::signbit(resultf) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_FExp overflow preserves multiplier sign");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = -230.0f;
+    Require(_FExp_nid_postfix(&resultf, -1.0f, 0) == 0 && resultf == 0.0f && std::signbit(resultf) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_FExp underflow preserves multiplier sign");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = -230.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 0 && resultf == 0.0f && !std::signbit(resultf) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_FExp negative cutoff reports underflow");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, std::numeric_limits<float>::max(), 0) == 1 && std::isinf(resultf) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_FExp finite multiplier overflow");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, std::numeric_limits<float>::denorm_min(), 0) == -2 && std::fpclassify(resultf) == FP_SUBNORMAL && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT), "_FExp subnormal result classification");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = INFINITY;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 1 && std::isinf(resultf) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0, "_FExp positive infinity");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = NAN;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 2 && std::isnan(resultf) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_FExp NaN exponent");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, NAN, 0) == 2 && std::isnan(resultf) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_FExp NaN multiplier");
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, INFINITY, 0) == 1 && std::isinf(resultf) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0, "_FExp infinite multiplier");
+    resultf = 100.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 1 && std::isinf(resultf), "_FExp overflow");
+    resultf = -120.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 0) == 0 && resultf == 0.0f, "_FExp underflow");
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, -200) == 0 && resultf == 0.0f, "_FExp scaled underflow");
+    resultf = 1.0f;
+    Require(_FExp_nid_postfix(&resultf, 1.0f, 200) == 1 && std::isinf(resultf), "_FExp scaled overflow");
+}
+
 void TestDispatch() {
     Require(_Sin_nid_postfix(0.5, 0) == std::sin(0.5) && _Sin_nid_postfix(0.5, 1) == std::cos(0.5) && _Sin_nid_postfix(0.5, 7) == std::cos(0.5), "_Sin");
     Require(_FSin_nid_postfix(0.5f, 0) == std::sin(0.5f) && _FSin_nid_postfix(0.5f, 2) == std::cos(0.5f), "_FSin");
@@ -171,6 +327,7 @@ void TestDispatch() {
 int main() {
     TestStod();
     TestStoll();
+    TestDoubleHelpers();
     TestFloatErrors();
     TestIntegerErrors();
     TestDispatch();
