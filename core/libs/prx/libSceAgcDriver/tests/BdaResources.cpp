@@ -809,7 +809,7 @@ private:
 
 void importMappedFailureGenerationTests(const Context& context) {
     ClearHostImports(context.device);
-    WindowedRange range(context, WindowedRange::piece, 1);
+    WindowedRange range(context, 2 * WindowedRange::piece, 1);
     ImportAllocationProbe probe(range.importing);
     probe.failure = VK_ERROR_INVALID_EXTERNAL_HANDLE;
     GuestAllocations::Mapped mapped;
