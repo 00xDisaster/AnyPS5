@@ -436,6 +436,8 @@ static void TestCustomRackChecks() {
 
     Require(!CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 0)));
     Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 4)) == SCE_NGS2_ERROR_INVALID_STATE_SIZE);
+    const ModuleOptionWords gainOption{sizeof(Ngs2CustomModuleOption), {}};
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, &gainOption, 0)));
 
     const ModuleOptionWords reverb{SCE_NGS2_CUSTOM_REVERB_OPTION_SIZE, {1}};
     const ModuleOptionWords reverbOff{SCE_NGS2_CUSTOM_REVERB_OPTION_SIZE, {0}};

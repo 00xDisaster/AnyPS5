@@ -71,6 +71,7 @@ int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option
     if (option.num_buffers != 1) throw std::runtime_error("NGS2: custom racks with " + std::to_string(option.num_buffers) + " buffers are not implemented");
     for (std::uint32_t m = 0; m < option.num_modules; m++) {
         const auto moduleId = option.module[m].module_id;
+        if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN && option.module[m].option != nullptr) throw std::runtime_error("NGS2: an option for the custom Gain module is not implemented");
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN && rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) continue;
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN) throw std::runtime_error("NGS2: the custom Gain module on a custom sampler rack is not implemented");
         const char* name = BuiltInModuleName(moduleId);
