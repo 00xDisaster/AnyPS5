@@ -1,6 +1,9 @@
+#include "ProcessParametersFixture.hpp"
 #include "prx/libSceHmd/Hmd.hpp"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -9,11 +12,28 @@
 
 namespace {
 
+constexpr std::uint32_t LastSdkBeforeStartupState = 0x044fffff;
+constexpr std::uint32_t FirstSdkWithStartupState = 0x04500000;
+
+alignas(16) std::array<std::byte, 0x40> process{};
+
 void Require(bool condition, const char* message) {
     if (!condition) {
         std::fprintf(stderr, "HMD: %s\n", message);
         std::abort();
     }
+}
+
+void InstallProcessParameters() {
+    const std::uint64_t size = process.size();
+    const std::uint32_t magic = 0x4942524f;
+    std::memcpy(process.data(), &size, sizeof(size));
+    std::memcpy(process.data() + 8, &magic, sizeof(magic));
+    Require(ProcessParametersFixture::Install(process.data(), process.size()), "process parameters were not installed");
+}
+
+void SetCompiledSdkVersion(std::uint32_t version) {
+    std::memcpy(process.data() + 0x10, &version, sizeof(version));
 }
 
 void CheckDisconnected() {
@@ -69,7 +89,7 @@ bool Unimplemented(Call call) {
     return false;
 }
 
-void CheckCommandQueries(bool afterInitialize) {
+void CheckCommandQueries(bool handleZeroMeasured) {
     unsigned char zeroed[64] = {};
     unsigned char vr2dBytes[64] = {};
     unsigned char commands[16];
@@ -112,13 +132,13 @@ void CheckCommandQueries(bool afterInitialize) {
             });
         }
     }
-    if (afterInitialize) {
-        Require(Unimplemented([&] { return sceHmdGetDistortionCorrectionCommand(0, distortion, commandBuffer); }), "distortion command answered handle 0 after initialize");
-        Require(Unimplemented([&] { return sceHmdDistortionGetCorrectionCommand(0, distortion, commandBuffer); }), "aliased distortion command answered handle 0 after initialize");
-        Require(Unimplemented([&] { return sceHmdGetWideNearDistortionCorrectionCommand(0, wideNear, commandBuffer); }), "wide-near distortion command answered handle 0 after initialize");
-        Require(Unimplemented([&] { return sceHmdDistortionGetWideNearCorrectionCommand(0, wideNear, commandBuffer); }), "aliased wide-near distortion command answered handle 0 after initialize");
-        Require(Unimplemented([&] { return sceHmdGet2dVrCommand(0, vr2d, commandBuffer); }), "2D VR command answered handle 0 after initialize");
-        Require(Unimplemented([&] { return sceHmdDistortionGet2dVrCommand(0, vr2d, commandBuffer); }), "aliased 2D VR command answered handle 0 after initialize");
+    if (!handleZeroMeasured) {
+        Require(Unimplemented([&] { return sceHmdGetDistortionCorrectionCommand(0, distortion, commandBuffer); }), "distortion command answered handle 0 where its answer is not measured");
+        Require(Unimplemented([&] { return sceHmdDistortionGetCorrectionCommand(0, distortion, commandBuffer); }), "aliased distortion command answered handle 0 where its answer is not measured");
+        Require(Unimplemented([&] { return sceHmdGetWideNearDistortionCorrectionCommand(0, wideNear, commandBuffer); }), "wide-near distortion command answered handle 0 where its answer is not measured");
+        Require(Unimplemented([&] { return sceHmdDistortionGetWideNearCorrectionCommand(0, wideNear, commandBuffer); }), "aliased wide-near distortion command answered handle 0 where its answer is not measured");
+        Require(Unimplemented([&] { return sceHmdGet2dVrCommand(0, vr2d, commandBuffer); }), "2D VR command answered handle 0 where its answer is not measured");
+        Require(Unimplemented([&] { return sceHmdDistortionGet2dVrCommand(0, vr2d, commandBuffer); }), "aliased 2D VR command answered handle 0 where its answer is not measured");
     } else {
         Require(sceHmdGetDistortionCorrectionCommand(0, distortion, commandBuffer) == Hmd::NotInitialized, "distortion command before initialize");
         Require(sceHmdDistortionGetCorrectionCommand(0, distortion, commandBuffer) == Hmd::NotInitialized, "aliased distortion command before initialize");
@@ -146,6 +166,7 @@ int main() {
     std::memset(&info, 0xa5, sizeof(info));
     const auto untouched = info;
 
+    InstallProcessParameters();
     CheckDisconnected();
     CheckBufferQueries();
     Require(sceHmdTerminate() == Hmd::NotInitialized, "terminate before initialize");
@@ -155,6 +176,9 @@ int main() {
     Require(sceHmdGetDeviceInformation(&info) == Hmd::NotInitialized, "query before initialize");
     Require(std::memcmp(&info, &untouched, sizeof(info)) == 0, "failed query modified output");
     CheckHandleQueries(Hmd::NotInitialized);
+    SetCompiledSdkVersion(LastSdkBeforeStartupState);
+    CheckCommandQueries(true);
+    SetCompiledSdkVersion(FirstSdkWithStartupState);
     CheckCommandQueries(false);
     CheckAssyError(Hmd::NotInitialized);
     Require(sceHmdGetDeviceInformationByHandle(0, &info) == Hmd::NotInitialized,
@@ -194,7 +218,7 @@ int main() {
             Require(std::memcmp(&info, &expected, sizeof(info)) == 0, "invalid handle modified output");
         }
         CheckHandleQueries(Hmd::InvalidHandle);
-        CheckCommandQueries(true);
+        CheckCommandQueries(false);
         CheckAssyError(Hmd::DeviceDisconnected);
         Require(sceHmdGetDeviceInformationByHandle(0, nullptr) == Hmd::InvalidHandle,
                 "null query accepted invalid handle");

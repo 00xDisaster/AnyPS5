@@ -1,4 +1,5 @@
 #include "Hmd.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 
 #include <atomic>
@@ -68,10 +69,18 @@ std::int32_t Initialize(const Hmd::InitializeParam* param) {
     return initialized.exchange(true) ? Hmd::AlreadyInitialized : 0;
 }
 
+std::uint32_t CompiledSdkVersion() {
+    static const auto* processParameters = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
+    std::uint32_t version;
+    std::memcpy(&version, processParameters + 0x10, sizeof(version));
+    return version;
+}
+
 std::int32_t CommandQueryHandle(std::int32_t handle, const char* query) {
     if (handle != 0) return Hmd::InvalidHandle;
-    if (!initialized.load()) return Hmd::NotInitialized;
-    NotImplemented_nid_no_patch((std::string(query) + " with handle 0 after sceHmdInitialize").c_str());
+    if (initialized.load()) NotImplemented_nid_no_patch((std::string(query) + " with handle 0 after sceHmdInitialize").c_str());
+    if (CompiledSdkVersion() >= Hmd::StartupStateSdkVersion) NotImplemented_nid_no_patch((std::string(query) + " with handle 0 before sceHmdInitialize from SDK 4.50").c_str());
+    return Hmd::NotInitialized;
 }
 
 template <typename T>
