@@ -108,7 +108,12 @@ constexpr int PAD_ERROR_DEVICE_NOT_CONNECTED = static_cast<int>(0x80920007);
 constexpr int PAD_ERROR_DEVICE_NO_HANDLE = static_cast<int>(0x80920008);
 
 bool g_opened = false;
+bool g_specialOpened = false;
 std::atomic_bool g_initialized{false};
+
+bool SpecialHandle(int handle) {
+    return g_specialOpened && handle == PAD_SPECIAL_HANDLE;
+}
 
 bool ValidPort(int userId, int type, int index) {
     const bool personalPort = type == PAD_PORT_TYPE_STANDARD || type == PAD_PORT_TYPE_SPECIAL;
@@ -137,6 +142,10 @@ static_assert(sizeof(PadMotionSensorPosition) == 12);
 extern "C" {
 
 int APS5_VABI scePadClose_nid_postfix(int handle) {
+ if (SpecialHandle(handle)) {
+  g_specialOpened = false;
+  return PAD_OK;
+ }
  if (handle != PAD_HANDLE) {
   return PAD_ERROR_INVALID_HANDLE;
  }
@@ -168,22 +177,24 @@ int APS5_VABI scePadDeviceClassGetExtendedInformation(int handle, PadDeviceClass
 }
 
 int APS5_VABI scePadDeviceClassParseData(int handle, const PadData* data, PadDeviceClassData* class_data) {
- if (handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
+ if (!SpecialHandle(handle) && handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
  if (data == nullptr || class_data == nullptr) return PAD_ERROR_INVALID_ARG;
  std::memset(class_data, 0, sizeof(*class_data));
+ if (SpecialHandle(handle)) return PAD_OK;
  class_data->deviceClass = PAD_DEVICE_CLASS_STANDARD;
  class_data->dataValid = data->connected;
  return PAD_OK;
 }
 
 int APS5_VABI scePadGetControllerInformation(int handle, PadControllerInformation* info) {
- if (handle != PAD_HANDLE) {
+ if (!SpecialHandle(handle) && handle != PAD_HANDLE) {
   return PAD_ERROR_INVALID_HANDLE;
  }
  if (info == nullptr) {
   return PAD_ERROR_INVALID_ARG;
  }
  std::memset(info, 0, sizeof(*info));
+ if (SpecialHandle(handle)) return PAD_OK;
  info->touchPadInfo.pixelDensity = 44.86f;
  info->touchPadInfo.resolution.x = kTouchPadWidth;
  info->touchPadInfo.resolution.y = kTouchPadHeight;
@@ -197,7 +208,9 @@ int APS5_VABI scePadGetControllerInformation(int handle, PadControllerInformatio
 }
 
 int APS5_VABI scePadGetHandle(int user_id, int type, int index) {
- if (!g_opened || !ValidPort(user_id, type, index) || type == PAD_PORT_TYPE_SPECIAL) return PAD_ERROR_DEVICE_NO_HANDLE;
+ if (!ValidPort(user_id, type, index)) return PAD_ERROR_DEVICE_NO_HANDLE;
+ if (type == PAD_PORT_TYPE_SPECIAL) return g_specialOpened ? PAD_SPECIAL_HANDLE : PAD_ERROR_DEVICE_NO_HANDLE;
+ if (!g_opened) return PAD_ERROR_DEVICE_NO_HANDLE;
  return PAD_HANDLE;
 }
 
@@ -261,7 +274,10 @@ int APS5_VABI scePadOpen_nid_postfix(int userId, int type, int index, const void
  if (!ValidPort(userId, type, index)) {
   return PAD_ERROR_INVALID_ARG;
  }
- if (type == PAD_PORT_TYPE_SPECIAL) return PAD_ERROR_DEVICE_NOT_CONNECTED;
+ if (type == PAD_PORT_TYPE_SPECIAL) {
+  g_specialOpened = true;
+  return PAD_SPECIAL_HANDLE;
+ }
  g_opened = true;
  return PAD_HANDLE;
 }
@@ -283,16 +299,20 @@ int APS5_VABI scePadSetFeatureReport(std::int32_t handle, std::uint8_t reportId,
 int APS5_VABI scePadOutputReport(std::int32_t handle, std::uint8_t reportId, const void* data, std::uint64_t size) { NotImplemented_nid_no_patch(__func__); return 0; }
 
 int APS5_VABI scePadRead_nid_postfix(int handle, PadData* data, int num) {
- if (handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
+ if (!SpecialHandle(handle) && handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
  if (data == nullptr || num <= 0) return PAD_ERROR_INVALID_ARG;
+ if (SpecialHandle(handle)) {
+  data[0] = PadData{};
+  return 1;
+ }
  return Pad::Read(data, num);
 }
 
 int APS5_VABI scePadReadState(int handle, PadData* data) {
- if (handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
+ if (!SpecialHandle(handle) && handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
  if (data == nullptr) return PAD_ERROR_INVALID_ARG;
 
- *data = Pad::ReadState();
+ *data = SpecialHandle(handle) ? PadData{} : Pad::ReadState();
 
  return 0;
 }
