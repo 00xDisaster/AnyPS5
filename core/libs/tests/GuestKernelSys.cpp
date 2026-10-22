@@ -705,6 +705,11 @@ int main() {
         const auto dotLink = (root / "dot-link").string();
         Require(symlink_nid_postfix(".", dotLink.c_str()) == 0);
         Require(link_nid_postfix(dotLink.c_str(), throughLink.c_str()) == -1 && Error() == 1);
+#ifdef _WIN32
+        Require(symlink_nid_postfix("loop-b", (root / "loop-a").string().c_str()) == 0);
+        Require(symlink_nid_postfix("loop-a", (root / "loop-b").string().c_str()) == 0);
+        Require(link_nid_postfix((root / "loop-a").string().c_str(), throughLink.c_str()) == -1 && Error() == 62);
+#endif
         Require(!std::filesystem::exists(std::filesystem::symlink_status(throughLink)));
     }
     RemoveTree(root);
