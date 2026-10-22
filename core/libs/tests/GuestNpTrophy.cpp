@@ -105,7 +105,10 @@ int main() {
     Require(sceNpTrophyGetTrophyIcon(context, handle, 0, icon, nullptr) == InvalidArgument, "null trophy icon size pointer");
     Require(sceNpTrophyDestroyHandle(-1) == InvalidHandle, "invalid handle destruction");
     Require(sceNpTrophyDestroyContext(missing) == 0, "destroy the second context");
+    Require(sceNpTrophyAbortHandle(handle) == 0, "abort a live handle");
+    Require(sceNpTrophyAbortHandle(999) == InvalidHandle && sceNpTrophyAbortHandle(-1) == InvalidHandle, "abort an unknown handle");
     Require(sceNpTrophyDestroyHandle(handle) == 0 && sceNpTrophyDestroyContext(context) == 0, "destroy the handle and context");
+    Require(sceNpTrophyAbortHandle(handle) == InvalidHandle, "abort a destroyed handle");
     Require(sceNpTrophyDestroyContext(context) == InvalidContext, "destroy the context twice");
 
     std::filesystem::current_path(root.parent_path());
