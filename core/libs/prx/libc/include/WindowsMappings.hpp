@@ -381,11 +381,13 @@ public:
         return true;
     }
 
+#ifdef APS5_COUNT_MAPPING_QUERIES
     void CollectWork(std::uint64_t* systemCalls, std::uint64_t* pieces) {
         std::lock_guard lock(mutex);
         *systemCalls = collectSystemCalls;
         *pieces = collectPieces;
     }
+#endif
 
     bool Collect(std::uintptr_t address, std::size_t bytes, void** pages, std::size_t* count, bool clear, Collection collection = Collection::All) {
         std::lock_guard lock(mutex);
@@ -528,8 +530,10 @@ public:
                 const auto touched = (((stop + 4095) & ~static_cast<std::uintptr_t>(4095)) - (cursor & ~static_cast<std::uintptr_t>(4095))) / 4096;
                 ULONG_PTR available = std::min<ULONG_PTR>(capacity - *count, touched);
                 DWORD granularity = 0;
+#ifdef APS5_COUNT_MAPPING_QUERIES
                 ++collectSystemCalls;
                 collectPieces += (stop + pageBytes - 1) / pageBytes - cursor / pageBytes;
+#endif
                 const bool committed = !verifyDirect() || committedPrivate(cursor, stop);
                 if (GetWriteWatch(clear ? WRITE_WATCH_FLAG_RESET : 0, reinterpret_cast<void*>(cursor), stop - cursor, pages + *count, &available, &granularity) != 0) {
                     const auto memory = query(cursor);
@@ -1148,8 +1152,10 @@ private:
     Ranges cleanRanges;
     Ranges collectableRanges;
     Ranges privateAllocations;
+#ifdef APS5_COUNT_MAPPING_QUERIES
     std::uint64_t collectSystemCalls = 0;
     std::uint64_t collectPieces = 0;
+#endif
     Ranges freshRanges;
     std::map<std::uintptr_t, View> views;
 
