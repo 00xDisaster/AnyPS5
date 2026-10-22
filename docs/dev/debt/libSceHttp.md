@@ -31,7 +31,7 @@
 
 ### Functional
 
-- [sceHttpUriParse, sceHttpUriBuild, sceHttpUriMerge](../../../core/libs/prx/libSceHttp/src/Uri.cpp) - bytes 0x80 to 0xFF were measured only as 0x80, 0xC3 and 0xFF in a hostname; the others, and any of them in a scheme or userinfo, are taken as the measured ASCII bytes outside those sets are. ASCII classification and scheme case folding are independent of the host locale.
+- [sceHttpUriParse, sceHttpUriBuild, sceHttpUriMerge](../../../core/libs/prx/libSceHttp/src/Uri.cpp) - bytes 0x80 to 0xFF were measured only as 0x80, 0xC3 and 0xFF in a hostname; the others, and any of them in a scheme or userinfo, are taken as the measured ASCII bytes outside those sets are. ASCII classification and scheme case folding are independent of the host locale. A bracketed host such as `[::1]` is parsed, merged and built without its brackets, as a PS5 (firmware 13.60) does; a PS4 (firmware 10.71) takes no bracketed host (`http://[::1]x/` has an empty host and the path `[::1]x/`) and keeps `[::1]:80` in a merge, as measured in #9058, so this follows the PS5 only.
 
 - [sceHttpUriEscape](../../../core/libs/prx/libSceHttp/src/Uri.cpp) escapes every byte except the ASCII unreserved set in [RFC 3986 section 2.3](https://www.rfc-editor.org/rfc/rfc3986#section-2.3), independently of the host locale. Console behaviour for non-ASCII input remains unmeasured.
 
