@@ -5,6 +5,19 @@
 
 extern "C" {
 
-APS5_DUMMY_FUN
+int APS5_VABI FT_Get_PFR_Advance(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI FT_Get_PFR_Kerning(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI FT_Get_PFR_Metrics(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
 
 }
