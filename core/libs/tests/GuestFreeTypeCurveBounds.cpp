@@ -122,6 +122,17 @@ int main() {
         threw = true;
     }
     Require(threw && Equal(invalid.box, sentinel));
+    for (auto badContours : std::vector<std::vector<std::uint16_t>>{{2}, {0}, {1, 1}, {1, 0}, {0, 1, 1}}) {
+        GuestOutline malformed{static_cast<std::uint16_t>(badContours.size()), 2,
+            points.data(), smallTags.data(), badContours.data(), 0};
+        threw = false;
+        try {
+            FT_Outline_Get_BBox_nid_postfix(&malformed, &invalid.box);
+        } catch (const std::runtime_error& error) {
+            threw = std::string(error.what()).starts_with("FT_Outline_Get_BBox: inconsistent contour bounds");
+        }
+        Require(threw && Equal(invalid.box, sentinel));
+    }
     for (const std::int64_t control : {curveLimit + 1, -curveLimit - 1, std::int64_t{2000000000}}) {
         std::array<GuestVector, 3> curve{{{-100, 0}, {0, control}, {100, 0}}};
         std::array<unsigned char, 3> curveTags{1, 0, 1};

@@ -26,6 +26,17 @@ extern "C" int APS5_VABI FT_Outline_Get_BBox_nid_postfix(FreeType::GuestOutline*
     if (outline->n_points != 0 && outline->n_contours != 0) {
         if (!outline->points || !outline->tags || !outline->contours)
             NotImplemented_nid_no_patch("FT_Outline_Get_BBox: missing nonempty outline arrays");
+        if (outline->n_contours > outline->n_points)
+            NotImplemented_nid_no_patch("FT_Outline_Get_BBox: inconsistent contour bounds");
+        std::size_t first = 0;
+        for (std::size_t contour = 0; contour < outline->n_contours; ++contour) {
+            const std::size_t last = outline->contours[contour];
+            if (last < first || last >= outline->n_points)
+                NotImplemented_nid_no_patch("FT_Outline_Get_BBox: inconsistent contour bounds");
+            first = last + 1;
+        }
+        if (first != outline->n_points)
+            NotImplemented_nid_no_patch("FT_Outline_Get_BBox: inconsistent contour bounds");
         points.reserve(outline->n_points);
         constexpr std::int64_t curveLimit = std::numeric_limits<std::int32_t>::max() / 4;
         bool curved = false;
