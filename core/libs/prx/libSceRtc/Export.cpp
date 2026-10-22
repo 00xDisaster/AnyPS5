@@ -759,9 +759,17 @@ int APS5_VABI sceRtcFormatRFC3339Precise(char* date_time, const RtcTick* utc, in
         utc = &now;
     }
     if (time_zone_minutes < -1439 || time_zone_minutes > 1439 || precision < 0 || precision > 6) return SCE_RTC_ERROR_INVALID_VALUE;
-    RtcTick local{};
-    if (const int result = addTicks(&local, utc, time_zone_minutes, TICKS_PER_MINUTE); result != 0) return result;
-    const RtcDateTime time = fromTick(local.tick);
+    const std::uint64_t shift = static_cast<std::uint64_t>(time_zone_minutes < 0 ? -time_zone_minutes : time_zone_minutes) * TICKS_PER_MINUTE;
+    std::uint64_t localTick = 0;
+    if (time_zone_minutes < 0) {
+        if (utc->tick < shift) return SCE_RTC_ERROR_INVALID_VALUE;
+        localTick = utc->tick - shift;
+    } else {
+        if (utc->tick > MAX_TICK || MAX_TICK - utc->tick < shift) return SCE_RTC_ERROR_INVALID_YEAR;
+        localTick = utc->tick + shift;
+    }
+    if (localTick > MAX_TICK) return SCE_RTC_ERROR_INVALID_YEAR;
+    const RtcDateTime time = fromTick(localTick);
     int written = std::snprintf(date_time, 20, "%04u-%02u-%02uT%02u:%02u:%02u", time.year, time.month, time.day, time.hour, time.minute, time.second);
     if (precision != 0) {
         std::uint32_t divisor = 1;
@@ -785,7 +793,6 @@ int APS5_VABI sceRtcFormatRFC3339PreciseLocalTime(char* date_time, const RtcTick
         utc = &now;
     }
     if (precision < 0 || precision > 6) return SCE_RTC_ERROR_INVALID_VALUE;
-    if (utc->tick > MAX_TICK) return SCE_RTC_ERROR_INVALID_VALUE;
     return sceRtcFormatRFC3339Precise(date_time, utc, localOffsetMinutes(*utc), precision);
 }
 
