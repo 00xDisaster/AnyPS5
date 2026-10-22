@@ -1,8 +1,14 @@
 # libSceGameLiveStreaming technical debt
 
+### Functional
+
+- [sceGameLiveStreamingEnableLiveStreaming](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) - a call outside `sceGameLiveStreamingInitialize` and `sceGameLiveStreamingTerminate` throws, as the module's error for it is not confirmed (`sceGameLiveStreamingTerminate` and `sceGameLiveStreamingGetCurrentStatus2` return `0x80A00004`; [fpPS4](https://github.com/red-prig/fpPS4/blob/04cefd43e6fddd1ab033e7980cd356d14c964905/src/ps4_libscegamelivestreaming.pas#L18) does not return its `SCE_GAME_LIVE_STREAMING_ERROR_NOT_INITIALIZED` from this call). Otherwise both values are accepted and change nothing, as no broadcast is ever on air. The signature, `int sceGameLiveStreamingEnableLiveStreaming(const bool)`, follows [Orbital](https://github.com/AlexAltea/orbital/blob/cc408367da6a6ebbf5ac1ac559fefeadc73b2831/tools/ida/db_types.json#L810) and [fpPS4](https://github.com/red-prig/fpPS4/blob/04cefd43e6fddd1ab033e7980cd356d14c964905/src/ps4_libscegamelivestreaming.pas#L111)
+- [libSceGameLiveStreaming](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) - native initialization requires exactly 0x4000 heap bytes before checking repeated initialization. Host lifecycle and pointer errors now match the wrapper, but service registration, allocation failures and asynchronous service readiness are not modelled. The host becomes ready immediately after initialization.
+- [sceGameLiveStreamingGetCurrentStatus2](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) - the supplied module confirms the 72-byte layout and inactive status (user -1, remaining bytes zero). Live service counters, active-user changes and broadcast-resolution conversion are unimplemented.
+- [sceGameLiveStreamingGetProgramInfo](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) - consumes one output pointer and uses a 4940-byte record. Field semantics remain unresolved; the protected body remains unimplemented.
+
 ### Unknown function info
 
-- [sceGameLiveStreamingGetCurrentStatus2](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - the status layout (user id, on-air flag, spectator, text and command message counts, broadcast resolution, 48 reserved bytes) is taken from shadPS4's `OrbisGameLiveStreamingStatus2`; the call reports that no stream is on air, with an invalid user id
 - [sceGameLiveStreamingScreenInitialize](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
 - [sceGameLiveStreamingScreenInitializeSeparateModeParameter](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
 - [sceGameLiveStreamingScreenTerminate](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
@@ -45,7 +51,3 @@
 - [sceGameLiveStreamingSetLinkCommentPreset](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
 - [sceGameLiveStreamingStartDebugBroadcast](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
 - [sceGameLiveStreamingStopDebugBroadcast](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - unknown signature
-
-### Functional
-
-- [sceGameLiveStreamingEnableLiveStreaming](../../../core/libs/prx/libSceGameLiveStreaming/Export.cpp) (libSceGameLiveStreaming) - a call outside `sceGameLiveStreamingInitialize` and `sceGameLiveStreamingTerminate` throws, as the console's error for it is unknown ([fpPS4](https://github.com/red-prig/fpPS4/blob/04cefd43e6fddd1ab033e7980cd356d14c964905/src/ps4_libscegamelivestreaming.pas#L18) defines `SCE_GAME_LIVE_STREAMING_ERROR_NOT_INITIALIZED` but does not return it from this call). Otherwise the flag is accepted for both values and changes nothing, as no broadcast is ever on air to allow or block. The signature, `int sceGameLiveStreamingEnableLiveStreaming(const bool isEnableLiveStreaming)`, follows [Orbital](https://github.com/AlexAltea/orbital/blob/cc408367da6a6ebbf5ac1ac559fefeadc73b2831/tools/ida/db_types.json#L810) and [fpPS4](https://github.com/red-prig/fpPS4/blob/04cefd43e6fddd1ab033e7980cd356d14c964905/src/ps4_libscegamelivestreaming.pas#L111)
