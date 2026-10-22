@@ -91,6 +91,10 @@ struct BlockSet {
         words[static_cast<std::size_t>(id) / 64u] |= std::uint64_t{1} << (id % 64u);
     }
 
+    bool has(std::uint32_t id) const {
+        return (words[static_cast<std::size_t>(id) / 64u] >> (id % 64u) & 1u) != 0u;
+    }
+
     void intersect(const BlockSet& other) {
         for (std::size_t i = 0; i < words.size(); ++i) words[i] &= other.words[i];
     }
@@ -158,6 +162,10 @@ void addSortedUnique(std::vector<std::uint32_t>& values, std::uint32_t value) {
     if (position == values.end() || *position != value) {
         values.insert(position, value);
     }
+}
+
+bool containsSorted(const std::vector<std::uint32_t>& values, std::uint32_t value) {
+    return std::binary_search(values.begin(), values.end(), value);
 }
 
 bool replaceValue(std::vector<std::uint32_t>& values, std::uint32_t oldValue, std::uint32_t newValue) {
@@ -248,10 +256,11 @@ std::uint32_t moveBlockBefore(ControlFlowGraph& graph, std::uint32_t blockId, st
 
 std::vector<std::uint32_t> dominatedBlocks(const ControlFlowGraph& graph, std::uint32_t headerBlock, std::uint32_t stopBlock = InvalidControlFlowId) {
     std::vector<std::uint32_t> blocks;
+    if (headerBlock == stopBlock || !graph.Dominates(headerBlock, headerBlock)) {
+        return blocks;
+    }
     std::vector<std::uint32_t> stack = {headerBlock};
     std::vector<bool> visited(graph.blocks.size());
-    blocks.reserve(graph.blocks.size());
-    stack.reserve(graph.blocks.size());
 
     while (!stack.empty()) {
         const auto blockId = stack.back();
@@ -259,7 +268,7 @@ std::vector<std::uint32_t> dominatedBlocks(const ControlFlowGraph& graph, std::u
         if (blockId >= visited.size()) {
             visited.resize(blockId + 1);
         }
-        if (blockId == stopBlock || visited[blockId] || !graph.Dominates(headerBlock, blockId)) {
+        if (visited[blockId]) {
             continue;
         }
 
@@ -267,7 +276,7 @@ std::vector<std::uint32_t> dominatedBlocks(const ControlFlowGraph& graph, std::u
         visited[blockId] = true;
         blocks.push_back(blockId);
         for (const auto successor : block.successors) {
-            if (successor != stopBlock && graph.Dominates(headerBlock, successor)) {
+            if (successor != stopBlock && (successor >= visited.size() || !visited[successor]) && graph.Dominates(headerBlock, successor)) {
                 stack.push_back(successor);
             }
         }
@@ -319,7 +328,7 @@ bool isolateSemanticLoopHeader(ControlFlowGraph& graph, std::uint32_t oldHeader,
 const NaturalLoop* findInnermostContainingLoop(const ControlFlowGraph& graph, std::uint32_t blockId) {
     const NaturalLoop* innermost = nullptr;
     for (const auto& loop : graph.naturalLoops) {
-        if (contains(loop.blocks, blockId) && (innermost == nullptr || loop.blocks.size() < innermost->blocks.size())) {
+        if (containsSorted(loop.blocks, blockId) && (innermost == nullptr || loop.blocks.size() < innermost->blocks.size())) {
             innermost = &loop;
         }
     }
@@ -811,8 +820,8 @@ bool isInnermostLoopControlConditional(const ControlFlowGraph& graph, const Basi
         };
         return isRepeatTarget(trueTarget) && isRepeatTarget(falseTarget);
     }
-    const bool trueInBody = contains(loop->blocks, trueTarget);
-    const bool falseInBody = contains(loop->blocks, falseTarget);
+    const bool trueInBody = containsSorted(loop->blocks, trueTarget);
+    const bool falseInBody = containsSorted(loop->blocks, falseTarget);
     if (trueInBody != falseInBody) {
         return true;
     }
@@ -832,8 +841,8 @@ std::uint32_t exitTailSelectionMerge(const ControlFlowGraph& graph, const BasicB
     }
     const auto trueTarget = block.terminator.trueBlock;
     const auto falseTarget = block.terminator.falseBlock;
-    const bool trueInBody = contains(loop->blocks, trueTarget);
-    if (trueInBody == contains(loop->blocks, falseTarget)) {
+    const bool trueInBody = containsSorted(loop->blocks, trueTarget);
+    if (trueInBody == containsSorted(loop->blocks, falseTarget)) {
         return InvalidControlFlowId;
     }
     const auto body = trueInBody ? trueTarget : falseTarget;
@@ -854,7 +863,7 @@ std::uint32_t exitTailSelectionMerge(const ControlFlowGraph& graph, const BasicB
             if (successor == loop->mergeBlock) {
                 continue;
             }
-            if (contains(loop->blocks, successor) || !graph.Dominates(tail, successor) || !isInsideLoopConstruct(graph, *loop, successor)) {
+            if (containsSorted(loop->blocks, successor) || !graph.Dominates(tail, successor) || !isInsideLoopConstruct(graph, *loop, successor)) {
                 return InvalidControlFlowId;
             }
             pending.push_back(successor);
@@ -887,7 +896,7 @@ bool mergeLeavesContainingLoop(const ControlFlowGraph& graph, std::uint32_t head
 }
 
 bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const std::vector<std::uint32_t>& constructBlocks, bool forceSplit = false) {
-    if (merge == InvalidControlFlowId || merge >= graph.blocks.size() || contains(constructBlocks, merge)) {
+    if (merge == InvalidControlFlowId || merge >= graph.blocks.size() || containsSorted(constructBlocks, merge)) {
         return false;
     }
 
@@ -895,7 +904,7 @@ bool splitSharedMergeBlock(ControlFlowGraph& graph, std::uint32_t merge, const s
     std::vector<std::uint32_t> constructPredecessors;
     bool hasExternalPredecessor = false;
     for (const auto predecessor : mergeBlock.predecessors) {
-        if (contains(constructBlocks, predecessor)) {
+        if (containsSorted(constructBlocks, predecessor)) {
             addUnique(constructPredecessors, predecessor);
         } else {
             hasExternalPredecessor = true;
@@ -962,21 +971,21 @@ bool splitOneLoopMerge(ControlFlowGraph& graph) {
 }
 
 std::vector<std::uint32_t> selectionRegion(const ControlFlowGraph& graph, const BasicBlock& header, std::uint32_t merge) {
-    std::vector<std::uint32_t> region;
+    const auto count = static_cast<std::uint32_t>(graph.blocks.size());
+    auto region = BlockSet::none(count);
     std::vector<std::uint32_t> pending = {header.terminator.trueBlock, header.terminator.falseBlock};
     const auto* loop = findInnermostContainingLoop(graph, header.id);
     while (!pending.empty()) {
         const auto blockId = pending.back();
         pending.pop_back();
-        if (blockId == merge || contains(region, blockId) || (loop != nullptr && (blockId == loop->mergeBlock || blockId == loop->continueBlock))) {
+        if (blockId == merge || (blockId < count && region.has(blockId)) || (loop != nullptr && (blockId == loop->mergeBlock || blockId == loop->continueBlock))) {
             continue;
         }
         const auto& block = graph.FindBlock(blockId);
-        addUnique(region, blockId);
+        region.add(blockId);
         pending.insert(pending.end(), block.successors.begin(), block.successors.end());
     }
-    sortUnique(region);
-    return region;
+    return region.ids();
 }
 
 constexpr std::uint32_t CloneWordLimit = 1024u;
@@ -1034,9 +1043,11 @@ using Edge = std::pair<std::uint32_t, std::uint32_t>;
 
 std::vector<Edge> externalEntryEdges(const ControlFlowGraph& graph, std::uint32_t header, const std::vector<std::uint32_t>& region) {
     std::vector<Edge> edges;
+    const auto count = static_cast<std::uint32_t>(graph.blocks.size());
+    const auto inRegion = BlockSet::fromIds(count, region);
     for (const auto member : region) {
         for (const auto predecessor : graph.FindBlock(member).predecessors) {
-            if (predecessor == header || contains(region, predecessor)) {
+            if (predecessor == header || (predecessor < count && inRegion.has(predecessor))) {
                 continue;
             }
             if (graph.Dominates(member, predecessor)) {
@@ -1050,6 +1061,7 @@ std::vector<Edge> externalEntryEdges(const ControlFlowGraph& graph, std::uint32_
 
 std::vector<std::uint32_t> reachableWithin(const ControlFlowGraph& graph, const std::vector<Edge>& entryEdges, const std::vector<std::uint32_t>& region) {
     std::vector<std::uint32_t> reached;
+    std::vector<bool> isReached(graph.blocks.size(), false);
     std::vector<std::uint32_t> pending;
     for (const auto& edge : entryEdges) {
         pending.push_back(edge.second);
@@ -1057,12 +1069,13 @@ std::vector<std::uint32_t> reachableWithin(const ControlFlowGraph& graph, const 
     while (!pending.empty()) {
         const auto blockId = pending.back();
         pending.pop_back();
-        if (contains(reached, blockId)) {
+        if (isReached[blockId]) {
             continue;
         }
+        isReached[blockId] = true;
         reached.push_back(blockId);
         for (const auto successor : graph.FindBlock(blockId).successors) {
-            if (contains(region, successor)) {
+            if (containsSorted(region, successor)) {
                 pending.push_back(successor);
             }
         }
@@ -1494,12 +1507,13 @@ bool splitOneSelectionMerge(ControlFlowGraph& graph, SplitBudget& budget, const 
     std::vector<std::uint32_t> loopHeaders;
     loopHeaders.reserve(graph.naturalLoops.size());
     for (const auto& loop : graph.naturalLoops) {
-        addUnique(loopHeaders, loop.headerBlock);
+        loopHeaders.push_back(loop.headerBlock);
     }
+    sortUnique(loopHeaders);
 
     std::vector<std::uint32_t> selectionHeaders;
     for (const auto& block : graph.blocks) {
-        if (block.terminator.kind == TerminatorKind::ConditionalBranch && !contains(loopHeaders, block.id)) {
+        if (block.terminator.kind == TerminatorKind::ConditionalBranch && !containsSorted(loopHeaders, block.id)) {
             selectionHeaders.push_back(block.id);
         }
     }
@@ -1536,10 +1550,13 @@ bool splitOneSelectionMerge(ControlFlowGraph& graph, SplitBudget& budget, const 
 
 std::vector<std::uint32_t> naturalLoopBody(const ControlFlowGraph& graph, std::uint32_t headerBlock, std::uint32_t latchBlock, bool& natural) {
     std::vector<std::uint32_t> body;
+    std::vector<bool> inBody(graph.blocks.size(), false);
     std::vector<std::uint32_t> stack;
     natural = true;
     addUnique(body, headerBlock);
     addUnique(body, latchBlock);
+    inBody[headerBlock] = true;
+    inBody[latchBlock] = true;
     if (latchBlock != headerBlock) {
         stack.push_back(latchBlock);
     }
@@ -1552,7 +1569,8 @@ std::vector<std::uint32_t> naturalLoopBody(const ControlFlowGraph& graph, std::u
             if (!graph.Dominates(headerBlock, predecessor)) {
                 natural = false;
             }
-            if (!contains(body, predecessor)) {
+            if (!inBody[predecessor]) {
+                inBody[predecessor] = true;
                 body.push_back(predecessor);
                 if (predecessor != headerBlock) {
                     stack.push_back(predecessor);
@@ -1595,7 +1613,7 @@ void emitComponent(TarjanState& state, std::uint32_t blockId) {
             cyclic = true;
         }
         for (const auto predecessor : memberBlock.predecessors) {
-            if (!contains(component.blocks, predecessor)) {
+            if (!containsSorted(component.blocks, predecessor)) {
                 addUnique(component.entryBlocks, member);
             }
         }
@@ -2225,7 +2243,7 @@ void Structurizer::detectNaturalLoops(ControlFlowGraph& graph) const {
         for (const auto blockId : loop.blocks) {
             const auto& block = graph.FindBlock(blockId);
             for (const auto successor : block.successors) {
-                if (!contains(loop.blocks, successor)) {
+                if (!containsSorted(loop.blocks, successor)) {
                     addUnique(loop.exitBlocks, successor);
                 }
             }
