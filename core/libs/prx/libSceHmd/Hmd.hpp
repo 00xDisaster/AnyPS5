@@ -55,6 +55,10 @@ struct HmdFieldOfView;
 struct HmdEyeOffset;
 struct HmdInertialSensorData;
 struct HmdAssemblyError;
+struct HmdDistortionCommandParameter;
+struct HmdWideNearDistortionCommandParameter;
+struct Hmd2dVrCommandParameter;
+struct HmdCommandBuffer;
 
 extern "C" {
 std::int32_t APS5_VABI sceHmdInitialize(const Hmd::InitializeParam* param);
@@ -78,6 +82,12 @@ int APS5_VABI sceHmdGetFieldOfView(std::int32_t handle, HmdFieldOfView* fieldOfV
 int APS5_VABI sceHmdGet2DEyeOffset(std::int32_t handle, HmdEyeOffset* leftOffset, HmdEyeOffset* rightOffset);
 int APS5_VABI sceHmdGetInertialSensorData(std::int32_t handle, HmdInertialSensorData* data, std::uint32_t count);
 int APS5_VABI sceHmdGetAssyError(HmdAssemblyError* data);
+int APS5_VABI sceHmdDistortionGet2dVrCommand(std::int32_t handle, const Hmd2dVrCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+int APS5_VABI sceHmdDistortionGetCorrectionCommand(std::int32_t handle, const HmdDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+int APS5_VABI sceHmdDistortionGetWideNearCorrectionCommand(std::int32_t handle, const HmdWideNearDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+int APS5_VABI sceHmdGet2dVrCommand(std::int32_t handle, const Hmd2dVrCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+int APS5_VABI sceHmdGetDistortionCorrectionCommand(std::int32_t handle, const HmdDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(std::int32_t handle, const HmdWideNearDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
 }
 
 #endif
