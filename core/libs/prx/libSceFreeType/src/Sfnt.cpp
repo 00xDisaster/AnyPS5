@@ -34,8 +34,14 @@ int APS5_VABI FT_Sfnt_Table_Info_nid_postfix(GuestFaceRec* face, std::uint32_t t
     FT_ULong nativeLength = 0;
     const auto error = FT_Sfnt_Table_Info(owner ? owner->host : nullptr, tableIndex, tag ? &nativeTag : nullptr, length ? &nativeLength : nullptr);
     if (error == 0) {
-        if (tag) *tag = nativeTag;
-        if (length) *length = nativeLength;
+        if (tag) {
+            GuestArena::HostWrite write(tag, sizeof(*tag));
+            *tag = nativeTag;
+        }
+        if (length) {
+            GuestArena::HostWrite write(length, sizeof(*length));
+            *length = nativeLength;
+        }
     }
     return error;
 }
@@ -48,6 +54,7 @@ int APS5_VABI FT_Load_Sfnt_Table_nid_postfix(GuestFaceRec* face, std::uint64_t t
     if (error != 0) return error;
     const std::uint64_t requested = length ? *length : tableSize;
     if (length && requested == 0) {
+        GuestArena::HostWrite write(length, sizeof(*length));
         *length = tableSize;
         return 0;
     }

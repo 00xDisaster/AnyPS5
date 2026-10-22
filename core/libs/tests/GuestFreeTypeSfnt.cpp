@@ -1,5 +1,7 @@
 #include "FontFixture.hpp"
 #include "prx/libSceFreeType/include/GuestObjects.hpp"
+#include "prx/libc/include/GuestArena.hpp"
+#include "prx/libc/include/GuestWriteWatch.hpp"
 
 #include FT_TRUETYPE_TABLES_H
 
@@ -137,6 +139,105 @@ static void WideStreamAccess(FacePair& face, int& comparisons) {
     }
 }
 
+struct WatchedMetadataPages {
+    std::uintptr_t tag;
+    std::uintptr_t length;
+    bool tagWritten = false;
+    bool lengthWritten = false;
+
+    static void Mark(void* context, std::uintptr_t begin, std::uintptr_t end) {
+        auto& pages = *static_cast<WatchedMetadataPages*>(context);
+        if (begin <= pages.tag && pages.tag < end) pages.tagWritten = true;
+        if (begin <= pages.length && pages.length < end) pages.lengthWritten = true;
+    }
+};
+
+static void WatchedMetadata(FacePair& face) {
+    if (!GuestArena::GuestArenaAvailable_nid_postfix()) {
+        std::puts("FreeType SFNT watched metadata: guest arena unavailable, skipped");
+        return;
+    }
+#ifdef _WIN32
+    if (!GuestArena::GuestArenaWriteWatched_nid_postfix()) {
+        std::puts("FreeType SFNT watched metadata: write watch unavailable, skipped");
+        return;
+    }
+#else
+    if (!GuestWriteWatch::GuestWriteWatchAvailable_nid_postfix()) {
+        std::puts("FreeType SFNT watched metadata: write watch unavailable, skipped");
+        return;
+    }
+#endif
+    constexpr std::size_t span = 0x10000;
+    auto* block = static_cast<unsigned char*>(GuestArena::GuestArenaAllocate_nid_postfix(span, span));
+    GuestArena::GuestArenaCommit_nid_postfix(block, span, 0x04, span);
+    auto* tag = reinterpret_cast<std::uint64_t*>(block + 0x100);
+    auto* length = reinterpret_cast<std::uint64_t*>(block + 0x4100);
+    constexpr std::uint64_t sentinel = 0xFEDCBA9876543210ull;
+    *tag = sentinel;
+    *length = sentinel;
+#ifndef _WIN32
+    GuestWriteWatch::GuestWriteWatchRegister_nid_postfix(block, span);
+    Require(GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(reinterpret_cast<std::uintptr_t>(block), span));
+#endif
+    const auto collect = [&]() {
+        WatchedMetadataPages dirty{reinterpret_cast<std::uintptr_t>(tag), reinterpret_cast<std::uintptr_t>(length)};
+#ifdef _WIN32
+        std::array<void*, 32> pages{};
+        std::size_t count = pages.size();
+        Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(block), span, pages.data(), &count, true));
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto begin = reinterpret_cast<std::uintptr_t>(pages[index]);
+            WatchedMetadataPages::Mark(&dirty, begin, begin + 0x1000);
+        }
+#else
+        Require(GuestWriteWatch::GuestWriteWatchCollect_nid_postfix(reinterpret_cast<std::uintptr_t>(block), span, WatchedMetadataPages::Mark, &dirty));
+#endif
+        return dirty;
+    };
+    const auto expect = [&](bool tagWritten, bool lengthWritten) {
+        const auto dirty = collect();
+        Require(dirty.tagWritten == tagWritten && dirty.lengthWritten == lengthWritten);
+    };
+    collect();
+    expect(false, false);
+    FT_ULong nativeTag = 0;
+    FT_ULong nativeLength = 0;
+    Require(FT_Sfnt_Table_Info(face.native, 0, &nativeTag, &nativeLength) == 0);
+    Require(FT_Sfnt_Table_Info_nid_postfix(face.guest, 0, tag, length) == 0);
+    Require(*tag == nativeTag && *length == nativeLength);
+    expect(true, true);
+    FT_ULong nativeAlias = 0;
+    Require(FT_Sfnt_Table_Info(face.native, 0, &nativeAlias, &nativeAlias) == 0);
+    {
+        GuestArena::HostWrite write(tag, sizeof(*tag));
+        *tag = sentinel;
+    }
+    collect();
+    expect(false, false);
+    Require(FT_Sfnt_Table_Info_nid_postfix(face.guest, 0, tag, tag) == 0 && *tag == nativeAlias);
+    expect(true, false);
+    {
+        GuestArena::HostWrite write(length, sizeof(*length));
+        *length = 0;
+    }
+    collect();
+    expect(false, false);
+    FT_ULong queriedLength = 0;
+    Require(FT_Load_Sfnt_Table(face.native, nativeTag, 0, nullptr, &queriedLength) == 0);
+    Require(FT_Load_Sfnt_Table_nid_postfix(face.guest, nativeTag, 0, reinterpret_cast<unsigned char*>(length), length) == 0);
+    Require(*length == queriedLength);
+    expect(false, true);
+    Require(FT_Sfnt_Table_Info_nid_postfix(nullptr, 0, tag, length) == FT_Err_Invalid_Face_Handle);
+    expect(false, false);
+#ifndef _WIN32
+    Require(GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(block, span));
+#endif
+    GuestArena::GuestArenaReset_nid_postfix(block, span);
+    GuestArena::GuestArenaRelease_nid_postfix(block, span);
+    std::puts("FreeType SFNT watched metadata: split outputs, alias and zero-length query recorded");
+}
+
 int main() {
     void* library = nullptr;
     FT_Library nativeLibrary = nullptr;
@@ -148,6 +249,7 @@ int main() {
             {"TAIL", {7, 6, 5, 4, 3, 2, 1, 0, 255, 254, 253, 252, 251, 250, 249}}, {"ZERO", {}},
             {std::string("\xF1\x23\xAB\xCD", 4), {19, 29, 39, 49, 59, 69, 79, 89}}});
         FacePair face(library, nativeLibrary, font);
+        WatchedMetadata(face);
         const unsigned tableCount = (static_cast<unsigned>(font[4]) << 8) | font[5];
         Require(font.size() + 16 < 1024);
         std::uint64_t count = 0;
