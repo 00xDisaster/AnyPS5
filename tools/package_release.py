@@ -56,12 +56,12 @@ def package(platform, build, output, version):
     licenses = []
     if "libSceAjm.native.prx" in expected:
         licenses.append((ROOT / "3rdparty/vgmstream/COPYING", "libs/licenses/vgmstream.txt"))
+    if expected & {"libSceOpusDec.prx", "libSceOpusCeltDec.prx"}:
+        licenses.append((ROOT / "3rdparty/opus/COPYING", "libs/licenses/opus.txt"))
     if platform == "windows":
         runtime = windows_runtime(build)
         files.extend(runtime / name for name in ("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll"))
         files.extend(build / "core/libs/libs" / name for name in ("mimalloc.dll", "mimalloc-redirect.dll"))
-    if expected & {"libSceOpusDec.prx", "libSceOpusCeltDec.prx"}:
-        files.append(build / "core/libs/licenses/COPYING.opus")
     files.extend(tracy_runtime(platform, build))
     binary = build / "core/relinker" / executable
     for file in [*files, binary, *(source for source, _ in licenses)]:
