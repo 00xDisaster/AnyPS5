@@ -5,6 +5,7 @@
 #include FT_FREETYPE_H
 #include FT_PFR_H
 #include <array>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
