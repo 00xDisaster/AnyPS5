@@ -711,6 +711,8 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpGameIntent>")
     endif()
 
+    add_subdirectory(tests/floating_prefix)
+
     add_test_executable(guest_vorbis_dec_tests tests/GuestVorbisDec.cpp)
     target_include_directories(guest_vorbis_dec_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(guest_vorbis_dec_tests PRIVATE libSceVorbisDec libc)
