@@ -5,7 +5,9 @@
 #include <windows.h>
 #include <algorithm>
 #include <array>
+#ifdef APS5_COUNT_MAPPING_QUERIES
 #include <atomic>
+#endif
 #include <cstdio>
 #include <cstddef>
 #include <cstdint>
@@ -29,9 +31,11 @@ public:
         return *mappings;
     }
 
+#ifdef APS5_COUNT_MAPPING_QUERIES
     static std::uint64_t MemoryQueries() {
         return queries.load(std::memory_order_relaxed);
     }
+#endif
 
     void* Reserve(void* address, std::size_t bytes) {
         return allocate(GetCurrentProcess(), address, bytes, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS, nullptr, 0);
@@ -980,7 +984,9 @@ private:
 
     static MEMORY_BASIC_INFORMATION query(std::uintptr_t address) {
         MEMORY_BASIC_INFORMATION memory{};
+#ifdef APS5_COUNT_MAPPING_QUERIES
         queries.fetch_add(1, std::memory_order_relaxed);
+#endif
         if (VirtualQuery(reinterpret_cast<void*>(address), &memory, sizeof(memory)) != sizeof(memory)) fail("query guest memory");
         return memory;
     }
@@ -1116,7 +1122,9 @@ private:
     std::map<std::uintptr_t, std::size_t> splitAliases;
     std::size_t granularity = 0x10000;
     bool watchResident = false;
+#ifdef APS5_COUNT_MAPPING_QUERIES
     static inline std::atomic<std::uint64_t> queries{0};
+#endif
     std::mutex mutex;
     AllocateFunction allocate = nullptr;
     MapFunction map = nullptr;
