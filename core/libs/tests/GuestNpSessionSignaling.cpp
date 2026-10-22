@@ -27,7 +27,6 @@ namespace {
 
 constexpr int InvalidArgument = static_cast<int>(0x80553303u);
 constexpr int Unavailable = static_cast<int>(0x80552D06u);
-constexpr int GroupNotFound = static_cast<int>(0x8055330Au);
 constexpr int ConnectionNotFound = static_cast<int>(0x8055330Cu);
 constexpr int NotInitialized = static_cast<int>(0x80553301u);
 constexpr int AlreadyInitialized = static_cast<int>(0x80553302u);
