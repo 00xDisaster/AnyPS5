@@ -31,6 +31,7 @@ namespace {
 
 constexpr int NOT_INITIALIZED = static_cast<int>(0x80B80003u);
 constexpr int INVALID_STATE = static_cast<int>(0x80B80006u);
+constexpr int NOT_RUNNING = static_cast<int>(0x80B8000Bu);
 constexpr int PARAM_INVALID = static_cast<int>(0x80B8000Au);
 constexpr int ARG_NULL = static_cast<int>(0x80B8000Du);
 
@@ -116,7 +117,7 @@ void CheckOpenDialog() {
     Require(sceWebBrowserDialogResetCookie(&reset) == 0, "ResetCookie after UpdateStatus");
 
     Require(sceWebBrowserDialogOpen(open) == 0, "second Open");
-    Require(sceWebBrowserDialogClose() == 0, "Close");
+    Require(sceWebBrowserDialogClose() == NOT_RUNNING, "Close of a finished dialog");
     Require(sceWebBrowserDialogSetCookie(&cookie) == 0, "SetCookie after Close");
 
     Require(sceWebBrowserDialogOpen(open) == 0, "third Open");
