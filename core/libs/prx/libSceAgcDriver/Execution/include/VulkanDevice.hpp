@@ -44,9 +44,11 @@ struct DeviceQueuePlan {
     bool sparseBinding = false;
     std::uint32_t sparseFamily = VK_QUEUE_FAMILY_IGNORED;
     std::uint32_t sparseIndex = 0;
+    bool present = false;
+    std::uint32_t presentIndex = 0;
 };
 
-DeviceQueuePlan PlanDeviceQueues(std::span<const VkQueueFamilyProperties> families, std::uint32_t family, bool settles, bool sparseBinding);
+DeviceQueuePlan PlanDeviceQueues(std::span<const VkQueueFamilyProperties> families, std::uint32_t family, bool settles, bool sparseBinding, bool presents);
 
 class VulkanDevice {
 public:
@@ -255,6 +257,7 @@ public:
     bool PresentDisplayBuffer(const DisplayBuffer& buffer);
     double FinishPresent();
     void QueuePresent();
+    bool PresentsOnOwnQueue() const;
     // At the flip packet (under the mutex): the recorder's submissions so far and, under
     // APS5_PROFILE_DRAW, how many in flight have not signaled (the frame record's batches_at_flip).
     void FlipBatches(std::uint64_t& submissions, std::uint64_t& unsignaled) const;
