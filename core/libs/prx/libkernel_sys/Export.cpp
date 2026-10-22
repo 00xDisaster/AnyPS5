@@ -372,7 +372,13 @@ std::int64_t APS5_VABI pathconf_nid_postfix(const char* path, int name) {
 }
 
 std::int64_t APS5_VABI _fpathconf_nid_postfix(int fd, int name) {
-    if (fd < 0 || !DescriptorIsOpen_nid_no_patch(fd)) return Fail(GuestEbadf);
+    if (fd < 0) return Fail(GuestEbadf);
+#ifdef _WIN32
+    if (GuestFstat(fd) != 0) return Fail(GuestEbadf);
+#else
+    struct stat status{};
+    if (::fstat(fd, &status) != 0) return Fail(GuestEbadf);
+#endif
     return PathConfigurationValue(name, "fpathconf");
 }
 
