@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <span>
 
 struct GameLiveStreamingStatus2 {
     std::int32_t userId;
@@ -22,7 +23,8 @@ extern "C" {
 int APS5_VABI sceGameLiveStreamingInitialize(std::size_t heap_size);
 int APS5_VABI sceGameLiveStreamingTerminate(void);
 int APS5_VABI sceGameLiveStreamingGetCurrentStatus2(GameLiveStreamingStatus2* status);
-int APS5_VABI sceGameLiveStreamingGetProgramInfo(void* info);
+struct GameLiveStreamingProgramInfo;
+int APS5_VABI sceGameLiveStreamingGetProgramInfo(GameLiveStreamingProgramInfo*);
 }
 
 namespace {
@@ -34,23 +36,16 @@ constexpr std::int32_t kInvalidUserId = -1;
 }
 
 int main() {
-    bool threwZeroHeap = false;
-    try {
-        sceGameLiveStreamingInitialize(0);
-    } catch (const std::invalid_argument&) {
-        threwZeroHeap = true;
-    }
-    Require(threwZeroHeap);
-
-    Require(sceGameLiveStreamingInitialize(1024 * 1024) == 0);
-
-    bool threwNullStatus = false;
-    try {
-        sceGameLiveStreamingGetCurrentStatus2(nullptr);
-    } catch (const std::invalid_argument&) {
-        threwNullStatus = true;
-    }
-    Require(threwNullStatus);
+    constexpr int invalidArgument = static_cast<int>(0x80A00002);
+    constexpr int alreadyInitialized = static_cast<int>(0x80A00003);
+    constexpr int notInitialized = static_cast<int>(0x80A00004);
+    Require(sceGameLiveStreamingTerminate() == notInitialized);
+    Require(sceGameLiveStreamingGetCurrentStatus2(nullptr) == notInitialized);
+    for (const std::size_t size : {0u, 1u, 0x3fffu, 0x4001u, 0x100000u}) Require(sceGameLiveStreamingInitialize(size) == invalidArgument);
+    Require(sceGameLiveStreamingInitialize(0x4000) == 0);
+    Require(sceGameLiveStreamingInitialize(0) == invalidArgument);
+    Require(sceGameLiveStreamingInitialize(0x4000) == alreadyInitialized);
+    Require(sceGameLiveStreamingGetCurrentStatus2(nullptr) == invalidArgument);
 
     GameLiveStreamingStatus2 status{};
     std::memset(&status, 0x7f, sizeof(status));
@@ -71,10 +66,17 @@ int main() {
     Require(sceGameLiveStreamingGetProgramInfo(nullptr) == static_cast<int>(0x80A00002));
     std::array<std::uint8_t, 0x134C + 16> programInfo{};
     programInfo.fill(0x7f);
-    Require(sceGameLiveStreamingGetProgramInfo(programInfo.data()) == 0);
+    Require(sceGameLiveStreamingGetProgramInfo(reinterpret_cast<GameLiveStreamingProgramInfo*>(programInfo.data())) == 0);
     for (std::size_t i = 0; i < programInfo.size(); ++i) {
         Require(programInfo[i] == (i < 0x134C ? 0 : 0x7f));
     }
 
     Require(sceGameLiveStreamingTerminate() == 0);
+    std::memset(&status, 0x7f, sizeof(status));
+    Require(sceGameLiveStreamingGetCurrentStatus2(&status) == notInitialized);
+    for (const auto value : std::as_bytes(std::span(&status, 1))) Require(value == std::byte{0x7f});
+    programInfo.fill(0x7f);
+    Require(sceGameLiveStreamingGetProgramInfo(reinterpret_cast<GameLiveStreamingProgramInfo*>(programInfo.data())) == notInitialized);
+    for (const std::uint8_t byte : programInfo) Require(byte == 0x7f);
+    Require(sceGameLiveStreamingTerminate() == notInitialized);
 }
