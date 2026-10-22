@@ -235,6 +235,8 @@ static void LongestMatch() {
     Require(Find(words, ba[0]) == nullptr);
     Characters band("and");
     Require(Find(words, band[0], &next, band[2]) == band[1] && next == band[2]);
+    Characters empty("be");
+    Require(Find(words, empty[0], &next, empty[0]) == empty[1] && next == nullptr);
     Characters joined("andy");
     joined.items[3].flags = std::uint64_t{1} << 43;
     Require(Find(words, joined[0]) == joined[1]);
