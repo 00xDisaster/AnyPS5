@@ -2473,12 +2473,11 @@ int APS5_VABI sceNetIoctl(int socketId, std::uint32_t command, void* argument) {
 
 void* APS5_VABI sceNetMemoryAllocate(std::int32_t size, int flags) {
     constexpr int zeroFill = 2;
+    constexpr std::size_t blockAlignment = 64;
     if (size <= 0) return nullptr;
-    if ((flags & 4) != 0)
-        throw std::runtime_error("sceNetMemoryAllocate: pool reserve allocation is not implemented");
     void* memory = nullptr;
     try {
-        memory = GuestHeap::GuestHeapAllocate_nid_postfix(static_cast<std::size_t>(size));
+        memory = GuestHeap::GuestHeapAlign_nid_postfix(blockAlignment, static_cast<std::size_t>(size));
     } catch (const std::bad_alloc&) {
         return nullptr;
     } catch (const std::length_error&) {
