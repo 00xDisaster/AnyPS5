@@ -195,6 +195,14 @@ TFloat ParseFloat(const char* text, char** end, TFloat (*parse)(const char*, cha
     }
     if (*subject == '+' || *subject == '-') ++subject;
     const bool hexadecimal = subject[0] == '0' && (subject[1] == 'x' || subject[1] == 'X') && parsedEnd > subject + 2;
+    if constexpr (std::is_same_v<TFloat, float>) {
+        const float magnitude = value < 0 ? -value : value;
+        if (value != 0 && magnitude < std::numeric_limits<float>::min()) {
+            const long double exact = std::strtold(text, nullptr);
+            errno = !hexadecimal && static_cast<long double>(value) != exact ? ERANGE : saved;
+        }
+        return value;
+    }
     if (!hexadecimal) return value;
     if constexpr (std::is_same_v<TFloat, double>) {
         constexpr double smallest = std::numeric_limits<double>::denorm_min();

@@ -486,7 +486,6 @@ static void CheckFloatUnderflowErrno() {
     errno = 7;
     Require(strtod_nid_postfix("1e-310", &end) == 1e-310 && errno == 7);
     Require(strtod_nid_postfix("-4.9406564584124654e-324", &end) == -0x1p-1074 && errno == 7);
-    Require(strtof_nid_postfix("1e-40", &end) == 1e-40f && errno == 7);
     Require(strtold_nid_postfix("1e-4940", &end) == 1e-4940L && errno == 7);
     Require(strtod_nid_postfix("1e-330", &end) == 0.0 && errno == ERANGE);
     errno = 0;
@@ -504,8 +503,18 @@ static void CheckFloatUnderflowErrno() {
     errno = 0;
     Require(strtod_nid_postfix("0x1p+1100", &end) == HUGE_VAL && errno == ERANGE);
     errno = 7;
-    Require(strtof_nid_postfix("0x1p-150", &end) == 0.0f && strtof_nid_postfix("0x1p+200", &end) == HUGE_VALF && errno == 7);
     Require(strtold_nid_postfix("0x1p-16446", &end) == 0.0L && strtold_nid_postfix("0x1p+20000", &end) == HUGE_VALL && errno == 7);
+    Require(strtof_nid_postfix("0x1p-149", &end) == 0x1p-149f && strtof_nid_postfix("0x1.8p-149", &end) == 0x1p-148f && strtof_nid_postfix("0x1.000001p-149", &end) == 0x1p-149f && errno == 7);
+    Require(strtof_nid_postfix("1.40129846432481707092372958328991613128026194187651577175706828388979108268586060148663818836212158203125e-45", &end) == 0x1p-149f && strtof_nid_postfix("1.17549435e-38", &end) == 0x1p-126f && errno == 7);
+    Require(strtof_nid_postfix("0x1p-150", &end) == 0.0f && errno == ERANGE);
+    errno = 7;
+    Require(strtof_nid_postfix("0x1p+200", &end) == HUGE_VALF && errno == ERANGE);
+    errno = 7;
+    Require(strtof_nid_postfix("1e-40", &end) == 1e-40f && errno == ERANGE);
+    errno = 7;
+    Require(strtof_nid_postfix("-1e-45", &end) == -0x1p-149f && errno == ERANGE);
+    errno = 7;
+    Require(strtof_nid_postfix("3e-45", &end) == 0x1p-148f && errno == ERANGE);
     Require(strtof_nid_postfix("1e39", &end) == HUGE_VALF && errno == ERANGE);
     errno = 0;
 }
