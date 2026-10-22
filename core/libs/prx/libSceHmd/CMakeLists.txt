@@ -6,6 +6,7 @@ if(BUILD_TESTING)
     add_test_executable(guest_hmd_tests ${LIBS_INCLUDE_DIR}/tests/GuestHmd.cpp)
     target_include_directories(guest_hmd_tests PRIVATE ${LIBS_INCLUDE_DIR})
     target_link_libraries(guest_hmd_tests PRIVATE libSceHmd)
+    configure_windows_unwind(guest_hmd_tests)
     add_test(NAME guest_hmd COMMAND guest_hmd_tests)
     if(WIN32)
         set_tests_properties(guest_hmd PROPERTIES ENVIRONMENT_MODIFICATION
