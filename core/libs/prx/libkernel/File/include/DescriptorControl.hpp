@@ -21,4 +21,6 @@ bool IsCharacterDevice(int fd);
 
 }
 
+extern "C" bool DescriptorHasNoVnode_nid_no_patch(int fd);
+
 #endif

@@ -607,3 +607,7 @@ bool IsVnode(int fd) {
 }
 
 }
+
+extern "C" bool DescriptorHasNoVnode_nid_no_patch(int fd) {
+    return !File::IsVnode(fd) && !File::IsCharacterDevice(fd) && !File::IsRandomDevice(fd);
+}
