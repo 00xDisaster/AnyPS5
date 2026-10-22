@@ -126,6 +126,16 @@ constexpr int NP_ERROR_NULL_ARGUMENT = static_cast<int>(0x80550003);
 constexpr int NP_ERROR_IPC_ALREADY_INITIALIZED = static_cast<int>(0x80559D00);
 constexpr int NP_ERROR_IPC_NOT_INITIALIZED = static_cast<int>(0x80559D01);
 constexpr int NP_ERROR_ONLINE_ID_MISMATCH = static_cast<int>(0x80550609);
+constexpr int NP_ERROR_INVALID_NP_ID = static_cast<int>(0x80550605);
+constexpr std::size_t NP_ID_OPT_OFFSET = 0x14;
+constexpr std::size_t NP_ID_PLATFORM_OFFSET = 0x18;
+constexpr std::size_t NP_ID_TERMINATOR_FLAG_OFFSET = 0x1C;
+
+std::uint32_t NpIdWord(const std::uint8_t* npId, std::size_t offset) {
+    std::uint32_t value;
+    std::memcpy(&value, npId + offset, sizeof(value));
+    return value;
+}
 constexpr std::size_t NP_ONLINE_ID_MAX = 16;
 constexpr std::size_t NP_ONLINE_ID_MIN = 3;
 constexpr int NP_ERROR_INVALID_ARGUMENT_UTIL = static_cast<int>(0x80550601);
@@ -762,6 +772,18 @@ std::uint32_t APS5_VABI sceNpGetRandom(void) {
 
 int APS5_VABI sceNpUtilCmpAccountId(std::uint64_t left, std::uint64_t right) {
     return left != right ? 1 : 0;
+}
+
+int APS5_VABI sceNpCmpNpId(const void* npId1, const void* npId2) {
+    if (!npId1 || !npId2) return NP_ERROR_NULL_ARGUMENT;
+    const auto* left = static_cast<const std::uint8_t*>(npId1);
+    const auto* right = static_cast<const std::uint8_t*>(npId2);
+    if (left[NP_ID_TERMINATOR_FLAG_OFFSET] != 1 || right[NP_ID_TERMINATOR_FLAG_OFFSET] != 1) return NP_ERROR_INVALID_NP_ID;
+    if (std::strncmp(static_cast<const char*>(npId1), static_cast<const char*>(npId2), NP_ONLINE_ID_MAX) != 0) return NP_ERROR_ONLINE_ID_MISMATCH;
+    if (NpIdWord(left, NP_ID_OPT_OFFSET) != NpIdWord(right, NP_ID_OPT_OFFSET)) return NP_ERROR_ONLINE_ID_MISMATCH;
+    if (NpIdWord(left, NP_ID_PLATFORM_OFFSET) == NpIdWord(right, NP_ID_PLATFORM_OFFSET)) return 0;
+    if (left[NP_ID_PLATFORM_OFFSET] == 0 || right[NP_ID_PLATFORM_OFFSET] == 0) return 0;
+    return NP_ERROR_ONLINE_ID_MISMATCH;
 }
 
 bool APS5_VABI sceNpIntIsOnlineIdString(const char* text) {
