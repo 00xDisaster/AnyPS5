@@ -1851,7 +1851,7 @@ void Driver::RegisterShader(const Shader* shader) {
     registered.context = snapshot.registeredState->context;
     registered.userConfig = snapshot.registeredState->userConfig;
     std::shared_ptr<RegisteredPreparation> preparation;
-    static const bool lazy = std::getenv("APS5_LAZY_SHADER_PREPARE") != nullptr;
+    static const bool lazy = std::getenv("APS5_EAGER_SHADER_PREPARE") == nullptr;
     if (lazy) {
         static_cast<void>(PlanRegistered(snapshot, *localDevice, registered, true, &snapshot.prepared->deferred));
         snapshot.prepared->deferred = true;

@@ -626,7 +626,7 @@ void RegisteredVertexWorkgroup(const ShaderRecompiler::SpirvTarget& target, bool
         header.specials.vgt_shader_stages_en.value = 0;
         ExpectFailure([&] { AgcDriverRegisterShader_nid_postfix(&header.shader); }, "missing AGC user-data header");
         header.shader.user_data = &header.userData;
-        if (target.subgroupSize < 64u && std::getenv("APS5_SYNC_SHADER_PREPARE") != nullptr && std::getenv("APS5_LAZY_SHADER_PREPARE") == nullptr) {
+        if (target.subgroupSize < 64u && std::getenv("APS5_SYNC_SHADER_PREPARE") != nullptr && std::getenv("APS5_EAGER_SHADER_PREPARE") != nullptr) {
             ExpectFailure([&] { AgcDriverRegisterShader_nid_postfix(&header.shader); }, "v_readlane_b32 of lane 63 is outside");
         }
         std::cout << "registered NGG preparation deferral passed; subgroup=" << target.subgroupSize << '\n';
@@ -640,7 +640,7 @@ void RegisteredVertexWorkgroup(const ShaderRecompiler::SpirvTarget& target, bool
 
 void LazyRegistration() {
     using namespace NarrowConstantStoreFixture;
-    Require(std::getenv("APS5_LAZY_SHADER_PREPARE") != nullptr, "lazy preparation is not enabled");
+    Require(std::getenv("APS5_EAGER_SHADER_PREPARE") == nullptr, "eager preparation is enabled");
     struct Header {
         Shader shader{};
         std::array<ShaderRegister, 7> registers{};
