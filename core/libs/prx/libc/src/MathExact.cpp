@@ -1,12 +1,15 @@
 #include "prx/libc/include/Api.hpp"
 #include <algorithm>
+#include <bit>
 #include <cerrno>
+#include <cfenv>
 #include <climits>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <emmintrin.h>
 #include <limits>
+#include <stdexcept>
 
 #include "prx/libc/include/General.hpp"
 
@@ -37,6 +40,15 @@ ExtendedBits Bits(const long double& value) {
     return bits;
 }
 
+long double JoinExtended(std::uint64_t mantissa, std::uint16_t signExponent) {
+    unsigned char bytes[sizeof(long double)]{};
+    std::memcpy(bytes, &mantissa, sizeof(mantissa));
+    std::memcpy(bytes + sizeof(mantissa), &signExponent, sizeof(signExponent));
+    long double value;
+    std::memcpy(&value, bytes, sizeof(value));
+    return value;
+}
+
 constexpr short Denormal = -2, Finite = -1, Zero = 0, Infinite = 1, NotANumber = 2;
 
 short TestExtended(const ExtendedBits& bits) {
@@ -45,6 +57,113 @@ short TestExtended(const ExtendedBits& bits) {
     if (exponent == 0x7fff) return fraction != 0 ? NotANumber : Infinite;
     if ((bits.mantissa >> 63) != 0) return Finite;
     return exponent != 0 || bits.mantissa != 0 ? Denormal : Zero;
+}
+
+void RaiseLibcError(int exceptions) {
+    if ((exceptions & (FE_OVERFLOW | FE_UNDERFLOW)) != 0) exceptions |= FE_INEXACT;
+    std::feraiseexcept(exceptions);
+    const bool range = (exceptions & FE_INVALID) == 0 &&
+        (exceptions & (FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW)) != 0;
+    errno = range ? ERANGE : EDOM;
+}
+
+short ScaleExtended(long double& value, long long exponent) {
+    const ExtendedBits parts = Bits(value);
+    const std::uint16_t sign = parts.signExponent & 0x8000;
+    if ((parts.signExponent & 0x7fff) == 0x7fff) {
+        return (parts.mantissa << 1) == 0 ? Infinite : NotANumber;
+    }
+    if (parts.mantissa == 0) {
+        value = JoinExtended(0, sign);
+        return Zero;
+    }
+    long long biased = std::max<long long>(parts.signExponent & 0x7fff, 1);
+    const int shift = std::countl_zero(parts.mantissa);
+    const std::uint64_t mantissa = parts.mantissa << shift;
+    biased += exponent - shift;
+    if (biased >= 0x7fff) {
+        value = JoinExtended(1ull << 63, static_cast<std::uint16_t>(sign | 0x7fff));
+        return Infinite;
+    }
+    if (biased > 0) {
+        value = JoinExtended(mantissa, static_cast<std::uint16_t>(sign | biased));
+        return Finite;
+    }
+    const long long rightShift = 1 - biased;
+    if (rightShift >= 65) {
+        value = JoinExtended(0, sign);
+        return Zero;
+    }
+    std::uint64_t kept = rightShift == 64 ? 0 : mantissa >> rightShift;
+    const std::uint64_t lost = rightShift == 64 ? mantissa : mantissa << (64 - rightShift);
+    bool roundUp = false;
+    switch (std::fegetround()) {
+    case FE_UPWARD:
+        roundUp = lost != 0 && sign == 0;
+        break;
+    case FE_DOWNWARD:
+        roundUp = lost != 0 && sign != 0;
+        break;
+    case FE_TOWARDZERO:
+        break;
+    default:
+        roundUp = lost > 1ull << 63 || (lost == 1ull << 63 && (kept & 1) != 0);
+        break;
+    }
+    if (roundUp) ++kept;
+    value = JoinExtended(kept, static_cast<std::uint16_t>(sign | (kept >> 63)));
+    return kept == 0 ? Zero : Finite;
+}
+
+short FinishExpScale(long double& value, long long exponent) {
+    const short result = ScaleExtended(value, exponent);
+    if (result == Infinite) RaiseLibcError(FE_OVERFLOW);
+    if (result == Zero) RaiseLibcError(FE_UNDERFLOW);
+    return result;
+}
+
+short ExpScaled(long double& x, long long scale, long double multiplier) {
+    constexpr long double inverseLn2 = 0xb.8aa3b295c17f0bcp-3L;
+    constexpr long double ln2Low = -0xe.8e7bcd5e4f1d9ccp-35L;
+    constexpr long double tiny = 0x1p-66L;
+    constexpr double ln2High = -0x1.62e42fecp-1;
+    constexpr long double p0 = 0xc.99bcb9bdeb30f49p-23L;
+    constexpr long double p1 = 0xa.578826a9b3aafa0p-13L;
+    constexpr long double p2 = 0xe.8b94728735d9363p-7L;
+    constexpr long double q0 = 0x8.45a5963c196b530p-17L;
+    constexpr long double q1 = 0xf.83a71f722cba3c4p-10L;
+    if (x < -29490.0L) {
+        x = 0.0L;
+        return Zero;
+    }
+    if (x > 29490.0L) {
+        x = std::numeric_limits<long double>::infinity();
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (scale == 0 && x == 1.0L) {
+        x = 0xa.df85458a2bb4a9bp-2L * multiplier;
+        return FinishExpScale(x, 0);
+    }
+    const long double g = x * inverseLn2;
+    if (std::isnan(g)) {
+        x = g;
+        return NotANumber;
+    }
+    const long long n = static_cast<long long>(g + (g < 0.0L ? -0.5L : 0.5L));
+    const long double nn = static_cast<long double>(n);
+    x += nn * static_cast<long double>(ln2High);
+    x += nn * ln2Low;
+    if (x > -tiny && x < tiny) {
+        x = 1.0L;
+    } else {
+        const long double w = x * x;
+        const long double even = ((p0 * w + p1) * w + p2) * w;
+        const long double odd = x * ((q0 * w + q1) * w + 0.5L);
+        x = ((even + odd) + 1.0L) / ((even - odd) + 1.0L);
+    }
+    x *= multiplier;
+    return FinishExpScale(x, n + scale);
 }
 
 template<typename TFloat>
@@ -245,6 +364,35 @@ int APS5_VABI __isnormall_nid_postfix(long double x) {
 }
 
 short APS5_VABI _LDtest_nid_postfix(const long double* value) { return TestExtended(Bits(*value)); }
+short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale) {
+    if (value == nullptr) throw std::invalid_argument("_LExp: null value");
+    const long double x = *value;
+    if (x < -29490.0L || y == 0.0L) {
+        *value = 0.0L;
+        return Zero;
+    }
+    if (x > 29490.0L) {
+        *value = std::numeric_limits<long double>::infinity();
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (std::isnan(x)) {
+        *value = x;
+        return NotANumber;
+    }
+    if (std::isnan(y)) {
+        *value = y;
+        return NotANumber;
+    }
+    if (std::isinf(y)) {
+        *value = y;
+        return Infinite;
+    }
+    long double result = x;
+    const short resultKind = ExpScaled(result, scale, y);
+    *value = result;
+    return resultKind;
+}
 int APS5_VABI _Dclass_nid_postfix(double x) { return TestFloat(x); }
 int APS5_VABI _FDclass_nid_postfix(float x) { return TestFloat(x); }
 int APS5_VABI _LDclass_nid_postfix(long double x) { return TestExtended(Bits(x)); }

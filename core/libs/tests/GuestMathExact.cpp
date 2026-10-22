@@ -154,6 +154,55 @@ static void CheckClassification() {
     Require(_LDsign_nid_postfix(-2.0L) == -32768 && _LDsign_nid_postfix(2.0L) == 0);
 }
 
+static void CheckLongDoubleExp() {
+    const long double e = std::exp(1.0L);
+    long double result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == -1);
+    Require(std::fabs(result - e) <= std::fabs(e) * 1e-17L);
+    result = 0.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == -1 && result == 1.0L);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 10) == -1);
+    Require(std::fabs(result - e * 1024.0L) <= std::fabs(e * 1024.0L) * 1e-17L);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 3.0L, 0) == -1);
+    Require(std::fabs(result - 3.0L * e) <= std::fabs(3.0L * e) * 1e-17L);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, -2.0L, 0) == -1);
+    Require(std::fabs(result + 2.0L * e) <= std::fabs(2.0L * e) * 1e-17L);
+    result = 0.0L;
+    Require(_LExp_nid_postfix(&result, 5.0L, 0) == -1 && result == 5.0L);
+    for (int i = -200; i <= 200; ++i) {
+        const long double x = static_cast<long double>(i) / 16.0L;
+        const long double expected = std::exp(x);
+        result = x;
+        Require(_LExp_nid_postfix(&result, 1.0L, 0) == -1);
+        Require(std::fabs(result - expected) <= std::fabs(expected) * 1e-17L);
+    }
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 0.0L, 0) == 0 && result == 0.0L);
+    result = INFINITY;
+    Require(_LExp_nid_postfix(&result, 0.0L, 0) == 0 && result == 0.0L);
+    result = -INFINITY;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L);
+    result = INFINITY;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 1 && std::isinf(result));
+    result = NAN;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 2 && std::isnan(result));
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, NAN, 0) == 2 && std::isnan(result));
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, INFINITY, 0) == 1 && std::isinf(result));
+    result = 12000.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 1 && std::isinf(result));
+    result = -12000.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, -20000) == 0 && result == 0.0L);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 20000) == 1 && std::isinf(result));
+}
+
 int main() {
     CheckRoundingAndScaling();
     CheckSignalingNanPassThrough();
@@ -161,5 +210,6 @@ int main() {
     CheckConsoleQuirks();
     CheckRoundingModes();
     CheckClassification();
+    CheckLongDoubleExp();
     return 0;
 }
