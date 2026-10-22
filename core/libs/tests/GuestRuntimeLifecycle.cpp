@@ -10,6 +10,7 @@
 #include <dlfcn.h>
 #include <thread>
 #include <source_location>
+#include <pthread.h>
 
 extern "C" {
 char* APS5_VABI dlerror_nid_postfix();
@@ -23,6 +24,9 @@ std::array<Event, 8> events{};
 std::atomic<unsigned> count{0};
 std::atomic<bool> entered{false}, releaseEntry{false};
 bool concurrent = false, reentrant = false;
+thread_local bool isLifecycleWaiter = false;
+std::atomic<bool> waiterObserved{false};
+std::atomic<unsigned> waiterReturns{0};
 const char* modulePath = nullptr;
 std::int32_t reentrantHandle = -1;
 void Require(bool ok, const std::source_location& where = std::source_location::current()) {
@@ -30,6 +34,16 @@ void Require(bool ok, const std::source_location& where = std::source_location::
     std::fprintf(stderr, "guest_runtime_lifecycle: failed at %u\n", where.line());
     std::abort();
 }
+}
+
+extern "C" int pthread_cond_wait(pthread_cond_t* condition, pthread_mutex_t* mutex) {
+    using Wait = int (*)(pthread_cond_t*, pthread_mutex_t*);
+    static const auto actual = reinterpret_cast<Wait>(::dlsym(RTLD_NEXT, "pthread_cond_wait"));
+    Require(actual != nullptr);
+    if (isLifecycleWaiter) waiterObserved.store(true, std::memory_order_release);
+    const int result = actual(condition, mutex);
+    if (isLifecycleWaiter) waiterReturns.fetch_add(1, std::memory_order_relaxed);
+    return result;
 }
 
 extern "C" void APS5_VABI RecordArgs(std::size_t args, const void* argp) {
@@ -75,10 +89,21 @@ int main(int argc, char** argv) {
             Require(std::chrono::steady_clock::now() < limit);
             std::this_thread::yield();
         }
-        std::thread two([&] { second = sceKernelLoadStartModule(argv[1], 0, nullptr, 0, nullptr, nullptr); });
+        std::thread two([&] {
+            isLifecycleWaiter = true;
+            second = sceKernelLoadStartModule(argv[1], 0, nullptr, 0, nullptr, nullptr);
+            isLifecycleWaiter = false;
+        });
+        while (!waiterObserved.load(std::memory_order_acquire)) {
+            Require(std::chrono::steady_clock::now() < limit);
+            std::this_thread::yield();
+        }
+        Require(count.load() == 1);
         releaseEntry.store(true, std::memory_order_release);
         one.join();
         two.join();
+        Require(waiterReturns.load() > 0);
+        std::fprintf(stderr, "Observed lifecycle waiter before initializer release; actual condition-wait returns=%u\n", waiterReturns.load());
     } else {
         first = sceKernelLoadStartModule(argv[1], requestedSize, requestedPointer, 0, nullptr, &result);
         second = sceKernelLoadStartModule(argv[1], 0, nullptr, 0, nullptr, nullptr);
