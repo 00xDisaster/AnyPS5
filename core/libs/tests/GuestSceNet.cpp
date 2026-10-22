@@ -147,7 +147,10 @@ static void Require(bool condition) {
     if (!condition) std::abort();
 }
 
-static bool FailResolverLookup(const char*, int, std::vector<std::array<std::uint8_t, 16>>&) {
+static bool FailResolverLookup(const char* hostname, int family, std::vector<std::array<std::uint8_t, 16>>&) {
+    Require(hostname != nullptr && (std::strcmp(hostname, "guest-sce-net.invalid.") == 0 ||
+        std::strcmp(hostname, "guest-sce-net.invalid") == 0));
+    Require(family == AF_INET || family == AF_INET6);
     return false;
 }
 
