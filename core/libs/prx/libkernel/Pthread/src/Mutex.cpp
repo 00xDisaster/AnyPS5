@@ -2,6 +2,7 @@
 #include "../include/Mutex.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
 #include "prx/libkernel/Time/include/TimedWait.hpp"
+#include "prx/libc/include/General.hpp"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -138,10 +139,9 @@ int APS5_VABI scePthreadMutexattrDestroy(PthreadMutexattr* attr) {
 }
 
 int APS5_VABI scePthreadMutexattrSetkind(PthreadMutexattr* attr, int kind) {
-    if (!attr || !*attr)
-        throw std::invalid_argument("Mutex attribute is null or uninitialized");
+    if (!attr || !*attr) NotImplemented_nid_no_patch("scePthreadMutexattrSetkind with a null or uninitialized attribute");
     if (kind < static_cast<int>(MutexType::ErrorCheck) || kind > static_cast<int>(MutexType::Adaptive))
-        throw std::invalid_argument("Mutex kind " + std::to_string(kind) + " is not a mutex type");
+        NotImplemented_nid_no_patch("scePthreadMutexattrSetkind with a kind other than 1 to 4");
     return scePthreadMutexattrSettype(attr, kind);
 }
 

@@ -78,11 +78,11 @@ void TestKind() {
         if (!LocksTwice(&attr, GUEST_EDEADLK)) return false;
         if (scePthreadMutexattrSetkind(&attr, KIND_RECURSIVE) != 0 || !LocksTwice(&attr, 0)) return false;
         for (const int kind : {0, 5, -1}) {
-            if (!Throws<std::invalid_argument>([&] { return scePthreadMutexattrSetkind(&attr, kind); }) || !HasKind(&attr, KIND_RECURSIVE)) return false;
+            if (!Throws<std::runtime_error>([&] { return scePthreadMutexattrSetkind(&attr, kind); }) || !HasKind(&attr, KIND_RECURSIVE)) return false;
         }
         if (pthread_mutexattr_destroy_nid_postfix(&attr) != 0) return false;
-        return Throws<std::invalid_argument>([&] { return scePthreadMutexattrSetkind(&attr, KIND_NORMAL); }) &&
-            Throws<std::invalid_argument>([] { return scePthreadMutexattrSetkind(nullptr, KIND_NORMAL); });
+        return Throws<std::runtime_error>([&] { return scePthreadMutexattrSetkind(&attr, KIND_NORMAL); }) &&
+            Throws<std::runtime_error>([] { return scePthreadMutexattrSetkind(nullptr, KIND_NORMAL); });
     });
 }
 
