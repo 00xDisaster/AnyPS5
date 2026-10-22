@@ -57,6 +57,7 @@
 ### Functional
 
 - [_Cosh](../../../core/libs/prx/libc/src/Math.cpp) (libc) follows the two-argument Dinkumware CRT helper used by `std::complex`, including a scaled large-finite-input path; the signature, exact result and floating-point exception behavior are not verified against the console.
+- [fmodf](../../../core/libs/prx/libc/src/Math.cpp) (libc) - console `errno`, exception flags and NaN payloads remain unverified. The wrapper preserves `errno` like the existing double `fmod`, following FreeBSD 11.4 [`e_fmodf.c`](https://github.com/freebsd/freebsd-src/blob/release/11.4.0/lib/msun/src/e_fmodf.c); host `std::fmod` still supplies the result and exception flags.
 - [_FSinh and _FCosh](../../../core/libs/prx/libc/src/Math.cpp) (libc) finite results are not verified bit for bit against the console: the scaled product uses the host's binary64 hyperbolic function before rounding to binary32, rather than the float rational and `_FExp` sequence in PRAGMATA's bundled `libc.prx`. NaN preference and payloads, signed zeros, infinite operands and the range-error thresholds follow that binary's instructions; the system `libSceLibcInternal` implementation and nondefault flush-to-zero modes are unverified.
 
 - [sscanf_s and vsscanf_s](../../../core/libs/prx/libc/src/Formatting.cpp) (libc) return `EOF` when a reached conversion has a null destination, stopping before further assignments, following C11 K.3.5.3.7 and K.3.5.3.14. Earlier assignments are retained. The constraint handler is not invoked, and console behaviour is unverified.
