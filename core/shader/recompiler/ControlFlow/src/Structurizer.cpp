@@ -52,6 +52,83 @@ bool inPlaceIntersections() {
     return enabled;
 }
 
+bool dominatorTrees() {
+    static const bool enabled = std::getenv("APS5_NO_PERF_DOMINATOR_TREE") == nullptr;
+    return enabled;
+}
+
+template <typename IncomingOf>
+bool assignTreeDominators(std::vector<BasicBlock>& blocks, const std::vector<std::uint32_t>& roots, IncomingOf incomingOf, std::vector<std::uint32_t> BasicBlock::*sets, std::uint32_t BasicBlock::*parent = nullptr) {
+    const auto count = static_cast<std::uint32_t>(blocks.size());
+    const auto virtualRoot = count;
+    std::vector<bool> isRoot(count, false);
+    std::vector<std::vector<std::uint32_t>> outgoing(count + 1u);
+    for (const auto root : roots) {
+        isRoot[root] = true;
+        outgoing[virtualRoot].push_back(root);
+    }
+    for (std::uint32_t id = 0; id < count; ++id) {
+        if (isRoot[id]) continue;
+        for (const auto from : incomingOf(id)) outgoing[from].push_back(id);
+    }
+    std::vector<std::uint32_t> postOrder(count + 1u, InvalidControlFlowId);
+    std::vector<std::uint32_t> order;
+    order.reserve(count + 1u);
+    std::vector<std::pair<std::uint32_t, std::size_t>> stack = {{virtualRoot, 0u}};
+    postOrder[virtualRoot] = 0;
+    while (!stack.empty()) {
+        auto& [node, next] = stack.back();
+        if (next < outgoing[node].size()) {
+            const auto target = outgoing[node][next++];
+            if (postOrder[target] == InvalidControlFlowId) {
+                postOrder[target] = 0;
+                stack.emplace_back(target, 0u);
+            }
+            continue;
+        }
+        postOrder[node] = static_cast<std::uint32_t>(order.size());
+        order.push_back(node);
+        stack.pop_back();
+    }
+    if (order.size() != count + 1u) {
+        return false;
+    }
+    std::vector<std::uint32_t> immediate(count + 1u, InvalidControlFlowId);
+    immediate[virtualRoot] = virtualRoot;
+    const auto intersect = [&](std::uint32_t first, std::uint32_t second) {
+        while (first != second) {
+            while (postOrder[first] < postOrder[second]) first = immediate[first];
+            while (postOrder[second] < postOrder[first]) second = immediate[second];
+        }
+        return first;
+    };
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (auto position = order.size() - 1u; position-- > 0u;) {
+            const auto node = order[position];
+            auto next = isRoot[node] ? virtualRoot : InvalidControlFlowId;
+            if (!isRoot[node]) {
+                for (const auto from : incomingOf(node)) {
+                    if (immediate[from] != InvalidControlFlowId) next = next == InvalidControlFlowId ? from : intersect(from, next);
+                }
+            }
+            if (immediate[node] != next) {
+                immediate[node] = next;
+                changed = true;
+            }
+        }
+    }
+    for (auto position = order.size() - 1u; position-- > 0u;) {
+        const auto node = order[position];
+        auto& set = blocks[node].*sets;
+        if (immediate[node] == virtualRoot) set.clear();
+        else set = blocks[immediate[node]].*sets;
+        set.insert(std::upper_bound(set.begin(), set.end(), node), node);
+        if (parent != nullptr) blocks[node].*parent = immediate[node] == virtualRoot ? node : immediate[node];
+    }
+    return true;
+}
+
 struct BlockSet {
     std::vector<std::uint64_t> words;
 
@@ -211,6 +288,7 @@ std::vector<std::uint32_t> applyBlockOrder(ControlFlowGraph& graph, std::vector<
     graph.entryBlock = remapId(graph.entryBlock, idMap);
     for (auto& block : graph.blocks) {
         block.id = remapId(block.id, idMap);
+        block.immediatePostDominator = remapId(block.immediatePostDominator, idMap);
         remapIds(block.predecessors, idMap);
         remapIds(block.successors, idMap);
         remapIds(block.dominators, idMap);
@@ -1144,6 +1222,7 @@ void cloneBlocks(ControlFlowGraph& graph, const std::vector<std::uint32_t>& bloc
         copy.predecessors.clear();
         copy.dominators.clear();
         copy.postDominators.clear();
+        copy.immediatePostDominator = InvalidControlFlowId;
         for (const auto& [original, clone] : cloneOf) {
             redirectEdge(copy, original, clone);
         }
@@ -2180,6 +2259,9 @@ void Structurizer::structurize(ControlFlowGraph& graph, bool privatizeReturns, b
 
 void Structurizer::computeDominatorTree(ControlFlowGraph& graph) const {
     const auto count = static_cast<std::uint32_t>(graph.blocks.size());
+    if (inPlaceIntersections() && dominatorTrees() && graph.entryBlock < count && assignTreeDominators(graph.blocks, {graph.entryBlock}, [&](std::uint32_t id) -> const std::vector<std::uint32_t>& { return graph.blocks[id].predecessors; }, &BasicBlock::dominators)) {
+        return;
+    }
     const auto order = analysisOrder(graph, false);
     if (inPlaceIntersections()) {
         std::vector<BlockSet> sets;
@@ -2264,6 +2346,16 @@ void Structurizer::detectNaturalLoops(ControlFlowGraph& graph) const {
 
 void Structurizer::computePostDominators(ControlFlowGraph& graph) const {
     const auto count = static_cast<std::uint32_t>(graph.blocks.size());
+    if (inPlaceIntersections() && dominatorTrees()) {
+        std::vector<std::uint32_t> exits;
+        for (const auto& block : graph.blocks) {
+            if (block.successors.empty()) exits.push_back(block.id);
+        }
+        if (assignTreeDominators(graph.blocks, exits, [&](std::uint32_t id) -> const std::vector<std::uint32_t>& { return graph.blocks[id].successors; }, &BasicBlock::postDominators, &BasicBlock::immediatePostDominator)) {
+            return;
+        }
+    }
+    for (auto& block : graph.blocks) block.immediatePostDominator = InvalidControlFlowId;
     const auto order = analysisOrder(graph, true);
     if (inPlaceIntersections()) {
         std::vector<BlockSet> sets;

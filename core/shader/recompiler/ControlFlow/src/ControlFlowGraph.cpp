@@ -122,6 +122,20 @@ bool ControlFlowGraph::PostDominates(std::uint32_t postDominator, std::uint32_t 
 std::uint32_t ControlFlowGraph::FindNearestCommonPostDominator(std::uint32_t firstBlock, std::uint32_t secondBlock) const {
     const auto& first = FindBlock(firstBlock);
     const auto& second = FindBlock(secondBlock);
+    if (first.immediatePostDominator != InvalidControlFlowId && second.immediatePostDominator != InvalidControlFlowId) {
+        const BasicBlock* left = &first;
+        const BasicBlock* right = &second;
+        while (left->postDominators.size() > right->postDominators.size()) left = &FindBlock(left->immediatePostDominator);
+        while (right->postDominators.size() > left->postDominators.size()) right = &FindBlock(right->immediatePostDominator);
+        while (left != right) {
+            if (left->immediatePostDominator == left->id) {
+                return InvalidControlFlowId;
+            }
+            left = &FindBlock(left->immediatePostDominator);
+            right = &FindBlock(right->immediatePostDominator);
+        }
+        return left->id;
+    }
     const auto common = intersectSorted(first.postDominators, second.postDominators);
     if (common.empty()) {
         return InvalidControlFlowId;
