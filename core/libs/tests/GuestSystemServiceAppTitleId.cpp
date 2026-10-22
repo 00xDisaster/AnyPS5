@@ -10,7 +10,7 @@
 extern "C" int APS5_VABI sceSystemServiceGetAppIdOfRunningBigApp(void);
 extern "C" int APS5_VABI sceSystemServiceGetAppId(const char* titleId);
 extern "C" int APS5_VABI sceSystemServiceGetAppTitleId(int appId, char* titleId);
-extern "C" void APS5_VABI sceLncUtilGetAppTitleId(std::uint32_t appId, char* titleId);
+extern "C" int APS5_VABI sceLncUtilGetAppTitleId(std::int32_t appId, char* titleId);
 
 namespace {
 
@@ -54,7 +54,7 @@ bool GetAppTitleIdThrows(int appId, GuardedBuffer& buffer) {
 }
 
 bool LncGetAppTitleIdThrows(std::uint32_t appId, GuardedBuffer& buffer) {
-    return Throws([&] { sceLncUtilGetAppTitleId(appId, buffer.bytes); }) && buffer.Untouched();
+    return Throws([&] { static_cast<void>(sceLncUtilGetAppTitleId(static_cast<std::int32_t>(appId), buffer.bytes)); }) && buffer.Untouched();
 }
 
 void CheckOtherApplications(int runningAppId) {
@@ -71,7 +71,7 @@ void CheckOtherApplications(int runningAppId) {
 
 void CheckNullBuffers(int runningAppId) {
     Require(Throws([&] { static_cast<void>(sceSystemServiceGetAppTitleId(runningAppId, nullptr)); }));
-    Require(Throws([&] { sceLncUtilGetAppTitleId(static_cast<std::uint32_t>(runningAppId), nullptr); }));
+    Require(Throws([&] { static_cast<void>(sceLncUtilGetAppTitleId(runningAppId, nullptr)); }));
     Require(Throws([&] { static_cast<void>(sceSystemServiceGetAppTitleId(runningAppId + 1, nullptr)); }));
     Require(GetAppIdThrows(nullptr));
 }
@@ -93,7 +93,7 @@ void CheckKnownTitle(int runningAppId) {
     Require(sceSystemServiceGetAppId(buffer.bytes) == runningAppId);
 
     GuardedBuffer lncBuffer;
-    sceLncUtilGetAppTitleId(static_cast<std::uint32_t>(runningAppId), lncBuffer.bytes);
+    Require(sceLncUtilGetAppTitleId(runningAppId, lncBuffer.bytes) == 0);
     Require(std::memcmp(lncBuffer.bytes, "PPSA00000", titleId.size() + 1) == 0);
     Require(lncBuffer.GuardIntact());
 
