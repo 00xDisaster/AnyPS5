@@ -377,6 +377,7 @@ struct FragmentParameter {
     bool custom = false;
     bool flatP10 = false;
     bool vertexOrder = false;
+    bool flatP20 = false;
     bool operator==(const FragmentParameter&) const = default;
 };
 
@@ -784,7 +785,7 @@ struct BarycentricTessellationShaders {
     RecompileResult evaluation;
 };
 
-[[nodiscard]] BarycentricTessellationShaders BuildBarycentricTessellationShaders(const RecompileResult& vertex, const RecompileResult& fragment, const SpirvTarget& target, std::uint32_t maxFragmentInputComponents);
+[[nodiscard]] BarycentricTessellationShaders BuildBarycentricTessellationShaders(const RecompileResult& vertex, const RecompileResult& fragment, const SpirvTarget& target, std::uint32_t maxFragmentInputComponents, std::uint32_t provokingVertex);
 
 }
 

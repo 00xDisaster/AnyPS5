@@ -68,6 +68,8 @@ struct ColorTarget {
     std::uint32_t pipeBankXor = 0;
     std::uint32_t samples = 1;
     std::uint32_t dccControl = 0;
+    std::uint64_t fmaskAddress = 0;
+    std::uint32_t fmaskPipeBankXor = 0;
 };
 
 struct DepthTarget {
@@ -140,6 +142,7 @@ struct State {
     bool ditheredAlphaToCoverage = false;
     bool perSampleShading = false;
     bool mergedCoverage = false;
+    bool truncatedCoverage = false;
     VkConservativeRasterizationModeEXT conservativeRasterization = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
     VkRect2D scissor;
     VkCullModeFlags cullMode;
@@ -201,6 +204,14 @@ struct ColorMetadataPass {
     std::optional<ColorTarget> source;
 };
 std::optional<ColorMetadataPass> DecodeColorMetadataPass(const QueueState& queue);
+struct DepthCopyPass {
+    std::uint64_t depthAddress;
+    VkExtent2D extent;
+    std::uint32_t samples;
+    std::uint32_t sample;
+    ColorTarget color;
+};
+std::optional<DepthCopyPass> DecodeDepthCopyPass(const QueueState& queue);
 std::string DepthMaintenanceRejection(const QueueState& queue);
 bool DepthResummarizeDrawsNothing(const QueueState& queue);
 // The message DecodeState (or the pixel stage decode after it) would throw for the register rules
