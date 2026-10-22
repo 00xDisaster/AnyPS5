@@ -57,6 +57,10 @@ int APS5_VABI pthread_rwlockattr_init_nid_postfix(PthreadRwlockattr* attr) {
     return toPosix(scePthreadRwlockattrInit(attr));
 }
 
+int APS5_VABI pthread_rwlockattr_settype_np_nid_postfix(PthreadRwlockattr* attr, int type) {
+    return toPosix(scePthreadRwlockattrSettype(attr, type));
+}
+
 int APS5_VABI pthread_rwlockattr_getpshared_nid_postfix(const PthreadRwlockattr* attr, int* pshared) {
     if (!attr || !*attr) throw std::runtime_error("pthread_rwlockattr_getpshared: null attr");
     if (!pshared) throw std::runtime_error("pthread_rwlockattr_getpshared: null pshared");
