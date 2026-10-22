@@ -19,9 +19,14 @@ addresses would name the wrong functions.
 The sampler rewrites its files every 20 s with totals since start-up. --since takes an earlier copy of the same
 file and subtracts it, which keeps only the samples taken between the two copies (a steady-state window).
 
-Input: a collapsed-stack file (<file stem>.collapsed.txt, 'frame;...;frame count' lines) or the address file
-('module offset self inclusive' lines). Output: the hottest functions by self and by inclusive samples, and with
---out a symbolized collapsed-stack file for speedscope.app or flamegraph.pl."""
+A module with no such record is also left unsymbolized, since nothing shows which build it was; --unverified
+symbolizes it anyway against the file found.
+
+Input: a collapsed-stack file (<file stem>.collapsed.txt, 'frame;...;frame count' lines) or an address file
+('module offset self inclusive' lines, under 'thread <id> samples <n>' headings for APS5_SAMPLE_THREADS; --thread
+keeps one thread). Output: the hottest functions by self and by inclusive samples, and with --out a symbolized
+collapsed-stack file for speedscope.app or flamegraph.pl. For an address file, a function's inclusive count is the
+sum of its addresses' counts, which overcounts the samples in which it is on the stack more than once."""
 
 IMAGE_SCN_CNT_CODE = 0x20
 IMAGE_SYM_CLASS_EXTERNAL = 2
@@ -54,8 +59,12 @@ class PeModule:
         if self.exported and export_rva:
             symbols = self.export_symbols(data, export_rva, export_size)
         symbols.sort()
-        self.code = [(start, start + size) for start, size, _, characteristics in self.sections if characteristics & IMAGE_SCN_CNT_CODE]
-        self.addresses = [address for address, _ in symbols]
+        self.code = []
+        for start, size, _, characteristics in self.sections:
+            if not characteristics & IMAGE_SCN_CNT_CODE:
+                continue
+            inside = [(address, name) for address, name in symbols if start <= address < start + size]
+            self.code.append((start, start + size, [address for address, _ in inside], [name for _, name in inside]))
         self.names = [name for _, name in symbols]
 
     def offset(self, rva):
@@ -106,16 +115,15 @@ class PeModule:
         return result
 
     def name(self, rva):
-        if not any(start <= rva < end for start, end in self.code):
-            return None
-        index = bisect.bisect_right(self.addresses, rva) - 1
-        if index < 0:
-            return None
-        return ("~" if self.exported else "") + self.names[index]
+        for start, end, addresses, names in self.code:
+            if start <= rva < end:
+                index = bisect.bisect_right(addresses, rva) - 1
+                return None if index < 0 else ("~" if self.exported else "") + names[index]
+        return None
 
 
 class Symbolizer:
-    def __init__(self, libs, headers, demangle=False, warn=print):
+    def __init__(self, libs, headers, demangle=False, warn=print, unverified=False):
         self.files = {}
         for directory in libs:
             for path in Path(directory).iterdir():
@@ -126,6 +134,7 @@ class Symbolizer:
         self.demangle = demangle and shutil.which("c++filt") is not None
         self.demangled = {}
         self.warn = warn
+        self.unverified = unverified
 
     def module(self, name):
         if name in self.modules:
@@ -137,6 +146,9 @@ class Symbolizer:
                 module = PeModule(path)
             except (ValueError, struct.error) as error:
                 self.warn(f"{name}: {error}")
+            if module is not None and name not in self.headers and not self.unverified:
+                self.warn(f"{name}: the samples have no '# module' record for it, so {path} may be another build; its frames stay unsymbolized (--unverified symbolizes them anyway)")
+                module = None
             if module is not None and name in self.headers and self.headers[name] != (module.size, module.timestamp):
                 size, timestamp = self.headers[name]
                 self.warn(f"{name}: the sampled module had size {size:#x} and timestamp {timestamp:#x}, but {path} has {module.size:#x} and {module.timestamp:#x}; its frames stay unsymbolized")
@@ -179,23 +191,42 @@ def read_headers(lines):
     return headers
 
 
-def load(path):
+class Samples:
+    def __init__(self):
+        self.headers = {}
+        self.stacks = collections.Counter()
+        self.self_counts = collections.Counter()
+        self.inclusive = collections.Counter()
+        self.total = collections.Counter()
+
+
+def load(path, thread=None):
     lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
-    headers = read_headers(lines)
-    stacks = collections.Counter()
-    addresses = collections.Counter()
+    samples = Samples()
+    samples.headers = read_headers(lines)
+    current = None
     for number, line in enumerate(lines, 1):
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == "#" and parts[2] == "samples" and parts[1].isdigit():
+            samples.total["samples"] += int(parts[1])
+            continue
         if line.startswith("#") or not line.strip():
             continue
-        parts = line.split()
+        if len(parts) == 4 and parts[0] == "thread" and parts[2] == "samples" and parts[1].isdigit() and parts[3].isdigit():
+            current = parts[1]
+            if thread is None or current == thread:
+                samples.total["threads"] += int(parts[3])
+            continue
         if len(parts) == 4 and parts[1].startswith("0x") and parts[2].isdigit() and parts[3].isdigit():
-            addresses[(parts[0], parts[1])] += int(parts[2])
+            if thread is None or current == thread:
+                samples.self_counts[(parts[0], parts[1])] += int(parts[2])
+                samples.inclusive[(parts[0], parts[1])] += int(parts[3])
             continue
         frames, _, count = line.rpartition(" ")
         if not frames or not count.isdigit():
-            raise ValueError(f"{path}:{number}: expected 'frame;...;frame count' or 'module offset self inclusive'")
-        stacks[frames] += int(count)
-    return headers, stacks, addresses
+            raise ValueError(f"{path}:{number}: expected 'frame;...;frame count', 'module offset self inclusive' or 'thread <id> samples <n>'")
+        samples.stacks[frames] += int(count)
+    return samples
 
 
 def subtract(later, earlier):
@@ -204,21 +235,31 @@ def subtract(later, earlier):
     return collections.Counter({key: count for key, count in result.items() if count > 0})
 
 
-def summarize(symbolizer, stacks, addresses, top):
+def window(later, earlier):
+    result = Samples()
+    result.headers = {**earlier.headers, **later.headers}
+    for name in ("stacks", "self_counts", "inclusive", "total"):
+        setattr(result, name, subtract(getattr(later, name), getattr(earlier, name)))
+    return result
+
+
+def summarize(symbolizer, samples, top):
     self_counts = collections.Counter()
     inclusive = collections.Counter()
     total = 0
-    if stacks:
-        for frames, count in stacks.items():
+    if samples.stacks:
+        for frames, count in samples.stacks.items():
             names = [symbolizer.frame(frame) for frame in frames.split(";")]
             total += count
             self_counts[names[-1]] += count
             for name in set(names):
                 inclusive[name] += count
     else:
-        for (module, offset), count in addresses.items():
-            total += count
+        for (module, offset), count in samples.self_counts.items():
             self_counts[symbolizer.frame(f"{module}+{offset}")] += count
+        for (module, offset), count in samples.inclusive.items():
+            inclusive[symbolizer.frame(f"{module}+{offset}")] += count
+        total = samples.total["threads"] or samples.total["samples"] or sum(samples.self_counts.values())
     lines = [f"{total} samples"]
     for title, counter in (("self", self_counts), ("inclusive", inclusive)):
         if not counter:
@@ -237,21 +278,20 @@ def main(argv=None):
     parser.add_argument("--out", help="write the symbolized collapsed stacks to this file")
     parser.add_argument("--top", type=int, default=30, help="functions listed per table (default 30)")
     parser.add_argument("--demangle", action="store_true", help="demangle C++ names with c++filt when it is on PATH")
+    parser.add_argument("--thread", help="keep only this thread of an APS5_SAMPLE_THREADS file")
+    parser.add_argument("--unverified", action="store_true", help="also symbolize modules the samples have no '# module' record for")
     args = parser.parse_args(argv)
-    headers, stacks, addresses = load(args.samples)
+    samples = load(args.samples, args.thread)
     if args.since:
-        earlier_headers, earlier_stacks, earlier_addresses = load(args.since)
-        stacks = subtract(stacks, earlier_stacks)
-        addresses = subtract(addresses, earlier_addresses)
-        headers = {**earlier_headers, **headers}
-    symbolizer = Symbolizer(args.libs, headers, args.demangle, warn=lambda text: print("warning: " + text, file=sys.stderr))
-    for line in summarize(symbolizer, stacks, addresses, args.top):
+        samples = window(samples, load(args.since, args.thread))
+    symbolizer = Symbolizer(args.libs, samples.headers, args.demangle, warn=lambda text: print("warning: " + text, file=sys.stderr), unverified=args.unverified)
+    for line in summarize(symbolizer, samples, args.top):
         print(line)
     if args.out:
-        if not stacks:
+        if not samples.stacks:
             parser.error("--out needs a collapsed-stack file")
         with open(args.out, "w", encoding="utf-8") as output:
-            for frames, count in stacks.items():
+            for frames, count in samples.stacks.items():
                 output.write(";".join(symbolizer.frame(frame) for frame in frames.split(";")) + f" {count}\n")
     return 0
 
