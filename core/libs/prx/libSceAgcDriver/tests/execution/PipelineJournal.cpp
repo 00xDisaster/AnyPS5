@@ -544,8 +544,6 @@ void EvictionTests() {
     Require(newest, "the newest pipeline did not survive the rewrite");
 }
 
-// The record that triggers an eviction must keep the modules it shares with the records the
-// eviction drops: the eviction cannot know what the record about to be written needs.
 void EvictionKeepsPendingModules() {
     using namespace NarrowConstantStoreFixture;
     const auto path = AgcDriver::Graphics::PipelineJournalPath();
@@ -601,6 +599,46 @@ void EvictionKeepsPendingModules() {
     }
 }
 
+void OversizedRecordKeepsTheJournal() {
+    using namespace NarrowConstantStoreFixture;
+    const auto path = AgcDriver::Graphics::PipelineJournalPath();
+    Block compute(BlockBytes);
+    const auto words = AddressWords(compute);
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the oversized record test could not be opened");
+        device->WaitForPipelineJournalReplay();
+        const auto code = ComputeCode(0);
+        const auto result = CompileCompute(*device, code, words, 32);
+        device->Dispatch(result, 1, 1, 1, {}, reinterpret_cast<std::uintptr_t>(code.data()));
+        device->WaitIdle();
+        AgcDriver::Graphics::FlushPipelineJournal();
+    }
+    const auto before = Snapshot();
+    const auto sizeBefore = std::filesystem::file_size(path);
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the oversized record test could not be opened");
+        device->WaitForPipelineJournalReplay();
+        const auto code = ComputeCode(2);
+        auto result = CompileCompute(*device, code, words, 32);
+        result.shaderDataUserWords.assign(400000u, 0u);
+        AgcDriver::Graphics::RecordComputePipeline(result, false);
+        AgcDriver::Graphics::FlushPipelineJournal();
+    }
+    const auto after = Snapshot();
+    Require(after.journal.writeFailures == before.journal.writeFailures + 1, "the oversized record was not counted as a write failure");
+    Require(std::filesystem::file_size(path) == sizeBefore, "the oversized record emptied the journal: " + std::to_string(sizeBefore) + " bytes became " + std::to_string(std::filesystem::file_size(path)));
+    const auto before2 = Snapshot();
+    {
+        const auto device = OpenVulkanTestDevice();
+        Require(device != nullptr, "the device for the oversized record replay could not be opened");
+        device->WaitForPipelineJournalReplay();
+        const auto replayed = Snapshot();
+        Require(replayed.journal.replayedCompute == before2.journal.replayedCompute + 1, "the record that was in the journal did not survive the oversized one");
+    }
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -632,6 +670,7 @@ int main(int argc, char** argv) {
         NewestEntriesTests();
         EvictionTests();
         EvictionKeepsPendingModules();
+        OversizedRecordKeepsTheJournal();
         std::puts("pipeline journal record and replay passed");
         return 0;
     } catch (const std::exception& error) {
