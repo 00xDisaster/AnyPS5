@@ -29,7 +29,6 @@ extern "C" {
 void APS5_VABI FT_Set_Transform_nid_postfix(GuestFaceRec*, const GuestMatrix*, const GuestVector*);
 int APS5_VABI FT_Init_FreeType_nid_postfix(void**);
 int APS5_VABI FT_Done_FreeType_nid_postfix(void*);
-int APS5_VABI FT_Get_Gasp_nid_postfix(GuestFaceRec*, std::uint32_t);
 int APS5_VABI FT_New_Face_nid_postfix(void*, const char*, std::int64_t, GuestFaceRec**);
 int APS5_VABI FT_New_Memory_Face_nid_postfix(void*, const unsigned char*, std::int64_t, std::int64_t, GuestFaceRec**);
 int APS5_VABI FT_Done_Face_nid_postfix(GuestFaceRec*);
@@ -48,6 +47,8 @@ static void Check(bool value, int line) {
     }
 }
 #define Require(value) Check((value), __LINE__)
+
+extern "C" int APS5_VABI FT_Get_Gasp_nid_postfix(GuestFaceRec*, std::uint32_t);
 
 static void CheckGaspTable(const std::vector<unsigned char>* table, const std::vector<std::pair<unsigned, int>>& ranges,
                            bool versionZero, bool render) {
