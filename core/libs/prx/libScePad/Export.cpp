@@ -108,6 +108,7 @@ namespace {
 constexpr int PAD_ERROR_DEVICE_NOT_CONNECTED = static_cast<int>(0x80920007);
 constexpr int PAD_ERROR_DEVICE_NO_HANDLE = static_cast<int>(0x80920008);
 constexpr int PAD_ERROR_ALREADY_OPENED = static_cast<int>(0x80920004);
+constexpr int PAD_ERROR_UNKNOWN_USER = static_cast<int>(0x809b0081);
 
 bool g_opened = false;
 std::array<int, PAD_SPECIAL_HANDLE_COUNT> g_specialUsers{};
@@ -305,7 +306,7 @@ int APS5_VABI scePadOpen_nid_postfix(int userId, int type, int index, const void
     return PAD_SPECIAL_HANDLE + slot;
    }
   }
-  NotImplemented_nid_no_patch(__func__);
+  return PAD_ERROR_UNKNOWN_USER;
  }
  g_opened = true;
  return PAD_HANDLE;

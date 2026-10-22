@@ -387,6 +387,16 @@ static void CheckSpecialPort(int user, int handle) {
     Require(scePadClose_nid_postfix(again) == PAD_OK);
     Require(scePadClose_nid_postfix(second) == PAD_OK);
     Require(scePadGetHandle(other, PAD_PORT_TYPE_SPECIAL, 0) == noHandle);
+    std::array<int, 16> handles{};
+    for (int i = 0; i < 16; ++i) {
+        handles[i] = scePadOpen_nid_postfix(user + i, PAD_PORT_TYPE_SPECIAL, 0, nullptr);
+        Require(handles[i] > 0 && handles[i] != handle && (i == 0 || handles[i] != handles[i - 1]));
+    }
+    Require(scePadOpen_nid_postfix(user + 16, PAD_PORT_TYPE_SPECIAL, 0, nullptr) == static_cast<int>(0x809b0081));
+    Require(scePadGetHandle(user + 16, PAD_PORT_TYPE_SPECIAL, 0) == noHandle);
+    Require(scePadGetHandle(user + 15, PAD_PORT_TYPE_SPECIAL, 0) == handles[15]);
+    for (int i = 0; i < 16; ++i) Require(scePadClose_nid_postfix(handles[i]) == PAD_OK);
+    Require(scePadGetHandle(user + 15, PAD_PORT_TYPE_SPECIAL, 0) == noHandle);
     Require(scePadGetHandle(user, 0, 0) == handle);
 }
 
