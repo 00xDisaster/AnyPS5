@@ -376,7 +376,11 @@ static void Trigonometry() {
     int differenceCases = 0;
     for (const auto& [angle, tangent] : poleTangents) {
         Require(FT_Tan_nid_postfix(angle) == tangent);
-        Require(static_cast<std::int64_t>(FT_Tan(static_cast<FT_Angle>(angle))) != tangent);
+        if (sizeof(FT_Fixed) == 4) {
+            Require(static_cast<std::int64_t>(FT_Tan(static_cast<FT_Angle>(angle))) != tangent);
+        } else {
+            Require(static_cast<std::int64_t>(FT_Tan(static_cast<FT_Angle>(angle))) == tangent);
+        }
     }
     auto compare = [&](std::int64_t angle, FT_Angle nativeAngle, std::int64_t expectedTangent) {
         Require(FT_Cos_nid_postfix(angle) == FT_Cos(nativeAngle));
