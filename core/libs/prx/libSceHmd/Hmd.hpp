@@ -88,6 +88,10 @@ int APS5_VABI sceHmdDistortionGetWideNearCorrectionCommand(std::int32_t handle, 
 int APS5_VABI sceHmdGet2dVrCommand(std::int32_t handle, const Hmd2dVrCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
 int APS5_VABI sceHmdGetDistortionCorrectionCommand(std::int32_t handle, const HmdDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
 int APS5_VABI sceHmdGetWideNearDistortionCorrectionCommand(std::int32_t handle, const HmdWideNearDistortionCommandParameter* parameter, HmdCommandBuffer* commandBuffer);
+bool APS5_VABI sceHmdInternalIsGameVr2d(void);
+bool APS5_VABI sceHmdInternalIsMiniAppVr2d(void);
+bool APS5_VABI sceHmdInternalIsCommonDlgVr2d(void);
+bool APS5_VABI sceHmdInternalIsCommonDlgMiniAppVr2d(void);
 }
 
 #endif

@@ -20,6 +20,10 @@ void CheckDisconnected() {
     Require(status == Hmd::DeviceStatus::NotDetected, "headset reported connected");
     Require(sceHmdInternalGetDeviceStatus(nullptr) == Hmd::ParameterNull, "null status");
     Require(sceHmdInternalMmapIsConnect() == 0, "connection reported present");
+    Require(!sceHmdInternalIsGameVr2d(), "game reported in VR2D without a headset");
+    Require(!sceHmdInternalIsMiniAppVr2d(), "mini app reported in VR2D without a headset");
+    Require(!sceHmdInternalIsCommonDlgVr2d(), "common dialog reported in VR2D without a headset");
+    Require(!sceHmdInternalIsCommonDlgMiniAppVr2d(), "common dialog mini app reported in VR2D without a headset");
 }
 
 void CheckBufferQueries() {

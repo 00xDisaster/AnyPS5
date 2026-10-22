@@ -428,8 +428,7 @@ int APS5_VABI sceHmdReprojectionStopCapture(HmdCaptureInfo* info) {
 }
 
 bool APS5_VABI sceHmdInternalIsCommonDlgMiniAppVr2d(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return false;
 }
 
 int APS5_VABI sceHmdInternalMmapGetSensorCalibrationData(void* buffer, std::uint32_t size) {
@@ -454,13 +453,11 @@ int APS5_VABI sceHmdInternalGetDebugMode(std::uint8_t* mode) {
 }
 
 bool APS5_VABI sceHmdInternalIsMiniAppVr2d(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return false;
 }
 
 bool APS5_VABI sceHmdInternalIsCommonDlgVr2d(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return false;
 }
 
 int APS5_VABI sceHmdReprojectionSetOutputMinColor(float red, float green, float blue) {
@@ -601,8 +598,7 @@ int APS5_VABI sceHmdReprojectionStartLiveCapture(const HmdLiveCaptureParameter* 
 }
 
 bool APS5_VABI sceHmdInternalIsGameVr2d(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return false;
 }
 
 int APS5_VABI sceHmdGetAssyError(HmdAssemblyError* data) {
