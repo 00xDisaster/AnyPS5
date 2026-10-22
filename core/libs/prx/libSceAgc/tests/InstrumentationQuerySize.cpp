@@ -8,7 +8,7 @@
 extern "C" {
 int APS5_VABI sceAgcSetShaderInstrumentation(std::uint32_t);
 std::uint32_t APS5_VABI sceAgcGetShaderInstrumentation();
-std::uint32_t APS5_VABI sceAgcDcbBeginOcclusionQueryGetSize(std::uint32_t);
+std::uint32_t APS5_VABI sceAgcDcbBeginOcclusionQueryGetSize(std::int32_t);
 std::uint32_t APS5_VABI sceAgcDcbEndOcclusionQueryGetSize();
 }
 
