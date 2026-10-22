@@ -228,7 +228,10 @@ static void WatchedMetadata(FacePair& face) {
     Require(FT_Load_Sfnt_Table_nid_postfix(face.guest, nativeTag, 0, reinterpret_cast<unsigned char*>(length), length) == 0);
     Require(*length == queriedLength);
     expect(false, true);
+    const auto retainedTag = *tag;
+    const auto retainedLength = *length;
     Require(FT_Sfnt_Table_Info_nid_postfix(nullptr, 0, tag, length) == FT_Err_Invalid_Face_Handle);
+    Require(*tag == retainedTag && *length == retainedLength);
     expect(false, false);
 #ifndef _WIN32
     Require(GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(block, span));
