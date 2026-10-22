@@ -9,6 +9,9 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `ANYPS5_LOADEXEC_PARENT` | string | `core/libs/tests/GuestLoadExecHost.cpp` |  | variable the Windows entry stub reads; its wide name is built in `core/relinker/elfpatcher/src/windows/WindowsEntryStubBuilder.cpp` |
 | `ANYPS5_LOADEXEC_TEST_ROOT` | string | `core/libs/tests/GuestLoadExecHost.cpp` |  | directory the load-exec host test reads its guest executable from |
 | `ANYPS5_TEST_QUOTED_ARGV0` | presence | `core/libs/tests/GuestLoadExecHost.cpp` |  | makes the load-exec test's first argument one with quotes, a backslash and non-ASCII text |
+| `ANYPS5_VIDEO_OUT_FULLSCREEN` | presence | `core/libs/prx/libSceVideoOut/src/DisplayWindow.cpp` |  | opens the presentation window fullscreen on the host display instead of at 60 percent of it |
+| `ANYPS5_VIDEO_OUT_MAX_HEIGHT` | integer | `core/libs/prx/libSceVideoOut/src/Buffer.cpp` |  | largest height the guest video out may register a buffer with; the buffer attribute is clamped to it and the title falls back to it when it asks for a larger display |
+| `ANYPS5_VIDEO_OUT_MAX_WIDTH` | integer | `core/libs/prx/libSceVideoOut/src/Buffer.cpp` |  | largest width the guest video out may register a buffer with; the buffer attribute is clamped to it and the title falls back to it when it asks for a larger display |
 | `APS5_EBOOT` | string | `core/libs/tests/GuestSystemExit.cpp` |  | host path of the executable launched for /app0/eboot.bin, defaulting to the running executable |
 | `APS5_SKIP_TIMING_TESTS` | presence | `core/libs/tests/PreciseWait.cpp` |  | treats the timing tests' runner as preempted, so they skip without probing the clock |
 | `APS5_USBD_DEVICE` | string | `core/libs/tests/GuestUsbd.cpp` |  | selects the USB device a test drives, as vendor:product in hex |

@@ -104,8 +104,8 @@ void APS5_VABI sceVideoOutSetBufferAttribute2(VideoOutBufferAttribute2* attribut
     std::memset(attribute, 0, sizeof(VideoOutBufferAttribute2));
     attribute->tiling_mode = tilingMode;
     attribute->aspect_ratio = 0;
-    attribute->width = width;
-    attribute->height = height;
+    attribute->width = ClampVideoOutWidth(width);
+    attribute->height = ClampVideoOutHeight(height);
     attribute->pitch_in_pixel = 0;
     attribute->option = option;
     attribute->pixel_format = pixelFormat;
@@ -167,8 +167,8 @@ void APS5_VABI sceVideoOutSetBufferAttribute(VideoOutBufferAttribute* attribute,
     attribute->pixel_format = pixelFormat;
     attribute->tiling_mode = tilingMode;
     attribute->aspect_ratio = aspectRatio;
-    attribute->width = width;
-    attribute->height = height;
+    attribute->width = ClampVideoOutWidth(width);
+    attribute->height = ClampVideoOutHeight(height);
     attribute->pitch_in_pixel = pitchInPixel;
 }
 
@@ -230,6 +230,8 @@ int APS5_VABI sceVideoOutSubmitChangeBufferAttribute2(int handle, int setIndex, 
     AgcDriverCheckGuestMemory_nid_postfix(attribute, sizeof(*attribute), alignof(VideoOutBufferAttribute2));
     auto group = cfg->groups[setIndex];
     group.attribute = *attribute;
+    group.attribute.width = ClampVideoOutWidth(group.attribute.width);
+    group.attribute.height = ClampVideoOutHeight(group.attribute.height);
     for (int i = 0; i < VIDEO_OUT_BUFFER_NUM_MAX; ++i) {
         if (cfg->buffers[i].groupIndex != setIndex) continue;
         const auto display = DescribeVideoOutBuffer(cfg->buffers[i], group);

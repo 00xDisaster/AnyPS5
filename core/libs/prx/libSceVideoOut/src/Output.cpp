@@ -260,6 +260,7 @@ int APS5_VABI sceVideoOutInitializeOutputOptions(VideoOutOutputOptions* options)
 int APS5_VABI sceVideoOutIsOutputSupported(int handle, uint64_t mode, const VideoOutOutputOptions* options, void* reservedPtr, uint64_t reserved) try {
     const int result = validateOutputConfig(handle, mode, options, reservedPtr, reserved);
     if (result != 0) {
+        if (result == VIDEO_OUT_ERROR_UNKNOWN_OUTPUT_MODE && VideoOutHostResolutionLimit().width != 0) return 0;
         return result;
     }
     return 1;
@@ -269,8 +270,8 @@ int APS5_VABI sceVideoOutIsOutputSupported(int handle, uint64_t mode, const Vide
 
 int APS5_VABI sceVideoOutConfigureOutput(int handle, uint64_t mode, const VideoOutOutputOptions* options, void* reservedPtr, uint64_t reserved) try {
     const int supported = sceVideoOutIsOutputSupported(handle, mode, options, reservedPtr, reserved);
-    if (supported < 0) {
-        return supported;
+    if (supported <= 0) {
+        return supported == 0 ? VIDEO_OUT_ERROR_UNSUPPORTED_OUTPUT_MODE : supported;
     }
     if (mode == VIDEO_OUT_OUTPUT_MODE_119_88HZ && (GetAppAttribute3_nid_no_patch() & 0x40u) == 0) return VIDEO_OUT_ERROR_UNSUPPORTED_OUTPUT_MODE;
     auto cfg = VideoOutDriver::Get().GetConfig(handle);

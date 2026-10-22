@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <list>
 #include <mutex>
 #include <thread>
@@ -48,6 +49,35 @@ static constexpr int VIDEO_OUT_BUS_TYPE_HMD2_MAIN = 0x20;
 
 static constexpr uint32_t VIDEO_OUT_DEFAULT_WIDTH = 1920;
 static constexpr uint32_t VIDEO_OUT_DEFAULT_HEIGHT = 1080;
+
+struct VideoOutHostResolution {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+inline VideoOutHostResolution VideoOutHostResolutionLimit() {
+    static const VideoOutHostResolution limit = [] {
+        VideoOutHostResolution parsed{};
+        if (const char* text = std::getenv("ANYPS5_VIDEO_OUT_MAX_WIDTH"); text != nullptr) {
+            parsed.width = static_cast<std::uint32_t>(std::strtoull(text, nullptr, 10));
+        }
+        if (const char* text = std::getenv("ANYPS5_VIDEO_OUT_MAX_HEIGHT"); text != nullptr) {
+            parsed.height = static_cast<std::uint32_t>(std::strtoull(text, nullptr, 10));
+        }
+        return parsed;
+    }();
+    return limit;
+}
+
+inline std::uint32_t ClampVideoOutWidth(std::uint32_t width) {
+    const auto limit = VideoOutHostResolutionLimit();
+    return limit.width != 0 && width > limit.width ? limit.width : width;
+}
+
+inline std::uint32_t ClampVideoOutHeight(std::uint32_t height) {
+    const auto limit = VideoOutHostResolutionLimit();
+    return limit.height != 0 && height > limit.height ? limit.height : height;
+}
 
 static constexpr std::uint32_t VIDEO_OUT_OPEN_PARAM_FIRST_WORD = 16;
 static constexpr std::int32_t VIDEO_OUT_SERVICE_THREAD_PRIORITY_HIGHEST = 256;
