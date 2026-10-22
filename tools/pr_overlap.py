@@ -264,7 +264,10 @@ if __name__ == "__main__":
         parser.error("pass exactly one of --out or --branch")
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
+    if args.out:
+        args.out = args.out.resolve()
     try:
+        os.chdir(git("rev-parse", "--show-toplevel").strip())
         REPO = args.repo or upstream()
         prs = open_prs(args.base)
         fetch(args.base, prs)
