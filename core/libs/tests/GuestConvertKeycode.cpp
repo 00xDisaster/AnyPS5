@@ -1,9 +1,15 @@
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "ProcessParametersFixture.hpp"
+#include "prx/libSceConvertKeycode/ImeKeyboardType.hpp"
+#include <array>
+#include <cstddef>
+#include <cstring>
 #include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
 #include <stdexcept>
+#include <utility>
 
 extern "C" {
 int APS5_VABI sceConvertKeycodeGetVirtualKeycode(std::uint16_t, std::uint32_t, std::uint16_t*);
@@ -13,7 +19,103 @@ int APS5_VABI sceConvertKeycodeGetCharacter(std::uint16_t, std::uint32_t, std::u
 
 static void Require(bool value) { if (!value) std::abort(); }
 
+namespace {
+
+struct FakeUser {
+    int keyboardResult = 0;
+    std::int32_t keyboardType = 0;
+    int japaneseResult = 0;
+    std::int32_t japaneseVariant = 0;
+    int chineseResult = 0;
+    std::int32_t chineseVariant = 0;
+    int calls = 0;
+};
+
+int Resolve(const FakeUser& user, std::uint32_t* type, std::uint32_t sdkVersion = 0xFFFFFFFFu, bool ps4Client = false) {
+    return ImeKeyboardType::Resolve(
+        7, type, sdkVersion, ps4Client,
+        [&](std::int32_t id, std::int32_t* value) { Require(id == 7); *value = user.keyboardType; return user.keyboardResult; },
+        [&](std::int32_t id, std::int32_t* value) { Require(id == 7); *value = user.japaneseVariant; return user.japaneseResult; },
+        [&](std::int32_t id, std::int32_t* value) { Require(id == 7); *value = user.chineseVariant; return user.chineseResult; });
+}
+
+std::uint32_t Map(std::int32_t keyboardType, std::int32_t japanese = 0, std::int32_t chinese = 0, std::uint32_t sdkVersion = 0xFFFFFFFFu, bool ps4Client = false) {
+    FakeUser user;
+    user.keyboardType = keyboardType;
+    user.japaneseVariant = japanese;
+    user.chineseVariant = chinese;
+    std::uint32_t type = 0xFFFFFFFFu;
+    Require(Resolve(user, &type, sdkVersion, ps4Client) == 0);
+    return type;
+}
+
+void RequireImeKeyboardTypeMapping() {
+    // The owner's table: UserService keyboard type -> IME keyboard type.
+    constexpr std::pair<int, int> table[] = {
+        {16, 1}, {17, 2}, {18, 3}, {19, 5}, {20, 4}, {21, 6}, {22, 7}, {23, 8}, {24, 10}, {25, 11}, {26, 9}, {27, 12},
+        {28, 13}, {29, 14}, {30, 15}, {31, 16}, {32, 17}, {33, 18}, {34, 19}, {35, 20}, {36, 21}, {38, 24}, {40, 25},
+        {41, 30}, {42, 31}, {43, 33}, {44, 32}, {45, 34}, {46, 35}, {47, 36}, {48, 37}, {49, 38}};
+    for (const auto& [keyboard, ime] : table) {
+        // 49 -> 38 is compatibility-sensitive; the table row is checked on a new SDK, the rule separately below.
+        Require(Map(keyboard) == static_cast<std::uint32_t>(ime));
+    }
+    // Unmatched keyboard types succeed with IME type 0 (including 0, the gaps, and out-of-range values).
+    for (int keyboard : {-1, 0, 1, 15, 50, 51, 1000, 0x7FFFFFFF, static_cast<int>(0x80000000u)}) Require(Map(keyboard) == 0);
+
+    // Type 37: Japanese input variant; anything else is unmatched.
+    Require(Map(37, 0) == 22 && Map(37, 1) == 23);
+    Require(Map(37, 2) == 0 && Map(37, -1) == 0);
+    Require(Map(37, 0, 4) == 22);  // the Traditional Chinese variant is ignored for 37
+    // Type 39: Traditional Chinese input variant.
+    Require(Map(39, 0, 0) == 26 && Map(39, 0, 1) == 27 && Map(39, 0, 2) == 28 && Map(39, 0, 3) == 29 && Map(39, 0, 4) == 39);
+    Require(Map(39, 0, 5) == 0 && Map(39, 0, -1) == 0);
+    Require(Map(39, 1, 0) == 26);  // the Japanese variant is ignored for 39
+
+    // Variant query failure falls back to variant 0 and still succeeds; other types never query the variants.
+    FakeUser user;
+    std::uint32_t type = 0xFFFFFFFFu;
+    user.keyboardType = 37; user.japaneseResult = static_cast<int>(0x80960001u); user.japaneseVariant = 1;
+    Require(Resolve(user, &type) == 0 && type == 22);
+    user = {};
+    type = 0xFFFFFFFFu;
+    user.keyboardType = 39; user.chineseResult = static_cast<int>(0x80960001u); user.chineseVariant = 4;
+    Require(Resolve(user, &type) == 0 && type == 26);
+    user = {};
+    type = 0xFFFFFFFFu;
+    user.keyboardType = 20; user.japaneseResult = 1; user.chineseResult = 1;
+    Require(Resolve(user, &type) == 0 && type == 4);
+
+    // SDK compatibility, applied after the lookup. IME 38 (from 49): PS5 SDK < 0x06000000, PS4 SDK < 0x10000000 -> 4.
+    Require(Map(49, 0, 0, 0x05FFFFFFu, false) == 4);
+    Require(Map(49, 0, 0, 0x06000000u, false) == 38);
+    Require(Map(49, 0, 0, 0x0FFFFFFFu, true) == 4);
+    Require(Map(49, 0, 0, 0x10000000u, true) == 38);
+    // IME 39 (from 39 variant 4): PS5 SDK < 0x08000000 and every PS4 client -> 29.
+    Require(Map(39, 0, 4, 0x07FFFFFFu, false) == 29);
+    Require(Map(39, 0, 4, 0x08000000u, false) == 39);
+    Require(Map(39, 0, 4, 0xFFFFFFFFu, true) == 29);
+    // Other IME types are never rewritten.
+    Require(Map(20, 0, 0, 0, false) == 4 && Map(36, 0, 0, 0, true) == 21 && Map(39, 0, 3, 0, true) == 29);
+
+    // Errors leave the output untouched.
+    type = 0x1234u;
+    user = {};
+    Require(ImeKeyboardType::Resolve(7, nullptr, 0, false, [](std::int32_t, std::int32_t*) { Require(false); return 0; }, [](std::int32_t, std::int32_t*) { return 0; }, [](std::int32_t, std::int32_t*) { return 0; }) == static_cast<int>(0x80BC0031u));
+    user.keyboardResult = static_cast<int>(0x80960105u);
+    Require(Resolve(user, &type) == static_cast<int>(0x80BC0010u) && type == 0x1234u);
+    for (int other : {1, -1, static_cast<int>(0x80960002u), static_cast<int>(0x80960005u), static_cast<int>(0x80BC0010u)}) {
+        user.keyboardResult = other;
+        Require(Resolve(user, &type) == static_cast<int>(0x80BC00FFu) && type == 0x1234u);
+    }
+}
+
+}  // namespace
+
 int main() {
+    static std::array<std::byte, 64> process{};
+    Require(ProcessParametersFixture::Install(process.data(), process.size()));
+    constexpr std::uint32_t sdkVersion = 0x09000000u;
+    std::memcpy(process.data() + 16, &sdkVersion, sizeof(sdkVersion));
     constexpr int invalidAddress = static_cast<int>(0x80BC0031u);
     constexpr int invalidUserId = static_cast<int>(0x80BC0010u);
 
@@ -41,18 +143,14 @@ int main() {
         Require(rejected && virtualKey == 0xABCD);
     }
 
+    // The exported function with the real UserService: unknown users fail, the initial user has no keyboard setting yet (0).
     std::uint32_t type = 0xFFFFFFFFu;
     Require(sceConvertKeycodeGetImeKeyboardType(-1, &type) == invalidUserId);
+    Require(sceConvertKeycodeGetImeKeyboardType(0, &type) == invalidUserId);
     Require(type == 0xFFFFFFFFu);
+    Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == 0);
 
-    bool rejected = false;
-    try {
-        sceConvertKeycodeGetImeKeyboardType(0, &type);
-    } catch (const std::runtime_error&) {
-        rejected = true;
-    }
-    Require(rejected && type == 0xFFFFFFFFu);
-
+    RequireImeKeyboardTypeMapping();
     Require(sceConvertKeycodeGetCharacter(4, 0, 0, nullptr) == invalidAddress);
     char16_t character = u'?';
     Require(sceConvertKeycodeGetCharacter(4, 0, 0, &character) == static_cast<int>(0x80BC001Du));

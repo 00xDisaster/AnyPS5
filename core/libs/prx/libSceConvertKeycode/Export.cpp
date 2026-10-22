@@ -1,12 +1,21 @@
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include "SceTypes.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libSceConvertKeycode/ImeKeyboardType.hpp"
+
+extern "C" {
+int APS5_VABI sceUserServiceGetKeyboardType(int32_t userId, int32_t* type);
+int APS5_VABI sceUserServiceGetJapaneseInputType(int32_t userId, int32_t* type);
+int APS5_VABI sceUserServiceGetTraditionalChineseInputType(int32_t userId, int32_t* type);
+}
 
 namespace {
 constexpr int kErrInvalidAddress = static_cast<int>(0x80BC0031u);
-constexpr int kErrInvalidUserId = static_cast<int>(0x80BC0010u);
 constexpr std::array<std::uint16_t, 256> BaseVirtualKeys = {
     255, 255, 255, 255, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
     77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 49, 50,
@@ -2398,9 +2407,12 @@ char16_t ConvertCharacter(std::uint16_t keycode, std::uint32_t state, std::uint3
 extern "C" {
 
 int APS5_VABI sceConvertKeycodeGetImeKeyboardType(int32_t userId, uint32_t* type) {
- if (type == nullptr) return kErrInvalidAddress;
- if (userId < 0) return kErrInvalidUserId;
- throw std::runtime_error("sceConvertKeycodeGetImeKeyboardType: user keyboard language and variant are unavailable");
+    // The PS4/PS5 client rule: AnyPS5 only runs PS5 processes (sceKernelIsPs4Process is unimplemented and reports 0).
+    constexpr bool ps4Client = false;
+    const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
+    std::uint32_t sdkVersion;
+    std::memcpy(&sdkVersion, process + 16, sizeof(sdkVersion));
+    return ImeKeyboardType::Resolve(userId, type, sdkVersion, ps4Client, sceUserServiceGetKeyboardType, sceUserServiceGetJapaneseInputType, sceUserServiceGetTraditionalChineseInputType);
 }
 int APS5_VABI sceConvertKeycodeGetVirtualKeycode(std::uint16_t keycode, std::uint32_t keyboardType, std::uint16_t* virtualKeycode) {
     if (virtualKeycode == nullptr) return kErrInvalidAddress;

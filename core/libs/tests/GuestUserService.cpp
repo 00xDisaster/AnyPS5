@@ -10,6 +10,9 @@ int APS5_VABI sceUserServiceGetPlatformPrivacyWs1(int32_t user_id, int32_t* valu
 int APS5_VABI sceUserServiceGetForegroundUser(int* user_id);
 int APS5_VABI sceUserServiceGetRegisteredUserIdList(UserServiceRegisteredUserIdList* user_id_list);
 int APS5_VABI sceUserServiceGetUserColor(int user_id, int* color);
+int APS5_VABI sceUserServiceGetKeyboardType(int user_id, std::int32_t* type);
+int APS5_VABI sceUserServiceGetJapaneseInputType(int user_id, std::int32_t* type);
+int APS5_VABI sceUserServiceGetTraditionalChineseInputType(int user_id, std::int32_t* type);
 int APS5_VABI sceUserServiceGetNpAccountId(int user_id, std::uint64_t* account_id);
 int APS5_VABI sceUserServiceGetAgeLevel(int user_id, std::uint32_t* age_level);
 int APS5_VABI sceUserServiceGetAccessibilityChatTranscription(int user_id, std::int32_t* value);
@@ -57,6 +60,15 @@ int main() {
     Require(sceUserServiceGetUserColor(USER_SERVICE_INITIAL_USER_ID, nullptr) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
     Require(sceUserServiceGetUserColor(123, &color) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
     Require(sceUserServiceGetUserColor(USER_SERVICE_INITIAL_USER_ID, &color) == USER_SERVICE_OK);
+
+    using KeyboardSetting = int (*)(int, std::int32_t*);
+    for (KeyboardSetting setting : {sceUserServiceGetKeyboardType, sceUserServiceGetJapaneseInputType, sceUserServiceGetTraditionalChineseInputType}) {
+        std::int32_t value = 0x5A5A;
+        Require(setting(USER_SERVICE_INITIAL_USER_ID, nullptr) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
+        Require(setting(123, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == 0x5A5A);
+        Require(setting(USER_SERVICE_USER_ID_INVALID, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == 0x5A5A);
+        Require(setting(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == 0);
+    }
     Require(color == 0);
 
     std::uint64_t account_id = 0xdeadbeefu;
