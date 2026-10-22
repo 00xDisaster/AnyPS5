@@ -10,6 +10,8 @@
 
 ### Functional
 
+- [FT_Outline_Get_BBox](../../../core/libs/prx/libSceFreeType/src/CurveBounds.cpp) has no console ABI or behaviour verification; extrema and errors follow bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftbbox.c). Curved outlines with any coordinate outside ±536870911 throw: conic differences and their sum can overflow native 32-bit arithmetic even when each input fits `FT_Pos`. Coordinates outside native `FT_Pos` (signed 32 bits on Windows) and missing nonempty arrays also throw. Native output uses a local box; errors and unsupported inputs leave the guest output unchanged. Empty outlines do not inspect their arrays.
+
 - [libSceFreeType](../../../core/libs/prx/libSceFreeType/src/GuestObjects.cpp) (libSceFreeType) - private fields (`driver`, `memory`, `stream`, `sizes_list`, `extensions`) and `subglyphs` stay null. Face, size and glyph-slot records are copies. Only edits to outline points and flags are written back before `FT_Render_Glyph`; replacing arrays or exceeding the host `FT_Pos` range throws. `FT_New_Face` reads the whole file into memory and throws for files of 2 GiB or more on Windows. On macOS, native FreeType symbols remain exported and could resolve guest imports without adaptation; Windows and Linux hide them with `--exclude-libs`.
 
 - [FT_New_Memory_Face](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - on Windows, the host FT_Long is 32 bits, so buffer sizes of 2 GiB or more or below -2 GiB throw before the font buffer is read
