@@ -1,4 +1,3 @@
-#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -38,14 +37,18 @@ bool initialized = false;
 std::unordered_map<int, Context> contexts;
 int lastContextId = 0;
 
+bool IsAsciiAlphanumeric(char value) {
+    return (value >= '0' && value <= '9') || (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z');
+}
+
 bool ReadNpId(const void* npId, SignalingNpId& copy) {
     std::memcpy(&copy, npId, sizeof(copy));
     if (copy.term != 0) return false;
     const std::size_t length = strnlen(copy.handle, sizeof(copy.handle));
-    if (length < 3 || !std::isalnum(static_cast<unsigned char>(copy.handle[0]))) return false;
+    if (length < 3 || !IsAsciiAlphanumeric(copy.handle[0])) return false;
     for (std::size_t index = 1; index < length; ++index) {
-        const auto value = static_cast<unsigned char>(copy.handle[index]);
-        if (!std::isalnum(value) && value != '_' && value != '-') return false;
+        const char value = copy.handle[index];
+        if (!IsAsciiAlphanumeric(value) && value != '_' && value != '-') return false;
     }
     return true;
 }

@@ -57,6 +57,8 @@ int main() {
     const SignalingNpId tooShort = MakeNpId("ab");
     const SignalingNpId leadingUnderscore = MakeNpId("_player");
     const SignalingNpId withDot = MakeNpId("pl.ayer");
+    SignalingNpId latin = MakeNpId("pl\xE9yer");
+    SignalingNpId upper = MakeNpId("Player9");
     SignalingNpId unterminated = MakeNpId("player_1");
     unterminated.term = 'x';
     unsigned char info[64];
@@ -81,9 +83,11 @@ int main() {
     Require(sceNpSignalingCreateContext(&leadingUnderscore, nullptr, nullptr, &context) == InvalidArgument, "sceNpSignalingCreateContext", "an online ID starting with '_' was taken");
     Require(sceNpSignalingCreateContext(&withDot, nullptr, nullptr, &context) == InvalidArgument, "sceNpSignalingCreateContext", "an online ID with '.' was taken");
     Require(sceNpSignalingCreateContext(&unterminated, nullptr, nullptr, &context) == InvalidArgument, "sceNpSignalingCreateContext", "an unterminated online ID was taken");
+    Require(sceNpSignalingCreateContext(&latin, nullptr, nullptr, &context) == InvalidArgument, "sceNpSignalingCreateContext", "an online ID with a byte outside ASCII was taken");
     Require(context == -7, "sceNpSignalingCreateContext", "a refused call wrote the context id");
 
     Require(sceNpSignalingCreateContext(&owner, nullptr, nullptr, &context) == 0 && context == 1, "sceNpSignalingCreateContext", "the first context is not id 1");
+    Require(sceNpSignalingActivateConnection(context, &upper, &connection) == SignedOut, "sceNpSignalingActivateConnection", "an online ID with upper-case letters and digits was refused");
     int created = 0;
     Require(sceNpSignalingCreateContext(&maximum, nullptr, nullptr, &created) == 0 && created == 2, "sceNpSignalingCreateContext", "the second context is not id 2");
     Require(sceNpSignalingDeleteContext(2) == 0, "sceNpSignalingDeleteContext", "deleting context 2 failed");
