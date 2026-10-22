@@ -39,8 +39,12 @@ class DatabaseCacheTests(unittest.TestCase):
             database = Path(directory) / "nid database.csv"
             nid = nid_names.compute_nid("sceExample")
             database.write_text(f"{nid} sceExample\n", encoding="utf-8")
+            scratch = str(Path(directory) / "scratch")
+            Path(scratch).mkdir()
+            environment = {**os.environ, "ANYPS5_NID_DB": str(database), "TEMP": scratch, "TMP": scratch, "TMPDIR": scratch}
             result = subprocess.run([sys.executable, script, "--nid", nid, "--json"], capture_output=True, text=True,
-                                    env={**os.environ, "ANYPS5_NID_DB": str(database)}, timeout=120)
+                                    env=environment, timeout=20)
+            self.assertEqual(list(Path(scratch).iterdir()), [])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("downloading", result.stderr)
         self.assertIn("sceExample", result.stdout)
