@@ -92,7 +92,7 @@ SysVDynamicSection SysVDynamicSectionBuilder::BuildDynamicSection(
         if (ref.Nid.empty()) return static_cast<std::uint8_t>((STB_WEAK << 4) | STT_NOTYPE);
         const bool tls = ref.RelocationTypeValue == R_X86_64_DTPMOD64 || ref.RelocationTypeValue == R_X86_64_DTPOFF64
             || ref.RelocationTypeValue == R_X86_64_TPOFF64;
-        const auto type = tls ? STT_TLS : ref.Function ? STT_FUNC : STT_OBJECT;
+        const auto type = tls ? STT_TLS : ref.SymbolType;
         return static_cast<std::uint8_t>(((ref.Weak ? STB_WEAK : STB_GLOBAL) << 4) | type);
     };
 
