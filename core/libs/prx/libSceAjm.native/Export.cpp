@@ -13,21 +13,36 @@ static void AjmStub(const char* name) {
     NotImplemented_nid_no_patch(name);
 }
 
-struct AjmDecWVorbisHeaderPacketParam {
-    std::uint64_t size;
-    std::uint32_t channels;
+struct WVorbisHeaderPacketParameter {
+    std::size_t size;
+    std::int32_t channels;
     std::uint32_t sampleRate;
     std::int32_t bytesPerSecond;
-    std::int32_t blockSize0Log2;
-    std::int32_t blockSize1Log2;
+    std::int32_t shortBlockExponent;
+    std::int32_t longBlockExponent;
     std::uint32_t reserved;
-    const std::uint8_t* setupPacket;
-    std::uint64_t setupPacketSize;
-    std::uint8_t* output;
-    std::uint64_t outputSize;
-    std::uint64_t writtenSize;
+    const void* setupPacket;
+    std::size_t setupPacketSize;
+    void* output;
+    std::size_t outputCapacity;
+    std::size_t outputSize;
 };
-static_assert(sizeof(AjmDecWVorbisHeaderPacketParam) == 0x48);
+
+struct WVorbisSetupPacketParameter {
+    std::size_t size;
+    std::int32_t channels;
+    std::uint32_t reserved;
+    const void* input;
+    std::size_t inputSize;
+    void* output;
+    std::size_t outputCapacity;
+    std::size_t outputSize;
+};
+
+static_assert(sizeof(WVorbisHeaderPacketParameter) == 72);
+static_assert(offsetof(WVorbisHeaderPacketParameter, setupPacket) == 32);
+static_assert(sizeof(WVorbisSetupPacketParameter) == 56);
+static_assert(offsetof(WVorbisSetupPacketParameter, input) == 16);
 
 namespace {
 
@@ -81,22 +96,22 @@ const char* APS5_VABI sceAjmStrError(int error) {
  return nullptr;
 }
 
-int APS5_VABI sceAjmDecWVorbisCreateHeaderPacket(AjmDecWVorbisHeaderPacketParam* param) {
+int APS5_VABI sceAjmDecWVorbisCreateHeaderPacket(WVorbisHeaderPacketParameter* param) {
     if (param == nullptr) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
-    if (param->size != sizeof(AjmDecWVorbisHeaderPacketParam)) return AJM_WVORBIS_ERROR_INVALID_SIZE;
+    if (param->size != sizeof(WVorbisHeaderPacketParameter)) return AJM_WVORBIS_ERROR_INVALID_SIZE;
     if (param->bytesPerSecond < 0) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
-    if (WVorbisBlockSize(param->blockSize0Log2) < VORBIS_BLOCK_SIZE_MIN) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
-    if (param->blockSize1Log2 < param->blockSize0Log2 || WVorbisBlockSize(param->blockSize1Log2) > VORBIS_BLOCK_SIZE_MAX)
+    if (WVorbisBlockSize(param->shortBlockExponent) < VORBIS_BLOCK_SIZE_MIN) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
+    if (param->longBlockExponent < param->shortBlockExponent || WVorbisBlockSize(param->longBlockExponent) > VORBIS_BLOCK_SIZE_MAX)
         return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
     if (param->setupPacket == nullptr) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
     if (param->setupPacketSize < WVORBIS_SETUP_MIN_SIZE) return AJM_WVORBIS_ERROR_INVALID_SETUP;
     if (param->output == nullptr) return AJM_WVORBIS_ERROR_INVALID_PARAMETER;
     constexpr std::size_t headers = WVORBIS_LENGTH_TABLE_SIZE + VORBIS_IDENTIFICATION_SIZE + VORBIS_COMMENT_SIZE;
-    if (param->outputSize < headers || param->setupPacketSize > param->outputSize - headers) return AJM_WVORBIS_ERROR_OUTPUT_TOO_SMALL;
+    if (param->outputCapacity < headers || param->setupPacketSize > param->outputCapacity - headers) return AJM_WVORBIS_ERROR_OUTPUT_TOO_SMALL;
 
-    const std::uint8_t* setup = param->setupPacket;
+    const auto* setup = static_cast<const std::uint8_t*>(param->setupPacket);
     const auto part1 = static_cast<std::uint16_t>(setup[WVORBIS_SETUP_PART1_LENGTH_OFFSET] | setup[WVORBIS_SETUP_PART1_LENGTH_OFFSET + 1] << 8);
-    std::uint8_t* out = param->output;
+    auto* out = static_cast<std::uint8_t*>(param->output);
     out = PutLittle(out, 0, 2);
     out = PutLittle(out, VORBIS_IDENTIFICATION_SIZE, 2);
     out = PutLittle(out, VORBIS_COMMENT_SIZE, 2);
@@ -105,12 +120,12 @@ int APS5_VABI sceAjmDecWVorbisCreateHeaderPacket(AjmDecWVorbisHeaderPacketParam*
 
     out = PutVorbisHeaderStart(out, 1);
     out = PutLittle(out, 0, 4);
-    out = PutLittle(out, param->channels, 1);
+    out = PutLittle(out, static_cast<std::uint32_t>(param->channels), 1);
     out = PutLittle(out, param->sampleRate, 4);
     out = PutLittle(out, 0, 4);
     out = PutLittle(out, static_cast<std::uint32_t>(param->bytesPerSecond) * 8u, 4);
     out = PutLittle(out, 0, 4);
-    *out++ = static_cast<std::uint8_t>((param->blockSize0Log2 & 0xF) | (param->blockSize1Log2 & 0xF) << 4);
+    *out++ = static_cast<std::uint8_t>((param->shortBlockExponent & 0xF) | (param->longBlockExponent & 0xF) << 4);
     *out++ = 1;
 
     out = PutVorbisHeaderStart(out, 3);
@@ -119,11 +134,11 @@ int APS5_VABI sceAjmDecWVorbisCreateHeaderPacket(AjmDecWVorbisHeaderPacketParam*
     *out++ = 1;
 
     std::memcpy(out, setup, param->setupPacketSize);
-    param->writtenSize = headers + param->setupPacketSize;
+    param->outputSize = headers + param->setupPacketSize;
     return 0;
 }
 
-int APS5_VABI sceAjmDecWVorbisCreateSetupPacket(void) {
+int APS5_VABI sceAjmDecWVorbisCreateSetupPacket(WVorbisSetupPacketParameter* parameter) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
