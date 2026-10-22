@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <stdexcept>
@@ -108,11 +109,19 @@ constexpr int PAD_ERROR_DEVICE_NOT_CONNECTED = static_cast<int>(0x80920007);
 constexpr int PAD_ERROR_DEVICE_NO_HANDLE = static_cast<int>(0x80920008);
 
 bool g_opened = false;
-bool g_specialOpened = false;
+std::array<int, PAD_SPECIAL_HANDLE_COUNT> g_specialUsers{};
 std::atomic_bool g_initialized{false};
 
 bool SpecialHandle(int handle) {
-    return g_specialOpened && handle == PAD_SPECIAL_HANDLE;
+    const int slot = handle - PAD_SPECIAL_HANDLE;
+    return slot >= 0 && slot < PAD_SPECIAL_HANDLE_COUNT && g_specialUsers[slot] != 0;
+}
+
+int SpecialHandleOf(int userId) {
+    for (int slot = 0; slot < PAD_SPECIAL_HANDLE_COUNT; ++slot) {
+        if (g_specialUsers[slot] == userId) return PAD_SPECIAL_HANDLE + slot;
+    }
+    return PAD_ERROR_DEVICE_NO_HANDLE;
 }
 
 bool ValidPort(int userId, int type, int index) {
@@ -143,7 +152,7 @@ extern "C" {
 
 int APS5_VABI scePadClose_nid_postfix(int handle) {
  if (SpecialHandle(handle)) {
-  g_specialOpened = false;
+  g_specialUsers[handle - PAD_SPECIAL_HANDLE] = 0;
   return PAD_OK;
  }
  if (handle != PAD_HANDLE) {
@@ -209,7 +218,7 @@ int APS5_VABI scePadGetControllerInformation(int handle, PadControllerInformatio
 
 int APS5_VABI scePadGetHandle(int user_id, int type, int index) {
  if (!ValidPort(user_id, type, index)) return PAD_ERROR_DEVICE_NO_HANDLE;
- if (type == PAD_PORT_TYPE_SPECIAL) return g_specialOpened ? PAD_SPECIAL_HANDLE : PAD_ERROR_DEVICE_NO_HANDLE;
+ if (type == PAD_PORT_TYPE_SPECIAL) return SpecialHandleOf(user_id);
  if (!g_opened) return PAD_ERROR_DEVICE_NO_HANDLE;
  return PAD_HANDLE;
 }
@@ -275,8 +284,15 @@ int APS5_VABI scePadOpen_nid_postfix(int userId, int type, int index, const void
   return PAD_ERROR_INVALID_ARG;
  }
  if (type == PAD_PORT_TYPE_SPECIAL) {
-  g_specialOpened = true;
-  return PAD_SPECIAL_HANDLE;
+  const int opened = SpecialHandleOf(userId);
+  if (opened != PAD_ERROR_DEVICE_NO_HANDLE) return opened;
+  for (int slot = 0; slot < PAD_SPECIAL_HANDLE_COUNT; ++slot) {
+   if (g_specialUsers[slot] == 0) {
+    g_specialUsers[slot] = userId;
+    return PAD_SPECIAL_HANDLE + slot;
+   }
+  }
+  NotImplemented_nid_no_patch(__func__);
  }
  g_opened = true;
  return PAD_HANDLE;

@@ -14,6 +14,7 @@ constexpr int PAD_PORT_TYPE_REMOTE = 16;
 constexpr int PAD_USER_ID_SYSTEM = 0xff;
 constexpr int PAD_HANDLE = 1;
 constexpr int PAD_SPECIAL_HANDLE = 0x20;
+constexpr int PAD_SPECIAL_HANDLE_COUNT = 4;
 
 constexpr int PAD_CONNECTION_TYPE_LOCAL = 0;
 constexpr int PAD_DEVICE_CLASS_STANDARD = 0;

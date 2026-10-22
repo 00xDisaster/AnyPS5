@@ -348,6 +348,24 @@ static void CheckSpecialPort(int user, int handle) {
     Require(scePadGetControllerInformation(special, &info) == PAD_ERROR_INVALID_HANDLE);
     Require(scePadGetHandle(user, 0, 0) == handle);
     Require(scePadReadState(handle, data) == PAD_OK);
+    const int other = user + 1;
+    const int first = scePadOpen_nid_postfix(user, PAD_PORT_TYPE_SPECIAL, 0, nullptr);
+    const int second = scePadOpen_nid_postfix(other, PAD_PORT_TYPE_SPECIAL, 0, nullptr);
+    Require(first > 0 && second > 0 && first != second && second != handle);
+    Require(scePadGetHandle(user, PAD_PORT_TYPE_SPECIAL, 0) == first);
+    Require(scePadGetHandle(other, PAD_PORT_TYPE_SPECIAL, 0) == second);
+    Require(scePadOpen_nid_postfix(other, PAD_PORT_TYPE_SPECIAL, 0, nullptr) == second);
+    Require(scePadClose_nid_postfix(first) == PAD_OK);
+    Require(scePadGetHandle(user, PAD_PORT_TYPE_SPECIAL, 0) == noHandle);
+    Require(scePadGetHandle(other, PAD_PORT_TYPE_SPECIAL, 0) == second);
+    Require(scePadRead_nid_postfix(first, data, 1) == PAD_ERROR_INVALID_HANDLE);
+    Require(scePadRead_nid_postfix(second, data, 1) == 1);
+    Require(!data[0].connected);
+    Require(scePadOpen_nid_postfix(user, PAD_PORT_TYPE_SPECIAL, 0, nullptr) == first);
+    Require(scePadClose_nid_postfix(first) == PAD_OK);
+    Require(scePadClose_nid_postfix(second) == PAD_OK);
+    Require(scePadGetHandle(other, PAD_PORT_TYPE_SPECIAL, 0) == noHandle);
+    Require(scePadGetHandle(user, 0, 0) == handle);
 }
 
 static void CheckRemoteController(int handle) {
