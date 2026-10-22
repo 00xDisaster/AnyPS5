@@ -233,9 +233,9 @@ int main() {
     Require(sceVoiceGetMuteFlag(input, &muted) == 0 && !muted);
     Require(sceVoiceGetMuteFlag(output, &muted) == 0 && muted);
 
-    std::uint32_t bitrate = 0;
+    std::uint32_t portBitrate = 0;
     Require(sceVoiceSetBitRate(input, 7300) == 0);
-    Require(sceVoiceGetBitRate(input, &bitrate) == 0 && bitrate == 7300);
+    Require(sceVoiceGetBitRate(input, &portBitrate) == 0 && portBitrate == 7300);
     VoicePortInfo rateInfo{};
     Require(sceVoiceGetPortInfo(input, &rateInfo) == 0 && rateInfo.frame_size == 19);
     Require(sceVoiceSetBitRate(output + 1, 7300) == portNotFound);
@@ -243,7 +243,7 @@ int main() {
     RequireThrows([&] { sceVoiceSetBitRate(output, 7300); });
     RequireThrows([&] { sceVoiceSetBitRate(input, 7301); });
     RequireThrows([&] { sceVoiceSetBitRate(input, 0x80000000u); });
-    Require(sceVoiceGetBitRate(input, &bitrate) == 0 && bitrate == 7300);
+    Require(sceVoiceGetBitRate(input, &portBitrate) == 0 && portBitrate == 7300);
 
     VoicePortParam update{};
     update.port_type = 2;
@@ -253,11 +253,11 @@ int main() {
     Require(sceVoiceUpdatePort(input, &update) == 0);
     Require(sceVoiceGetMuteFlag(input, &muted) == 0 && muted);
     Require(sceVoiceGetVolume(input, &volume) == 0 && volume == 0.75f);
-    Require(sceVoiceGetBitRate(input, &bitrate) == 0 && bitrate == 14400);
+    Require(sceVoiceGetBitRate(input, &portBitrate) == 0 && portBitrate == 14400);
     Require(sceVoiceGetPortInfo(input, &rateInfo) == 0 && rateInfo.frame_size == 27);
     update.voice.bitrate = 1;
     RequireThrows([&] { sceVoiceUpdatePort(input, &update); });
-    Require(sceVoiceGetBitRate(input, &bitrate) == 0 && bitrate == 14400);
+    Require(sceVoiceGetBitRate(input, &portBitrate) == 0 && portBitrate == 14400);
     update.voice.bitrate = 14400;
     update.port_type = 3;
     RequireThrows([&] { sceVoiceUpdatePort(input, &update); });
