@@ -78,6 +78,7 @@ void testUnregistered() {
 
 void testRegistrationRejections() {
     const auto before = snapshot();
+    expectFailure([] { sceAgcSetAmmSemaphoreMemory(nullptr, memoryBytes); });
     check(sceAgcSetAmmSemaphoreMemory(memory() + 1, memoryBytes) == InvalidAlignment, "unaligned memory was not rejected");
     check(sceAgcSetAmmSemaphoreMemory(memory() + labelBytes, blockBytes) == InvalidAlignment, "memory aligned only to a label was not rejected");
     check(sceAgcSetAmmSemaphoreMemory(memory(), blockBytes - 1u) == InvalidAlignment, "an unaligned size was not rejected");
@@ -87,11 +88,16 @@ void testRegistrationRejections() {
     check(sceAgcSetSemaphoreMemory(memory() + 1, 0x40000000u + blockBytes) == OutOfRange, "the size limit was not checked before the memory alignment");
     check(sceAgcSetSemaphoreMemory(memory(), blockBytes - 1u) == InvalidAlignment, "the size alignment was not checked first");
     check(sceAgcSetAmmSemaphoreMemory(nullptr, 0) == 0, "an empty registration was rejected");
+    expectFailure([] {
+        const auto top = std::numeric_limits<std::uintptr_t>::max() & ~static_cast<std::uintptr_t>(blockBytes - 1u);
+        sceAgcSetAmmSemaphoreMemory(reinterpret_cast<void*>(top), memoryBytes);
+    });
     checkUnchanged(before, "a rejected registration changed memory");
     testUnregistered();
 }
 
 void testRegistration() {
+    std::fill(memory(), memory() + memoryBytes, std::uint8_t{0x77});
     const auto before = snapshot();
     check(sceAgcSetAmmSemaphoreMemory(memory(), memoryBytes) == 0, "registering the AMM semaphore memory failed");
     check(std::all_of(memory(), memory() + memoryBytes, [](std::uint8_t byte) { return byte == 0; }), "registration did not clear the whole semaphore memory");
@@ -114,6 +120,7 @@ void testLabelRejections() {
         check(sceAgcGetSemaphoreLabel(index, &label) == OutOfRange, "a label past the semaphore memory was not rejected");
         check(label == storage.get(), "a rejected semaphore label changed the output");
     }
+    expectFailure([] { sceAgcGetSemaphoreLabel(0, nullptr); });
 }
 
 void testRepeatedRegistration() {
@@ -122,6 +129,7 @@ void testRepeatedRegistration() {
     check(sceAgcSetAmmSemaphoreMemory(memory(), memoryBytes) == AlreadyRegistered, "a repeated registration was not rejected");
     check(sceAgcSetAmmSemaphoreMemory(storage.get() + 1, blockBytes) == AlreadyRegistered, "registration was not checked before alignment");
     check(sceAgcSetSemaphoreMemory(storage.get(), blockBytes) == AlreadyRegistered, "the non-AMM call did not share the registration");
+    check(sceAgcSetAmmSemaphoreMemory(nullptr, 0) == AlreadyRegistered, "an empty registration was not rejected once memory is registered");
     checkUnchanged(before, "a repeated registration changed memory");
     void* label = nullptr;
     check(sceAgcGetSemaphoreLabel(labelCount - 1u, &label) == 0 && label == memory() + memoryBytes - labelBytes, "a repeated registration replaced the semaphore memory");
