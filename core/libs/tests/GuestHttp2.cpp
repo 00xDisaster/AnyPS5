@@ -29,13 +29,20 @@ int main() {
     Require(sceHttp2SetResolveRetry(tmpl, 0) == 0);
     Require(Throws([&] { sceHttp2SetResolveRetry(tmpl, 3); }));
     Require(sceHttp2SetRequestNoContentLength(request) == 0);
+    Require(Throws([&] { sceHttp2AddRequestHeader(request, "bad:name", "value", 0); }));
+    Require(Throws([&] { sceHttp2AddRequestHeader(request, "x-header", "value\r\ninjected: yes", 0); }));
+    Require(Throws([&] { sceHttp2AddRequestHeader(request, "connection", "keep-alive", 0); }));
     Require(Throws([] { sceHttp2WebSocketSetPingInterval(0, 1000000); }));
-    for (const int id : {context, tmpl, request, box}) {
+    for (const int id : {tmpl, request}) {
         Require(Throws([&] { sceHttp2SetMinSslVersion(id, 0); }));
         Require(sceHttp2SslEnableOption(id, 0x3d) == 0);
         Require(sceHttp2SslDisableOption(id, 0x20) == 0);
         Require(Throws([&] { sceHttp2SetMinSslVersion(id, 99); }));
         Require(Throws([&] { sceHttp2SslEnableOption(id, 0x80000000); }));
+    }
+    for (const int id : {context, box}) {
+        Require(Throws([&] { sceHttp2SslEnableOption(id, 0x3d); }));
+        Require(Throws([&] { sceHttp2SslDisableOption(id, 0x20); }));
     }
     Http2MemoryPoolStats stats{1, 2, 3, 4};
     Require(Throws([&] { sceHttp2GetMemoryPoolStats(context, &stats); }));
@@ -61,6 +68,7 @@ int main() {
     const int child = sceHttp2CreateRequestWithURL(sibling, "GET", "https://localhost/", 0);
     Require(Throws([&] { sceHttp2SendRequest(child, nullptr, 0); }));
     Require(sceHttp2DeleteTemplate(tmpl) == 0);
+    Require(sceHttp2SslEnableOption(sibling, 0) == 0);
     Require(sceHttp2DeleteRequest(request) == InvalidId);
     Require(sceHttp2SendRequest(request, nullptr, 0) == InvalidId);
     Require(sceHttp2Term(context) == 0);
