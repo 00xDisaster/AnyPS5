@@ -238,6 +238,20 @@ void BuffersFollowThePs5() {
     Require(GetInt(pair[0], SoSendBuffer) == 2048 && GetInt(pair[0], SoReceiveBuffer) == 4096, "an AF_UNIX datagram socket starts with 2048 and 4096 bytes");
     Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0, "close failed");
     Require(close_nid_postfix(stream) == 0 && close_nid_postfix(datagram) == 0, "close failed");
+    const int listener = socket_nid_postfix(2, Stream, 0);
+    Require(listener >= 0, "socket failed");
+    auto address = Loopback(0);
+    Require(bind_nid_postfix(listener, address.data(), address.size()) == 0 && listen_nid_postfix(listener, 1) == 0, "listen failed");
+    std::uint32_t size = address.size();
+    Require(getsockname_nid_postfix(listener, address.data(), &size) == 0, "getsockname failed");
+    SetInt(listener, SoReceiveBuffer, 3000);
+    SetInt(listener, SoSendLowWater, 700);
+    const int client = socket_nid_postfix(2, Stream, 0);
+    Require(client >= 0 && connect_nid_postfix(client, address.data(), address.size()) == 0, "connect failed");
+    const int accepted = accept_nid_postfix(listener, nullptr, nullptr);
+    Require(accepted >= 0, "accept failed");
+    Require(GetInt(accepted, SoReceiveBuffer) == 3000 && GetInt(accepted, SoSendLowWater) == 700 && GetInt(accepted, SoSendBuffer) == 32768, "an accepted socket takes the listener's buffers");
+    Require(close_nid_postfix(accepted) == 0 && close_nid_postfix(client) == 0 && close_nid_postfix(listener) == 0, "close failed");
 }
 
 void NullValues() {

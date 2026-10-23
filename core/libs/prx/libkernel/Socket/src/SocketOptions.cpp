@@ -108,7 +108,7 @@ void EnsureBuffers(SocketOptionState& state, int family, int type) {
 }
 
 int Copy(void* output, std::uint32_t* length, const void* value, std::uint32_t size) {
-    const std::uint32_t count = std::min(*length, size);
+    const std::uint32_t count = output ? std::min(*length, size) : 0;
     if (count != 0) std::memcpy(output, value, count);
     *length = count;
     return 0;
@@ -179,10 +179,9 @@ int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
                 return 0;
             }
             if (number > MaximumReservation) return ErrorNoBuffers;
-            const int reserved = std::min(number, MaximumBuffer);
             const int nativeOption = send ? SO_SNDBUF : SO_RCVBUF;
-            if (::setsockopt(handle, SOL_SOCKET, nativeOption, reinterpret_cast<NativeOptionValue>(&reserved), sizeof(reserved))) return HostError();
-            size = reserved;
+            if (::setsockopt(handle, SOL_SOCKET, nativeOption, reinterpret_cast<NativeOptionValue>(&number), sizeof(number))) return HostError();
+            size = std::min(number, MaximumBuffer);
             mark = std::min(mark, size);
             return 0;
         }
