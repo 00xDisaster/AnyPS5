@@ -18,6 +18,7 @@ constexpr std::int32_t NOT_INITIALIZED = static_cast<std::int32_t>(0x81120032);
 constexpr std::int32_t ALREADY_INITIALIZED = static_cast<std::int32_t>(0x81120033);
 constexpr std::int32_t TIMED_OUT = static_cast<std::int32_t>(0x81120027);
 constexpr std::int32_t NO_SPACE = static_cast<std::int32_t>(0x8112001C);
+constexpr std::int32_t INVALID_ARGUMENT = static_cast<std::int32_t>(0x81120016);
 constexpr std::int32_t FATAL = static_cast<std::int32_t>(0x811200FF);
 
 struct Result {
@@ -40,7 +41,8 @@ extern "C" {
 std::int32_t APS5_VABI sceZlibInitialize(const void* buffer, std::uint64_t length) {
     std::lock_guard lock(serviceMutex);
     if (initialized) return ALREADY_INITIALIZED;
-    if ((buffer == nullptr) != (length == 0)) throw std::runtime_error("sceZlibInitialize: invalid work buffer");
+    if ((buffer == nullptr) != (length == 0)) return INVALID_ARGUMENT;
+    if (buffer) throw std::runtime_error("sceZlibInitialize: work memory registration is not implemented");
     initialized = true;
     return 0;
 }
@@ -56,14 +58,13 @@ std::int32_t APS5_VABI sceZlibFinalize() {
     return 0;
 }
 
-std::int32_t APS5_VABI sceZlibInflate(const void* source, std::uint32_t sourceLength,
-                                     void* destination, std::uint32_t destinationLength,
-                                     std::uint64_t* requestId) {
+std::int32_t APS5_VABI sceZlibInflate(const void* source, std::uint32_t sourceLength, void* destination, std::uint32_t destinationLength, std::uint64_t* requestId) {
     std::lock_guard lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
     if (!source || !sourceLength || !destination || !requestId || !destinationLength ||
-        destinationLength > 65536 || reinterpret_cast<std::uintptr_t>(destination) % 2048 != 0)
-        throw std::runtime_error("sceZlibInflate: invalid buffer or size");
+        destinationLength > 65536 || destinationLength % 2048 != 0) return INVALID_ARGUMENT;
+    if (reinterpret_cast<std::uintptr_t>(destination) % 2048 != 0)
+        throw std::runtime_error("sceZlibInflate: unaligned destination driver behavior is not implemented");
     if (nextId == std::numeric_limits<std::uint64_t>::max()) throw std::runtime_error("sceZlibInflate: request IDs exhausted");
     z_stream stream{};
     stream.next_in = const_cast<Bytef*>(static_cast<const Bytef*>(source));
@@ -88,7 +89,7 @@ std::int32_t APS5_VABI sceZlibInflate(const void* source, std::uint32_t sourceLe
 std::int32_t APS5_VABI sceZlibWaitForDone(std::uint64_t* requestId, std::uint32_t* timeout) {
     std::unique_lock lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
-    if (!requestId) throw std::runtime_error("sceZlibWaitForDone: invalid output");
+    if (!requestId) return INVALID_ARGUMENT;
     const std::uint64_t waitSession = session;
     const auto finished = [waitSession] { return !completed.empty() || session != waitSession; };
     if (!timeout) completion.wait(lock, finished);
@@ -99,11 +100,10 @@ std::int32_t APS5_VABI sceZlibWaitForDone(std::uint64_t* requestId, std::uint32_
     return 0;
 }
 
-std::int32_t APS5_VABI sceZlibGetResult(std::uint64_t requestId, std::uint32_t* destinationLength,
-                                       std::int32_t* status) {
+std::int32_t APS5_VABI sceZlibGetResult(std::uint64_t requestId, std::uint32_t* destinationLength, std::int32_t* status) {
     std::lock_guard lock(serviceMutex);
     if (!initialized) return NOT_INITIALIZED;
-    if (!destinationLength || !status) throw std::runtime_error("sceZlibGetResult: invalid output");
+    if (!destinationLength || !status) return INVALID_ARGUMENT;
     const auto found = results.find(requestId);
     if (found == results.end()) return NOT_FOUND;
     *destinationLength = found->second.produced;
