@@ -2131,6 +2131,114 @@ bool settleWriteOrderTests(const Device& device) {
     return true;
 }
 
+struct SettleWaitFailure {
+    PFN_vkGetDeviceProcAddr resolve;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkResult result = VK_SUCCESS;
+    std::uint64_t timeout = 0;
+    unsigned waits = 0;
+    unsigned destroys = 0;
+    unsigned frees = 0;
+};
+
+SettleWaitFailure* settleWaitFailure = nullptr;
+
+VKAPI_ATTR VkResult VKAPI_CALL settleWaitForFences(VkDevice device, std::uint32_t count, const VkFence* fences, VkBool32 all, std::uint64_t timeout) {
+    auto& failure = *settleWaitFailure;
+    if (failure.result != VK_SUCCESS) {
+        failure.timeout = timeout;
+        ++failure.waits;
+        return failure.result;
+    }
+    return reinterpret_cast<PFN_vkWaitForFences>(failure.resolve(device, "vkWaitForFences"))(device, count, fences, all, timeout);
+}
+
+VKAPI_ATTR void VKAPI_CALL settleDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks* allocator) {
+    auto& failure = *settleWaitFailure;
+    if (buffer == failure.buffer) ++failure.destroys;
+    reinterpret_cast<PFN_vkDestroyBuffer>(failure.resolve(device, "vkDestroyBuffer"))(device, buffer, allocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL settleFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* allocator) {
+    auto& failure = *settleWaitFailure;
+    if (memory == failure.memory) ++failure.frees;
+    reinterpret_cast<PFN_vkFreeMemory>(failure.resolve(device, "vkFreeMemory"))(device, memory, allocator);
+}
+
+PFN_vkVoidFunction VKAPI_CALL settleWaitDeviceProc(VkDevice device, const char* name) {
+    if (std::strcmp(name, "vkWaitForFences") == 0) return reinterpret_cast<PFN_vkVoidFunction>(settleWaitForFences);
+    if (std::strcmp(name, "vkDestroyBuffer") == 0) return reinterpret_cast<PFN_vkVoidFunction>(settleDestroyBuffer);
+    if (std::strcmp(name, "vkFreeMemory") == 0) return reinterpret_cast<PFN_vkVoidFunction>(settleFreeMemory);
+    return settleWaitFailure->resolve(device, name);
+}
+
+bool settleWaitFailureTests(const Device& device) {
+    using namespace AgcDriver::GuestMemory;
+    auto context = device.GetContext();
+    constexpr std::size_t unit = 65536;
+    if (context.hostImportAlignment == 0 || context.hostImportAlignment > unit || context.settleQueue == VK_NULL_HANDLE || !WriteWatched()) return false;
+    std::lock_guard gpu(GpuMutex());
+    PrepareImportWatch(context);
+    if (!settledImportsWatchPrivate(context)) return false;
+    ClearHostImports(context.device);
+    SettleWaitFailure failure{context.deviceProc};
+    settleWaitFailure = &failure;
+    context.deviceProc = settleWaitDeviceProc;
+    context.functions = nullptr;
+    void* block = AllocateWatched(unit, unit);
+    Require(block != nullptr, "no watched block for settle wait failure");
+    {
+        GuestAllocations::Mutation mutation;
+        mutation.Add(block, unit, true, true, true);
+    }
+    struct Release {
+        Context& context;
+        SettleWaitFailure& failure;
+        void* block;
+        ~Release() {
+            failure.result = VK_SUCCESS;
+            ClearHostImports(context.device);
+            {
+                GuestAllocations::Mutation mutation;
+                mutation.Remove(block);
+            }
+            ReleaseWatched(block, unit);
+            settleWaitFailure = nullptr;
+        }
+    } release{context, failure, block};
+    const auto address = reinterpret_cast<std::uint64_t>(block);
+    const auto* import = HostImportFor(context, address, unit);
+    Require(import != nullptr && import->unwatched, "wait failure import was not initially compared");
+    failure.buffer = import->buffer;
+    failure.memory = import->memory;
+    const auto before = HostImportSettles().submitted;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (HostImportSettles().submitted == before && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        HostImportFor(context, address, unit);
+    }
+    Require(HostImportSettles().submitted > before, "wait failure did not submit a settle");
+    Check(context.Function<PFN_vkDeviceWaitIdle>("vkDeviceWaitIdle")(context.device), "vkDeviceWaitIdle before settle failure");
+    for (const auto result : {VK_TIMEOUT, VK_ERROR_DEVICE_LOST}) {
+        failure.result = result;
+        const auto waits = failure.waits;
+        std::string error;
+        try {
+            ClearHostImports(context.device);
+        } catch (const std::runtime_error& caught) {
+            error = caught.what();
+        }
+        failure.result = VK_SUCCESS;
+        Require(failure.waits == waits + 1 && failure.timeout > 0 && failure.timeout <= 60'000'000'000ull, "settle retirement did not use a bounded fence wait");
+        Require(error == "AGC graphics: vkWaitForFences (settle batch): Vulkan result " + std::to_string(result), "settle retirement did not propagate its Vulkan failure");
+        Require(failure.destroys == 0 && failure.frees == 0 && HostImportCovers(context, address, unit), "failed settle wait released its host import");
+    }
+    ClearHostImports(context.device);
+    Require(failure.destroys == 1 && failure.frees == 1, "successful settle retirement did not release the retained import exactly once");
+    std::cout << "bounded settle wait preserves imports on timeout and device loss; successful retry releases once\n";
+    return true;
+}
 
 bool settleFirstUseTests(const Device& device) {
     using namespace AgcDriver::GuestMemory;
@@ -10591,6 +10699,7 @@ int main(int argc, char** argv) {
             }
             return settleWriteOrderTests(device) ? 0 : 77;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--settle-wait-failure-only") return settleWaitFailureTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--settle-first-use-only") return settleFirstUseTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--settle-earlier-import-only") return settleEarlierImportTests(device) ? 0 : 77;
         if (argc == 2 && std::string_view(argv[1]) == "--settle-retire-only") return settleRetireTests(device) ? 0 : 77;
