@@ -436,12 +436,7 @@ static int FollowLinkPath(const std::filesystem::path& source, std::filesystem::
 }
 #endif
 
-int APS5_VABI link_nid_postfix(const char* existing, const char* created) {
-    if (existing == nullptr || created == nullptr) return static_cast<int>(Fail(GuestEfault));
-    if (*existing == '\0' || *created == '\0') return static_cast<int>(Fail(GuestEnoent));
-    std::filesystem::path source, destination;
-    if (const int error = ResolvePathError_nid_no_patch(existing, source)) return static_cast<int>(Fail(error));
-    if (const int error = ResolvePathError_nid_no_patch(created, destination)) return static_cast<int>(Fail(error));
+static int LinkNative(const std::filesystem::path& source, const std::filesystem::path& destination) {
     std::error_code error;
     const auto status = std::filesystem::status(source, error);
     if (!std::filesystem::exists(status)) {
@@ -468,15 +463,34 @@ int APS5_VABI link_nid_postfix(const char* existing, const char* created) {
     return 0;
 }
 
+int APS5_VABI link_nid_postfix(const char* existing, const char* created) {
+    if (existing == nullptr || created == nullptr) return static_cast<int>(Fail(GuestEfault));
+    if (*existing == '\0' || *created == '\0') return static_cast<int>(Fail(GuestEnoent));
+    std::filesystem::path source, destination;
+    if (const int error = ResolvePathError_nid_no_patch(existing, source)) return static_cast<int>(Fail(error));
+    if (const int error = ResolvePathError_nid_no_patch(created, destination)) return static_cast<int>(Fail(error));
+    return LinkNative(source, destination);
+}
+
+static int ResolveAtPath(int fd, const char* path, std::filesystem::path& native) {
+    if (fd == GuestAtFdcwd || *path == '/') return ResolvePathError_nid_no_patch(path, native);
+    if (std::strlen(path) >= GuestPathMax || HasLongComponent(path)) return GuestEnametoolong;
+    int error = 0;
+    const char* base = GetDirectoryDescriptorPath_nid_no_patch(fd, &error);
+    if (base == nullptr) return error;
+    native = std::filesystem::path(reinterpret_cast<const char8_t*>(base)) / std::filesystem::path(reinterpret_cast<const char8_t*>(path));
+    return 0;
+}
+
 int APS5_VABI linkat_nid_postfix(int fd1, const char* path1, int fd2, const char* path2, int flag) {
     if (flag & ~GuestAtSymlinkFollow) return static_cast<int>(Fail(GuestEinval));
     if (path1 == nullptr || path2 == nullptr) return static_cast<int>(Fail(GuestEfault));
-    if ((fd1 != GuestAtFdcwd && *path1 != '/') || (fd2 != GuestAtFdcwd && *path2 != '/'))
-        NotImplemented_nid_no_patch("linkat: a relative path with a directory descriptor");
-    std::filesystem::path source;
-    if (flag == 0 && *path1 != '\0' && ResolvePathError_nid_no_patch(path1, source) == 0 && IsSymbolicLink(source))
-        NotImplemented_nid_no_patch("linkat: a hard link to a symbolic link itself");
-    return link_nid_postfix(path1, path2);
+    if (*path1 == '\0' || *path2 == '\0') return static_cast<int>(Fail(GuestEnoent));
+    std::filesystem::path source, destination;
+    if (const int error = ResolveAtPath(fd1, path1, source)) return static_cast<int>(Fail(error));
+    if (const int error = ResolveAtPath(fd2, path2, destination)) return static_cast<int>(Fail(error));
+    if (flag == 0 && IsSymbolicLink(source)) NotImplemented_nid_no_patch("linkat: a hard link to a symbolic link itself");
+    return LinkNative(source, destination);
 }
 
 int APS5_VABI fchdir_nid_postfix(int fd) {
