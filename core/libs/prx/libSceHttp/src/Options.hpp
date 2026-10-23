@@ -6,6 +6,7 @@
 
 struct HttpOptions {
     bool autoRedirect = true;
+    bool authEnabled = false;
     bool cookieEnabled = false;
     bool nonblock = false;
     bool acceptEncodingGzip = false;
