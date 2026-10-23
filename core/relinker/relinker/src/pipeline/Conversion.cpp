@@ -107,11 +107,12 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
             throw Domain::RelinkerException("Relinker patch exceeds source image", patch.Offset);
         for (std::size_t index = 0; index < patch.Bytes.size(); ++index) sourceBytes[patch.Offset + index] = patch.Bytes[index];
     }
+    const auto intelSites = trampolines.size();
+    std::vector<Codegen::RedZoneDisplacement> displacements;
     if (options.FrameRedZone) {
         std::vector<Domain::ProgramHeader> codeSegments;
         for (const auto& header : Relinker::ElfReader(sourceBytes).ReadProgramHeaders()) if (header.Type == 1 && (header.Flags & 1) != 0) codeSegments.push_back(header);
         Codegen::RedZoneFrameReport report;
-        std::vector<Codegen::RedZoneDisplacement> displacements;
         auto framed = Codegen::FrameRedZoneFunctions(sourceBytes, codeSegments, trampolines, report, displacements);
         for (const auto& moved : displacements) {
             if (moved.Offset > sourceBytes.size() || moved.Bytes.size() > sourceBytes.size() - moved.Offset)
@@ -122,7 +123,7 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
         for (const auto& [reason, count] : report.Skipped) { std::ostringstream message; message << "Red-zone framing: skipped " << count << ": " << reason << '\n'; inputProgress.Message(message.str()); }
         trampolines.insert(trampolines.end(), std::make_move_iterator(framed.begin()), std::make_move_iterator(framed.end()));
     }
-    GamePatch::CheckOverlaps(options.TargetName, patchedRanges, {.RelinkPatches = result.Patches, .RelaData = result.DynamicSection.RelaData, .RelaPltData = result.DynamicSection.RelaPltData});
+    GamePatch::CheckOverlaps(options.TargetName, patchedRanges, {.RelinkPatches = result.Patches, .RelaData = result.DynamicSection.RelaData, .RelaPltData = result.DynamicSection.RelaPltData, .RedZoneSites = std::span<const Codegen::TrampolineSite>(trampolines).subspan(intelSites), .RedZoneDisplacements = displacements});
 
     if (!options.Patches.empty()) {
         for (auto& module : input.Modules) {
