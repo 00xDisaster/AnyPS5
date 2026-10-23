@@ -13,6 +13,8 @@ namespace {
 
 constexpr int GUEST_REALTIME_CLOCK = 0;
 constexpr int PROCESS_PRIVATE = 0;
+constexpr int FIRST_STORED_RWLOCK_TYPE = 1;
+constexpr int LAST_STORED_RWLOCK_TYPE = 2;
 
 int toPosix(int result) {
     if (result == 0)
@@ -58,7 +60,7 @@ int APS5_VABI pthread_rwlockattr_init_nid_postfix(PthreadRwlockattr* attr) {
 }
 
 int APS5_VABI pthread_rwlockattr_settype_np_nid_postfix(PthreadRwlockattr* attr, int type) {
-    if (type < 0 || type > 2) NotImplemented_nid_no_patch("pthread_rwlockattr_settype_np with a type other than 0 to 2");
+    if (!attr || !*attr || type < FIRST_STORED_RWLOCK_TYPE || type > LAST_STORED_RWLOCK_TYPE) return PosixThread::GUEST_EINVAL;
     return toPosix(scePthreadRwlockattrSettype(attr, type));
 }
 

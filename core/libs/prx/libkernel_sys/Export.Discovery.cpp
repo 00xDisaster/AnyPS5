@@ -2348,11 +2348,6 @@ int APS5_VABI scePthreadMutexattrGetgen(void) {
     return 0;
 }
 
-int APS5_VABI scePthreadMutexattrGetkind(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI scePthreadMutexattrInitForInternalLibc(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
