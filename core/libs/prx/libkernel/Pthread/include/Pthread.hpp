@@ -67,6 +67,7 @@ struct PthreadRwlockPrivate {
     std::atomic<std::thread::id> _writer;
     std::atomic<int> _readers{0};
     int _waitingWriters = 0;
+    std::string _name;
 };
 
 struct PthreadCondattrPrivate {
