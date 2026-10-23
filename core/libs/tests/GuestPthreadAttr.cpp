@@ -262,8 +262,11 @@ static void CheckThreadScope() {
     Require(pthread_attr_getinheritsched_nid_postfix(&queryAttr, &reportedInherit) == 0 && reportedInherit == INHERIT_SCHED);
     scope = -1;
     Require(pthread_attr_getscope_nid_postfix(&queryAttr, &scope) == 0 && scope == SCOPE_SYSTEM);
+    Require(pthread_attr_setinheritsched_nid_postfix(&queryAttr, EXPLICIT_SCHED) == 0);
     Require(pthread_attr_get_np_nid_postfix(inheritedThread, &queryAttr) == 0);
     Require(pthread_attr_getscope_nid_postfix(&queryAttr, &scope) == 0 && scope == SCOPE_SYSTEM);
+    reportedInherit = -1;
+    Require(pthread_attr_getinheritsched_nid_postfix(&queryAttr, &reportedInherit) == 0 && reportedInherit == INHERIT_SCHED);
     Require(scePthreadAttrDestroy(&queryAttr) == SCE_OK);
 
     releaseInherited.set_value();
