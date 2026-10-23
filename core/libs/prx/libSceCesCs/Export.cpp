@@ -521,32 +521,6 @@ int convertString(const void* context, const Source* source, uint32_t sourceMax,
     return result;
 }
 
-int decodeMbcsSource(const void* profile, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t& length, uint32_t& code) {
-    return decodeMbcs(profile, mbcs, mbcsMax, length, code);
-}
-
-int decodeUtf8Source(const void*, const uint8_t* utf8, uint32_t utf8max, uint32_t& length, uint32_t& code) {
-    return decodeScalarUtf8(utf8, utf8max, length, code);
-}
-
-int decodeUcs2Source(const void*, const uint16_t* ucs2, uint32_t ucs2max, uint32_t& length, uint32_t& code) {
-    return decodeUcs2(ucs2, ucs2max, length, code);
-}
-
-int encodeMbcsTarget(const void* profile, uint32_t code, uint8_t* mbcs, uint32_t& length) {
-    return encodeMbcs(profile, code, mbcs, length);
-}
-
-int encodeUtf8Target(const void*, uint32_t code, uint8_t* utf8, uint32_t& length) {
-    length = encodeUtf8(code, utf8);
-    return 0;
-}
-
-int encodeUcs2Target(const void*, uint32_t code, uint16_t* ucs2, uint32_t& length) {
-    length = encodeUcs2(code, ucs2);
-    return 0;
-}
-
 int mbcsToUtf8(bool accepted, const void* profile, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint8_t* utf8, uint32_t utf8Max, uint32_t* utf8Len) {
     if (!accepted) return CES_ERROR_INVALID_PARAMETER;
     if (!mbcs) return CES_ERROR_INVALID_SRC_BUFFER;
@@ -924,35 +898,35 @@ void* APS5_VABI sceCesUcsProfileInitBig5Cp950(void* sheet) {
 }
 
 int APS5_VABI sceCesUtf8StrToMbcsStr(void* context, const uint8_t* utf8, uint32_t utf8max, uint32_t* utf8Len, uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen) {
-    return convertString(context, utf8, utf8max, utf8Len, mbcs, mbcsMax, mbcsLen, false, decodeUtf8Source, encodeMbcsTarget);
+    return convertString(context, utf8, utf8max, utf8Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeScalarUtf8, uint8_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesUtf8StrGetMbcsLen(void* context, const uint8_t* utf8, uint32_t utf8max, uint32_t* utf8Len, uint32_t* mbcsLen) {
-    return convertString(context, utf8, utf8max, utf8Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, decodeUtf8Source, encodeMbcsTarget);
+    return convertString(context, utf8, utf8max, utf8Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeScalarUtf8, uint8_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesUcs2StrToMbcsStr(void* context, const uint16_t* ucs2, uint32_t ucs2max, uint32_t* ucs2Len, uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen) {
-    return convertString(context, ucs2, ucs2max, ucs2Len, mbcs, mbcsMax, mbcsLen, false, decodeUcs2Source, encodeMbcsTarget);
+    return convertString(context, ucs2, ucs2max, ucs2Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeUcs2, uint16_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesUcs2StrGetMbcsLen(void* context, const uint16_t* ucs2, uint32_t ucs2max, uint32_t* ucs2Len, uint32_t* mbcsLen) {
-    return convertString(context, ucs2, ucs2max, ucs2Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, decodeUcs2Source, encodeMbcsTarget);
+    return convertString(context, ucs2, ucs2max, ucs2Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeUcs2, uint16_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesMbcsStrToUtf8Str(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint8_t* utf8, uint32_t utf8max, uint32_t* utf8Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, utf8, utf8max, utf8Len, false, decodeMbcsSource, encodeUtf8Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, utf8, utf8max, utf8Len, false, decodeMbcs, unitTarget<encodeUtf8, uint8_t>);
 }
 
 int APS5_VABI sceCesMbcsStrGetUtf8Len(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint32_t* utf8Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint8_t*>(nullptr), 0, utf8Len, true, decodeMbcsSource, encodeUtf8Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint8_t*>(nullptr), 0, utf8Len, true, decodeMbcs, unitTarget<encodeUtf8, uint8_t>);
 }
 
 int APS5_VABI sceCesMbcsStrToUcs2Str(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint16_t* ucs2, uint32_t ucs2max, uint32_t* ucs2Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, ucs2, ucs2max, ucs2Len, false, decodeMbcsSource, encodeUcs2Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, ucs2, ucs2max, ucs2Len, false, decodeMbcs, unitTarget<encodeUcs2, uint16_t>);
 }
 
 int APS5_VABI sceCesMbcsStrGetUcs2Len(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint32_t* ucs2Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint16_t*>(nullptr), 0, ucs2Len, true, decodeMbcsSource, encodeUcs2Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint16_t*>(nullptr), 0, ucs2Len, true, decodeMbcs, unitTarget<encodeUcs2, uint16_t>);
 }
 
 int APS5_VABI sceCesEucJpToUcs2(const void* profile, const uint8_t* euc, uint32_t eucMax, uint32_t* eucSize, uint16_t* ucs2) {
@@ -1236,39 +1210,35 @@ int APS5_VABI sceCesUtf32leToSbc(const uint32_t* utf32, const uint8_t* profile, 
 }
 
 int APS5_VABI sceCesUtf16StrToMbcsStr(void* context, const uint16_t* utf16, uint32_t utf16max, uint32_t* utf16Len, uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen) {
-    if (!mbcs) return CES_ERROR_INVALID_DST_BUFFER;
-    return convertString(context, utf16, utf16max, utf16Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeUtf16<NATIVE_BIG_ENDIAN>, uint16_t>, encodeMbcsTarget);
+    return convertString(context, utf16, utf16max, utf16Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeUtf16<NATIVE_BIG_ENDIAN>, uint16_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesUtf16StrGetMbcsLen(void* context, const uint16_t* utf16, uint32_t utf16max, uint32_t* utf16Len, uint32_t* mbcsLen) {
-    return convertString(context, utf16, utf16max, utf16Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeUtf16<NATIVE_BIG_ENDIAN>, uint16_t>, encodeMbcsTarget);
+    return convertString(context, utf16, utf16max, utf16Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeUtf16<NATIVE_BIG_ENDIAN>, uint16_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesMbcsStrToUtf16Str(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint16_t* utf16, uint32_t utf16max, uint32_t* utf16Len) {
-    if (!utf16) return CES_ERROR_INVALID_DST_BUFFER;
-    return convertString(context, mbcs, mbcsMax, mbcsLen, utf16, utf16max, utf16Len, false, decodeMbcsSource, encodeUcs2Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, utf16, utf16max, utf16Len, false, decodeMbcs, unitTarget<encodeUcs2, uint16_t>);
 }
 
 int APS5_VABI sceCesMbcsStrGetUtf16Len(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint32_t* utf16Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint16_t*>(nullptr), 0, utf16Len, true, decodeMbcsSource, encodeUcs2Target);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint16_t*>(nullptr), 0, utf16Len, true, decodeMbcs, unitTarget<encodeUcs2, uint16_t>);
 }
 
 int APS5_VABI sceCesUtf32StrToMbcsStr(void* context, const uint32_t* utf32, uint32_t utf32max, uint32_t* utf32Len, uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen) {
-    if (!mbcs) return CES_ERROR_INVALID_DST_BUFFER;
-    return convertString(context, utf32, utf32max, utf32Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeUtf32, uint32_t>, encodeMbcsTarget);
+    return convertString(context, utf32, utf32max, utf32Len, mbcs, mbcsMax, mbcsLen, false, unitSource<decodeUtf32, uint32_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesUtf32StrGetMbcsLen(void* context, const uint32_t* utf32, uint32_t utf32max, uint32_t* utf32Len, uint32_t* mbcsLen) {
-    return convertString(context, utf32, utf32max, utf32Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeUtf32, uint32_t>, encodeMbcsTarget);
+    return convertString(context, utf32, utf32max, utf32Len, static_cast<uint8_t*>(nullptr), 0, mbcsLen, true, unitSource<decodeUtf32, uint32_t>, encodeMbcs);
 }
 
 int APS5_VABI sceCesMbcsStrToUtf32Str(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint32_t* utf32, uint32_t utf32max, uint32_t* utf32Len) {
-    if (!utf32) return CES_ERROR_INVALID_DST_BUFFER;
-    return convertString(context, mbcs, mbcsMax, mbcsLen, utf32, utf32max, utf32Len, false, decodeMbcsSource, unitTarget<encodeUtf32, uint32_t>);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, utf32, utf32max, utf32Len, false, decodeMbcs, unitTarget<encodeUtf32, uint32_t>);
 }
 
 int APS5_VABI sceCesMbcsStrGetUtf32Len(void* context, const uint8_t* mbcs, uint32_t mbcsMax, uint32_t* mbcsLen, uint32_t* utf32Len) {
-    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint32_t*>(nullptr), 0, utf32Len, true, decodeMbcsSource, unitTarget<encodeUtf32, uint32_t>);
+    return convertString(context, mbcs, mbcsMax, mbcsLen, static_cast<uint32_t*>(nullptr), 0, utf32Len, true, decodeMbcs, unitTarget<encodeUtf32, uint32_t>);
 }
 
 }
