@@ -176,6 +176,23 @@ void BooleanOptionsReportTheirBit() {
     Require(close_nid_postfix(stream) == 0 && close_nid_postfix(datagram) == 0, "close failed");
 }
 
+void ReusePortSharesAPort() {
+    const int first = socket_nid_postfix(2, Datagram, 0);
+    const int second = socket_nid_postfix(2, Datagram, 0);
+    const int third = socket_nid_postfix(2, Datagram, 0);
+    Require(first >= 0 && second >= 0 && third >= 0, "socket failed");
+    SetInt(first, SoReusePort, 1);
+    SetInt(second, SoReusePort, 1);
+    Require(GetInt(first, SoReusePort) == SoReusePort && GetInt(first, 0x4) == 0, "SO_REUSEPORT does not read back as SO_REUSEADDR");
+    auto address = Loopback(0);
+    Require(bind_nid_postfix(first, address.data(), address.size()) == 0, "bind failed");
+    std::uint32_t size = address.size();
+    Require(getsockname_nid_postfix(first, address.data(), &size) == 0, "getsockname failed");
+    Require(bind_nid_postfix(second, address.data(), address.size()) == 0, "a second SO_REUSEPORT socket must bind the same port");
+    Require(bind_nid_postfix(third, address.data(), address.size()) == -1 && *__error_nid_postfix() == 48, "a socket without SO_REUSEPORT must fail with EADDRINUSE (48)");
+    Require(close_nid_postfix(first) == 0 && close_nid_postfix(second) == 0 && close_nid_postfix(third) == 0, "close failed");
+}
+
 void LingerFollowsFreeBsd() {
     const int stream = socket_nid_postfix(2, Stream, 0);
     Require(stream >= 0, "socket failed");
@@ -340,6 +357,7 @@ int main() {
     ReportsTypeAndListening();
     ReportsAndClearsTheConnectError();
     BooleanOptionsReportTheirBit();
+    ReusePortSharesAPort();
     LingerFollowsFreeBsd();
     LengthsFollowFreeBsd();
     BuffersFollowThePs5();

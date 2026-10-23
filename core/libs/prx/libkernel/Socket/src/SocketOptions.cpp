@@ -40,7 +40,8 @@ constexpr int GuestNonBlocking = 0x1200;
 constexpr int GuestNonBlockingState = 0x100;
 constexpr int GuestUnix = 1;
 constexpr int GuestTcpNoDelay = 1;
-constexpr int KeptFlags = 0x1 | 0x40 | 0x200 | 0x400 | 0x2000 | 0x10000;
+constexpr int GuestReusePort = 0x200;
+constexpr int KeptFlags = 0x1 | GuestReuseAddress | 0x40 | GuestReusePort | 0x400 | 0x2000 | 0x10000;
 constexpr int WriteOnlyFlags = 0x4000 | 0x8000;
 constexpr int GuestTcpNoDelayFlag = 4;
 constexpr int GuestTcpMaximumSegment = 2;
@@ -100,7 +101,6 @@ int HostError() { return GuestErrorFromHost(errno); }
 
 int NativeBoolean(int option) {
     switch (option) {
-        case GuestReuseAddress: return SO_REUSEADDR;
         case GuestKeepAlive: return SO_KEEPALIVE;
         case GuestDontRoute: return SO_DONTROUTE;
         case GuestBroadcast: return SO_BROADCAST;
@@ -208,7 +208,19 @@ int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
         if (length < sizeof(int)) return ErrorInvalid;
         int number;
         std::memcpy(&number, value, sizeof(number));
-        if ((option & KeptFlags) != 0) state.keptFlags = number != 0 ? state.keptFlags | option : state.keptFlags & ~option;
+        if ((option & KeptFlags) == 0) return 0;
+        const int flags = number != 0 ? state.keptFlags | option : state.keptFlags & ~option;
+        if (option == GuestReuseAddress || option == GuestReusePort) {
+#ifdef _WIN32
+            const int reuseAddress = (flags & (GuestReuseAddress | GuestReusePort)) != 0 ? 1 : 0;
+#else
+            const int reuseAddress = (flags & GuestReuseAddress) != 0 ? 1 : 0;
+            const int reusePort = (flags & GuestReusePort) != 0 ? 1 : 0;
+            if (::setsockopt(handle, SOL_SOCKET, SO_REUSEPORT, reinterpret_cast<NativeOptionValue>(&reusePort), sizeof(reusePort))) return HostError();
+#endif
+            if (::setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<NativeOptionValue>(&reuseAddress), sizeof(reuseAddress))) return HostError();
+        }
+        state.keptFlags = flags;
         return 0;
     }
     return ErrorNoProtocolOption;
