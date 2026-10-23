@@ -31,9 +31,9 @@ usage: unwrap_self.py <input.self> <output.elf> [--verbose]
 
 import argparse
 import math
+import secrets
 import struct
 import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -328,17 +328,16 @@ def unwrap(path, output, verbose=False):
                   % (item["index"], name, item["vaddr"], item["size"], item["new"], moved))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = None
+    temporary_path = destination.parent / (".unwrap-self-" + secrets.token_hex(16))
+    temporary = temporary_path.open("xb")
     try:
-        with tempfile.NamedTemporaryFile(mode="wb", dir=destination.parent, prefix=".unwrap-self-", delete=False) as temporary:
-            temporary_path = Path(temporary.name)
+        with temporary:
             temporary.write(result)
         if sys.platform != "win32" and destination.exists():
             temporary_path.chmod(destination.stat().st_mode)
         temporary_path.replace(destination)
     finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        temporary_path.unlink(missing_ok=True)
     return len(result)
 
 
