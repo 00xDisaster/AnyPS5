@@ -234,8 +234,8 @@ public:
         const bool endOfFile = feof_unlocked(GetHandle()) != 0;
         const bool error = ferror_unlocked(GetHandle()) != 0;
 #else
-        const bool endOfFile = ::feof_unlocked(GetHandle()) != 0;
-        const bool error = ::ferror_unlocked(GetHandle()) != 0;
+        const bool endOfFile = feof_unlocked(GetHandle()) != 0;
+        const bool error = ferror_unlocked(GetHandle()) != 0;
 #endif
         PublishStatus(endOfFile, error || guestError);
     }

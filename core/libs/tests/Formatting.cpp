@@ -11,8 +11,9 @@
 #include <stdexcept>
 #include <cstdint>
 #include <cstdio>
-#ifdef __APPLE__
 #include <cstdarg>
+
+#if defined(__clang__) && !defined(_WIN32)
 #define __builtin_sysv_va_list va_list
 #define __builtin_sysv_va_start va_start
 #define __builtin_sysv_va_end va_end
