@@ -192,6 +192,16 @@ DrawFinisher::Pending heldWrites(const DrawTail& tail) {
     return held;
 }
 
+bool EmptyIndirectSkip() {
+    static const bool enabled = std::getenv("APS5_NO_EMPTY_INDIRECT_SKIP") == nullptr;
+    return enabled;
+}
+
+std::unordered_map<std::uint64_t, bool>& CpuIndirectPrograms() {
+    thread_local std::unordered_map<std::uint64_t, bool> programs;
+    return programs;
+}
+
 }
 
 DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packet, const Submission& submission, std::string& rejected) {
@@ -387,8 +397,8 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
     programs = decode->programs;
     for (const auto& patch : userPatches) programs[patch.program].userData[patch.index] = patch.value;
     if (const auto skipped = SkippedShader(); skipped != 0 && std::any_of(programs.begin(), programs.end(), [skipped](const DrawProgram& program) { return program.binary.codeAddress == skipped; })) return drawn();
-    static const bool emptyIndirectSkip = std::getenv("APS5_NO_EMPTY_INDIRECT_SKIP") == nullptr;
-    thread_local std::unordered_map<std::uint64_t, bool> cpuIndirectPrograms;
+    const bool emptyIndirectSkip = EmptyIndirectSkip();
+    auto& cpuIndirectPrograms = CpuIndirectPrograms();
     const auto recordDraws = [&](const Pm4::DrawArguments& arguments) { return arguments.count != 0 && arguments.instances != 0 && (!drawParameters.indexed || arguments.firstVertexOrIndex < drawParameters.indexCount); };
     if (emptyIndirectSkip && drawParameters.indirect && !programs.empty()) {
         const auto known = cpuIndirectPrograms.find(programs.front().binary.codeAddress);
@@ -776,7 +786,7 @@ DrawVerdict Driver::finishDraw(DrawTail& tail, PerformanceTimer& timing) {
         const auto& result = *programResults[i];
         if (i == 0 && drawParameters.indirect) {
             indirectCpu = ClassifyIndirectDraw(result, graphics, programs.front(), localDevice, drawParameters, traceIndirect);
-            if (emptyIndirectSkip) cpuIndirectPrograms[programs.front().binary.codeAddress] = indirectCpu.has_value();
+            if (EmptyIndirectSkip()) CpuIndirectPrograms()[programs.front().binary.codeAddress] = indirectCpu.has_value();
         } else if (i == 0) {
             fold(result, drawParameters);
         }
