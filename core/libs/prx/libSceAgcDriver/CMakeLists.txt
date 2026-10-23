@@ -2269,6 +2269,10 @@ target_include_directories(agc_driver_packed_unorm_color_target_tests PRIVATE $<
 
 target_include_directories(agc_driver_packed_unorm4444_color_target_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
 
+target_include_directories(agc_driver_packed_unorm4444_partial_write_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
+
+target_include_directories(agc_driver_packed_unorm4444_multisample_partial_write_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
+
 target_include_directories(agc_driver_color1555_target_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
 
 target_include_directories(agc_driver_color565_target_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
@@ -2452,6 +2456,12 @@ if(BUILD_TESTING)
         ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1;APS5_SKIP_REFUSED_DRAWS=1" SKIP_RETURN_CODE 77 TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     if(WIN32)
         set_tests_properties(agc_driver_draw_unsupported_buffer_type_skip_refused PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+    add_test(NAME agc_driver_period_copy_no_hle COMMAND agc_driver_period_copy_tests)
+    set_tests_properties(agc_driver_period_copy_no_hle PROPERTIES ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1;APS5_NO_COPY_HLE=1" SKIP_RETURN_CODE 77 TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    if(WIN32)
+        set_tests_properties(agc_driver_period_copy_no_hle PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test(NAME agc_driver_sparse_indirect_indices_unreadable COMMAND agc_driver_sparse_indirect_indices_tests --unreadable)
@@ -3729,6 +3739,16 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+if(BUILD_TESTING)
+    add_test_executable(agc_flat_scratch_tests tests/FlatScratch.cpp)
+    target_link_libraries(agc_flat_scratch_tests PRIVATE shader_recompiler_agc_driver libc)
+    configure_windows_unwind(agc_flat_scratch_tests)
+    add_test(NAME agc_flat_scratch COMMAND agc_flat_scratch_tests)
+    set_tests_properties(agc_flat_scratch PROPERTIES TIMEOUT 30)
+    if(WIN32)
+        set_tests_properties(agc_flat_scratch PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
 add_test_executable(agc_constant_select_tests EXCLUDE_FROM_ALL tests/ConstantSelect.cpp)
 target_link_libraries(agc_constant_select_tests PRIVATE shader_recompiler_agc_driver libc)
 set_target_properties(agc_constant_select_tests PROPERTIES CXX_EXTENSIONS OFF)
