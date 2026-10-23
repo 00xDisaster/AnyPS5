@@ -74,6 +74,7 @@ int APS5_VABI scePthreadCreate(void** thread, const void* attr, void* (APS5_VABI
 int APS5_VABI scePthreadMutexUnlock(void** mutex);
 int APS5_VABI scePthreadCondWait(void** condition, void** mutex);
 void* APS5_VABI scePthreadSelf();
+int APS5_VABI _Thrd_yield_nid_postfix();
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -465,6 +466,14 @@ static void VersionedSync() {
     Require(_ZNSt8__sce_v28_Thrd_idEv_nid_postfix() != nullptr);
 }
 
+static void ThreadHelpers() {
+    Require(_Thrd_yield_nid_postfix() == success);
+    std::thread other([&] {
+        Require(_Thrd_yield_nid_postfix() == success);
+    });
+    other.join();
+}
+
 int main() {
     KernelKeys();
     VersionedSync();
@@ -476,4 +485,5 @@ int main() {
     ConditionSignal();
     PadLaunchAndJoin();
     PadDetach();
+    ThreadHelpers();
 }
