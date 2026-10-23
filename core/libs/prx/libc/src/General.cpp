@@ -743,14 +743,14 @@ extern "C" std::filesystem::path RelinkedModulePath_nid_no_patch(const std::file
     std::error_code error;
     if (std::filesystem::is_regular_file(relinked, error)) return relinked;
     const auto parent = relinked.parent_path().empty() ? std::filesystem::path(".") : relinked.parent_path();
-    const auto name = relinked.filename();
-    for (const char* directory : {"prx", "sce_module", "sce_modules"}) {
-        const auto candidate = parent / directory / name;
-        if (std::filesystem::is_regular_file(candidate, error)) return candidate;
-    }
     NameMatch names[] = {{relinked.filename().string()}, {path.filename().string(), std::nullopt, false, true}};
     MatchNames(parent, names);
     if (names[0].ambiguous || names[0].path) return MatchedModuleOrPath(path, relinked, names[0]);
+    for (const char* directory : {"prx", "sce_module", "sce_modules"}) {
+        NameMatch nested[] = {{relinked.filename().string()}};
+        MatchNames(parent / directory, nested);
+        if (nested[0].ambiguous || nested[0].path) return MatchedModuleOrPath(path, relinked, nested[0]);
+    }
     return names[1].path ? *names[1].path : path;
 }
 
