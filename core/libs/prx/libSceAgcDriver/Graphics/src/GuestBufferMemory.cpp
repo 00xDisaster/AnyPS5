@@ -293,7 +293,7 @@ HostImports& Imports() {
 
 #ifdef _WIN32
 void waitSettleBatch(const ImportSettle& settle, VkDevice device, const SettleBatch& batch) {
-    if (batch.busy && settle.waitForFences != nullptr) Check(settle.waitForFences(device, 1, &batch.fence, VK_TRUE, UINT64_MAX), "vkWaitForFences (settle batch)");
+    if (batch.busy && settle.waitForFences != nullptr) Check(settle.waitForFences(device, 1, &batch.fence, VK_TRUE, 60'000'000'000ull), "vkWaitForFences (settle batch)");
 }
 
 bool settleBatchRunning(const ImportSettle& settle, VkDevice device, const SettleBatch& batch) {
