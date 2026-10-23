@@ -95,6 +95,21 @@ std::vector<Leaf> framedLeaves() {
     };
 }
 
+std::vector<Leaf> stubbedLeaves() {
+    return {
+        {"inflate_fast-shaped leaf with operands at rsp and at 0x60 shifted by 0x20", {
+            0x55, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x70,
+            0x48, 0x89, 0x7c, 0x24, 0xe0, 0x48, 0x89, 0x34, 0x24, 0x48, 0x89, 0x54, 0x24, 0x60, 0xb9, 0x04, 0x00, 0x00, 0x00, 0x31, 0xc0,
+            0x48, 0x03, 0x44, 0x24, 0xe0, 0x48, 0x03, 0x04, 0x24, 0x48, 0x03, 0x44, 0x24, 0x60, 0xff, 0xc9, 0x75, 0xee,
+            0x48, 0x83, 0xc4, 0x70, 0x5b, 0x41, 0x5c, 0x41, 0x5d, 0x41, 0x5e, 0x41, 0x5f, 0x5d, 0xc3,
+        }, 4 * (kA + kB + kC)},
+        {"leaf shifted by the whole red zone reading its saved rbx at +0x8", {
+            0x41, 0x57, 0x53, 0x41, 0x56, 0x4c, 0x8d, 0x74, 0x24, 0xe0, 0x49, 0x89, 0x3e, 0x31, 0xc0, 0xb9, 0x08, 0x00, 0x00, 0x00,
+            0x49, 0x03, 0x06, 0x48, 0x03, 0x44, 0x24, 0x08, 0xff, 0xc9, 0x75, 0xf4, 0x41, 0x5e, 0x5b, 0x41, 0x5f, 0xc3,
+        }, 8 * (kA + kD)},
+    };
+}
+
 void writeRel32(std::uint8_t* at, const std::uint64_t target, const std::uint64_t next) {
     const auto displacement = static_cast<std::int64_t>(target) - static_cast<std::int64_t>(next);
     require(displacement >= std::numeric_limits<std::int32_t>::min() && displacement <= std::numeric_limits<std::int32_t>::max(), "a stub jump is out of rel32 range");
@@ -188,7 +203,7 @@ std::string hex(const std::uint64_t value) {
     return text.str();
 }
 
-void runLeaves(const std::vector<Leaf>& leaves) {
+Codegen::RedZoneFrameReport runLeaves(const std::vector<Leaf>& leaves) {
     const auto image = place(leaves);
     load(image, false);
     std::vector<Run> plain, clobbered;
@@ -209,6 +224,7 @@ void runLeaves(const std::vector<Leaf>& leaves) {
         require(framed.Result == leaves[index].Expected, std::string(leaves[index].Name) + ": the framed leaf returned " + hex(framed.Result) + " under writes below rsp, not " + hex(leaves[index].Expected));
         std::cout << leaves[index].Name << ": unframed " << hex(plain[index].Result) << " alone and " << hex(clobbered[index].Result) << " under the clobber (" << clobbered[index].Steps << " steps); framed " << hex(framed.Result) << " under the clobber (" << framed.Steps << " steps)\n";
     }
+    return framing.Report;
 }
 
 }
@@ -227,6 +243,8 @@ int main() {
         }
         arena = static_cast<std::uint8_t*>(mapped);
         runLeaves(framedLeaves());
+        const auto stubbed = runLeaves(stubbedLeaves());
+        require(stubbed.OperandStubs == 3 && stubbed.StubbedOperands == 5, "the leaves were framed with " + std::to_string(stubbed.OperandStubs) + " operand stubs carrying " + std::to_string(stubbed.StubbedOperands) + " rsp operands, not 3 carrying 5");
         std::cout << "red-zone framer execution tests passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <optional>
 #include <set>
 
@@ -185,6 +186,28 @@ std::optional<std::vector<std::uint8_t>> movedDisplacement(const MemoryUse& use,
     return std::nullopt;
 }
 
+std::optional<std::vector<std::uint8_t>> withDisplacement(const std::uint8_t* code, const Insn& insn, const MemoryUse& use, const std::int64_t disp) {
+    if (disp < std::numeric_limits<std::int32_t>::min() || disp > std::numeric_limits<std::int32_t>::max()) return std::nullopt;
+    const std::size_t oldBytes = use.Mod == 1 ? 1 : use.Mod == 2 ? 4 : 0;
+    if (use.DispOffset + oldBytes > insn.Length) return std::nullopt;
+    const bool narrow = disp >= std::numeric_limits<std::int8_t>::min() && disp <= std::numeric_limits<std::int8_t>::max();
+    std::vector<std::uint8_t> bytes(code, code + use.DispOffset);
+    bytes[insn.Info.ModRmOffset] = static_cast<std::uint8_t>((bytes[insn.Info.ModRmOffset] & 0x3f) | (narrow ? 0x40 : 0x80));
+    const auto value = static_cast<std::uint32_t>(static_cast<std::int32_t>(disp));
+    for (std::size_t index = 0; index < (narrow ? 1u : 4u); ++index) bytes.push_back(static_cast<std::uint8_t>(value >> (8 * index)));
+    bytes.insert(bytes.end(), code + use.DispOffset + oldBytes, code + insn.Length);
+    return bytes;
+}
+
+struct OperandStub {
+    std::size_t First;
+    std::size_t Last;
+    std::size_t Begin;
+    std::size_t End;
+    std::vector<std::uint8_t> Body;
+    std::size_t Operands = 0;
+};
+
 void frameSegment(
     const std::vector<std::uint8_t>& fileBytes,
     const Domain::ProgramHeader& ph,
@@ -296,7 +319,8 @@ void frameSegment(
         bool redZone = false;
         const char* reason = nullptr;
         std::vector<std::pair<std::size_t, std::size_t>> exits;
-        std::vector<std::pair<std::size_t, std::vector<std::uint8_t>>> moves;
+        std::map<std::size_t, std::pair<std::size_t, std::vector<std::uint8_t>>> moves;
+        std::vector<std::size_t> stubbed;
         const auto functionEnd = insns[body.back()].Offset + insns[body.back()].Length;
         std::int64_t depth = 0;
         bool wholeRedZone = rbpPrologue;
@@ -323,10 +347,10 @@ void frameSegment(
             } else {
                 if (use.RegisterRsp) { reason = "other use of rsp"; continue; }
                 if (use.RspBased) {
-                    auto moved = code[insn.Info.OpcodeOffset] == 0x62 ? std::nullopt : movedDisplacement(use, shift);
-                    if (!moved) { reason = "rsp operand that cannot move with rsp"; continue; }
+                    if (code[insn.Info.OpcodeOffset] == 0x62) { reason = "rsp operand that cannot move with rsp"; continue; }
                     if (overlapsExisting(insn.Offset, insn.Offset + insn.Length)) { reason = "overlaps another stub"; continue; }
-                    moves.emplace_back(insn.Offset + use.DispOffset, std::move(*moved));
+                    if (auto moved = movedDisplacement(use, shift)) moves.emplace(k, std::pair{insn.Offset + use.DispOffset, std::move(*moved)});
+                    else stubbed.push_back(k);
                 }
             }
             if (flow == ControlFlowKind::IndirectJump) { reason = "indirect jump"; continue; }
@@ -357,33 +381,64 @@ void frameSegment(
         if (reason == nullptr && targetInside(start, prologueEnd)) reason = "branch into the prologue";
         if (reason == nullptr && exits.empty()) reason = "no ret exit";
         if (reason == nullptr && (overlapsExisting(start, prologueEnd) || std::any_of(exits.begin(), exits.end(), [&](const auto& exit) { return overlapsExisting(exit.first, exit.second); }))) reason = "overlaps another stub";
+        std::vector<OperandStub> stubs;
+        const auto overlapsSite = [&](const std::size_t begin, const std::size_t end) {
+            if (begin < prologueEnd && start < end) return true;
+            if (std::any_of(exits.begin(), exits.end(), [&](const auto& exit) { return begin < exit.second && exit.first < end; })) return true;
+            return std::any_of(stubs.begin(), stubs.end(), [&](const OperandStub& stub) { return begin < stub.End && stub.Begin < end; });
+        };
+        for (const auto k : stubbed) {
+            if (reason != nullptr) break;
+            if (!stubs.empty() && k < stubs.back().Last) continue;
+            OperandStub stub{k, k, insns[body[k]].Offset, insns[body[k]].Offset, {}};
+            while (stub.Last < body.size() && stub.End - stub.Begin < kJumpBytes) {
+                const auto& covered = insns[body[stub.Last]];
+                if (covered.Offset != stub.End || covered.Info.FlowKind != ControlFlowKind::Sequential || covered.Info.HasRipRelativeDisp || frees.contains(stub.Last)) break;
+                const auto use = memoryUse(at(stub.Last), covered);
+                const auto bytes = use.RspBased ? withDisplacement(at(stub.Last), covered, use, use.RspDisp + shift) : std::vector<std::uint8_t>(at(stub.Last), at(stub.Last) + covered.Length);
+                if (!bytes) break;
+                stub.Body.insert(stub.Body.end(), bytes->begin(), bytes->end());
+                if (use.RspBased) ++stub.Operands;
+                stub.End += covered.Length;
+                ++stub.Last;
+            }
+            if (stub.End - stub.Begin < kJumpBytes || targetInside(stub.Begin, stub.End) || overlapsSite(stub.Begin, stub.End) || overlapsExisting(stub.Begin, stub.End)) reason = "rsp operand that cannot move and has no room for a stub";
+            else stubs.push_back(std::move(stub));
+        }
         if (reason != nullptr) { skip(reason); continue; }
+        for (const auto& stub : stubs)
+            for (auto k = stub.First; k < stub.Last; ++k) moves.erase(k);
 
-        const auto addSite = [&](const std::size_t begin, const std::size_t end, const bool entry) {
+        const auto addSite = [&](const std::size_t begin, const std::size_t end, std::vector<std::uint8_t> code) {
             TrampolineSite site;
             site.Offset = ph.Offset + begin;
             site.Address = ph.MappedAddress + begin;
             site.Length = end - begin;
             site.OriginalBytes.assign(seg.begin() + static_cast<std::ptrdiff_t>(begin), seg.begin() + static_cast<std::ptrdiff_t>(end));
-            if (entry) {
-                site.Body = site.OriginalBytes;
-                const auto lower = lowerRsp(shift);
-                site.Body.insert(site.Body.end(), lower.begin(), lower.end());
-            } else {
-                site.Body = raiseRsp(shift);
-                site.Body.insert(site.Body.end(), site.OriginalBytes.begin(), site.OriginalBytes.end());
-            }
-            site.ReturnBranchOffset = site.Body.size();
-            site.Body.insert(site.Body.end(), std::begin(kJumpBack), std::end(kJumpBack));
+            site.ReturnBranchOffset = code.size();
+            code.insert(code.end(), std::begin(kJumpBack), std::end(kJumpBack));
+            site.Body = std::move(code);
             sites.push_back(std::move(site));
         };
-        addSite(start, prologueEnd, true);
-        for (const auto& exit : exits) addSite(exit.first, exit.second, false);
-        for (auto& [offset, bytes] : moves) displacements.push_back({ph.Offset + offset, std::move(bytes)});
+        const auto original = [&](const std::size_t begin, const std::size_t end) { return std::vector<std::uint8_t>(seg.begin() + static_cast<std::ptrdiff_t>(begin), seg.begin() + static_cast<std::ptrdiff_t>(end)); };
+        auto entry = original(start, prologueEnd);
+        const auto lower = lowerRsp(shift);
+        entry.insert(entry.end(), lower.begin(), lower.end());
+        addSite(start, prologueEnd, std::move(entry));
+        for (const auto& exit : exits) {
+            auto code = raiseRsp(shift);
+            const auto tail = original(exit.first, exit.second);
+            code.insert(code.end(), tail.begin(), tail.end());
+            addSite(exit.first, exit.second, std::move(code));
+        }
+        for (auto& stub : stubs) addSite(stub.Begin, stub.End, std::move(stub.Body));
+        for (auto& [k, move] : moves) displacements.push_back({ph.Offset + move.first, std::move(move.second)});
         ++report.Framed;
         if (!rbpPrologue) ++report.FramedWithoutFramePointer;
         report.Exits += exits.size();
         report.MovedOperands += moves.size();
+        report.OperandStubs += stubs.size();
+        for (const auto& stub : stubs) report.StubbedOperands += stub.Operands;
     }
 }
 

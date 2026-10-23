@@ -118,7 +118,7 @@ ConversionOutput Conversion::Convert(ConversionInput input, const ConversionOpti
                 throw Domain::RelinkerException("Red-zone displacement exceeds source image", moved.Offset);
             std::copy(moved.Bytes.begin(), moved.Bytes.end(), sourceBytes.begin() + static_cast<std::ptrdiff_t>(moved.Offset));
         }
-        { std::ostringstream message; message << "Red-zone framing: " << report.Functions << " functions, " << report.RedZoneFunctions << " leaf functions keep values below RSP, " << report.Framed << " framed (" << report.FramedWithoutFramePointer << " without a frame pointer, " << report.MovedOperands << " rsp operands moved; " << report.Exits << " exits)\n"; inputProgress.Message(message.str()); }
+        { std::ostringstream message; message << "Red-zone framing: " << report.Functions << " functions, " << report.RedZoneFunctions << " leaf functions keep values below RSP, " << report.Framed << " framed (" << report.FramedWithoutFramePointer << " without a frame pointer, " << report.MovedOperands << " rsp operands moved, " << report.StubbedOperands << " in " << report.OperandStubs << " operand stubs; " << report.Exits << " exits)\n"; inputProgress.Message(message.str()); }
         for (const auto& [reason, count] : report.Skipped) { std::ostringstream message; message << "Red-zone framing: skipped " << count << ": " << reason << '\n'; inputProgress.Message(message.str()); }
         trampolines.insert(trampolines.end(), std::make_move_iterator(framed.begin()), std::make_move_iterator(framed.end()));
     }

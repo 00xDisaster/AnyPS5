@@ -18,6 +18,8 @@ struct RedZoneFrameReport {
     std::size_t FramedWithoutFramePointer = 0;
     std::size_t Exits = 0;
     std::size_t MovedOperands = 0;
+    std::size_t OperandStubs = 0;
+    std::size_t StubbedOperands = 0;
     std::map<std::string, std::size_t> Skipped;
 };
 

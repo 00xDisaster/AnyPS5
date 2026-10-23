@@ -104,6 +104,17 @@ const std::vector<std::uint8_t> LoadDeepBelowRsp{0x48, 0x8b, 0x44, 0x24, 0xd8};
 const std::vector<std::uint8_t> AddressBelowRsp{0x48, 0x8d, 0x44, 0x24, 0xe0};
 const std::vector<std::uint8_t> AddressAboveRsp{0x48, 0x8d, 0x44, 0x24, 0x08};
 const std::vector<std::uint8_t> StoreIndexedBelowRsp{0x48, 0x89, 0x7c, 0xcc, 0xf0};
+const std::vector<std::uint8_t> StoreImmediateFarAboveRsp{0xc7, 0x44, 0x24, 0x7c, 0x78, 0x56, 0x34, 0x12};
+const std::vector<std::uint8_t> LoadIndexedAtRsp{0x48, 0x8b, 0x04, 0xcc};
+const std::vector<std::uint8_t> AddRdxToRax{0x48, 0x01, 0xd0};
+const std::vector<std::uint8_t> VexStoreAtRsp{0xc5, 0xf8, 0x11, 0x04, 0x24};
+const std::vector<std::uint8_t> EvexStoreBelowRsp{0x62, 0xf1, 0x7c, 0x48, 0x11, 0x44, 0x24, 0xff};
+const std::vector<std::uint8_t> LoadRipRelative{0x48, 0x8b, 0x05, 0x00, 0x00, 0x00, 0x00};
+
+std::vector<std::uint8_t> stubBody(std::vector<std::uint8_t> code) {
+    append(code, {0xe9, 0, 0, 0, 0});
+    return code;
+}
 
 std::vector<std::uint8_t> framelessLeaf(const std::vector<std::uint8_t>& prologue, const std::vector<std::uint8_t>& body, const std::vector<std::uint8_t>& exit) {
     std::vector<std::uint8_t> bytes = prologue;
@@ -192,17 +203,73 @@ void shiftsByTheWholeRedZoneForIndexedOperands() {
     require(sites[0].Body[FramelessPrologue.size() + 4] == 0x80 && displacements[0].Bytes == std::vector<std::uint8_t>{0x70} && displacements[1].Bytes == std::vector<std::uint8_t>{0x70}, "a leaf whose indexed operand can reach deeper than its displacement was not shifted by the whole red zone");
 }
 
-void skipsLeavesWithOperandsThatCannotMove() {
-    std::vector<std::uint8_t> farAbove = StoreBelowRsp;
-    append(farAbove, LoadFarAboveRsp);
-    std::vector<std::uint8_t> atRsp = StoreBelowRsp;
-    append(atRsp, LoadAtRsp);
-    const auto input = image({framelessLeaf(FramelessPrologue, farAbove, FramelessExit), framelessLeaf(FramelessPrologue, atRsp, FramelessExit), framelessLeaf({0x41, 0x56, 0x41, 0x57}, StoreBelowRsp, {0x41, 0x5f, 0x41, 0x5e, 0xc3})});
+void stubsOperandsWhoseDisplacementOverflows() {
+    std::vector<std::uint8_t> body = StoreBelowRsp;
+    append(body, LoadFarAboveRsp);
+    append(body, StoreImmediateFarAboveRsp);
+    const auto input = image({framelessLeaf(FramelessPrologue, body, FramelessExit)});
     Codegen::RedZoneFrameReport report;
     std::vector<Codegen::RedZoneDisplacement> displacements;
     const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
-    require(sites.empty() && displacements.empty() && report.RedZoneFunctions == 3, "a leaf whose rsp operands cannot all move, or whose prologue is too short, was framed");
-    require(report.Skipped.at("rsp operand that cannot move with rsp") == 2 && report.Skipped.at("prologue shorter than a jump") == 1, "the skipped leaves were not reported with their reasons");
+    require(report.Framed == 1 && report.MovedOperands == 1 && report.OperandStubs == 2 && report.StubbedOperands == 2 && sites.size() == 4, "a leaf whose 8-bit displacements above rsp overflow after the shift was not framed with operand stubs");
+    const auto load = Base + 0x40 + FramelessPrologue.size() + StoreBelowRsp.size();
+    require(sites[2].Address == load && sites[2].Length == LoadFarAboveRsp.size() && sites[2].OriginalBytes == LoadFarAboveRsp, "the stub site does not cover the load that cannot move in place");
+    require(sites[2].Body == stubBody({0x48, 0x8b, 0x84, 0x24, 0x88, 0x00, 0x00, 0x00}) && sites[2].ReturnBranchOffset == 8, "the load was not re-encoded with a 32-bit displacement moved by the shift");
+    require(sites[3].Address == load + LoadFarAboveRsp.size() && sites[3].OriginalBytes == StoreImmediateFarAboveRsp, "the stub site does not cover the store of an immediate that cannot move in place");
+    require(sites[3].Body == stubBody({0xc7, 0x84, 0x24, 0x8c, 0x00, 0x00, 0x00, 0x78, 0x56, 0x34, 0x12}), "the store lost its immediate when its displacement was widened");
+    require(displacements.size() == 1 && displacements[0].Bytes == std::vector<std::uint8_t>{0x00}, "the store below rsp was not moved in place");
+}
+
+void stubsOperandsAtRspWithTheInstructionsAfterThem() {
+    std::vector<std::uint8_t> atRsp = StoreBelowRsp;
+    append(atRsp, LoadAtRsp);
+    append(atRsp, LoadAboveRsp);
+    std::vector<std::uint8_t> indexed = StoreBelowRsp;
+    append(indexed, LoadIndexedAtRsp);
+    append(indexed, AddRdxToRax);
+    const auto input = image({framelessLeaf(FramelessPrologue, atRsp, FramelessExit), framelessLeaf(FramelessPrologue, indexed, FramelessExit)});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(report.Framed == 2 && report.MovedOperands == 2 && report.OperandStubs == 2 && report.StubbedOperands == 3 && sites.size() == 6, "leaves with operands at rsp were not framed with operand stubs");
+    const auto first = 0x40 + FramelessPrologue.size() + StoreBelowRsp.size();
+    require(sites[2].Address == Base + first && sites[2].Length == LoadAtRsp.size() + LoadAboveRsp.size(), "the stub site does not run on to the next instruction to make room for its jump");
+    require(sites[2].Body == stubBody({0x48, 0x8b, 0x44, 0x24, 0x10, 0x48, 0x8b, 0x44, 0x24, 0x18}), "the load at rsp and the load the stub covers after it were not both moved by the shift");
+    for (const auto& displacement : displacements) require(displacement.Offset < first || displacement.Offset >= first + sites[2].Length, "an rsp operand inside a stub site was also moved in place");
+    require(sites[3].Body[FramelessPrologue.size() + 4] == 0x80, "a leaf with an indexed operand at rsp was not shifted by the whole red zone");
+    require(sites[5].OriginalBytes.size() == LoadIndexedAtRsp.size() + AddRdxToRax.size() && sites[5].Body == stubBody({0x48, 0x8b, 0x84, 0xcc, 0x80, 0x00, 0x00, 0x00, 0x48, 0x01, 0xd0}), "the indexed load at rsp was not re-encoded with a 32-bit displacement of 0x80 ahead of the add it covers");
+}
+
+void stubsVexOperandsAtRsp() {
+    std::vector<std::uint8_t> body = StoreBelowRsp;
+    append(body, VexStoreAtRsp);
+    const auto input = image({framelessLeaf(FramelessPrologue, body, FramelessExit)});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(report.Framed == 1 && report.OperandStubs == 1 && report.StubbedOperands == 1 && sites.size() == 3, "a leaf with a VEX store at rsp was not framed with an operand stub");
+    require(sites[2].OriginalBytes == VexStoreAtRsp && sites[2].Body == stubBody({0xc5, 0xf8, 0x11, 0x44, 0x24, 0x10}), "the VEX store at rsp was not re-encoded with an 8-bit displacement moved by the shift");
+}
+
+void skipsLeavesWithOperandsThatCannotMove() {
+    std::vector<std::uint8_t> evex = StoreBelowRsp;
+    append(evex, EvexStoreBelowRsp);
+    std::vector<std::uint8_t> beforeExit = StoreBelowRsp;
+    append(beforeExit, LoadAtRsp);
+    std::vector<std::uint8_t> beforeRipRelative = StoreBelowRsp;
+    append(beforeRipRelative, LoadAtRsp);
+    append(beforeRipRelative, LoadRipRelative);
+    std::vector<std::uint8_t> beforeTarget = StoreBelowRsp;
+    append(beforeTarget, LoadAtRsp);
+    append(beforeTarget, {0xff, 0xc0, 0x3b, 0x44, 0x24, 0xf0, 0x72, 0xf8});
+    const auto input = image({framelessLeaf(FramelessPrologue, evex, FramelessExit), framelessLeaf(FramelessPrologue, beforeExit, FramelessExit), framelessLeaf(FramelessPrologue, beforeRipRelative, FramelessExit), framelessLeaf(FramelessPrologue, beforeTarget, FramelessExit), framelessLeaf({0x41, 0x56, 0x41, 0x57}, StoreBelowRsp, {0x41, 0x5f, 0x41, 0x5e, 0xc3})});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(sites.empty() && displacements.empty() && report.RedZoneFunctions == 5, "a leaf whose rsp operands can neither move nor be stubbed, or whose prologue is too short, was framed");
+    require(report.Skipped.at("rsp operand that cannot move with rsp") == 1, "an EVEX operand, whose 8-bit displacement is scaled, was not refused");
+    require(report.Skipped.at("rsp operand that cannot move and has no room for a stub") == 3, "an operand at rsp followed by an exit, a rip-relative instruction or a branch target was not refused for want of room");
+    require(report.Skipped.at("prologue shorter than a jump") == 1, "the leaf with a short prologue was not reported with its reason");
 }
 
 void skipsLeavesThatCopyRsp() {
@@ -390,6 +457,9 @@ int main() {
         framesLeavesThatAllocateBelowTheirPushes();
         framesLeavesThatAllocateWithLeaOrALargeSub();
         skipsAllocatingLeavesWithoutAMatchingFree();
+        stubsOperandsWhoseDisplacementOverflows();
+        stubsOperandsAtRspWithTheInstructionsAfterThem();
+        stubsVexOperandsAtRsp();
         skipsLeavesWithOperandsThatCannotMove();
         skipsLeavesThatCopyRsp();
         endsBodiesAtAlignedCodeAfterARet();
