@@ -247,8 +247,8 @@ struct Manager {
 
 thread_local Manager* currentWorker = nullptr;
 
-void WakeWorkers(Manager& manager, std::uint32_t invocations) {
-    const std::uint32_t available = invocations - (currentWorker == &manager ? 1u : 0u);
+void WakeWorkers(Manager& manager, std::uint32_t invocations, bool publisherCanRun = true) {
+    const std::uint32_t available = invocations - (publisherCanRun && currentWorker == &manager ? 1u : 0u);
     manager.wakeTokens += std::min(available, manager.sleepingWorkers - manager.wakeTokens);
     if (manager.wakeTokens != 0) manager.work.notify_all();
 }
@@ -477,6 +477,13 @@ int Sequence::WaitLocked(std::unique_lock<std::mutex>& guard) {
     bool done = false;
     items.push_back({ItemType::Wait, this, nullptr, nullptr, 0, 0, 0, &done});
     Advance();
+    if (!done && currentWorker == manager) {
+        std::uint64_t runnable = 0;
+        for (const auto& queue : manager->runQueues) {
+            for (const Item* item : queue) runnable += item->count - item->handedOut;
+        }
+        WakeWorkers(*manager, static_cast<std::uint32_t>(std::min(runnable, std::uint64_t{manager->workerCount})), false);
+    }
     passed.wait(guard, [&done] { return done; });
     --manager->blockedWaiters;
     return result;
