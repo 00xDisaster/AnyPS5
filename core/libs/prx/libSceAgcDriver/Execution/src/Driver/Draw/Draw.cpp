@@ -10,6 +10,7 @@
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Pm4.hpp"
 #include "Optimization/ResourceProgram.hpp"
+#include "prx/libc/include/HostThreadLocal.hpp"
 #include <atomic>
 #include <array>
 #include <algorithm>
@@ -197,9 +198,10 @@ bool EmptyIndirectSkip() {
     return enabled;
 }
 
+struct CpuIndirectProgramsStorage {};
+
 std::unordered_map<std::uint64_t, bool>& CpuIndirectPrograms() {
-    thread_local std::unordered_map<std::uint64_t, bool> programs;
-    return programs;
+    return HostThreadLocal<std::unordered_map<std::uint64_t, bool>, CpuIndirectProgramsStorage>();
 }
 
 }
