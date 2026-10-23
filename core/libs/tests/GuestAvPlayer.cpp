@@ -1726,6 +1726,78 @@ void TestAudioClockDriftGating() {
     }
 }
 
+void TestAudioEofClockRebase() {
+    const auto open = [](Events& events, bool hold) {
+        AvPlayerInitData init = InitData(&events);
+        auto* player = sceAvPlayerInit(&init);
+        Check(player != nullptr, "audio eof clock init failed");
+        Check(sceAvPlayerAddSource(player, "/app0/avplayer.mp4") == 0, "audio eof clock source failed");
+        Check(WaitFor([&] { return events.Seen(EventReady); }), "audio eof clock ready missing");
+        Check(sceAvPlayerEnableStream(player, EnglishAudioStream) == 0, "audio eof clock audio failed");
+        if (hold) AvPlayer::HoldAvPlayerAudioEofForTest_nid_no_patch(player, true);
+        Check(sceAvPlayerStart(player) == 0, "audio eof clock start failed");
+        Check(WaitFor([&] { return events.Seen(EventPlay); }), "audio eof clock play missing");
+        return player;
+    };
+    const auto close = [](AvPlayerInternal* player) {
+        AvPlayer::HoldAvPlayerAudioEofForTest_nid_no_patch(player, false);
+        Check(sceAvPlayerClose(player) == 0, "audio eof clock close failed");
+        std::lock_guard lock(allocations.mutex);
+        Check(allocations.blocks.empty(), "audio eof clock allocations leaked");
+    };
+    const auto pullQueued = [](AvPlayerInternal* player) {
+        std::uint64_t timestamp = 0;
+        Check(AvPlayer::NextQueuedAvPlayerAudioTimestampForTest_nid_no_patch(player, &timestamp), "audio eof clock queue empty");
+        AvPlayer::SetAvPlayerClockForTest_nid_no_patch(player, static_cast<double>(timestamp));
+        AvPlayerFrameInfo sound{};
+        Check(sceAvPlayerGetAudioData(player, &sound) != 0, "audio eof clock drain failed");
+        Check(sound.timestamp == timestamp, "audio eof clock drained an unexpected frame");
+    };
+    const auto leaveFinalFrame = [&](AvPlayerInternal* player, bool afterEof) {
+        Check(WaitFor([&] {
+            const auto queued = AvPlayer::QueuedAvPlayerAudioForTest_nid_no_patch(player);
+            const auto ready = afterEof ? AvPlayer::AvPlayerAudioEndedForTest_nid_no_patch(player) : AvPlayer::AvPlayerAudioEofHeldForTest_nid_no_patch(player);
+            if (ready && queued >= 1) return true;
+            if (queued > 1) pullQueued(player);
+            return false;
+        }), afterEof ? "audio eof before the final pull missing" : "audio eof hold missing");
+        while (AvPlayer::QueuedAvPlayerAudioForTest_nid_no_patch(player) > 1) pullQueued(player);
+    };
+    const auto pullFinal = [](AvPlayerInternal* player, AvPlayerFrameInfo& sound) {
+        std::uint64_t last = 0;
+        Check(AvPlayer::NextQueuedAvPlayerAudioTimestampForTest_nid_no_patch(player, &last), "final audio frame was not queued");
+        Check(last > 50, "final audio timestamp is inside the drift gate");
+        AvPlayer::SetAvPlayerClockForTest_nid_no_patch(player, static_cast<double>(last - 42));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        Check(sceAvPlayerGetAudioData(player, &sound) != 0, "final audio frame missing");
+        Check(sound.timestamp == last, "final audio timestamp changed");
+        return last;
+    };
+
+    {
+        Events events;
+        auto* player = open(events, true);
+        leaveFinalFrame(player, false);
+        AvPlayerFrameInfo sound{};
+        const auto last = pullFinal(player, sound);
+        Check(sceAvPlayerCurrentTime(player) == last - 42, "clock rebased before audio eof was marked");
+        AvPlayer::HoldAvPlayerAudioEofForTest_nid_no_patch(player, false);
+        Check(WaitFor([&] { return AvPlayer::AvPlayerAudioEndedForTest_nid_no_patch(player); }), "audio eof was not marked");
+        Check(sceAvPlayerCurrentTime(player) == last, "clock was not reconciled after audio eof");
+        close(player);
+    }
+
+    {
+        Events events;
+        auto* player = open(events, false);
+        leaveFinalFrame(player, true);
+        AvPlayerFrameInfo sound{};
+        const auto last = pullFinal(player, sound);
+        Check(sceAvPlayerCurrentTime(player) == last, "clock was not reconciled when the final frame followed eof");
+        close(player);
+    }
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -1766,6 +1838,7 @@ int main(int argc, char** argv) {
         TestEofStopLatency();
         TestVideoSyncTolerance();
         TestAudioClockDriftGating();
+        TestAudioEofClockRebase();
         std::puts("AvPlayer tests passed");
         return 0;
     } catch (const std::exception& error) {
