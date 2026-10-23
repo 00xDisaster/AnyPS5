@@ -313,6 +313,17 @@ class ImportAuditTests(unittest.TestCase):
                         self.assertIn("Qualified import names exported only as their NID", out)
                         self.assertIn(f"-> {nid}", out)
 
+    def test_name_mismatch_requires_a_resolved_host_fallback(self):
+        name, library = "strlen", "libc.prx"
+        exports = {nid_names.compute_nid(name): [library]}
+        for providers, modules, kind, mismatch in (({}, set(), "absent", False),
+                                                   (exports, {library}, "module", False),
+                                                   (exports, set(), "implemented", True)):
+            with self.subTest(kind=kind):
+                records, _ = import_audit.audit([(name, library, False)], providers, {}, {library}, modules)
+                self.assertEqual(records[0]["class"], kind)
+                self.assertEqual(records[0]["symbol_mismatch"], mismatch)
+
     def test_literal_exports_resolve_without_a_name_mismatch(self):
         work = self.work
         name, nid = "strlen", nid_names.compute_nid("strlen")

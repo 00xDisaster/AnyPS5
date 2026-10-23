@@ -584,9 +584,11 @@ def audit(imports, exports, stubs, libraries, modules, module_imports=None, modu
         if not library:
             providers = sorted(set(providers) | set((module_exports or {}).get(nid, [])))
         resolved_nid = nid
+        record["symbol_mismatch"] = False
         if not providers:
             resolved_nid = nid_names.compute_nid(nid)
             providers = exports.get(resolved_nid, [])
+            record["symbol_mismatch"] = bool(library) and library not in modules and bool(providers) and resolved_nid != nid
             if not library:
                 providers = sorted(set(providers) | set((module_exports or {}).get(resolved_nid, [])))
         kind = classify(resolved_nid, library, providers, stubs, modules)
@@ -594,7 +596,6 @@ def audit(imports, exports, stubs, libraries, modules, module_imports=None, modu
         record["providers"] = providers
         record["library_mismatch"] = kind in ("implemented", "stub") and bool(library) and library not in providers and "libc.prx" not in providers
         record["name"] = next((stubs[(provider, resolved_nid)] for provider in providers if (provider, resolved_nid) in stubs), None) if kind == "stub" else None
-        record["symbol_mismatch"] = kind in ("implemented", "stub") and resolved_nid != nid and bool(library)
     ordered = sorted(records.values(), key=lambda record: (record["class"], record["library"] or "", record.get("module") or "", record["nid"]))
     check_conservation(len(imports) + sum(len(symbols) for symbols, _ in (module_imports or {}).values()), ordered)
     missing = defaultdict(int)
