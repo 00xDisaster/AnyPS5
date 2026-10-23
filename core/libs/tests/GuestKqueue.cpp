@@ -1121,14 +1121,42 @@ static void Timeout() {
 static void ReplaceStandardInputWithNull() {
 #ifdef _WIN32
     const int null = _open("NUL", _O_RDONLY);
-    Require(null >= 0 && _dup2(null, 0) == 0);
-    Require(_close(null) == 0);
+    Require(null >= 0);
+    if (null != 0) {
+        Require(_dup2(null, 0) == 0);
+        Require(_close(null) == 0);
+    }
 #else
     const int null = ::open("/dev/null", O_RDONLY);
-    Require(null >= 0 && ::dup2(null, 0) == 0);
-    Require(::close(null) == 0);
+    Require(null >= 0);
+    if (null != 0) {
+        Require(::dup2(null, 0) == 0);
+        Require(::close(null) == 0);
+    }
 #endif
 }
+
+static bool StandardInputAtEnd() {
+    char byte = 0;
+#ifdef _WIN32
+    return _read(0, &byte, 1) == 0;
+#else
+    return ::read(0, &byte, 1) == 0;
+#endif
+}
+
+static void StandardInputReplacement() {
+    ReplaceStandardInputWithNull();
+    Require(StandardInputAtEnd());
+#ifdef _WIN32
+    Require(_close(0) == 0);
+#else
+    Require(::close(0) == 0);
+#endif
+    ReplaceStandardInputWithNull();
+    Require(StandardInputAtEnd());
+}
+
 
 static void StandardInput() {
     ReplaceStandardInputWithNull();
@@ -1153,6 +1181,7 @@ static void StandardInput() {
 }
 
 int main() {
+    StandardInputReplacement();
     StandardInput();
     CreateAndClose();
     Timers();
