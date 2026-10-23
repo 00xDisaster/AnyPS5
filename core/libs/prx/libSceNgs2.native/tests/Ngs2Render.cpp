@@ -728,15 +728,19 @@ static void TestReverbConversion() {
         stereo[i] = static_cast<std::int16_t>(static_cast<std::int32_t>((seed >> 16) & 0x3fff) - 0x2000);
     }
     const auto same = RenderReverbChannels(2, 2, mixed, stereo, 8192);
-    const auto surround = RenderReverbChannels(2, 6, mixed, stereo, 8192);
-    float sides = 0.0f;
-    float lfe = 0.0f;
-    for (std::uint32_t frame = 0; frame < 8192; frame++) {
-        for (std::uint32_t c = 0; c < 2; c++) Require(std::fabs(surround[frame * 6 + c] - same[frame * 2 + c]) <= 1e-7f + std::fabs(same[frame * 2 + c]) * 1e-5f);
-        for (std::uint32_t c : {2u, 4u, 5u}) sides = std::max(sides, std::fabs(surround[frame * 6 + c]));
-        lfe = std::max(lfe, std::fabs(surround[frame * 6 + 3]));
+    for (std::uint32_t outputs : {6u, 8u}) {
+        const auto surround = RenderReverbChannels(2, outputs, mixed, stereo, 8192);
+        float sides = 0.0f;
+        float lfe = 0.0f;
+        for (std::uint32_t frame = 0; frame < 8192; frame++) {
+            for (std::uint32_t c = 0; c < 2; c++) Require(std::fabs(surround[frame * outputs + c] - same[frame * 2 + c]) <= 1e-7f + std::fabs(same[frame * 2 + c]) * 1e-5f);
+            for (std::uint32_t c = 2; c < outputs; c++) {
+                if (c != 3) sides = std::max(sides, std::fabs(surround[frame * outputs + c]));
+            }
+            lfe = std::max(lfe, std::fabs(surround[frame * outputs + 3]));
+        }
+        Require(sides > 1e-4f && lfe == 0.0f);
     }
-    Require(sides > 1e-4f && lfe == 0.0f);
 
     auto dry = mixed;
     dry.wet = 0.0f;
