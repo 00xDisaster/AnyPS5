@@ -216,7 +216,7 @@ void DefineModule(SpirvEmitterState& state) {
     DefineOutputs(state);
     DefineTessellationInterfaces(state);
     DefineDescriptors(state);
-    if (state.requirements.functionLds) {
+    if (state.requirements.functionLds && !state.pixelFunctionLdsBuffer) {
         state.ldsVariable = state.module.AllocateId();
     }
     if (state.requirements.functionScratch) {
@@ -240,7 +240,7 @@ void DefineModule(SpirvEmitterState& state) {
         state.meshGuestFunc = state.module.AllocateId();
         state.module.EmitCapability(spv::CapabilityMeshShadingEXT);
         state.module.EmitExtension("SPV_EXT_mesh_shader");
-        state.module.AddExecutionMode(state.mainFunc, mesh.outputPrimitiveSize == 2u ? spv::ExecutionModeOutputLinesEXT : spv::ExecutionModeOutputTrianglesEXT);
+        state.module.AddExecutionMode(state.mainFunc, mesh.outputPrimitiveSize == 1u ? spv::ExecutionModeOutputPoints : mesh.outputPrimitiveSize == 2u ? spv::ExecutionModeOutputLinesEXT : spv::ExecutionModeOutputTrianglesEXT);
         state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeOutputVertices, mesh.maxVertices);
         state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeOutputPrimitivesEXT, mesh.maxPrimitives);
     }
@@ -402,7 +402,7 @@ void DefineModule(SpirvEmitterState& state) {
         state.module.AddExecutionMode(state.mainFunc, spv::ExecutionModeDerivativeGroupLinearKHR);
     }
     state.module.AddName(state.mainFunc, "main");
-    if (state.requirements.functionLds) {
+    if (state.requirements.functionLds && !state.pixelFunctionLdsBuffer) {
         state.module.AddName(state.ldsVariable, "lds_dwords");
     }
     if (state.requirements.functionScratch) {
