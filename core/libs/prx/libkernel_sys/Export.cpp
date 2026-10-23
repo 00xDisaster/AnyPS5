@@ -29,8 +29,6 @@
 #include "prx/libkernel/File/include/DescriptorControl.hpp"
 #include "prx/libc/include/CreationMask.hpp"
 #include "prx/libkernel/File/include/FileFlags.hpp"
-#include "prx/libkernel/File/include/File.hpp"
-#include "prx/libkernel/KernelErrors.hpp"
 extern "C" int APS5_VABI getpid_nid_postfix(void);
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -52,11 +50,12 @@ namespace {
 #ifdef _WIN32
 extern "C" _invalid_parameter_handler _set_thread_local_invalid_parameter_handler(_invalid_parameter_handler);
 static void IgnoreInvalidParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {}
-static int GuestFstat(int fd) {
+static int GuestFstat(int fd, bool* withoutVnode = nullptr) {
     const auto previous = _set_thread_local_invalid_parameter_handler(IgnoreInvalidParameter);
     struct _stat64 status{};
     const int result = ::_fstat64(fd, &status);
     _set_thread_local_invalid_parameter_handler(previous);
+    if (result == 0 && withoutVnode != nullptr) *withoutVnode = (status.st_mode & _S_IFMT) == _S_IFIFO;
     return result;
 }
 #endif
@@ -100,6 +99,7 @@ constexpr int PcRecXferAlign = 17;
 constexpr int PcSymlinkMax = 18;
 constexpr int PcMinHoleSize = 21;
 constexpr int PcAsyncIo = 53;
+constexpr std::int64_t PosixAsynchronousIo = 200112;
 constexpr int PcPrioIo = 54;
 constexpr int PcSyncIo = 55;
 constexpr int PcAclExtended = 59;
@@ -373,12 +373,16 @@ std::int64_t APS5_VABI pathconf_nid_postfix(const char* path, int name) {
 
 std::int64_t APS5_VABI _fpathconf_nid_postfix(int fd, int name) {
     if (fd < 0) return Fail(GuestEbadf);
+    bool withoutVnode = false;
 #ifdef _WIN32
-    if (GuestFstat(fd) != 0) return Fail(GuestEbadf);
+    if (GuestFstat(fd, &withoutVnode) != 0) return Fail(GuestEbadf);
 #else
     struct stat status{};
     if (::fstat(fd, &status) != 0) return Fail(GuestEbadf);
+    withoutVnode = S_ISFIFO(status.st_mode) || S_ISSOCK(status.st_mode);
 #endif
+    if (name == PcAsyncIo) return PosixAsynchronousIo;
+    if (withoutVnode) return name == PcPipeBuf ? 512 : Fail(GuestEinval);
     return PathConfigurationValue(name, "fpathconf");
 }
 

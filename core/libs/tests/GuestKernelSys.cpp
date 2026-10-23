@@ -340,10 +340,24 @@ void CheckDescriptorPathconf(F fn, int descriptor) {
     Require(fn(descriptor, 55) == 0);
     for (const int name : {0, 11, 61, 62, 65, -1})
         Require(fn(descriptor, name) == -1 && Error() == 22);
-    for (const int name : {2, 3, 9, 10, 14, 16, 17, 21, 53, 59, 60, 63, 64})
+    Require(fn(descriptor, 53) == 200112);
+    for (const int name : {2, 3, 9, 10, 14, 16, 17, 21, 59, 60, 63, 64})
         Require(DescriptorPathconfThrows(fn, descriptor, name));
     Require(fn(-1, 4) == -1 && Error() == 9);
     Require(fn(descriptor + 1000, 4) == -1 && Error() == 9);
+}
+
+template <typename F>
+void CheckPipePathconf(F fn) {
+    int ends[2]{-1, -1};
+    Require(pipe_nid_postfix(ends) == 0);
+    for (const int end : ends) {
+        Require(fn(end, 6) == 512);
+        Require(fn(end, 53) == 200112);
+        for (const int name : {0, 1, 4, 5, 7, 8, 12, 18, 54, 55, 61, -1})
+            Require(fn(end, name) == -1 && Error() == 22);
+    }
+    Require(close_nid_postfix(ends[0]) == 0 && close_nid_postfix(ends[1]) == 0);
 }
 
 int main() {
@@ -380,6 +394,8 @@ int main() {
     Require(fstat_nid_postfix(descriptor, nullptr) == -1 && Error() == 14);
     CheckDescriptorPathconf(fpathconf_nid_postfix, descriptor);
     CheckDescriptorPathconf(_fpathconf_nid_postfix, descriptor);
+    CheckPipePathconf(fpathconf_nid_postfix);
+    CheckPipePathconf(_fpathconf_nid_postfix);
     Require(close_nid_postfix(descriptor) == 0);
     Require(fstatfs_nid_postfix(-1, viaPublic) == -1 && Error() == 9);
     Require(fstat_nid_postfix(descriptor, &viaFstat) == -1 && Error() == 9);
