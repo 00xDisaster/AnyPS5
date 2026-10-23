@@ -32,6 +32,17 @@ def git(*args):
             ["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, check=True
         ).stdout.decode("utf-8", errors="replace").strip()
         _REPO_ROOTS[cwd] = root
+    args = list(args)
+    if "--" in args:
+        separator = args.index("--")
+        for index in range(separator + 1, len(args)):
+            pathspec = args[index]
+            if pathspec.startswith(("../", "..\\")):
+                absolute = (cwd / pathspec).resolve()
+                try:
+                    args[index] = absolute.relative_to(Path(root)).as_posix()
+                except ValueError:
+                    pass
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false", *args],
         cwd=root,
