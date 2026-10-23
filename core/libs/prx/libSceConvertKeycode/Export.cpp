@@ -7,6 +7,8 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceConvertKeycode/ImeKeyboardType.hpp"
+#include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
+#include <string_view>
 
 extern "C" {
 int APS5_VABI sceUserServiceGetKeyboardType(int32_t userId, int32_t* type);
@@ -2402,13 +2404,20 @@ char16_t ConvertCharacter(std::uint16_t keycode, std::uint32_t state, std::uint3
     }
     return character;
 }
+bool Ps4Client() {
+    try {
+        const auto titleId = GetAppTitleId_nid_postfix();
+        return ImeKeyboardType::IsPs4TitleId(std::string_view(titleId.value, strnlen(titleId.value, sizeof(titleId.value))));
+    } catch (const std::runtime_error&) {
+        return false;
+    }
+}
 }  // namespace
 
 extern "C" {
 
 int APS5_VABI sceConvertKeycodeGetImeKeyboardType(int32_t userId, uint32_t* type) {
-    // The PS4/PS5 client rule: AnyPS5 only runs PS5 processes (sceKernelIsPs4Process is unimplemented and reports 0).
-    constexpr bool ps4Client = false;
+    const bool ps4Client = Ps4Client();
     const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
     std::uint32_t sdkVersion;
     std::memcpy(&sdkVersion, process + 16, sizeof(sdkVersion));

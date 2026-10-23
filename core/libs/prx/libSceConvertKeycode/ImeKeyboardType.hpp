@@ -2,6 +2,7 @@
 #define CORE_LIBS_PRX_LIBSCECONVERTKEYCODE_IMEKEYBOARDTYPE_HPP
 
 #include <cstdint>
+#include <string_view>
 
 // sceConvertKeycodeGetImeKeyboardType: the UserService keyboard type (plus the Japanese and Traditional Chinese
 // input variants) to IME keyboard type mapping and the SDK compatibility rules, as specified by the repository
@@ -44,6 +45,10 @@ constexpr std::uint32_t ApplySdkCompatibility(std::uint32_t imeType, std::uint32
     if (imeType == 38 && sdkVersion < (ps4Client ? 0x10000000u : 0x06000000u)) return 4;
     if (imeType == 39 && (ps4Client || sdkVersion < 0x08000000u)) return 29;
     return imeType;
+}
+
+constexpr bool IsPs4TitleId(std::string_view titleId) {
+    return titleId.substr(0, 4) == "CUSA";
 }
 
 template <typename GetKeyboardType, typename GetJapaneseInputType, typename GetTraditionalChineseInputType>

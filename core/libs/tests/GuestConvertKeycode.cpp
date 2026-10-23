@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 extern "C" {
@@ -18,6 +19,14 @@ int APS5_VABI sceConvertKeycodeGetCharacter(std::uint16_t, std::uint32_t, std::u
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
+
+static void SetLanguage(const char* value) {
+#ifdef _WIN32
+    Require(_putenv_s("ANYPS5_LANGUAGE", value != nullptr ? value : "") == 0);
+#else
+    Require((value != nullptr ? ::setenv("ANYPS5_LANGUAGE", value, 1) : ::unsetenv("ANYPS5_LANGUAGE")) == 0);
+#endif
+}
 
 namespace {
 
@@ -148,7 +157,26 @@ int main() {
     Require(sceConvertKeycodeGetImeKeyboardType(-1, &type) == invalidUserId);
     Require(sceConvertKeycodeGetImeKeyboardType(0, &type) == invalidUserId);
     Require(type == 0xFFFFFFFFu);
+    SetLanguage(nullptr);
     Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == 4);
+    constexpr std::uint32_t imeTypeByLanguage[] = {22, 4, 9, 6, 2, 13, 14, 18, 19, 24, 26, 25, 8, 20, 1, 15, 16, 17, 5, 21, 7, 30, 11, 32, 37, 33, 36, 31, 35, 34};
+    for (int language = 0; language < 30; ++language) {
+        SetLanguage(std::to_string(language).c_str());
+        type = 0xFFFFFFFFu;
+        Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == imeTypeByLanguage[language]);
+    }
+    SetLanguage("30");
+    Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == 4);
+    SetLanguage(nullptr);
+
+    Require(ImeKeyboardType::IsPs4TitleId("CUSA00000"));
+    Require(ImeKeyboardType::IsPs4TitleId("CUSA"));
+    Require(!ImeKeyboardType::IsPs4TitleId("PPSA00000"));
+    Require(!ImeKeyboardType::IsPs4TitleId(""));
+    Require(!ImeKeyboardType::IsPs4TitleId("CUS"));
+    Require(!ImeKeyboardType::IsPs4TitleId("cusa00000"));
+    Require(!ImeKeyboardType::IsPs4TitleId("XCUSA0000"));
+    Require(!ImeKeyboardType::IsPs4TitleId("HOMEBREW1"));
 
     RequireImeKeyboardTypeMapping();
     Require(sceConvertKeycodeGetCharacter(4, 0, 0, nullptr) == invalidAddress);

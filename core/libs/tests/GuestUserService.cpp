@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 extern "C" {
@@ -29,6 +30,14 @@ int APS5_VABI sceUserServiceGetAccessibilityZoomFollowFocus(int user_id, std::in
 namespace {
 
 void Require(bool value) { if (!value) std::abort(); }
+
+void SetLanguage(const char* value) {
+#ifdef _WIN32
+    Require(_putenv_s("ANYPS5_LANGUAGE", value != nullptr ? value : "") == 0);
+#else
+    Require((value != nullptr ? ::setenv("ANYPS5_LANGUAGE", value, 1) : ::unsetenv("ANYPS5_LANGUAGE")) == 0);
+#endif
+}
 
 }
 
@@ -62,6 +71,7 @@ int main() {
     Require(sceUserServiceGetUserColor(123, &color) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
     Require(sceUserServiceGetUserColor(USER_SERVICE_INITIAL_USER_ID, &color) == USER_SERVICE_OK);
 
+    SetLanguage(nullptr);
     using KeyboardSetting = decltype(&sceUserServiceGetKeyboardType);
     const std::pair<KeyboardSetting, std::int32_t> keyboardSettings[] = {
         {sceUserServiceGetKeyboardType, 20}, {sceUserServiceGetJapaneseInputType, 0}, {sceUserServiceGetTraditionalChineseInputType, 0}};
@@ -72,6 +82,21 @@ int main() {
         Require(setting(USER_SERVICE_USER_ID_INVALID, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == 0x5A5A);
         Require(setting(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == expected);
     }
+    constexpr std::int32_t keyboardTypeByLanguage[] = {37, 20, 26, 21, 17, 28, 29, 33, 34, 38, 39, 40, 23, 35, 16, 30, 31, 32, 19, 36, 22, 41, 25, 44, 48, 43, 47, 42, 46, 45};
+    for (int language = 0; language < 30; ++language) {
+        SetLanguage(std::to_string(language).c_str());
+        std::int32_t value = 0x5A5A;
+        Require(sceUserServiceGetKeyboardType(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == keyboardTypeByLanguage[language]);
+        Require(sceUserServiceGetKeyboardType(123, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == keyboardTypeByLanguage[language]);
+        for (const auto variant : {sceUserServiceGetJapaneseInputType, sceUserServiceGetTraditionalChineseInputType}) {
+            value = 0x5A5A;
+            Require(variant(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == 0);
+        }
+    }
+    SetLanguage("30");
+    std::int32_t fallback = 0x5A5A;
+    Require(sceUserServiceGetKeyboardType(USER_SERVICE_INITIAL_USER_ID, &fallback) == USER_SERVICE_OK && fallback == 20);
+    SetLanguage(nullptr);
     Require(color == 0);
 
     std::uint64_t account_id = 0xdeadbeefu;
