@@ -13,6 +13,7 @@
 #endif
 #include <windows.h>
 #else
+#include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
@@ -47,7 +48,7 @@ unsigned long CurrentThreadId() {
 #ifdef _WIN32
     return GetCurrentThreadId();
 #else
-    return static_cast<unsigned long>(::gettid());
+    return static_cast<unsigned long>(::syscall(SYS_gettid));
 #endif
 }
 
@@ -70,7 +71,7 @@ void APS5_VABI sceLibcInternalBacktraceForGame_nid_postfix(const char* heapName)
         static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(__builtin_return_address(0))));
 }
 
-void APS5_VABI sceLibcInternalHeapErrorReportForGame_nid_postfix(void* heap, void*, std::uint32_t error) {
+void APS5_VABI sceLibcInternalHeapErrorReportForGame_nid_postfix(void* heap, void* block, std::uint32_t error) {
     if (heap == nullptr) throw std::invalid_argument("sceLibcInternalHeapErrorReportForGame: null heap");
     const auto* state = static_cast<const char*>(heap);
     std::uint32_t number = 0;
@@ -82,6 +83,8 @@ void APS5_VABI sceLibcInternalHeapErrorReportForGame_nid_postfix(void* heap, voi
     if (error == SegmentOutOfRange) std::fprintf(output, "[SceLibc] -- Error reason --\n[SceLibc] segment out of range.\n");
     std::fprintf(output, "[SceLibc] pid:<0x%lx> tid:<0x%lx>\n", CurrentProcessId(), CurrentThreadId());
     std::fflush(output);
+    std::fprintf(stderr, "[libc] heap error 0x%x: heap %p, block %p, reported from guest 0x%llx\n", error, heap, block,
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(__builtin_return_address(0))));
 }
 
 }

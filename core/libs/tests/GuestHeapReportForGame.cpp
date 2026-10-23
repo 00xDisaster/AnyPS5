@@ -4,6 +4,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -73,6 +78,14 @@ int main() {
     Require(output.find("reason", output.find(second)) == std::string::npos, "reason printed for error 2");
     Require(report.find("[SceLibcHeap] backtrace requested from guest 0x") != std::string::npos, "heap name not reported");
     Require(report.find("[] backtrace requested from guest 0x") != std::string::npos, "null heap name not reported");
-    Require(report.find("heap error") == std::string::npos, "heap error written to stderr");
+    Require(report.find("[libc] heap error 0x1: heap ") != std::string::npos, "host diagnostic missing");
+#ifdef _WIN32
+    const unsigned long pid = static_cast<unsigned long>(_getpid());
+#else
+    const unsigned long pid = static_cast<unsigned long>(getpid());
+#endif
+    char pidText[32];
+    std::snprintf(pidText, sizeof(pidText), "pid:<0x%lx> tid:<0x", pid);
+    Require(output.find(pidText) != std::string::npos, "pid differs");
     Require(std::string(heapName) == "SceLibcHeap", "heap name modified");
 }
