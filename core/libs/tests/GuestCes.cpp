@@ -297,7 +297,25 @@ static std::uint32_t EncoderSweep(void* context) {
     return hash;
 }
 
+constexpr std::uint32_t MeasuredSjisDecoder = 0xCA99178C;
+
+static std::uint32_t SjisDecoderSweep(void* sjis) {
+    std::uint32_t hash = 2166136261u;
+    for (std::uint32_t lead = 0; lead < 256; ++lead) {
+        for (std::uint32_t trail = 0; trail < 256; ++trail) {
+            const std::uint8_t source[2] = {static_cast<std::uint8_t>(lead), static_cast<std::uint8_t>(trail)};
+            std::uint16_t output[3] = {0xBBBB, 0xBBBB, 0xBBBB};
+            std::uint32_t used = 0xAAAAAAAA;
+            std::uint32_t produced = 0xCCCCCCCC;
+            const int result = sceCesMbcsStrToUcs2Str(sjis, source, 2, &used, output, 3, &produced);
+            hash = Fnv(Fnv(Fnv(Fnv(Fnv(hash, static_cast<std::uint32_t>(result)), used), produced), static_cast<std::uint32_t>(output[0]) | static_cast<std::uint32_t>(output[1]) << 16), output[2]);
+        }
+    }
+    return hash;
+}
+
 static void RequireMeasuredEncoders(void* eucJp, void* sjis) {
+    Require(SjisDecoderSweep(sjis) == MeasuredSjisDecoder);
     Require(EncoderSweep(eucJp) == MeasuredEucJpEncoder);
     Require(EncoderSweep(sjis) == MeasuredSjisEncoder);
     const std::uint16_t aliases[] = {0x00A2, 0x00A3, 0x00AC, 0x2014, 0x2016, 0x203E, 0x2212, 0x301C, 0xFEFF, 0x0080, 0};
