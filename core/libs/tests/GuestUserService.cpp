@@ -96,6 +96,21 @@ int main() {
     SetLanguage("30");
     std::int32_t fallback = 0x5A5A;
     Require(sceUserServiceGetKeyboardType(USER_SERVICE_INITIAL_USER_ID, &fallback) == USER_SERVICE_OK && fallback == 20);
+    for (const char* malformed : {"arabic", "-1", "31", "1x", ""}) {
+        SetLanguage(malformed);
+        std::int32_t untouched = 0x5A5A;
+        bool rejected = false;
+        try {
+            sceUserServiceGetKeyboardType(USER_SERVICE_INITIAL_USER_ID, &untouched);
+        } catch (const std::runtime_error& error) {
+            rejected = std::string(error.what()).find("ANYPS5_LANGUAGE") != std::string::npos;
+        }
+        const bool configured = malformed[0] != '\0';
+        Require(rejected == configured && untouched == (configured ? 0x5A5A : 20));
+        untouched = 0x5A5A;
+        Require(sceUserServiceGetKeyboardType(123, &untouched) == USER_SERVICE_ERROR_UNKNOWN_USER && untouched == 0x5A5A);
+        Require(sceUserServiceGetJapaneseInputType(USER_SERVICE_INITIAL_USER_ID, &untouched) == USER_SERVICE_OK && untouched == 0);
+    }
     SetLanguage(nullptr);
     Require(color == 0);
 

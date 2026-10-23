@@ -2410,6 +2410,8 @@ bool Ps4Client() {
         return ImeKeyboardType::IsPs4TitleId(std::string_view(titleId.value, strnlen(titleId.value, sizeof(titleId.value))));
     } catch (const std::runtime_error&) {
         return false;
+    } catch (const std::length_error&) {
+        return false;
     }
 }
 }  // namespace
