@@ -630,6 +630,27 @@ static void CheckLog1pConsoleBits() {
     }
 }
 
+static void CheckTanhConsoleBits() {
+    constexpr std::uint64_t cases[][2] = {
+        {0x0000000000000000ull, 0x0000000000000000ull}, {0x8000000000000000ull, 0x8000000000000000ull},
+        {0x3e2fffffffffffffull, 0x3e2fffffffffffffull}, {0x3e30000000000000ull, 0x3e30000000000000ull},
+        {0xbe30000000000000ull, 0xbe30000000000000ull}, {0x3fefffffffffffffull, 0x3fe85efab514f394ull},
+        {0x3ff0000000000000ull, 0x3fe85efab514f394ull}, {0xbff0000000000000ull, 0xbfe85efab514f394ull},
+        {0x3fe0000000000000ull, 0x3fdd9353d7568af3ull}, {0x4035ffffffffffffull, 0x3ff0000000000000ull},
+        {0x4036000000000000ull, 0x3ff0000000000000ull}, {0xc036000000000000ull, 0xbff0000000000000ull},
+        {0x4049000000000000ull, 0x3ff0000000000000ull}, {0x7fefffffffffffffull, 0x3ff0000000000000ull},
+        {0x7ff0000000000000ull, 0x3ff0000000000000ull}, {0xfff0000000000000ull, 0xbff0000000000000ull},
+        {0x7ff8000000000001ull, 0x7ff8000000000001ull}, {0xfff8000000000002ull, 0xfff8000000000002ull},
+        {0x3f927ed0db8370b1ull, 0x3f927e4d1092a580ull}, {0x3f95d74e4cee78bfull, 0x3f95d67547d523a0ull},
+        {0x3f18f1b062cb523cull, 0x3f18f1b06187faaeull}, {0x3f937129f25ae835ull, 0x3f937090dd8c9cb3ull},
+        {0x3facb0d89f8aa91cull, 0x3faca92afe31a32bull}, {0x3f07f462f020acdeull, 0x3f07f462efd91530ull},
+    };
+    for (const auto& [input, expected] : cases) {
+        errno = 1234;
+        Require(std::bit_cast<std::uint64_t>(tanh_nid_postfix(std::bit_cast<double>(input))) == expected && errno == 1234);
+    }
+}
+
 static void CheckAsinl() {
     const struct { std::uint64_t inputMantissa; std::uint16_t inputSignExponent; std::uint64_t outputMantissa; std::uint16_t outputSignExponent; } cases[] = {
         {0, 0x0000, 0, 0x0000}, {0, 0x8000, 0, 0x8000},
@@ -1722,6 +1743,7 @@ int main() {
     CheckExpm1ConsoleBits();
     CheckLog1pConsoleBits();
     CheckNextafterConsoleBits();
+    CheckTanhConsoleBits();
     CheckAsinl();
     Require(scalbn_nid_postfix(0.75, -2) == 0.1875);
     Require(scalbnf_nid_postfix(0.75f, 4) == 12.f);
