@@ -132,7 +132,10 @@ extern "C" int RenameGuestPath_nid_no_patch(const char* from, const char* to) {
         }
 #ifdef _WIN32
         constexpr int GuestEloop = 62;
-        if ((error == 2 || error == 20) && (BelowSymbolicLinkLoop(source.parent_path()) || BelowSymbolicLinkLoop(destination.parent_path()))) error = GuestEloop;
+        if (error == 2 || error == 20) {
+            if (BelowSymbolicLinkLoop(source.parent_path())) error = GuestEloop;
+            else if (SourceLookupError_nid_no_patch(source) == 0 && BelowSymbolicLinkLoop(destination.parent_path())) error = GuestEloop;
+        }
 #endif
         if (error) { errno = error; return -1; }
         RecordWrittenPath_nid_no_patch(source);
