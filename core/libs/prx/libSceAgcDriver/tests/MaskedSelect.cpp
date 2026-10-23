@@ -1074,6 +1074,54 @@ int main() {
         return !StencilReplaySafe(b.program);
     });
 
+    const auto wholeQuadEval = [](Builder& b, IrValue& live) -> IrValue& {
+        auto& ballot = b.emit(IrOpcode::Ballot, IrType::U32x4, {&live});
+        auto& allLow = b.emit(IrOpcode::Ballot, IrType::U32x4, {&b.truth()});
+        auto& allHigh = b.emit(IrOpcode::Ballot, IrType::U32x4, {&b.truth()});
+        auto& low = b.emit(IrOpcode::BitwiseAnd32, IrType::U32, {&b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&ballot, &b.constant(0u)}), &b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&allLow, &b.constant(0u)})});
+        auto& high = b.emit(IrOpcode::BitwiseAnd32, IrType::U32, {&b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&ballot, &b.constant(1u)}), &b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&allHigh, &b.constant(1u)})});
+        return b.emit(IrOpcode::WqmU64, IrType::U64, {&b.emit(IrOpcode::CompositeConstructU64, IrType::U64, {&low, &high})});
+    };
+
+    const auto splitQuads = [&](Builder& b, IrValue& live) -> IrValue& {
+        auto& wqmLow = wholeQuadEval(b, live);
+        auto& wqmHigh = wholeQuadEval(b, live);
+        return b.threadBit(b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmLow, &b.constant(0u)}), b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmHigh, &b.constant(1u)}));
+    };
+
+    passed &= run("stencil replay pairs structurally equivalent whole-quad evaluations for split low and high words", [&] {
+        Builder b;
+        b.program.Resources().stage = IrShaderStage::Pixel;
+        exportUnder(b, splitQuads(b, b.logicalAnd(pixelPredicate(b), helperPredicate(b, false))), true, true);
+        return StencilReplaySafe(b.program);
+    });
+
+    passed &= run("stencil replay refuses to pair whole-quad evaluations separated by an execution-mask change", [&] {
+        Builder b;
+        b.program.Resources().stage = IrShaderStage::Pixel;
+        auto& live = b.logicalAnd(pixelPredicate(b), helperPredicate(b, false));
+        auto& wqmLow = wholeQuadEval(b, live);
+        b.emit(IrOpcode::SetExecLo, IrType::Void, {&b.constant(0xffffffffu)});
+        auto& wqmHigh = wholeQuadEval(b, live);
+        auto& guard = b.threadBit(b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmLow, &b.constant(0u)}), b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmHigh, &b.constant(1u)}));
+        exportUnder(b, guard, true, true);
+        return !StencilReplaySafe(b.program);
+    });
+
+    passed &= run("stencil replay refuses to pair whole-quad evaluations whose predicates differ only in a constant", [&] {
+        Builder b;
+        b.program.Resources().stage = IrShaderStage::Pixel;
+        auto& helperLow = b.emit(IrOpcode::GetBuiltin, IrType::U32, {&b.constant(static_cast<std::uint32_t>(StageInputKind::HelperInvocation)), &b.constant(0u)});
+        auto& lowLive = b.logicalAnd(pixelPredicate(b), b.emit(IrOpcode::IEqual32, IrType::Bool, {&helperLow, &b.constant(0u)}));
+        auto& wqmLow = wholeQuadEval(b, lowLive);
+        auto& helperHigh = b.emit(IrOpcode::GetBuiltin, IrType::U32, {&b.constant(static_cast<std::uint32_t>(StageInputKind::HelperInvocation)), &b.constant(0u)});
+        auto& highLive = b.logicalAnd(pixelPredicate(b), b.emit(IrOpcode::IEqual32, IrType::Bool, {&helperHigh, &b.constant(1u)}));
+        auto& wqmHigh = wholeQuadEval(b, highLive);
+        auto& guard = b.threadBit(b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmLow, &b.constant(0u)}), b.emit(IrOpcode::CompositeExtractU64, IrType::U32, {&wqmHigh, &b.constant(1u)}));
+        exportUnder(b, guard, true, true);
+        return !StencilReplaySafe(b.program);
+    });
+
     const auto execCopy = [](Builder& b, IrValue& low, IrValue& high) -> IrValue& {
         auto& active = b.emit(IrOpcode::Ballot, IrType::U32x4, {&b.truth()});
         auto& lanes = b.emit(IrOpcode::CompositeConstructU64, IrType::U64, {&b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&active, &b.constant(0u)}), &b.emit(IrOpcode::CompositeExtractU32x4, IrType::U32, {&active, &b.constant(1u)})});
