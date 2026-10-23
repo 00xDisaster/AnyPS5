@@ -3,6 +3,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/PreciseWait.hpp"
 #include <algorithm>
+#include <atomic>
 #include <thread>
 #include <chrono>
 #include <cstdio>
@@ -1080,32 +1081,44 @@ void Execute(std::span<const std::uint32_t> packet, QueueState& queue) {
         }
         case 0x39: {
             const auto semaphore = address(packet[1], packet[2]);
-            std::uint64_t value = 0;
-            const auto read = [&] {
-                const GuestMemory::ReadSiteScope site(GuestMemory::ReadSite::Wait);
-                GuestMemory::Read(semaphore, std::as_writable_bytes(std::span(&value, 1)), 8);
+            auto* word = reinterpret_cast<std::uint64_t*>(semaphore);
+            std::atomic_ref<std::uint64_t> shared(*word);
+            const auto prepare = [&] {
+                GuestMemory::GuardRead(semaphore, sizeof(*word));
+                GuestMemory::FlushGpuWrites(semaphore, sizeof(*word));
+                GuestMemory::CheckRange(word, sizeof(*word), std::atomic_ref<std::uint64_t>::required_alignment, true);
             };
             if ((packet[3] >> 29u) == 6u) {
-                if ((packet[3] & 0x100000u) != 0) {
-                    value = 1;
-                } else {
-                    read();
-                    ++value;
-                }
-            } else {
-                const auto start = std::chrono::steady_clock::now();
-                bool warned = false;
-                for (read(); value == 0; read()) {
-                    PreciseSleepUs(50);
-                    if (!warned && std::chrono::steady_clock::now() - start > std::chrono::seconds(5)) {
-                        warned = true;
-                        std::fprintf(stderr, "[gpu] MEM_SEMAPHORE wait at 0x%llx still waiting after 5s\n", static_cast<unsigned long long>(semaphore));
-                    }
-                }
-                --value;
+                prepare();
+                const bool set = (packet[3] & 0x100000u) != 0;
+                GuestMemory::StoreOwnBytes(semaphore, sizeof(*word), [&] {
+                    if (set) shared.store(1, std::memory_order_release);
+                    else shared.fetch_add(1, std::memory_order_acq_rel);
+                });
+                return;
             }
-            GuestMemory::Write(semaphore, std::as_bytes(std::span(&value, 1)), 8);
-            return;
+            const auto start = std::chrono::steady_clock::now();
+            bool warned = false;
+            for (;;) {
+                {
+                    const GuestMemory::ReadSiteScope site(GuestMemory::ReadSite::Wait);
+                    prepare();
+                }
+                auto value = shared.load(std::memory_order_acquire);
+                if (value != 0) {
+                    bool taken = false;
+                    GuestMemory::StoreOwnBytes(semaphore, sizeof(*word), [&] {
+                        taken = shared.compare_exchange_strong(value, value - 1, std::memory_order_acq_rel);
+                    });
+                    if (taken) return;
+                    continue;
+                }
+                PreciseSleepUs(50);
+                if (!warned && std::chrono::steady_clock::now() - start > std::chrono::seconds(5)) {
+                    warned = true;
+                    std::fprintf(stderr, "[gpu] MEM_SEMAPHORE wait at 0x%llx still waiting after 5s\n", static_cast<unsigned long long>(semaphore));
+                }
+            }
         }
         case 0x49: {
             // Earlier work has drained by the time the driver reaches this packet, so the end-of-pipe
