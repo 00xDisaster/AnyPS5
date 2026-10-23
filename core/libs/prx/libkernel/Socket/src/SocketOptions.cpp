@@ -380,6 +380,9 @@ int SetIpLevelOption(std::uintptr_t native, SocketOptionState& state, bool ipv4,
             std::int32_t index;
             std::memcpy(&index, static_cast<const unsigned char*>(value) + 8, sizeof(index));
             if (index != 0) throw std::runtime_error("IP_MULTICAST_IF: an interface index is not supported");
+            const auto* addresses = static_cast<const unsigned char*>(value);
+            if (std::any_of(addresses, addresses + 8, [](unsigned char byte) { return byte != 0; }))
+                throw std::runtime_error("IP_MULTICAST_IF: an ip_mreqn with a non-zero address is not supported");
         } else {
             std::memcpy(&address, value, sizeof(address));
         }
