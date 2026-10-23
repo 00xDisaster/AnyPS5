@@ -108,6 +108,70 @@ static void CheckQueryBuffer(const Ngs2SystemOption* option, int expected, const
     Require((query.host_buffer_size != 0) == (expected == SCE_NGS2_OK));
 }
 
+static void CheckCreateArguments() {
+    constexpr int outputError = static_cast<int>(0x804A8010u);
+    constexpr int bufferError = static_cast<int>(0x804A8020u);
+    constexpr int allocatorError = static_cast<int>(0x804A8023u);
+    constexpr int rateError = static_cast<int>(0x804A8051u);
+    constexpr uintptr_t sentinel = 0x5a5a;
+    const auto valid = Option();
+    const auto badRate = Option(512, 256, 7000);
+    Ngs2ContextBufferInfo query{};
+    Status(sceNgs2SystemQueryBufferSize(&valid, &query), SCE_NGS2_OK, "system buffer query failed");
+    std::vector<std::uint64_t> storage(query.host_buffer_size / sizeof(std::uint64_t) + 1);
+    Ngs2ContextBufferInfo buffer{};
+    buffer.host_buffer = storage.data();
+    buffer.host_buffer_size = query.host_buffer_size;
+    Ngs2ContextBufferInfo noHost = buffer;
+    noHost.host_buffer = nullptr;
+    const Ngs2BufferAllocator allocator{CountedAllocate, CountedRelease, 0};
+    const Ngs2BufferAllocator noAlloc{nullptr, CountedRelease, 0};
+
+    struct CreateCase {
+        const Ngs2SystemOption* option;
+        const Ngs2ContextBufferInfo* buffer;
+        bool handle;
+        int expected;
+        const char* label;
+    };
+    for (const auto& c : {CreateCase{&valid, nullptr, true, bufferError, "a null buffer info"},
+                          CreateCase{&valid, &noHost, true, bufferError, "a null host buffer"},
+                          CreateCase{&badRate, nullptr, false, bufferError, "a null buffer info, handle and bad option"},
+                          CreateCase{&badRate, &noHost, false, bufferError, "a null host buffer, handle and bad option"},
+                          CreateCase{&badRate, &buffer, false, outputError, "a null handle and bad option"},
+                          CreateCase{&badRate, &buffer, true, rateError, "a bad option"}}) {
+        uintptr_t created = sentinel;
+        Returned(sceNgs2SystemCreate(c.option, c.buffer, c.handle ? &created : nullptr), c.expected, "sceNgs2SystemCreate", c.label);
+        Require(created == sentinel);
+    }
+    uintptr_t created = sentinel;
+    Returned(sceNgs2SystemCreate(nullptr, &buffer, &created), SCE_NGS2_OK, "sceNgs2SystemCreate", "a null option");
+    Status(sceNgs2SystemDestroy(created, nullptr), SCE_NGS2_OK, "system destroy failed");
+
+    struct AllocatorCase {
+        const Ngs2SystemOption* option;
+        const Ngs2BufferAllocator* allocator;
+        bool handle;
+        int expected;
+        const char* label;
+    };
+    for (const auto& c : {AllocatorCase{&valid, nullptr, true, allocatorError, "a null allocator"},
+                          AllocatorCase{&valid, &noAlloc, true, allocatorError, "a null alloc handler"},
+                          AllocatorCase{&badRate, nullptr, false, allocatorError, "a null allocator, handle and bad option"},
+                          AllocatorCase{&badRate, &noAlloc, false, allocatorError, "a null alloc handler, handle and bad option"},
+                          AllocatorCase{&badRate, &allocator, false, outputError, "a null handle and bad option"},
+                          AllocatorCase{&badRate, &allocator, true, rateError, "a bad option"}}) {
+        uintptr_t allocated = sentinel;
+        Returned(sceNgs2SystemCreateWithAllocator(c.option, c.allocator, c.handle ? &allocated : nullptr), c.expected, "sceNgs2SystemCreateWithAllocator", c.label);
+        Require(allocated == sentinel && allocations == 0);
+    }
+    uintptr_t allocated = sentinel;
+    Returned(sceNgs2SystemCreateWithAllocator(nullptr, &allocator, &allocated), SCE_NGS2_OK, "sceNgs2SystemCreateWithAllocator", "a null option");
+    Require(allocations == 1);
+    Status(sceNgs2SystemDestroy(allocated, nullptr), SCE_NGS2_OK, "system destroy failed");
+    Require(allocations == 0);
+}
+
 static void CheckSystemOption() {
     constexpr int outputError = static_cast<int>(0x804A8010u);
     constexpr int sizeError = static_cast<int>(0x804A8013u);
@@ -247,6 +311,7 @@ int main() {
         Status(sceNgs2SystemDestroy(system, nullptr), SCE_NGS2_OK, "valid system destroy failed");
         Status(sceNgs2SystemGetUserData(system, &value), systemError, "retired system returned the wrong error");
         Require(value == sentinel);
+        CheckCreateArguments();
         CheckResetOption();
         CheckSystemOption();
         CheckSetGrainSamples();

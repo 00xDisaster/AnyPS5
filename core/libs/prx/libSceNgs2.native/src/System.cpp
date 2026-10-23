@@ -198,7 +198,7 @@ int Ngs2ReleaseBuffer(const Ngs2BufferAllocator& allocator, Ngs2ContextBufferInf
 }
 
 static Ngs2ContextBufferInfo Allocate(const Ngs2BufferAllocator* allocator, std::size_t size) {
-    if (allocator == nullptr || allocator->alloc_handler == nullptr || allocator->free_handler == nullptr) APS5_INVALID_ARG_EX;
+    if (allocator->free_handler == nullptr) APS5_INVALID_ARG_EX;
     Ngs2ContextBufferInfo bufferInfo{};
     bufferInfo.host_buffer_size = size;
     bufferInfo.user_data = allocator->user_data;
@@ -274,16 +274,17 @@ int APS5_VABI sceNgs2SystemQueryBufferSize(const Ngs2SystemOption* option, Ngs2C
 }
 
 int APS5_VABI sceNgs2SystemCreate(const Ngs2SystemOption* option, const Ngs2ContextBufferInfo* buffer_info, uintptr_t* handle) {
+    if (buffer_info == nullptr || buffer_info->host_buffer == nullptr) return SCE_NGS2_ERROR_INVALID_BUFFER_INFO;
     if (handle == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     Ngs2SystemOption checked{};
     const int result = CheckSystemOption(option, checked);
     if (result != SCE_NGS2_OK) return result;
-    if (buffer_info == nullptr) APS5_INVALID_ARG_EX;
     const Ngs2Lock lock;
     return CreateSystem(checked, *buffer_info, {}, handle);
 }
 
 int APS5_VABI sceNgs2SystemCreateWithAllocator(const Ngs2SystemOption* option, const Ngs2BufferAllocator* allocator, uintptr_t* handle) {
+    if (allocator == nullptr || allocator->alloc_handler == nullptr) return SCE_NGS2_ERROR_INVALID_BUFFER_ALLOCATOR;
     if (handle == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     Ngs2SystemOption checked{};
     const int result = CheckSystemOption(option, checked);
