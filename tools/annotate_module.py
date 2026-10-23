@@ -53,6 +53,8 @@ class Module:
         self.strtab = self.address(self.require_tag(DT_STRTAB, "DT_STRTAB"))
         self.symtab = self.address(self.require_tag(DT_SYMTAB, "DT_SYMTAB"))
         self.strsz = self.require_tag(DT_STRSZ, "DT_STRSZ")
+        if self.strtab + self.strsz > len(self.data):
+            raise ModuleError("the string table of DT_STRSZ %#x extends past the end of the file" % self.strsz)
         self.symbol_count = self.count_symbols()
         self.check_relocation_tags()
 
@@ -126,9 +128,9 @@ class Module:
         if name >= self.strsz:
             raise ModuleError("symbol %d has a name offset %#x outside DT_STRSZ %#x" % (index, name, self.strsz))
         start = self.strtab + name
-        end = self.data.find(b"\0", start)
+        end = self.data.find(b"\0", start, self.strtab + self.strsz)
         if end < 0:
-            raise ModuleError("symbol %d has an unterminated name" % index)
+            raise ModuleError("symbol %d has a name unterminated within DT_STRSZ %#x" % (index, self.strsz))
         return self.data[start:end].decode("utf-8", errors="replace"), shndx, value, info & 0xF
 
     def check_relocation_tags(self):
@@ -152,8 +154,10 @@ class Module:
     def imports(self):
         slots = {}
         for table, size in self.relocation_tables():
+            if size % RELA_SIZE:
+                raise ModuleError("relocation table at %#x has %d bytes, not a multiple of %d" % (table, size, RELA_SIZE))
             start = self.address(table)
-            for position in range(start, start + size - size % RELA_SIZE, RELA_SIZE):
+            for position in range(start, start + size, RELA_SIZE):
                 offset, info, _ = self.unpack("<QQq", position)
                 if info >> 32:
                     slots[offset] = self.symbol(info >> 32)[0]

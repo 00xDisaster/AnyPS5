@@ -237,7 +237,16 @@ class AnnotateModuleTests(unittest.TestCase):
         self.assert_fails(build_module(tags=DEFAULT_TAGS + (9,), values={9: 16}), "DT_RELAENT")
 
     def test_name_offset_past_strsz_fails(self):
-        self.assert_fails(build_module(values={10: 4}), "outside DT_STRSZ")
+        self.assert_fails(build_module(values={10: len(symbol_name(IMPORT_NAME)) + 2}), "symbol 2 has a name offset")
+
+    def test_strsz_past_the_end_of_the_file_fails(self):
+        self.assert_fails(build_module(values={10: 0x100000}), "string table of DT_STRSZ 0x100000 extends past the end of the file")
+
+    def test_name_unterminated_within_strsz_fails(self):
+        self.assert_fails(build_module(values={10: 2}), "unterminated within DT_STRSZ")
+
+    def test_relocation_size_not_a_multiple_of_24_fails(self):
+        self.assert_fails(build_module(values={2: 25}), "not a multiple of 24")
 
     def test_no_executable_segment_fails(self):
         self.assert_fails(build_module(code_flags=6), "no executable PT_LOAD segment")
