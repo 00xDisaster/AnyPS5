@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "core/relinker/relinker/tests"))
 from guest_import_fixtures import executable
 
 CASES = ("memory", "owned_state", "concurrent_wait", "validation", "dispatch", "ordering", "nested", "limits", "node_pool", "priority", "shutdown", "worker_policy", "worker_wake", "worker_wait", "worker_count", "worker_spin")
-PARITY_CASES = tuple(case for case in CASES if case != "node_pool")
+PARITY_CASES = tuple(case for case in CASES if case not in ("node_pool", "worker_wait"))
 
 
 def stage_libraries(directory, build, toolchain, dependencies):
@@ -122,7 +122,7 @@ def main():
     parser.add_argument("--output", type=Path, help="New directory for staged modules, per-case logs and results.json; defaults to a temporary directory")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--cases", nargs="+", choices=CASES)
-    selection.add_argument("--suite", choices=("all", "parity"), help="all runs every case (default); parity excludes the known native node_pool Wait stall")
+    selection.add_argument("--suite", choices=("all", "parity"), help="all runs every case (default); parity excludes original-module node_pool and worker_wait stalls with host kernel services")
     parser.add_argument("--timeout", type=float, default=20)
     args = parser.parse_args()
     if args.cases is None:
