@@ -13,6 +13,7 @@
 #include "prx/libc/include/CpuTopology.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
+#include "prx/libc/include/HostThreadLocal.hpp"
 #include "prx/libc/include/general/AtomicSharedPtr.hpp"
 #ifdef _WIN32
 #include <windows.h>
@@ -1256,9 +1257,45 @@ bool stillRefused(const HostImports& state, const ImportRefusal* refusal, std::u
     return refusal != nullptr && budget != 0 && budget <= refusal->budget && state.liveBytes >= refusal->liveBytes;
 }
 
-ImportRun importRun(const GuestAllocations::Lease& lease, std::uint64_t address, std::uint64_t largest = std::numeric_limits<std::uint64_t>::max(), std::uint64_t budget = 0) {
+struct RunBounds {
+    std::size_t first = 0;
+    std::size_t last = 0;
+    bool found = false;
+};
+
+std::pair<std::size_t, std::size_t> walkRun(const GuestAllocations::Lease& lease, std::size_t index, std::uint64_t low, std::uint64_t high) {
+    auto first = index;
+    while (first > 0 && lease[first - 1]->address >= low && continuesRun(*lease[first - 1], *lease[first])) --first;
+    auto last = index;
+    while (last + 1 < lease.size() && lease[last + 1]->address + lease[last + 1]->bytes <= high && continuesRun(*lease[last], *lease[last + 1])) ++last;
+    return {first, last};
+}
+
+std::pair<std::size_t, std::size_t> continuedRun(const GuestAllocations::Lease& lease, std::size_t index, std::uint64_t window, std::uint64_t low, std::uint64_t high) {
+    static const bool memo = std::getenv("APS5_NO_RUN_MEMO") == nullptr;
+    if (!memo) return walkRun(lease, index, low, high);
+    struct Memo {
+        std::weak_ptr<const GuestAllocations::Lease::Ranges> snapshot;
+        std::size_t index = 0;
+        std::uint64_t window = 0;
+        std::uint64_t low = 0;
+        std::pair<std::size_t, std::size_t> run;
+    };
+    struct MemoStorage {};
+    auto& memos = HostThreadLocal<std::array<Memo, 1024>, MemoStorage>();
+    const auto& snapshot = lease.Snapshot();
+    const auto block = window != 0 ? low / window : 0;
+    const auto slot = (reinterpret_cast<std::uintptr_t>(snapshot.get()) / 16u ^ index * 0x9e3779b1u ^ block * 0x85ebca6bu) % memos.size();
+    auto& entry = memos[slot];
+    if (!entry.snapshot.owner_before(snapshot) && !snapshot.owner_before(entry.snapshot) && entry.index == index && entry.window == window && entry.low == low) return entry.run;
+    entry = Memo{snapshot, index, window, low, walkRun(lease, index, low, high)};
+    return entry.run;
+}
+
+RunBounds importRunBounds(const GuestAllocations::Lease& lease, std::uint64_t address, std::uint64_t largest = std::numeric_limits<std::uint64_t>::max(), std::uint64_t budget = 0) {
     const auto index = leasedIndexContaining(lease, address);
     if (index == lease.size()) return {};
+    const RunBounds single{index, index, true};
     const auto& containing = *lease[index];
     const auto& state = Imports();
     const auto window = importWindow.load(std::memory_order_relaxed);
@@ -1267,14 +1304,11 @@ ImportRun importRun(const GuestAllocations::Lease& lease, std::uint64_t address,
     if (window != 0) {
         low = address / window * window;
         high = low + window;
-        if (containing.address < low || containing.address + containing.bytes > high) return leasedRun(lease, index, index);
+        if (containing.address < low || containing.address + containing.bytes > high) return single;
     }
-    auto first = index;
-    while (first > 0 && lease[first - 1]->address >= low && continuesRun(*lease[first - 1], *lease[first])) --first;
-    auto last = index;
-    while (last + 1 < lease.size() && lease[last + 1]->address + lease[last + 1]->bytes <= high && continuesRun(*lease[last], *lease[last + 1])) ++last;
+    const auto [first, last] = continuedRun(lease, index, window, low, high);
     const auto skipped = [&](std::size_t from, std::size_t to) { return rememberedRun(state.failedBlocks, lease, from, to) != nullptr || stillRefused(state, rememberedRun(state.refusals, lease, from, to), budget); };
-    if (window == 0) return first == last || lease[last]->address + lease[last]->bytes - lease[first]->address > largest || skipped(first, last) ? leasedRun(lease, index, index) : leasedRun(lease, first, last);
+    if (window == 0) return first == last || lease[last]->address + lease[last]->bytes - lease[first]->address > largest || skipped(first, last) ? single : RunBounds{first, last, true};
     const auto bounding = [&](std::size_t from, std::size_t to, std::uint64_t value, bool start) {
         const auto found = std::lower_bound(lease.begin() + static_cast<std::ptrdiff_t>(from), lease.begin() + static_cast<std::ptrdiff_t>(to) + 1, value, [start](const auto& range, std::uint64_t wanted) { return (start ? range->address : range->address + range->bytes) < wanted; });
         const auto position = static_cast<std::size_t>(found - lease.begin());
@@ -1291,9 +1325,23 @@ ImportRun importRun(const GuestAllocations::Lease& lease, std::uint64_t address,
         if (blockFirst == lease.size() || blockLast == lease.size()) continue;
         if (blockFirst == blockLast) break;
         if (skipped(blockFirst, blockLast)) continue;
-        return leasedRun(lease, blockFirst, blockLast);
+        return {blockFirst, blockLast, true};
     }
-    return leasedRun(lease, index, index);
+    return single;
+}
+
+ImportRun importRun(const GuestAllocations::Lease& lease, std::uint64_t address, std::uint64_t largest = std::numeric_limits<std::uint64_t>::max(), std::uint64_t budget = 0) {
+    const auto bounds = importRunBounds(lease, address, largest, budget);
+    return bounds.found ? leasedRun(lease, bounds.first, bounds.last) : ImportRun{};
+}
+
+template<typename Entry>
+bool sameRun(const Entry& entry, const GuestAllocations::Lease& lease, const RunBounds& bounds) {
+    if (!bounds.found || lease[bounds.first]->address != entry.base || lease[bounds.last]->address + lease[bounds.last]->bytes - entry.base != entry.bytes || bounds.last - bounds.first + 1 != entry.ranges.size()) return false;
+    for (std::size_t index = 0; index < entry.ranges.size(); ++index) {
+        if (entry.ranges[index].owner_before(lease[bounds.first + index]) || lease[bounds.first + index].owner_before(entry.ranges[index])) return false;
+    }
+    return true;
 }
 
 ImportRun exactRun(const GuestAllocations::Lease& lease, std::uint64_t base, std::uint64_t bytes) {
@@ -1308,8 +1356,8 @@ ImportRun exactRun(const GuestAllocations::Lease& lease, std::uint64_t base, std
 }
 
 bool runCovers(const GuestAllocations::Lease& lease, std::uint64_t begin, std::uint64_t end) {
-    const auto run = importRun(lease, begin);
-    return !run.ranges.empty() && end <= run.base + run.bytes;
+    const auto bounds = importRunBounds(lease, begin);
+    return bounds.found && end <= lease[bounds.last]->address + lease[bounds.last]->bytes;
 }
 
 ImportRun crossedRun(const GuestAllocations::Lease& lease, std::uint64_t begin, std::uint64_t end) {
@@ -1364,7 +1412,7 @@ bool wouldRetireImport(const HostImports& state, const ImportRun& run) {
 bool sameRange(const ImportFailure& entry, const GuestAllocations::Lease& lease, std::uint64_t budget = 0) {
     const auto current = entry.ranges.size() == 1 ? leasedRangeOwner(lease, entry.base, entry.base + entry.bytes) : nullptr;
     if (current != nullptr && entry.bytes < current->bytes) return !entry.ranges.front().owner_before(current) && !current.owner_before(entry.ranges.front());
-    return sameRun(entry, importRun(lease, entry.base, std::numeric_limits<std::uint64_t>::max(), budget));
+    return sameRun(entry, lease, importRunBounds(lease, entry.base, std::numeric_limits<std::uint64_t>::max(), budget));
 }
 
 bool sameRange(const HostImport& entry, const GuestAllocations::Lease& lease, std::uint64_t budget = 0) {
@@ -1372,7 +1420,8 @@ bool sameRange(const HostImport& entry, const GuestAllocations::Lease& lease, st
         const auto current = leasedRangeOwner(lease, entry.base, entry.base + entry.bytes);
         return current != nullptr && !entry.ranges.front().owner_before(current) && !current.owner_before(entry.ranges.front());
     }
-    return sameRun(entry, entry.joined ? joinedRun(lease, entry.base, entry.base + entry.bytes) : importRun(lease, entry.base, std::numeric_limits<std::uint64_t>::max(), budget));
+    if (entry.joined) return sameRun(entry, joinedRun(lease, entry.base, entry.base + entry.bytes));
+    return sameRun(entry, lease, importRunBounds(lease, entry.base, std::numeric_limits<std::uint64_t>::max(), budget));
 }
 
 std::uint64_t effectiveUse(const HostImports& state, const HostImport& entry) {
@@ -1587,12 +1636,13 @@ const HostImport* importAllocation(const Context& context, HostImports& state, s
         ++counts.remembered;
         return nullptr;
     }
-    auto run = importRun(lease, address, largest, budget);
+    const auto bounds = importRunBounds(lease, address, largest, budget);
     // Without an end the caller views the whole run through the import (AcquireRegistered): a window that holds the
     // first byte is shorter than that, so only an import of the whole run is a hit; a window is replaced below.
     if (fresh && end == 0) {
-        if (const auto* current = findImport(state, address, run.ranges.empty() ? address + 1 : run.base + run.bytes)) return current;
+        if (const auto* current = findImport(state, address, bounds.found ? lease[bounds.last]->address + lease[bounds.last]->bytes : address + 1)) return current;
     }
+    auto run = bounds.found ? leasedRun(lease, bounds.first, bounds.last) : ImportRun{};
     if (end != 0) run = windowRun(state, std::move(run), address, end, context.hostImportAlignment);
     if (run.ranges.empty()) return nullptr;
     return importRunAt(context, state, std::move(run), false, address, lease, end, evict, requester);
