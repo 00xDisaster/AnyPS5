@@ -45,6 +45,14 @@ static void CheckDatagram(int family) {
     Require(connect_nid_postfix(probe, address.data(), size) == -1 && *__error_nid_postfix() == 49,
         "connect to port 0 on an unconnected datagram socket must fail with EADDRNOTAVAIL (49)");
     Require(getpeername_nid_postfix(probe, name.data(), &length) == -1 && *__error_nid_postfix() == 57, "still unconnected");
+    address[3] = 9;
+    Require(connect_nid_postfix(probe, address.data(), size) == 0, "connect to port 9");
+    address[3] = 0;
+    Require(connect_nid_postfix(probe, address.data(), size) == -1 && *__error_nid_postfix() == 49,
+        "connect to port 0 on a connected datagram socket must fail with EADDRNOTAVAIL (49)");
+    length = name.size();
+    Require(getpeername_nid_postfix(probe, name.data(), &length) == -1 && *__error_nid_postfix() == 57,
+        "connect to port 0 must disconnect a datagram socket first");
     Require(close_nid_postfix(probe) == 0, "close");
 }
 

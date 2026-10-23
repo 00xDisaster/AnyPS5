@@ -69,6 +69,33 @@ void ArgumentsAreCheckedBeforeTheDescriptor() {
     Require(Fails(sendto_nid_postfix(-1, "x", 1, 0, address.data(), address.size()), ErrorBadDescriptor), "sendto(-1) with a valid address must fail with EBADF (9)");
 }
 
+void LongAddressesAndOtherFamiliesFail() {
+    constexpr int ErrorFamily = 47;
+    const int stream = socket_nid_postfix(2, Stream, 0);
+    const int datagram = socket_nid_postfix(2, Datagram, 0);
+    const int stream6 = socket_nid_postfix(28, Stream, 0);
+    Require(stream >= 0 && datagram >= 0 && stream6 >= 0, "socket failed");
+    std::array<std::uint8_t, 255> address{16, 2};
+    address[4] = 127;
+    address[7] = 1;
+    for (const std::uint32_t length : {17u, 28u, 255u}) {
+        Require(Fails(bind_nid_postfix(datagram, address.data(), length), ErrorInvalid), "bind with an AF_INET address longer than sockaddr_in must fail with EINVAL (22)");
+        Require(Fails(connect_nid_postfix(datagram, address.data(), length), ErrorInvalid), "connect with an AF_INET address longer than sockaddr_in must fail with EINVAL (22)");
+        Require(Fails(sendto_nid_postfix(datagram, "x", 1, 0, address.data(), length), ErrorInvalid), "sendto with an AF_INET address longer than sockaddr_in must fail with EINVAL (22)");
+    }
+    std::array<std::uint8_t, 64> v6{28, 28};
+    v6[23] = 1;
+    Require(Fails(bind_nid_postfix(stream6, v6.data(), 29), ErrorInvalid), "bind with an AF_INET6 address longer than sockaddr_in6 must fail with EINVAL (22)");
+    Require(Fails(connect_nid_postfix(stream6, v6.data(), 64), ErrorInvalid), "connect with an AF_INET6 address longer than sockaddr_in6 must fail with EINVAL (22)");
+    for (const std::uint8_t family : {std::uint8_t{28}, std::uint8_t{1}, std::uint8_t{0}}) {
+        address[1] = family;
+        Require(Fails(bind_nid_postfix(stream, address.data(), 16), ErrorFamily), "bind of another family on an AF_INET socket must fail with EAFNOSUPPORT (47)");
+    }
+    address[1] = 28;
+    Require(Fails(bind_nid_postfix(stream, address.data(), 28), ErrorFamily), "the family is checked before the length on an AF_INET socket");
+    Require(close_nid_postfix(stream) == 0 && close_nid_postfix(datagram) == 0 && close_nid_postfix(stream6) == 0, "close failed");
+}
+
 void FullAddressesStillWork() {
     const int stream = socket_nid_postfix(2, Stream, 0);
     Require(stream >= 0, "socket failed");
@@ -82,6 +109,7 @@ void FullAddressesStillWork() {
 int main() {
     ShortAddressesAreInvalid();
     ArgumentsAreCheckedBeforeTheDescriptor();
+    LongAddressesAndOtherFamiliesFail();
     FullAddressesStillWork();
     return 0;
 }
