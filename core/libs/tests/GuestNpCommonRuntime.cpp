@@ -294,6 +294,19 @@ void TestCallouts() {
     Require(sceNpCalloutStopOnCtx(&context, &stopped, &wasPending) == 0 && wasPending == 1, "a queued callout is removed");
     Require(sceNpCalloutStopOnCtx(&context, &stopped, &wasPending) == 0 && wasPending == 0, "removing twice reports nothing pending");
 
+    NpCallout queuedFirst {};
+    NpCallout queuedSecond {};
+    Require(sceNpCalloutStartOnCtx(&context, &queuedFirst, 30000000, RecordUnexpected, nullptr) == 0, "an earlier distant callout is queued");
+    Require(sceNpCalloutStartOnCtx(&context, &queuedSecond, 60000000, RecordUnexpected, nullptr) == 0, "a later distant callout is queued");
+    const std::uint64_t queuedDeadline = queuedFirst.deadline;
+    Require(sceNpCalloutStartOnCtx(&context, &queuedFirst, 0, RecordFirst, &context) == NpAlreadyQueued,
+        "the earlier callout cannot be queued again");
+    Require(queuedFirst.next == &queuedSecond && queuedFirst.deadline == queuedDeadline && queuedFirst.handler == RecordUnexpected &&
+        queuedFirst.arg == nullptr, "a rejected start leaves the queued callout unchanged");
+    Require(sceNpCalloutStopOnCtx(&context, &queuedSecond, &wasPending) == 0 && wasPending == 1,
+        "the later callout is still pending after the rejected start");
+    Require(sceNpCalloutStopOnCtx(&context, &queuedFirst, &wasPending) == 0 && wasPending == 1, "the earlier callout is still pending");
+
     NpCallout later {};
     Require(sceNpCalloutStartOnCtx(&context, &later, 20000, RecordSecond, nullptr) == 0, "a later callout is queued");
     Require(sceNpCalloutStartOnCtx(&context, &callout, 1000, RecordFirst, nullptr) == 0, "an earlier callout is queued");

@@ -307,7 +307,8 @@ std::mt19937 g_random {std::random_device {}()};
 NpMemoryHeap g_globalHeap {};
 NpAllocator g_globalAllocator {};
 NpAllocatorEx g_globalAllocatorEx {};
-std::atomic<int> g_archReferences {0};
+int g_archReferences = 0;
+std::mutex g_archMutex;
 std::mutex g_ipcClientMutex;
 bool g_ipcClientInitialized = false;
 NpMemoryHeap g_ipcClientHeap {};
@@ -527,14 +528,21 @@ int APS5_VABI sceNpIpc2ClientTerm(void) {
 }
 
 int APS5_VABI sceNpArchInit(void) {
-    if (g_archReferences.fetch_add(1) != 0) return 0;
+    std::lock_guard lock(g_archMutex);
+    if (g_archReferences != 0) {
+        ++g_archReferences;
+        return 0;
+    }
     const int result = InitMemoryHeap(&g_globalHeap, NP_GLOBAL_HEAP_SIZE, NP_GLOBAL_HEAP_NAME);
-    if (result < 0) g_archReferences.fetch_sub(1);
-    return result < 0 ? result : 0;
+    if (result < 0) return result;
+    g_archReferences = 1;
+    return 0;
 }
 
 void APS5_VABI sceNpArchTerm(void) {
-    if (g_archReferences.fetch_sub(1) == 1) DestroyMemoryHeap(&g_globalHeap);
+    std::lock_guard lock(g_archMutex);
+    if (g_archReferences == 0) return;
+    if (--g_archReferences == 0) DestroyMemoryHeap(&g_globalHeap);
 }
 
 int APS5_VABI sceNpHeapInit(NpHeap* heap, void* base, std::size_t size, const char* name) {
@@ -724,10 +732,7 @@ void APS5_VABI sceNpCalloutTermCtx(NpCalloutContext* context) {
 int APS5_VABI sceNpCalloutStartOnCtx64(NpCalloutContext* context, NpCallout* callout, std::uint64_t usec,
     void (APS5_VABI *handler)(void* arg), void* arg) {
     if (context->initialized == 0) return NP_ERROR_NOT_INITIALIZED;
-    *callout = {};
-    callout->deadline = ClockUsec() + usec;
-    callout->handler = handler;
-    callout->arg = arg;
+    const std::uint64_t deadline = ClockUsec() + usec;
     sceNpMutexLock(&context->mutex);
     for (NpCallout* entry = context->pending; entry != nullptr; entry = entry->next) {
         if (entry == callout) {
@@ -735,6 +740,10 @@ int APS5_VABI sceNpCalloutStartOnCtx64(NpCalloutContext* context, NpCallout* cal
             return NP_ERROR_ALREADY_QUEUED;
         }
     }
+    *callout = {};
+    callout->deadline = deadline;
+    callout->handler = handler;
+    callout->arg = arg;
     NpCallout** link = &context->pending;
     while (*link != nullptr && callout->deadline > (*link)->deadline) link = &(*link)->next;
     callout->next = *link;
