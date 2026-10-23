@@ -1,3 +1,4 @@
+#include "prx/libSceAgc/Command/include/Packet.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PipelineLinkOptimization.hpp"
 #include "Triangle_frag_spv.h"
 #include "Triangle_vert_spv.h"
@@ -384,6 +385,7 @@ public:
                 VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &hostProperties};
                 function<PFN_vkGetPhysicalDeviceProperties2>("vkGetPhysicalDeviceProperties2")(context.physical, &properties);
                 context.hostImportAlignment = hostProperties.minImportedHostPointerAlignment;
+                context.discreteGpu = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
             }
             if (driverProperties.driverID != VK_DRIVER_ID_NVIDIA_PROPRIETARY && hasExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) && hasExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME)) {
                 extensionsEnabled.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
@@ -1838,6 +1840,16 @@ void storeRunTests(const Device& device, Recorder& recorder) {
     Require(words[0] == 1 && words[1] == 2 && words[2] == 5 && words[4] == 4 && words[3] == 0, "the stores did not land (or the later store of a dword lost)");
     const auto after = Recorder::StoreCounts();
     Require(after.stores == before.stores + 1 && after.replaced == before.replaced + 0 && after.joined == before.joined + 0, "store counters are off");
+    store(8, 1);
+    recorder.NotePendingWrite(address + 32, 4);
+    auto* commandWords = static_cast<std::uint32_t*>(block);
+    CommandBuffer disjoint{commandWords + 12, commandWords + 16, commandWords + 12, nullptr, nullptr, nullptr, 0};
+    Agc::Command::Emit(&disjoint, 0x7a, {0x20000243, 0x400}, __func__);
+    Require(recorder.Recording(), "a disjoint command allocation drained the GPU store");
+    CommandBuffer reused{commandWords + 6, commandWords + 10, commandWords + 6, nullptr, nullptr, nullptr, 0};
+    Agc::Command::Emit(&reused, 0x7a, {0x20000243, 0x400}, __func__);
+    recorder.Sync();
+    Require(words[8] == 0x400, "a pending GPU label overwrote a reused command word");
     // The covered-access mask: reported once by the next Commands() call, then cleared.
     VkAccessFlags covered = 0xffffffffu;
     recorder.Commands(&covered);
@@ -3240,7 +3252,7 @@ bool readWrittenStagingTests(const Device& device, Recorder& recorder) {
         std::cout << "host imports unavailable: read and written staging not tested\n";
         return false;
     }
-    constexpr std::size_t bytes = 8u << 20u;
+    constexpr std::size_t bytes = 16u << 20u;
 #ifdef _WIN32
     void* block = VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
@@ -3270,11 +3282,12 @@ bool readWrittenStagingTests(const Device& device, Recorder& recorder) {
         return direct;
     };
     Require(!boundInPlace(address + 4096, 1u << 20u, false), "a written 1 MiB element was not staged");
-    Require(boundInPlace(address + 4096, 4u << 20u, false), "a written-only 4 MiB element was staged past the written window");
+    Require(boundInPlace(address + 4096, 4u << 20u, false) != context.discreteGpu, context.discreteGpu ? "a written-only 4 MiB element was bound in place on a discrete GPU" : "a written-only 4 MiB element was staged past the written window");
+    Require(boundInPlace(address + 4096, 12u << 20u, false), "a written-only 12 MiB element was staged past the discrete written window");
     Require(!boundInPlace(address + 4096, 4u << 20u, true), "a read and written 4 MiB element was bound in place");
     const auto buildInPlace = [&](std::uint64_t dispatchThreads, bool read, std::uint32_t stride, std::uint32_t extent) {
         const auto element = address + 4096;
-        constexpr std::uint32_t elementBytes = 4u << 20u;
+        constexpr std::uint32_t elementBytes = 12u << 20u;
         const std::uint32_t records = stride != 0 ? elementBytes / stride : elementBytes;
         ShaderRecompiler::RecompileResult program;
         ShaderRecompiler::DescriptorBinding binding;
@@ -3296,13 +3309,13 @@ bool readWrittenStagingTests(const Device& device, Recorder& recorder) {
         recorder.Sync();
         return direct;
     };
-    Require(!buildInPlace((4u << 20u) / 16u, true, 16, 0), "a dispatch sweeping a read and written 4 MiB element bound it in place");
-    Require(buildInPlace(1024, true, 16, 0), "a dispatch touching 16 KiB of a read and written 4 MiB element staged all of it");
-    Require(buildInPlace(0, true, 16, 0), "a dispatch of unknown size staged a read and written 4 MiB element");
-    Require(buildInPlace((4u << 20u) / 16u, false, 16, 0), "a dispatch sweeping a written-only 4 MiB element staged it");
-    Require(!buildInPlace((4u << 20u) / 32u, true, 0, 32), "a dispatch sweeping a read and written 4 MiB raw element bound it in place");
-    Require(buildInPlace(1024, true, 0, 32), "a dispatch touching 32 KiB of a read and written 4 MiB raw element staged all of it");
-    Require(buildInPlace((4u << 20u) / 32u, true, 0, 0), "a raw element without an access extent was staged");
+    Require(!buildInPlace((12u << 20u) / 16u, true, 16, 0), "a dispatch sweeping a read and written 12 MiB element bound it in place");
+    Require(buildInPlace(1024, true, 16, 0), "a dispatch touching 16 KiB of a read and written 12 MiB element staged all of it");
+    Require(buildInPlace(0, true, 16, 0), "a dispatch of unknown size staged a read and written 12 MiB element");
+    Require(buildInPlace((12u << 20u) / 16u, false, 16, 0), "a dispatch sweeping a written-only 12 MiB element staged it");
+    Require(!buildInPlace((12u << 20u) / 32u, true, 0, 32), "a dispatch sweeping a read and written 12 MiB raw element bound it in place");
+    Require(buildInPlace(1024, true, 0, 32), "a dispatch touching 32 KiB of a read and written 12 MiB raw element staged all of it");
+    Require(buildInPlace((12u << 20u) / 32u, true, 0, 0), "a raw element without an access extent was staged");
     Require(std::all_of(static_cast<const std::byte*>(block), static_cast<const std::byte*>(block) + bytes, [](std::byte value) { return value == std::byte{0x11}; }), "a staged copy-back changed the guest bytes");
     {
         GuestAllocations::Mutation mutation;
@@ -10584,6 +10597,12 @@ int main(int argc, char** argv) {
         std::cout << "host imports " << (PrepareImportWatch(device.GetContext()) == ImportWatch::Unwatch ? "are compared" : "stay watched") << '\n';
         Recorder recorder(device.GetContext());
         recorder.Activate();
+        if (argc == 2 && std::string_view(argv[1]) == "--command-reuse-only") {
+            if (device.GetContext().hostImportAlignment == 0) return 77;
+            const auto before = Recorder::StoreCounts().stores;
+            storeRunTests(device, recorder);
+            return Recorder::StoreCounts().stores != before ? 0 : 77;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--copied-direct-only") {
             copiedDirectOrderingTests(device, recorder);
             return 0;
