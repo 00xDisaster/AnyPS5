@@ -375,6 +375,7 @@ static void CheckAttrProcessSharing() {
     pshared = -1;
     Require(pthread_rwlockattr_getpshared_nid_postfix(&attr, &pshared) == 0 && pshared == PROCESS_PRIVATE);
     Require(pthread_rwlockattr_setpshared_nid_postfix(&attr, PROCESS_PRIVATE) == 0);
+    Require(Throws([&] { scePthreadRwlockattrDestroy(&attr); }));
 }
 
 static void CheckAttrSettype() {
