@@ -504,28 +504,41 @@ static void HostTraffic(std::uint64_t& sent, std::uint64_t& received) {
 #endif
 }
 
-static int CheckCallbacks(CallbackSlot (&callbacks)[MAX_CALLBACKS]) {
+static int CheckCallbacks(CallbackSlot (&callbacks)[MAX_CALLBACKS], bool includeV6 = false) {
     if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
-    if (!HasCallback(callbacks)) return 0;
-    const int event = HostHasAddress(AF_UNSPEC) ? NET_CTL_EVENT_IPOBTAINED : NET_CTL_EVENT_DISCONNECTED;
-    CallbackSlot due[MAX_CALLBACKS];
+    const bool primary = HasCallback(callbacks);
+    const bool ipv6 = includeV6 && HasCallback(g_callbacksV6);
+    if (!primary && !ipv6) return 0;
+    const int primaryEvent = primary ? (HostHasAddress(AF_UNSPEC) ? NET_CTL_EVENT_IPOBTAINED : NET_CTL_EVENT_DISCONNECTED) : 0;
+    const int ipv6Event = ipv6 ? (HostHasAddress(AF_INET6) ? NET_CTL_EVENT_IPOBTAINED : NET_CTL_EVENT_DISCONNECTED) : 0;
+    struct Delivery {
+        CallbackSlot callback;
+        int event;
+    };
+    Delivery due[2 * MAX_CALLBACKS];
     int count = 0;
     {
         std::lock_guard lock(g_callbackLock);
-        for (auto& slot : callbacks) {
-            if (!slot.func || slot.lastEvent == event) continue;
-            slot.lastEvent = event;
-            due[count++] = slot;
-        }
+        const auto collect = [&](CallbackSlot (&slots)[MAX_CALLBACKS], int event) {
+            if (event == 0) return;
+            for (auto& slot : slots) {
+                if (!slot.func || slot.lastEvent == event) continue;
+                slot.lastEvent = event;
+                due[count++] = {slot, event};
+            }
+        };
+        collect(callbacks, primaryEvent);
+        if (includeV6) collect(g_callbacksV6, ipv6Event);
     }
-    for (int index = 0; index < count; ++index) due[index].func(event, due[index].arg);
+    for (int index = 0; index < count; ++index)
+        due[index].callback.func(due[index].event, due[index].callback.arg);
     return 0;
 }
 
 extern "C" {
 
 int APS5_VABI sceNetCtlCheckCallback(void) {
-    return CheckCallbacks(g_callbacks);
+    return CheckCallbacks(g_callbacks, true);
 }
 
 int APS5_VABI sceNetCtlGetIfStat(NetCtlIfStat* stat) {
