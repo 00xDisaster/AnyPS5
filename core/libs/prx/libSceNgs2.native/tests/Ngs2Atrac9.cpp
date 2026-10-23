@@ -385,7 +385,7 @@ static void TestMalformedLoops() {
         Require(info.loop_begin_position == 100 && info.loop_end_position == 700 && info.num_blocks == 3);
         for (std::uint32_t block = 0; block < 3; ++block) Require(std::memcmp(&info.block[block], &expected.block[block], sizeof(Ngs2WaveformBlock)) == 0);
     }
-    for (const auto [start, last, begin, end] : {std::tuple<std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t>{0, 955, 0xffffff00u, 700}, {356, 255, 100, 0}, {956, 955, 700, 700}, {956, 700, 700, 445}}) {
+    for (const auto [start, last, begin, end] : {std::tuple<std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t>{256, 255, 0, 0}, {356, 255, 100, 0}, {956, 955, 700, 700}, {956, 700, 700, 445}}) {
         auto file = original;
         Set32(file, 144, start);
         Set32(file, 148, last);
@@ -399,7 +399,17 @@ static void TestMalformedLoops() {
         Set32(file, 148, last);
         Require(ParseThrows(file));
     }
+    for (const std::uint32_t start : {0u, 255u}) {
+        auto file = original;
+        Set32(file, 144, start);
+        Require(ParseThrows(file));
+    }
     Ngs2WaveformInfo info{};
+    auto pastData = original;
+    Set32(pastData, 80, 4 * SuperframeSamples - 255);
+    Require(ParseThrows(pastData));
+    Set32(pastData, 80, 4 * SuperframeSamples - 256);
+    Require(sceNgs2ParseWaveformData(pastData.data(), pastData.size(), &info) == SCE_NGS2_OK && info.num_blocks == 3);
     for (std::size_t size = 92; size < 168; ++size)
         Require(sceNgs2ParseWaveformData(original.data(), size, &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_DATA);
     for (const std::uint32_t size : {28u, 36u, 50u}) Require(ParseThrows(ShortSampler(original, size)));

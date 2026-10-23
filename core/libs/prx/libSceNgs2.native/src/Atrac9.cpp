@@ -306,10 +306,12 @@ static int ReadChunks(std::size_t size, TRead&& read, RiffChunks& chunks) {
 }
 
 static void AddAtrac9Block(Ngs2WaveformInfo& info, std::uint32_t begin, std::uint32_t samples, std::uint32_t repeats) {
-    auto& block = info.block[info.num_blocks++];
-    block = Atrac9Block(info.format.config_data, begin, samples);
+    auto block = Atrac9Block(info.format.config_data, begin, samples);
+    if (block.data_offset > info.data_size || block.data_size > info.data_size - block.data_offset)
+        throw std::runtime_error("NGS2: an ATRAC9 loop block reaching past the data chunk is not implemented");
     block.data_offset += info.data_offset;
     block.num_repeats = repeats;
+    info.block[info.num_blocks++] = block;
 }
 
 static int ParseAtrac9Loop(const RiffChunks& chunks, Ngs2WaveformInfo& info) {
@@ -317,6 +319,7 @@ static int ParseAtrac9Loop(const RiffChunks& chunks, Ngs2WaveformInfo& info) {
     if (chunks.samplerSize < 32) throw std::runtime_error("NGS2: a smpl chunk too short for its loop count is not implemented");
     if (ReadLe32(chunks.sampler + 28) == 0) return SCE_NGS2_OK;
     if (chunks.samplerSize < 52) throw std::runtime_error("NGS2: a smpl chunk too short for its first loop is not implemented");
+    if (ReadLe32(chunks.sampler + 44) < info.num_delay_samples) throw std::runtime_error("NGS2: an ATRAC9 loop starting inside the decoder delay is not implemented");
     const std::uint32_t begin = ReadLe32(chunks.sampler + 44) - info.num_delay_samples;
     const std::uint32_t end = ReadLe32(chunks.sampler + 48) - info.num_delay_samples + 1u;
     info.loop_begin_position = begin;
