@@ -96,6 +96,7 @@ public:
             auto shared = slot.page.lock();
             if (!shared) {
                 shared = std::make_shared<SharedPage>();
+                shared->comparedWhenShared = slot.comparedWhenShared;
                 slot.page = shared;
             }
             return shared;
@@ -193,6 +194,7 @@ public:
             if (residentOnly && !it->second.resident) continue;
             auto& page = *it->second.page;
             page.comparedWhenShared = true;
+            it->second.slot->comparedWhenShared = true;
             for (const auto alias : page.aliases) {
                 auto& view = views.at(alias);
                 if (view.resident || view.armed == 0) continue;
@@ -571,6 +573,7 @@ private:
     struct Physical {
         std::weak_ptr<SharedPage> page;
         bool stored = false;
+        bool comparedWhenShared = false;
         std::shared_ptr<Saved> saved;
         std::size_t savedOffset = 0;
     };
