@@ -1833,7 +1833,7 @@ const HostImport* importRunAt(const Context& context, HostImports& state, Import
         }
 #endif
         return step == nullptr;
-    }, watchedHostPointer, false);
+    }, watchedHostPointer);
 #ifndef _WIN32
     if (BackingFile backing; step != nullptr && watchedDmaBuf != watchedHostPointer && sharedBacking(context, entry, backing)) {
         GuestMemory::ImportWatched(base, bytes, [&] {
