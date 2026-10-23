@@ -356,6 +356,26 @@ void TestStoreAndHit() {
     Require(sceHttpCacheTerm(exchange.cache) == 0);
 }
 
+void TestLifetimeOrder() {
+    Exchange exchange{sceHttpCacheInit(0)};
+    Cached(exchange, "http://order/expires-later", {{"Date", "Sat, 01 Jan 2000 00:00:00 GMT"}, {"Expires", "Sat, 01 Jan 2000 01:00:00 GMT"}}, "x");
+    RequireMiss(exchange, "http://order/expires-later");
+    Cached(exchange, "http://order/expires-earlier", {{"Date", "Sat, 01 Jan 2000 01:00:00 GMT"}, {"Expires", "Sat, 01 Jan 2000 00:00:00 GMT"}}, "expired");
+    Require(exchange.Retrieve("http://order/expires-earlier") == 0 && exchange.result == 1);
+    Require(ReadAll(exchange.request) == "expired" && Value(exchange.response, "Warning").empty());
+    exchange.Done();
+    Cached(exchange, "http://order/modified-earlier", {{"Date", "Mon, 10 Jan 2000 00:00:00 GMT"}, {"Last-Modified", "Sat, 01 Jan 2000 00:00:00 GMT"}}, "x");
+    Require(exchange.Retrieve("http://order/modified-earlier") == 0 && exchange.result == 2);
+    Require(Value(exchange.next, "If-Modified-Since") == "Sat, 01 Jan 2000 00:00:00 GMT");
+    exchange.Done();
+    Cached(exchange, "http://order/modified-later", {{"Date", "Sat, 01 Jan 2000 00:00:00 GMT"}, {"Last-Modified", "Sun, 02 Jan 2000 00:00:00 GMT"}}, "modified");
+    Advance(400 * 24 * 3600);
+    Require(exchange.Retrieve("http://order/modified-later") == 0 && exchange.result == 1);
+    Require(ReadAll(exchange.request) == "modified" && !Value(exchange.response, "Warning").empty());
+    exchange.Done();
+    Require(sceHttpCacheTerm(exchange.cache) == 0);
+}
+
 void TestRevalidation() {
     Exchange exchange{sceHttpCacheInit(0)};
     Cached(exchange, "http://stale/a", {{"Cache-Control", "max-age=60"}, {"ETag", "e1"}, {"Last-Modified", "lm"}}, "old body");
@@ -470,6 +490,7 @@ int main() {
     TestCacheArguments();
     TestCacheLimit();
     TestStoreAndHit();
+    TestLifetimeOrder();
     TestRevalidation();
     TestPublicResponses();
     return 0;
