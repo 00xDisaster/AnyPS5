@@ -339,6 +339,57 @@ void CheckComparedWhenSharedRemapped() {
     mappings.ForgetSection(section);
     CloseHandle(section);
 }
+
+void CheckComparedPagesReportedOnce() {
+    auto& mappings = Mappings::Get();
+    HANDLE section = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_EXECUTE_READWRITE | SEC_RESERVE, 0, 2 * Bytes, nullptr);
+    std::array<unsigned char*, 3> reserved{};
+    for (auto& address : reserved) address = static_cast<unsigned char*>(mappings.Reserve(nullptr, 2 * Bytes));
+    Require(section && reserved[0] && reserved[1] && reserved[2], "cannot allocate compared page report test memory");
+    mappings.ForgetSection(section);
+    const auto listed = [&](unsigned char* base, std::size_t begin, std::size_t count, bool unreported) {
+        const auto address = reinterpret_cast<std::uintptr_t>(base);
+        auto cursor = address + begin * Small;
+        const auto end = cursor + count * Small;
+        std::set<std::size_t> result;
+        while (cursor < end) {
+            std::array<void*, 3> pages{};
+            std::size_t available = pages.size();
+            mappings.ComparedPages(cursor, end - cursor, pages.data(), &available, unreported);
+            for (std::size_t i = 0; i < available; ++i) result.insert((reinterpret_cast<std::uintptr_t>(pages[i]) - address) / Small);
+            if (available < pages.size()) break;
+            cursor = reinterpret_cast<std::uintptr_t>(pages[available - 1]) + Small;
+        }
+        return result;
+    };
+    auto* first = reserved[0];
+    auto* second = reserved[1];
+    mappings.Map(first, 2 * Bytes, section, 0, PAGE_READWRITE, true, true);
+    mappings.CompareWhenShared(reinterpret_cast<std::uintptr_t>(first), Bytes);
+    Require(listed(first, 0, 32, false).empty() && listed(first, 0, 32, true).empty(), "a resident page to be compared was listed before it was shared");
+    mappings.Map(second, 2 * Bytes, section, 0, PAGE_READWRITE, true, true);
+    Require(listed(first, 0, 32, false) == Pages(0, 16) && listed(second, 0, 32, false) == Pages(0, 16), "the compared pages of both mappings were not listed once shared");
+    Require(listed(first, 2, 4, true) == Pages(2, 6), "a partial take did not report exactly its compared pages");
+    std::set<std::size_t> rest = Pages(0, 2);
+    rest.insert(6);
+    for (std::size_t page = 7; page < 16; ++page) rest.insert(page);
+    Require(listed(first, 0, 32, true) == rest, "a compared page was reported twice or not at all");
+    Require(listed(first, 0, 32, true).empty() && listed(first, 0, 32, false) == Pages(0, 16), "a compared page was reported again, or a listing consumed its mark");
+    Require(listed(second, 0, 32, true) == Pages(0, 16) && listed(second, 0, 32, true).empty(), "the second mapping's compared pages were not reported exactly once");
+    mappings.CompareWhenShared(reinterpret_cast<std::uintptr_t>(first), Bytes);
+    Require(listed(first, 0, 32, true).empty() && listed(second, 0, 32, true).empty(), "marking compared pages again reported them again");
+    mappings.CompareWhenShared(reinterpret_cast<std::uintptr_t>(first + Bytes), Bytes);
+    Require(listed(first, 16, 16, true) == Pages(16, 32) && listed(second, 16, 16, true) == Pages(16, 32), "shared pages newly marked to be compared were not reported in every mapping");
+    mappings.Map(reserved[2], 2 * Bytes, section, 0, PAGE_READWRITE, true, true);
+    Require(listed(reserved[2], 0, 32, true) == Pages(0, 32) && listed(first, 0, 32, true).empty(), "a new mapping of compared pages was not reported, or reported the others again");
+    for (auto* address : reserved) mappings.Reset(address, 2 * Bytes);
+    for (auto* address : reserved) {
+        VirtualFree(address, 2 * Bytes, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS);
+        VirtualFree(address, 0, MEM_RELEASE);
+    }
+    mappings.ForgetSection(section);
+    CloseHandle(section);
+}
 }
 
 int main() {
@@ -356,6 +407,7 @@ int main() {
         CheckComparedWhenShared();
         CheckResidentOnlyComparedWhenShared();
         CheckComparedWhenSharedRemapped();
+        CheckComparedPagesReportedOnce();
         std::cout << "Windows deferred write-watch tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -147,7 +147,8 @@ public:
             mapShared(base, section, offset + done, protection, viewProtection, viewBytes);
             slot->stored = true;
             shared->aliases.push_back(base);
-            views.emplace(base, View{shared, protection, {}, 0, owned, offset + done, 0, 0, false, slot, hostPages(viewBytes)});
+            const auto created = views.emplace(base, View{shared, protection, {}, 0, owned, offset + done, 0, 0, false, slot, hostPages(viewBytes)}).first;
+            if (shared->comparedWhenShared) created->second.unreported = allSubpages;
             remember(freshRanges, base, base + pageBytes);
             invalidate(*shared);
             done += pageBytes;
@@ -194,13 +195,35 @@ public:
         for (auto it = views.lower_bound(address & ~(pageBytes - 1)); it != views.end() && it->first < address + bytes; ++it) {
             if (residentOnly && !it->second.resident && !it->second.aliasDemoted) continue;
             auto& page = *it->second.page;
+            const bool marked = page.comparedWhenShared;
             page.comparedWhenShared = true;
             it->second.slot->comparedWhenShared = true;
             for (const auto alias : page.aliases) {
                 auto& view = views.at(alias);
-                if (view.resident || view.armed == 0) continue;
+                if (view.resident) continue;
+                if (!marked) view.unreported = allSubpages;
+                if (view.armed == 0) continue;
                 protectSubpages(alias, view.armed, view.protection, "stop arming a compared shared page", view.viewBytes);
                 view.armed = 0;
+            }
+        }
+    }
+
+    void ComparedPages(std::uintptr_t address, std::size_t bytes, void** pages, std::size_t* count, bool unreported) {
+        std::lock_guard lock(mutex);
+        const auto capacity = *count;
+        *count = 0;
+        const auto end = address + bytes;
+        for (auto it = views.lower_bound(address & ~(pageBytes - 1)); it != views.end() && it->first < end; ++it) {
+            auto& view = it->second;
+            if (view.resident || !view.page->comparedWhenShared) continue;
+            const auto listed = static_cast<std::uint8_t>(subpagesOf(it->first, address, end) & (unreported ? view.unreported : allSubpages));
+            for (std::size_t sub = 0; sub < subpages; ++sub) {
+                const auto bit = static_cast<std::uint8_t>(1u << sub);
+                if ((listed & bit) == 0) continue;
+                if (*count == capacity) return;
+                pages[(*count)++] = reinterpret_cast<void*>(it->first + sub * subpageBytes);
+                if (unreported) view.unreported &= static_cast<std::uint8_t>(~bit);
             }
         }
     }
@@ -592,6 +615,7 @@ private:
         std::size_t viewBytes = pageBytes;
         std::uint32_t hostImports = 0;
         bool aliasDemoted = false;
+        std::uint8_t unreported = 0;
     };
     struct Run {
         std::uintptr_t end;
@@ -758,6 +782,7 @@ private:
             view.slot->stored = true;
             view.resident = false;
             view.aliasDemoted = alias;
+            view.unreported = view.page->comparedWhenShared ? allSubpages : std::uint8_t{0};
             view.seen.fill(0);
             view.armed = 0;
             view.collected = 0;
