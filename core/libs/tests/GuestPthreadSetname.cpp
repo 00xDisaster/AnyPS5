@@ -17,6 +17,10 @@ int APS5_VABI pthread_rwlock_destroy_nid_postfix(PthreadRwlock*);
 int APS5_VABI pthread_rwlock_rdlock_nid_postfix(PthreadRwlock*);
 int APS5_VABI pthread_rwlock_unlock_nid_postfix(PthreadRwlock*);
 int APS5_VABI pthread_rwlock_setname_np_nid_postfix(PthreadRwlock*, const char*);
+int APS5_VABI pthread_barrier_init_nid_postfix(void**, void* const*, unsigned);
+int APS5_VABI pthread_barrier_destroy_nid_postfix(void**);
+int APS5_VABI pthread_barrier_wait_nid_postfix(void**);
+int APS5_VABI pthread_barrier_setname_np_nid_postfix(void**, const char*);
 }
 
 static constexpr int GuestEinval = 22;
@@ -70,8 +74,23 @@ static void TestRwlock() {
     Require(pthread_rwlock_setname_np_nid_postfix(&unset, "static") == 0 && unset == nullptr);
 }
 
+static void TestBarrier() {
+    void* barrier = nullptr;
+    Require(pthread_barrier_init_nid_postfix(&barrier, nullptr, 1) == 0);
+    Require(pthread_barrier_setname_np_nid_postfix(&barrier, "first") == 0);
+    Require(pthread_barrier_setname_np_nid_postfix(&barrier, nullptr) == 0);
+    Require(pthread_barrier_wait_nid_postfix(&barrier) == -1);
+    Require(pthread_barrier_setname_np_nid_postfix(&barrier, "second") == 0);
+    Require(pthread_barrier_setname_np_nid_postfix(nullptr, "barrier") == GuestEinval);
+    Require(pthread_barrier_destroy_nid_postfix(&barrier) == 0);
+    Require(pthread_barrier_setname_np_nid_postfix(&barrier, "destroyed") == GuestEinval);
+    void* unset = nullptr;
+    Require(pthread_barrier_setname_np_nid_postfix(&unset, "unset") == GuestEinval && unset == nullptr);
+}
+
 int main() {
     TestMutex();
     TestRwlock();
+    TestBarrier();
     std::puts("pthread setname tests passed");
 }

@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <thread>
+#include <string>
 
 struct KernelIovec {
     void* base;
@@ -116,6 +117,7 @@ struct PthreadBarrierPrivate {
     unsigned arrived = 0;
     unsigned active = 0;
     std::uint64_t generation = 0;
+    std::string name;
 };
 
 struct PthreadBarrierattrPrivate {

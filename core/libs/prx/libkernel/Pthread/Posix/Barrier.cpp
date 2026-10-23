@@ -91,4 +91,12 @@ int APS5_VABI pthread_barrier_destroy_nid_postfix(PthreadBarrierPrivate** barrie
     return 0;
 }
 
+int APS5_VABI pthread_barrier_setname_np_nid_postfix(PthreadBarrierPrivate** barrier, const char* name) {
+    if (!barrier || !*barrier) return 22;
+    auto& value = **barrier;
+    std::lock_guard lock(value.mutex);
+    if (name) value.name = name;
+    return 0;
+}
+
 }
