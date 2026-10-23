@@ -244,17 +244,6 @@ void frameSegment(
         const auto hit = targets.upper_bound(begin);
         return hit != targets.end() && *hit < end;
     };
-    const auto padding = [&](const Insn& insn) {
-        if (insn.Info.IsTwoByteOpcode) return insn.Info.Opcode == 0x1f;
-        return seg[insn.Offset + insn.Info.OpcodeOffset] == 0x90 && (insn.Info.RexPrefix & 1) == 0;
-    };
-    const auto jumpTarget = [](const Insn& insn) -> std::optional<std::size_t> {
-        if (insn.Info.FlowKind != ControlFlowKind::UnconditionalJump || !insn.Info.HasBranchTarget || insn.Info.HasRipRelativeDisp) return std::nullopt;
-        const auto target = static_cast<std::int64_t>(insn.Offset + insn.Length) + insn.Info.BranchDisp;
-        if (target < 0) return std::nullopt;
-        return static_cast<std::size_t>(target);
-    };
-
     for (const auto& function : functions) {
         if (function.Begin < ph.MappedAddress || function.End <= function.Begin || function.End - ph.MappedAddress > segSize) continue;
         const auto start = static_cast<std::size_t>(function.Begin - ph.MappedAddress);
@@ -264,17 +253,9 @@ void frameSegment(
 
         const std::vector<std::uint8_t> code(seg.begin() + static_cast<std::ptrdiff_t>(start), seg.begin() + static_cast<std::ptrdiff_t>(limit));
         std::vector<Insn> body;
-        bool afterReturn = false;
-        std::optional<std::size_t> jumpedTo;
         for (const auto& match : scanner->ScanCodeSection(code, 0, code.size())) {
             if (code[match.Offset] == 0xcc && match.Length == 1) break;
-            const Insn insn{start + static_cast<std::size_t>(match.Offset), match.Length, decoder.DecodeInstruction(code.data() + match.Offset, match.Length)};
-            if (!padding(insn)) {
-                if (insn.Offset % 16 == 0 && (afterReturn || jumpedTo == insn.Offset)) break;
-                afterReturn = insn.Info.FlowKind == ControlFlowKind::Return || insn.Info.FlowKind == ControlFlowKind::Trap;
-                jumpedTo = jumpTarget(insn);
-            }
-            body.push_back(insn);
+            body.push_back({start + static_cast<std::size_t>(match.Offset), match.Length, decoder.DecodeInstruction(code.data() + match.Offset, match.Length)});
         }
         if (body.size() < 3) continue;
         const auto at = [&](const std::size_t k) { return seg.data() + body[k].Offset; };

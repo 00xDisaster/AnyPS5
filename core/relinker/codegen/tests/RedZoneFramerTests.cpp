@@ -381,22 +381,23 @@ Image calledThenUncalled(const std::vector<std::uint8_t>& called, const std::vec
     result.bytes = padTo(result.bytes, 0x80);
     result.segments.push_back({1, 5, 0, Base, Base, result.bytes.size(), result.bytes.size(), 16});
     result.functions.push_back({Base + 0x40, Base + 0x40 + called.size()});
+    result.functions.push_back({Base + 0x60, Base + 0x60 + uncalled.size()});
     return result;
 }
 
-void endsBodiesAtAlignedCodeAfterARet() {
+void framesEachFunctionFromItsOwnFde() {
     std::vector<std::uint8_t> body = StoreBelowRsp;
     append(body, LoadBelowRsp);
     const auto input = calledThenUncalled(framelessLeaf(FramelessPrologue, body, FramelessExit), framelessLeaf(FramelessPrologue, StoreBelowRsp, FramelessExit));
     Codegen::RedZoneFrameReport report;
     std::vector<Codegen::RedZoneDisplacement> displacements;
     const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, input.functions, {}, report, displacements);
-    require(report.Framed == 1 && report.Exits == 1 && sites.size() == 2 && displacements.size() == 2, "the called leaf was not framed on its own");
-    for (const auto& site : sites) require(site.Address < Base + 0x60, "a leaf reached without a call was framed as part of the leaf before it");
-    for (const auto& displacement : displacements) require(displacement.Offset < 0x60, "an rsp operand of a leaf reached without a call was moved");
+    require(report.Functions == 2 && report.Framed == 2 && report.Exits == 2 && sites.size() == 4 && displacements.size() == 3, "two adjacent functions were not framed each by its own FDE");
+    require(sites[0].Address < Base + 0x60 && sites[1].Address + sites[1].Length <= Base + 0x60 && displacements[0].Offset < 0x60 && displacements[1].Offset < 0x60, "the first function's frame runs past its FDE end");
+    require(sites[2].Address == Base + 0x60 && sites[2].OriginalBytes == FramelessPrologue && displacements[2].Offset > 0x60, "the function reached without a call was not framed from its own FDE start");
 }
 
-void endsBodiesAtTailCallsToTheNextFunction() {
+void treatsATailCallPastTheFdeEndAsLeaving() {
     std::vector<std::uint8_t> called = FramelessPrologue;
     append(called, StoreBelowRsp);
     append(called, {0x85, 0xff, 0x75, 0x06});
@@ -406,8 +407,43 @@ void endsBodiesAtTailCallsToTheNextFunction() {
     Codegen::RedZoneFrameReport report;
     std::vector<Codegen::RedZoneDisplacement> displacements;
     const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, input.functions, {}, report, displacements);
-    require(sites.empty() && displacements.empty(), "a leaf that tail-calls the function after it was framed together with that function");
-    require(report.Skipped.at("branch leaves the function") == 1, "the tail call was not reported as leaving the function");
+    require(report.Skipped.at("branch leaves the function") == 1, "the tail call past the FDE end was not reported as leaving the function");
+    require(report.Framed == 1 && sites.size() == 2 && sites[0].Address == Base + 0x60, "the tail-called function was not framed from its own FDE start");
+}
+
+void framesALeafAfterAJumpWithoutInt3FromItsOwnFde() {
+    std::vector<std::uint8_t> first = FramelessPrologue;
+    append(first, StoreBelowRsp);
+    append(first, {0x31, 0xc0, 0xeb, 0x06});
+    append(first, FramelessExit);
+    append(first, {0x48, 0x3b, 0x44, 0x24, 0xf0, 0x73, 0xf3, 0x48, 0xff, 0xc0, 0xeb, 0xf4});
+    require(first.size() == 0x20, "the first leaf must end where the second starts");
+    std::vector<std::uint8_t> second = StoreBelowRsp;
+    append(second, LoadBelowRsp);
+    const auto input = calledThenUncalled(first, framelessLeaf(FramelessPrologue, second, FramelessExit));
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, input.functions, {}, report, displacements);
+    require(report.Framed == 2 && report.Exits == 2 && sites.size() == 4 && displacements.size() == 4, "a leaf right after a jmp without int3 padding was not framed on its own");
+    require(sites[1].Address + sites[1].Length <= Base + 0x60 && displacements[1].Offset < 0x60, "the leaf ending in a jmp took the next leaf into its body");
+    require(sites[2].Address == Base + 0x60 && sites[2].OriginalBytes == FramelessPrologue && displacements[2].Offset > 0x60, "the leaf after the jmp was not framed from its own FDE start");
+}
+
+void keepsColdBlocksAfterARetInsideTheFde() {
+    std::vector<std::uint8_t> leaf = FramelessPrologue;
+    append(leaf, StoreBelowRsp);
+    append(leaf, {0x85, 0xff, 0x74, 0x12});
+    append(leaf, LoadBelowRsp);
+    append(leaf, FramelessExit);
+    append(leaf, {0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00});
+    append(leaf, {0x48, 0x8b, 0x54, 0x24, 0xf0});
+    append(leaf, FramelessExit);
+    const auto input = image({leaf});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, input.functions, {}, report, displacements);
+    require(report.Framed == 1 && report.Exits == 2 && sites.size() == 3, "the exit of a cold block after the ret inside the FDE was not framed");
+    require(displacements.size() == 3 && displacements[2].Offset == 0x40 + 0x20 + 4 && displacements[2].Bytes == std::vector<std::uint8_t>{0x00}, "the rsp operand of a cold block after the ret inside the FDE was not moved");
 }
 
 void keepsLoopsAlignedAfterAJump() {
@@ -496,8 +532,10 @@ int main() {
         stubsVexOperandsAtRsp();
         skipsLeavesWithOperandsThatCannotMove();
         skipsLeavesThatCopyRsp();
-        endsBodiesAtAlignedCodeAfterARet();
-        endsBodiesAtTailCallsToTheNextFunction();
+        framesEachFunctionFromItsOwnFde();
+        treatsATailCallPastTheFdeEndAsLeaving();
+        framesALeafAfterAJumpWithoutInt3FromItsOwnFde();
+        keepsColdBlocksAfterARetInsideTheFde();
         keepsLoopsAlignedAfterAJump();
         framesAPointerOnlyFunctionByItsOwnBounds();
         leavesCodeWithoutAFunctionRange();
