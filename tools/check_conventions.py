@@ -1,5 +1,6 @@
 import argparse
 import io
+import itertools
 import json
 import os
 import posixpath
@@ -177,15 +178,20 @@ class Check:
             source = self.show(path).split("\n")
             masked = cpp_text("\n".join(source), preserve_comments=True).split("\n")
             assembly = asm_exports("\n".join(source)) if core and path.startswith("core/libs/prx/") else {}
+            constants, starts = None, None
             for number, text in lines:
                 bare = masked[number - 1]
                 if ("//" in bare or "/*" in bare) and not ALLOWED_COMMENT.match(bare):
                     self.report("comment", path, number)
                 if EXTENSION.search(bare):
                     self.report("extension", path, number, EXTENSION.search(bare).group(0))
-                alignment = over_aligned(bare, named_constants("\n".join(masked))) if "alignas" in bare else None
-                if alignment:
-                    self.report("alignment", path, number, alignment)
+                if "alignas" in bare:
+                    if constants is None:
+                        constants = named_constants(cpp_text("\n".join(source)))
+                        starts = list(itertools.accumulate((len(line) + 1 for line in masked), initial=0))
+                    alignment = over_aligned(bare, constants, starts[number - 1])
+                    if alignment:
+                        self.report("alignment", path, number, alignment)
                 if core and TITLE.search(text):
                     self.report("title-specific", path, number, TITLE.search(text).group(0))
                 if core and path.startswith("core/libs/prx/"):
@@ -596,12 +602,27 @@ def integer_literal(text):
 
 
 def named_constants(text):
-    return {name: integer_literal(value) for name, value in CONSTANT.findall(text)}
+    open_braces, scopes = [], []
+    for index, character in enumerate(text):
+        if character == "{":
+            open_braces.append(index)
+        elif character == "}" and open_braces:
+            scopes.append((open_braces.pop(), index))
+    constants = []
+    for match in CONSTANT.finditer(text):
+        scope = min((pair for pair in scopes if pair[0] < match.start() < pair[1]), key=lambda pair: pair[1] - pair[0], default=(-1, len(text)))
+        constants.append((match.group(1), integer_literal(match.group(2)), match.start(), scope))
+    return constants
 
 
-def over_aligned(text, constants={}):
+def constant_value(constants, name, position):
+    visible = [(scope[0], start, value) for found, value, start, scope in constants if found == name and start < position and scope[0] < position < scope[1]]
+    return max(visible)[2] if visible else 0
+
+
+def over_aligned(text, constants=(), offset=0):
     for match in ALIGNAS.finditer(text):
-        value = integer_literal(match.group(1)) if match.group(1) else constants.get(match.group(2), 0)
+        value = integer_literal(match.group(1)) if match.group(1) else constant_value(constants, match.group(2), offset + match.start())
         if value > ALIGNMENT_LIMIT:
             return match.group(0)
     return None

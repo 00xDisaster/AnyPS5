@@ -1,3 +1,4 @@
+import itertools
 import os
 import subprocess
 import sys
@@ -6,9 +7,19 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check_conventions import Check, named_constants, over_aligned
+from check_conventions import Check, cpp_text, named_constants, over_aligned
 
 SOURCE = "core/libs/prx/libSceExample/tests/Example.cpp"
+
+SMALL = "void Small() {\n    constexpr std::size_t Alignment = 64;\n    alignas(Alignment) static char small[4];\n}\n"
+LARGE = "void Large() {\n    constexpr std::size_t Alignment = 16384;\n    alignas(Alignment) static char large[4];\n}\n"
+
+
+def reported(text):
+    constants = named_constants(cpp_text(text))
+    lines = text.split("\n")
+    starts = list(itertools.accumulate((len(line) + 1 for line in lines), initial=0))
+    return [number for number, line in enumerate(lines, 1) if over_aligned(line, constants, starts[number - 1])]
 
 
 class OverAlignedTests(unittest.TestCase):
@@ -41,23 +52,39 @@ class OverAlignedTests(unittest.TestCase):
                 self.assertIsNone(over_aligned(line))
 
     def test_named_constants_of_the_file(self):
-        constants = named_constants("constexpr std::size_t BlockBytes = 65536;\n"
-                                    "static constexpr std::uint32_t PageBytes{0x1000u};\n"
-                                    "constexpr auto Large = 0x10000;\n"
-                                    "constexpr std::size_t Texels = 4u << 20u;\n")
-        self.assertEqual(constants, {"BlockBytes": 65536, "PageBytes": 4096, "Large": 65536})
-        self.assertEqual(over_aligned("alignas(BlockBytes) std::array<std::uint8_t, BlockBytes> Block{};", constants),
-                         "alignas(BlockBytes)")
-        self.assertEqual(over_aligned("alignas( Large ) char block[16];", constants), "alignas( Large )")
-        for line in ("alignas(PageBytes) char page[4096];", "alignas(Texels) char block[16];",
-                     "alignas(inotify_event) char buffer[16384];"):
-            with self.subTest(line=line):
-                self.assertIsNone(over_aligned(line, constants))
-        self.assertIsNone(over_aligned("alignas(BlockBytes) char block[16];"))
+        self.assertEqual(reported("constexpr std::size_t BlockBytes = 65536;\n"
+                                  "static constexpr std::uint32_t PageBytes{0x1000u};\n"
+                                  "constexpr auto Large = 0x10000;\n"
+                                  "constexpr std::size_t Texels = 4u << 20u;\n"
+                                  "alignas(BlockBytes) std::array<std::uint8_t, BlockBytes> Block{};\n"
+                                  "alignas( Large ) char block[16];\n"
+                                  "alignas(PageBytes) char page[4096];\n"
+                                  "alignas(Texels) char texels[16];\n"
+                                  "alignas(inotify_event) char buffer[16384];\n"), [5, 6])
+        self.assertEqual(reported("alignas(BlockBytes) char block[16];\n"
+                                  "constexpr std::size_t BlockBytes = 65536;\n"), [])
+
+    def test_constants_in_separate_scopes(self):
+        self.assertEqual(reported(SMALL + LARGE), [7])
+        self.assertEqual(reported(LARGE + SMALL), [3])
+
+    def test_constants_in_nested_scopes(self):
+        for outer, inner, expected in ((64, 16384, [6]), (16384, 64, [3, 8])):
+            text = ("void Nested() {\n"
+                    f"    constexpr std::size_t Alignment = {outer};\n"
+                    "    alignas(Alignment) static char before[4];\n"
+                    "    {\n"
+                    f"        constexpr std::size_t Alignment = {inner};\n"
+                    "        alignas(Alignment) static char inside[4];\n"
+                    "    }\n"
+                    "    alignas(Alignment) static char after[4];\n"
+                    "}\n")
+            with self.subTest(outer=outer, inner=inner):
+                self.assertEqual(reported(text), expected)
 
 
 class AlignmentRuleTests(unittest.TestCase):
-    def test_only_added_code_is_reported(self):
+    def findings(self, after):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -72,12 +99,7 @@ class AlignmentRuleTests(unittest.TestCase):
             git("init", "-q")
             git("add", ".")
             git("commit", "-qm", "test: add fixture")
-            source.write_text("alignas(65536) char existing[16];\n"
-                              "alignas(256) char small[16];\n"
-                              "const char* text = \"alignas(65536)\";\n"
-                              "alignas(0x10000) char added[16];\n"
-                              "constexpr std::size_t BlockBytes = 65536;\n"
-                              "alignas(BlockBytes) std::array<std::uint8_t, BlockBytes> Block{};\n", encoding="utf-8")
+            source.write_text("alignas(65536) char existing[16];\n" + after, encoding="utf-8")
             git("commit", "-qam", "test: add over-aligned blocks")
             original = Path.cwd()
             try:
@@ -86,8 +108,19 @@ class AlignmentRuleTests(unittest.TestCase):
                 check.code()
             finally:
                 os.chdir(original)
-            self.assertEqual(check.findings, [("alignment", SOURCE, 4, "alignas(0x10000)"),
-                                              ("alignment", SOURCE, 6, "alignas(BlockBytes)")])
+            return check.findings
+
+    def test_only_added_code_is_reported(self):
+        self.assertEqual(self.findings("alignas(256) char small[16];\n"
+                                       "const char* text = \"alignas(65536)\";\n"
+                                       "alignas(0x10000) char added[16];\n"
+                                       "constexpr std::size_t BlockBytes = 65536;\n"
+                                       "alignas(BlockBytes) std::array<std::uint8_t, BlockBytes> Block{};\n"),
+                         [("alignment", SOURCE, 4, "alignas(0x10000)"), ("alignment", SOURCE, 6, "alignas(BlockBytes)")])
+
+    def test_constants_are_resolved_in_their_scope(self):
+        self.assertEqual(self.findings("namespace First {\n" + SMALL + LARGE + "}\nnamespace Second {\n" + LARGE + SMALL + "}\n"),
+                         [("alignment", SOURCE, 9, "alignas(Alignment)"), ("alignment", SOURCE, 15, "alignas(Alignment)")])
 
 
 if __name__ == "__main__":
