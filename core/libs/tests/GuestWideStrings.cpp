@@ -365,11 +365,15 @@ int main() {
     require(wcstof_nid_postfix(u"1e-45", nullptr) == 0x1p-149f && *__error_nid_postfix() == ERANGE);
     *__error_nid_postfix() = 0;
     require(wcstof_nid_postfix(u"0x1p-149", nullptr) == 0x1p-149f && *__error_nid_postfix() == 0);
+    require(wcstof_nid_postfix(u"0x1.8p-150", nullptr) == 0x1p-149f && *__error_nid_postfix() == ERANGE);
+    const char16_t* loneSign = u" -";
+    const float loneSignValue = wcstof_nid_postfix(loneSign, &end);
+    require(loneSignValue == 0.f && !std::signbit(loneSignValue) && end == loneSign && std::signbit(wcstold_nid_postfix(loneSign, &end)));
     const char16_t* half = u"-1.5é";
     require(wcstold_nid_postfix(half, &end) == -1.5L && end == half + 4);
     const char16_t* wideNan = u" -nan(0x123)é";
     require(std::bit_cast<std::uint64_t>(wcstod_nid_postfix(wideNan, &end)) == 0xfff8000000000123u && end == wideNan + 12);
-    require(std::bit_cast<std::uint32_t>(wcstof_nid_postfix(wideNan, &end)) == 0x7fc00000u && end == wideNan + 12);
+    require(std::bit_cast<std::uint32_t>(wcstof_nid_postfix(wideNan, &end)) == 0xffc00000u && end == wideNan + 12);
     const long double wideExtended = wcstold_nid_postfix(wideNan, &end);
     std::uint64_t significand;
     std::memcpy(&significand, &wideExtended, sizeof(significand));
