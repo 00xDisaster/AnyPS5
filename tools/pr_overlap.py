@@ -177,7 +177,10 @@ def source_changed_exports(diff, prefix):
 
 
 def base_exports(ref):
-    archive = subprocess.run(["git", "archive", "--format=tar", ref, "core/libs"], capture_output=True, check=True).stdout
+    root = git("rev-parse", "--show-toplevel").strip()
+    archive = subprocess.run(
+        ["git", "-C", root, "archive", "--format=tar", ref, "core/libs"], capture_output=True, check=True
+    ).stdout
     found = {}
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
         for entry in source:
