@@ -294,16 +294,17 @@ struct IsoWeek {
 };
 
 IsoWeek isoWeek(const GuestTm& time) {
+    if (time.tm_yday < 0) NotImplemented_nid_no_patch("strftime: ISO week of a negative tm_yday");
     int base = YEAR_BASE;
-    int yday = time.tm_yday;
+    std::int64_t yday = time.tm_yday;
     for (;;) {
         const int length = isLeapYearSum(time.tm_year, base) ? 366 : 365;
-        const int bottom = (yday + 11 - time.tm_wday) % 7 - 3;
-        int top = bottom - length % 7;
+        const std::int64_t bottom = (yday + 11 - time.tm_wday) % 7 - 3;
+        std::int64_t top = bottom - length % 7;
         if (top < -3) top += 7;
         top += length;
         if (yday >= top) return {static_cast<std::int64_t>(time.tm_year) + base + 1, 1};
-        if (yday >= bottom) return {static_cast<std::int64_t>(time.tm_year) + base, 1 + (yday - bottom) / 7};
+        if (yday >= bottom) return {static_cast<std::int64_t>(time.tm_year) + base, static_cast<int>(1 + (yday - bottom) / 7)};
         --base;
         yday += isLeapYearSum(time.tm_year, base) ? 366 : 365;
     }
