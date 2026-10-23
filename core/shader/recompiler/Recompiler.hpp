@@ -298,6 +298,7 @@ struct SpirvTarget {
     bool float32FlushToZero = false;
     bool waveLdsMemoryBarriers = false;
     bool float32DenormPreserve = false;
+    bool fusedExactArithmetic = false;
 };
 
 struct BindingLayout {
@@ -390,6 +391,7 @@ struct BarycentricEmulation {
     bool active = false;
     bool smooth = false;
     bool linear = false;
+    bool smoothOffset = false;
     bool operator==(const BarycentricEmulation&) const = default;
 };
 
@@ -514,6 +516,7 @@ struct BarycentricEmulationLayout {
     std::uint32_t smoothLocation = NoLocation;
     std::uint32_t linearLocation = NoLocation;
     std::uint32_t positionsLocation = NoLocation;
+    std::uint32_t reciprocalWLocation = NoLocation;
     std::vector<std::pair<std::uint32_t, std::uint32_t>> perVertexLocations;
 };
 
