@@ -140,6 +140,7 @@ public:
             const auto aliases = shared->aliases;
             for (const auto alias : aliases) {
                 if (views.at(alias).resident) demote(alias);
+                views.at(alias).aliasDemoted = false;
             }
             const auto viewBytes = std::min(pageBytes, sectionBytes - done);
             split(base, pageBytes);
@@ -191,7 +192,7 @@ public:
         std::lock_guard lock(mutex);
         collectableRanges.clear();
         for (auto it = views.lower_bound(address & ~(pageBytes - 1)); it != views.end() && it->first < address + bytes; ++it) {
-            if (residentOnly && !it->second.resident) continue;
+            if (residentOnly && !it->second.resident && !it->second.aliasDemoted) continue;
             auto& page = *it->second.page;
             page.comparedWhenShared = true;
             it->second.slot->comparedWhenShared = true;
@@ -304,7 +305,7 @@ public:
         }
         for (std::size_t done = 0; done < bytes; done += pageBytes) {
             const auto found = views.find(address + done);
-            if (found != views.end() && found->second.resident) demote(address + done);
+            if (found != views.end() && found->second.resident) demote(address + done, true);
         }
         auto view = views.find(address);
         if (view == views.end()) throw refuse("the range does not start at a shared view");
@@ -590,6 +591,7 @@ private:
         std::shared_ptr<Physical> slot;
         std::size_t viewBytes = pageBytes;
         std::uint32_t hostImports = 0;
+        bool aliasDemoted = false;
     };
     struct Run {
         std::uintptr_t end;
@@ -737,7 +739,7 @@ private:
         return true;
     }
 
-    void demote(std::uintptr_t address) {
+    void demote(std::uintptr_t address, bool alias = false) {
         const auto run = std::prev(residentRuns.upper_bound(address));
         const auto start = run->first;
         const auto stop = run->second.end;
@@ -755,6 +757,7 @@ private:
             mapShared(page, view.section->handle, view.offset, view.protection);
             view.slot->stored = true;
             view.resident = false;
+            view.aliasDemoted = alias;
             view.seen.fill(0);
             view.armed = 0;
             view.collected = 0;
