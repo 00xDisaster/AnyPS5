@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -43,6 +45,62 @@ constexpr char kLayerVersion23[] =
 
 void Require(bool condition) {
     if (!condition) std::abort();
+}
+
+template <typename TRange>
+concept AssignableMemory = requires(ShaderRecompiler::GuestContext& context, TRange&& range) {
+    context.memory = std::forward<TRange>(range);
+};
+
+using Region = ShaderRecompiler::MemoryRegion;
+using Regions = std::vector<Region>;
+using RegionArray = std::array<Region, 1>;
+using RegionView = ShaderRecompiler::MemoryRegionView;
+
+static_assert(!AssignableMemory<Regions>);
+static_assert(!AssignableMemory<const Regions>);
+static_assert(!AssignableMemory<RegionArray>);
+static_assert(!AssignableMemory<std::initializer_list<Region>>);
+static_assert(AssignableMemory<Regions&> && AssignableMemory<const Regions&>);
+static_assert(AssignableMemory<RegionArray&> && AssignableMemory<const RegionArray&>);
+static_assert(AssignableMemory<std::span<const Region>> && AssignableMemory<RegionView>);
+static_assert(sizeof(RegionView) == sizeof(std::span<const Region>));
+static_assert(alignof(RegionView) == alignof(std::span<const Region>));
+static_assert(std::is_trivially_copyable_v<RegionView>);
+static_assert(std::is_nothrow_constructible_v<RegionView, std::span<const Region>>);
+static_assert([] {
+    const RegionArray owned{{{0x1000u, {}}}};
+    const RegionView view{std::span<const Region>(owned)};
+    return view.size() == 1u && view.front().guestAddress == 0x1000u;
+}());
+
+void VerifyMemoryView() {
+    const std::array<std::byte, 4> bytes{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
+    Regions owned{{0x1000u, bytes}};
+    const Regions frozen = owned;
+    Region array[]{{0x2000u, bytes}};
+    RegionArray standard{{{0x3000u, bytes}}};
+    ShaderRecompiler::RecompileRequest request{};
+    request.context.memory = owned;
+    Require(request.context.memory.data() == owned.data());
+    owned.front().guestAddress = 0x4000u;
+    Require(request.context.memory.front().guestAddress == 0x4000u);
+    request.context.memory = frozen;
+    Require(request.context.memory.data() == frozen.data());
+    request.context.memory = array;
+    Require(request.context.memory.data() == array);
+    request.context.memory = standard;
+    Require(request.context.memory.data() == standard.data());
+    request.context.memory = std::span<const Region>(owned).first(1);
+    const auto copy = request;
+    Require(copy.context.memory.data() == owned.data() && copy.context.memory.front().bytes.data() == bytes.data());
+    request.context.memory = {owned.data(), owned.size()};
+    const ShaderRecompiler::RequestSerializer serializer;
+    const auto replay = serializer.Deserialize(serializer.Serialize(request));
+    Require(replay.request.context.memory.size() == 1u && replay.request.context.memory.front().guestAddress == 0x4000u);
+    Require(std::ranges::equal(replay.request.context.memory.front().bytes, bytes));
+    request.context.memory = {};
+    Require(request.context.memory.empty());
 }
 
 void InsertMeshBarycentricFlag(std::vector<std::uint8_t>& bytes) {
@@ -99,6 +157,7 @@ std::string EncodeBase64(const std::vector<std::uint8_t>& bytes) {
 }
 
 int main() {
+    VerifyMemoryView();
     const ShaderRecompiler::RequestSerializer serializer;
 
     const auto historical = serializer.Deserialize(kHistoricalVersion21);
@@ -226,6 +285,8 @@ int main() {
             if (fixture.tessellation) upgraded.insert(upgraded.end() - 35u, 6u, 0u);
             AppendVertexTail(upgraded);
             upgraded.push_back(0u);
+            upgraded.push_back(0u);
+            upgraded.insert(upgraded.end(), {0u, 0x10u, 0u, 0u});
             Require(serializer.Serialize(request) == EncodeBase64(upgraded));
             auto truncated = bytes;
             truncated.pop_back();
@@ -267,6 +328,8 @@ int main() {
                 if (fixture.tessellation) layered.insert(layered.end() - 35u, 6u, 0u);
                 AppendVertexTail(layered);
                 layered.push_back(0u);
+                layered.push_back(0u);
+                layered.insert(layered.end(), {0u, 0x10u, 0u, 0u});
                 Require(serializer.Serialize(layerReplay.request) == EncodeBase64(layered));
             }
         }
@@ -293,6 +356,8 @@ int main() {
             InsertPixelDefaultsAfterFrontFace(bytes);
             AppendVertexTail(bytes);
             bytes.push_back(0u);
+            bytes.push_back(0u);
+            bytes.insert(bytes.end(), {0u, 0x10u, 0u, 0u});
             Require(serializer.Serialize(replay.request) == EncodeBase64(bytes));
 
             auto truncated23 = DecodeBase64(encoded23);
@@ -424,6 +489,8 @@ int main() {
                 main38.insert(main38.end(), sizeof(std::uint64_t) + 1u + 5u + 1u, 0u);
                 AppendVertexTail(upgraded);
                 upgraded.push_back(0u);
+                upgraded.push_back(0u);
+                upgraded.insert(upgraded.end(), {0u, 0x10u, 0u, 0u});
                 Require(serializer.Serialize(request) == EncodeBase64(upgraded));
                 const auto replay38 = serializer.Deserialize(EncodeBase64(main38));
                 Require(replay38.request.graphics.has_value() && replay38.request.graphics->tessellation.has_value() == fixture.tessellation);
@@ -441,7 +508,11 @@ int main() {
                         pointed.context.vertex->pointSizeMax = 8.0f;
                         auto version47 = DecodeBase64(serializer.Serialize(pointed));
                         Require(version47.size() > 15u && version47[4] == 47u);
-                        auto version43 = version47;
+                        auto version44 = version47;
+                        version44.resize(version44.size() - 4u);
+                        version44.pop_back();
+                        version44[4] = 44u;
+                        auto version43 = version44;
                         version43.pop_back();
                         version43[4] = 43u;
                         const auto replay43 = serializer.Deserialize(EncodeBase64(version43));
@@ -480,6 +551,8 @@ int main() {
                     if (fixture.tessellation) main25.insert(main25.end() - 35u, 1u, 0u);
                     AppendVertexTail(main25);
                     main25.push_back(0u);
+                    main25.push_back(0u);
+                    main25.insert(main25.end(), {0u, 0x10u, 0u, 0u});
                     Require(serializer.Serialize(replay25.request) == EncodeBase64(main25));
                 }
             }
@@ -491,12 +564,16 @@ int main() {
         request.target.float16DenormPreserve = preserve;
         request.target.float32FlushToZero = !preserve;
         request.target.float32DenormPreserve = preserve;
+        request.target.largePixelFunctionLdsBuffer = !preserve;
+        request.target.pixelFunctionStorageDwords = preserve ? 2048u : 4096u;
         const auto encoded = serializer.Serialize(request);
         const auto replay = serializer.Deserialize(encoded);
-        Require(replay.request.target.float16DenormPreserve == preserve && replay.request.target.float32FlushToZero == !preserve && replay.request.target.float32DenormPreserve == preserve);
+        Require(replay.request.target.float16DenormPreserve == preserve && replay.request.target.float32FlushToZero == !preserve && replay.request.target.float32DenormPreserve == preserve && replay.request.target.largePixelFunctionLdsBuffer == !preserve && replay.request.target.pixelFunctionStorageDwords == request.target.pixelFunctionStorageDwords);
         auto bytes = DecodeBase64(encoded);
         Require(bytes.size() >= 8u && bytes[4] == 47u && bytes[5] == 0u && bytes[6] == 0u && bytes[7] == 0u);
         auto version40 = bytes;
+        version40.resize(version40.size() - sizeof(std::uint32_t));
+        version40.pop_back();
         version40.pop_back();
         version40.pop_back();
         version40[4] = 40u;
@@ -549,6 +626,8 @@ int main() {
     const auto order = std::search(version41.begin(), version41.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.end()) + pixel.sampleLocations.size() + 1;
     Require(version41.end() - order > static_cast<std::ptrdiff_t>(sizeof(pixel.sampleOrder)) && *order == 0x10u);
     version41.erase(order, order + sizeof(pixel.sampleOrder));
+    version41.resize(version41.size() - 4u);
+    version41.pop_back();
     version41.pop_back();
     version41[4] = 41u;
     const auto replay41 = serializer.Deserialize(EncodeBase64(version41));
@@ -560,6 +639,8 @@ int main() {
         Require(serializer.Deserialize(serializer.Serialize(request)).request.target.spannedWaves == spanned);
         request.target.float32FlushToZero = true;
         auto version35 = DecodeBase64(serializer.Serialize(request));
+        version35.resize(version35.size() - sizeof(std::uint32_t));
+        version35.pop_back();
         version35.pop_back();
         const auto stencilOperationValue = std::search(version35.begin(), version35.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
         const auto pixelTail = static_cast<std::ptrdiff_t>(1u + sizeof(pixel.sampleOrder));
@@ -605,7 +686,7 @@ int main() {
         for (const std::uint8_t version : {32u, 33u, 34u, 35u, 36u, 37u, 38u}) {
             pointRequest.target.spannedWaves = spanned;
             auto legacy = DecodeBase64(serializer.Serialize(pointRequest));
-            legacy.resize(legacy.size() - (version >= 36u ? 15u : version >= 35u ? 16u : 21u));
+            legacy.resize(legacy.size() - (version >= 36u ? 20u : version >= 35u ? 21u : 26u));
             legacy[4] = version;
             const auto replayLegacy = serializer.Deserialize(EncodeBase64(legacy));
             Require(replayLegacy.request.target.spannedWaves == spanned);
@@ -617,7 +698,7 @@ int main() {
             Require(!replayLegacy.request.context.vertex->pointList && replayLegacy.request.context.vertex->pointSize == 1.0f);
             Require(replayLegacy.request.context.vertex->pointSizeMin == 0.0f && replayLegacy.request.context.vertex->pointSizeMax == 0.0f);
             const auto upgradedLegacy = DecodeBase64(serializer.Serialize(replayLegacy.request));
-            Require(upgradedLegacy[4] == 47u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 15u : version >= 35u ? 16u : 21u));
+            Require(upgradedLegacy[4] == 47u && upgradedLegacy.size() == legacy.size() + (version >= 36u ? 20u : version >= 35u ? 21u : 26u));
         }
     }
 
@@ -626,14 +707,14 @@ int main() {
     const auto sampledPoint = serializer.Deserialize(serializer.Serialize(pointRequest));
     Require(sampledPoint.request.context.vertex->pointList && sampledPoint.request.context.pixel->sampleOrder == pixel.sampleOrder);
     auto legacy42 = DecodeBase64(serializer.Serialize(pointRequest));
-    legacy42.resize(legacy42.size() - 14u);
+    legacy42.resize(legacy42.size() - 19u);
     legacy42[4] = 42u;
     const auto replay42 = serializer.Deserialize(EncodeBase64(legacy42));
     Require(replay42.request.context.pixel->sampleOrder == pixel.sampleOrder && !replay42.request.context.vertex->pointList && replay42.request.context.vertex->pointSize == 1.0f);
     pixel.sampleOrder = {};
     pointRequest.context.pixel = pixel;
     auto legacy34 = DecodeBase64(serializer.Serialize(pointRequest));
-    legacy34.resize(legacy34.size() - 21u);
+    legacy34.resize(legacy34.size() - 26u);
     const auto stencil34 = std::search(legacy34.begin(), legacy34.end(), pixel.sampleLocations.begin(), pixel.sampleLocations.begin() + 4) + pixel.sampleLocations.size();
     const auto legacyPixelTail = static_cast<std::ptrdiff_t>(1u + sizeof(pixel.sampleOrder));
     Require(legacy34.end() - stencil34 > legacyPixelTail && std::all_of(stencil34, stencil34 + legacyPixelTail, [](std::uint8_t value) { return value == 0u; }));
@@ -645,8 +726,13 @@ int main() {
 
     for (const bool fused : {false, true}) {
         request.target.fusedExactArithmetic = fused;
+        request.target.largePixelFunctionLdsBuffer = false;
         auto bytes = DecodeBase64(serializer.Serialize(request));
-        Require(serializer.Deserialize(EncodeBase64(bytes)).request.target.fusedExactArithmetic == fused && bytes.back() == (fused ? 1u : 0u));
+        Require(serializer.Deserialize(EncodeBase64(bytes)).request.target.fusedExactArithmetic == fused && bytes[bytes.size() - 6u] == (fused ? 1u : 0u) && bytes[bytes.size() - 5u] == 0u);
+        bytes.resize(bytes.size() - 4u);
+        bytes.pop_back();
+        bytes[4] = 44u;
+        Require(serializer.Deserialize(EncodeBase64(bytes)).request.target.fusedExactArithmetic == fused);
         bytes[4] = 43u;
         bytes.pop_back();
         Require(!serializer.Deserialize(EncodeBase64(bytes)).request.target.fusedExactArithmetic);

@@ -879,6 +879,8 @@ std::string RequestSerializer::Serialize(const RecompileRequest& request) const 
         writer.WriteU32(std::bit_cast<std::uint32_t>(request.context.vertex->pointSizeMax));
     }
     writer.WriteBool(request.target.fusedExactArithmetic);
+    writer.WriteBool(request.target.largePixelFunctionLdsBuffer);
+    writer.WriteU32(request.target.pixelFunctionStorageDwords);
     return base64Encode(buffer);
 }
 
@@ -942,6 +944,10 @@ DeserializedRequest RequestSerializer::Deserialize(std::string_view text) const 
         result.vertex = vertex;
     }
     if (version >= 44u) result.request.target.fusedExactArithmetic = reader.ReadBool();
+    if (version >= 45u) {
+        result.request.target.largePixelFunctionLdsBuffer = reader.ReadBool();
+        result.request.target.pixelFunctionStorageDwords = reader.ReadU32();
+    }
     if (version >= 21u && reader.Remaining() != 0u) throw std::runtime_error("RequestSerializer: unexpected trailing data");
     return result;
 }
