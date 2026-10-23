@@ -1,4 +1,5 @@
 add_library(libSceRtc SHARED EXCLUDE_FROM_ALL Export.cpp)
+target_link_libraries(libSceRtc PRIVATE libc)
 target_include_directories(libSceRtc PRIVATE ${LIBS_INCLUDE_DIR})
 configure_windows_unwind(libSceRtc)
 

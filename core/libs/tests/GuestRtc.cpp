@@ -1,5 +1,8 @@
 #include "SceTypes.hpp"
+#include "ProcessParametersFixture.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -113,7 +116,14 @@ static int CallAdd(Add function, RtcTick* destination, const RtcTick* source, st
     std::abort();
 }
 
+static void SetCompiledSdkVersion(std::byte* process, std::uint32_t version) {
+    std::memcpy(process + 16, &version, sizeof(version));
+}
+
 int main() {
+    static std::array<std::byte, 64> process{};
+    Require(ProcessParametersFixture::Install(process.data(), process.size()));
+    SetCompiledSdkVersion(process.data(), 0x01000051);
     constexpr int invalidPointer = static_cast<int>(0x80B50002);
     constexpr int invalidValue = static_cast<int>(0x80B50003);
     constexpr int badParse = static_cast<int>(0x80B50007);
@@ -952,6 +962,40 @@ int main() {
         Require(sceRtcGetCurrentDebugNetworkTick(&current) == 0 && current.tick >= debugClock.tick && current.tick < debugClock.tick + 1000000);
         Require(sceRtcGetCurrentRawNetworkTick(&current) == 0 && current.tick > unixEpochTick);
     }
+    SetCompiledSdkVersion(process.data(), 0x02ffffff);
+    Require(sceRtcGetDayOfWeek(0, 13, 1) == invalidYear && sceRtcGetDayOfWeek(10000, 1, 1) == 6);
+    SetCompiledSdkVersion(process.data(), 0x03000000);
+    Require(sceRtcGetDayOfWeek(0, 13, 1) == invalidMonth && sceRtcGetDayOfWeek(10000, 1, 1) == invalidYear);
+    SetCompiledSdkVersion(process.data(), 0x05050001);
+    Require(sceRtcGetDayOfWeek(0, 13, 1) == invalidMonth && sceRtcGetDayOfWeek(10000, 13, 1) == invalidMonth && sceRtcGetDayOfWeek(2024, 0, 1) == invalidMonth);
+    Require(sceRtcGetDayOfWeek(0, 1, 0) == invalidYear && sceRtcGetDayOfWeek(10000, 2, 30) == invalidYear && sceRtcGetDayOfWeek(65536, 1, 1) == invalidYear);
+    Require(sceRtcGetDayOfWeek(2024, 2, 30) == invalidDay && sceRtcGetDayOfWeek(9999, 12, 31) == 5 && sceRtcGetDayOfWeek(1, 1, 1) == 1);
+    Require(sceRtcGetDaysInMonth(0, 13) == invalidYear && sceRtcGetDaysInMonth(10000, 1) == 31 && sceRtcIsLeapYear(10000) == 1);
+    RtcDateTime sentinel{0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaaaaaau};
+    RtcDateTime ranged = sentinel;
+    Require(sceRtcSetTime_t(&ranged, -1) == invalidValue && Equal(ranged, sentinel));
+    Require(sceRtcSetTime_t(&ranged, std::numeric_limits<std::int64_t>::min()) == invalidValue && Equal(ranged, sentinel));
+    Require(sceRtcSetTime_t(&ranged, 4294967296ll) == 0 && Equal(ranged, RtcDateTime{2106, 2, 7, 6, 28, 16, 0}));
+    Require(sceRtcSetTime_t(&ranged, 253402300800ll) == 0 && Equal(ranged, RtcDateTime{10000, 1, 1, 0, 0, 0, 0}));
+    Require(sceRtcSetTime_t(&ranged, 18446744073709ll) == 0 && Equal(ranged, RtcDateTime{1969, 12, 31, 23, 59, 59, 448384}));
+    Require(sceRtcSetTime_t(&ranged, std::numeric_limits<std::int64_t>::max()) == 0 && Equal(ranged, RtcDateTime{1969, 12, 31, 23, 59, 59, 0}));
+    char ranges[64];
+    RtcTick shifted{0};
+    Require(sceRtcFormatRFC3339(ranges, &shifted, -1) == invalidValue);
+    shifted.tick = 59999999;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, -1) == invalidValue);
+    shifted.tick = 60000000;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, -1) == 0 && std::strcmp(ranges, "0001-01-01T00:00:00.00-00:01") == 0);
+    shifted.tick = std::numeric_limits<std::uint64_t>::max();
+    Require(sceRtcFormatRFC3339(ranges, &shifted, 1) == invalidValue && sceRtcFormatRFC3339(ranges, &shifted, 1439) == invalidValue);
+    shifted.tick = std::numeric_limits<std::uint64_t>::max() - 60000000 + 1;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, 1) == invalidValue);
+    shifted.tick = std::numeric_limits<std::uint64_t>::max() - 60000000;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, 1) == invalidYear);
+    shifted.tick = 1ull << 63;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, 0) == invalidYear && sceRtcFormatRFC3339(ranges, &shifted, -1) == invalidYear);
+    shifted.tick = maxTick + 1;
+    Require(sceRtcFormatRFC3339(ranges, &shifted, -1) == 0 && std::strcmp(ranges, "9999-12-31T23:59:00.00-00:01") == 0);
     Require(sceRtcInit() == 0);
     Require(sceRtcEnd() == 0);
 }

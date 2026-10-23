@@ -7,6 +7,7 @@
 #include <limits>
 #include <mutex>
 #include "SceTypes.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 
 namespace {
@@ -31,6 +32,7 @@ constexpr std::int64_t WIN32_EPOCH_DAYS = 584388;
 constexpr std::uint64_t UNIX_EPOCH_TICK = UNIX_EPOCH_DAYS * TICKS_PER_DAY;
 constexpr std::uint64_t WIN32_EPOCH_TICK = WIN32_EPOCH_DAYS * TICKS_PER_DAY;
 constexpr std::uint64_t MAX_TICK = 3652059ull * TICKS_PER_DAY - 1;
+constexpr std::uint32_t RANGE_CHECKED_SDK_VERSION = 0x03000000;
 
 struct ClockState {
     std::uint64_t tick = 0;
@@ -98,6 +100,13 @@ RtcDateTime fromTick(std::uint64_t tick) {
         static_cast<std::uint16_t>(year), static_cast<std::uint16_t>(month), static_cast<std::uint16_t>(day),
         static_cast<std::uint16_t>(timeOfDay / TICKS_PER_HOUR), static_cast<std::uint16_t>(timeOfDay % TICKS_PER_HOUR / TICKS_PER_MINUTE),
         static_cast<std::uint16_t>(timeOfDay % TICKS_PER_MINUTE / TICKS_PER_SECOND), static_cast<std::uint32_t>(timeOfDay % TICKS_PER_SECOND)};
+}
+
+bool rangeChecked() {
+    const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
+    std::uint32_t version;
+    std::memcpy(&version, process + 16, sizeof(version));
+    return version >= RANGE_CHECKED_SDK_VERSION;
 }
 
 std::uint64_t currentTick(std::size_t clock = 0) {
@@ -370,8 +379,13 @@ int APS5_VABI sceRtcGetDaysInMonth(int year, int month) {
 }
 
 int APS5_VABI sceRtcGetDayOfWeek(int year, int month, int day) {
-    if (year < 1) return SCE_RTC_ERROR_INVALID_YEAR;
-    if (month < 1 || month > 12) return SCE_RTC_ERROR_INVALID_MONTH;
+    if (rangeChecked()) {
+        if (month < 1 || month > 12) return SCE_RTC_ERROR_INVALID_MONTH;
+        if (year < 1 || year > 9999) return SCE_RTC_ERROR_INVALID_YEAR;
+    } else {
+        if (year < 1) return SCE_RTC_ERROR_INVALID_YEAR;
+        if (month < 1 || month > 12) return SCE_RTC_ERROR_INVALID_MONTH;
+    }
     if (day < 1 || day > daysInMonth(year, month)) return SCE_RTC_ERROR_INVALID_DAY;
     return static_cast<int>((daysFromCivil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) + 1) % 7);
 }
@@ -451,6 +465,11 @@ int APS5_VABI sceRtcGetTime_t(const RtcDateTime* time, int64_t* seconds) {
 
 int APS5_VABI sceRtcSetTime_t(RtcDateTime* time, int64_t seconds) {
     if (!time) return SCE_RTC_ERROR_INVALID_POINTER;
+    if (rangeChecked()) {
+        if (seconds < 0) return SCE_RTC_ERROR_INVALID_VALUE;
+        *time = fromTick(UNIX_EPOCH_TICK + static_cast<std::uint64_t>(seconds) * TICKS_PER_SECOND);
+        return 0;
+    }
     *time = fromTick(UNIX_EPOCH_TICK + static_cast<std::uint64_t>(static_cast<std::uint32_t>(seconds)) * TICKS_PER_SECOND);
     return 0;
 }
@@ -590,7 +609,9 @@ int APS5_VABI sceRtcFormatRFC3339(char* dateTime, const RtcTick* utc, int timeZo
         utc = &now;
     }
     if (timeZoneMinutes < -1439 || timeZoneMinutes > 1439) return SCE_RTC_ERROR_INVALID_VALUE;
-    const RtcTick local{utc->tick + static_cast<std::uint64_t>(static_cast<std::int64_t>(timeZoneMinutes) * TICKS_PER_MINUTE)};
+    const auto shift = static_cast<std::int64_t>(timeZoneMinutes) * TICKS_PER_MINUTE;
+    if (rangeChecked() && (shift < 0 ? utc->tick < static_cast<std::uint64_t>(-shift) : utc->tick > std::numeric_limits<std::uint64_t>::max() - static_cast<std::uint64_t>(shift))) return SCE_RTC_ERROR_INVALID_VALUE;
+    const RtcTick local{utc->tick + static_cast<std::uint64_t>(shift)};
     if (local.tick > MAX_TICK) return SCE_RTC_ERROR_INVALID_YEAR;
     const RtcDateTime time = fromTick(local.tick);
     int written = std::snprintf(dateTime, 23, "%04u-%02u-%02uT%02u:%02u:%02u.%02u", time.year, time.month, time.day, time.hour, time.minute, time.second, time.microsecond / 10000);
