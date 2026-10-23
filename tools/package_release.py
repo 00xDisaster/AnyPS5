@@ -56,6 +56,9 @@ def package(platform, build, output, version):
     licenses = []
     if "libSceAjm.native.prx" in expected:
         licenses.append((ROOT / "3rdparty/vgmstream/COPYING", "libs/licenses/vgmstream.txt"))
+    if "libSceVorbisDec.prx" in expected:
+        licenses.append((ROOT / "3rdparty/ogg/COPYING", "libs/licenses/ogg.txt"))
+        licenses.append((ROOT / "3rdparty/vorbis/COPYING", "libs/licenses/vorbis.txt"))
     if expected & {"libSceOpusDec.prx", "libSceOpusCeltDec.prx"}:
         licenses.append((ROOT / "3rdparty/opus/COPYING", "libs/licenses/opus.txt"))
     if platform == "windows":
