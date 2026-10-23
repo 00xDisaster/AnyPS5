@@ -35,6 +35,7 @@
 #endif
 
 static constexpr int SCE_OK = 0;
+static constexpr int GUEST_EINVAL = 22;
 
 static constexpr std::size_t HOST_STACK_MARGIN = 1u << 20;
 static constexpr int DETACH_DETACHED = 1;
@@ -818,6 +819,8 @@ static void* StartNativeThread(void* opaque) {
 
 extern "C" {
 
+int* APS5_VABI __error_nid_postfix();
+
 int APS5_VABI scePthreadCreate(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name) {
     if (!thread || !entry) throw std::runtime_error("scePthreadCreate: null arg");
     if (attr && !*attr) attr = nullptr;
@@ -1187,10 +1190,14 @@ void APS5_VABI scePthreadTestcancel() {
 }
 
 int APS5_VABI scePthreadSetprio(Pthread thread, int prio) {
-    const auto level = static_cast<std::uint32_t>(prio) & 0xffffu;
-    if (!thread || !((level >= 256 && level <= 767) || (level >= 896 && level <= 959))) return SCE_KERNEL_ERROR_EINVAL;
+    if (!thread) return SCE_KERNEL_ERROR_EINVAL;
     const auto live = LockLiveGuestThread(thread);
     if (!live) return SCE_KERNEL_ERROR_ESRCH;
+    const auto level = static_cast<std::uint32_t>(prio) & 0xffffu;
+    if (!((level >= 256 && level <= 767) || (level >= 896 && level <= 959))) {
+        *__error_nid_postfix() = GUEST_EINVAL;
+        return SCE_KERNEL_ERROR_EINVAL;
+    }
     thread->priority.store(prio, std::memory_order_relaxed);
     return SCE_OK;
 }

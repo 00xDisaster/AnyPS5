@@ -332,9 +332,7 @@ int APS5_VABI pthread_setcanceltype_nid_postfix(int type, int* old_type) {
 }
 
 int APS5_VABI pthread_setprio_nid_postfix(Pthread thread, int prio) {
-    const int result = PosixThread::ToErrno(scePthreadSetprio(thread, prio));
-    if (thread && result == PosixThread::GUEST_EINVAL) *__error_nid_postfix() = result;
-    return result;
+    return PosixThread::ToErrno(scePthreadSetprio(thread, prio));
 }
 
 int APS5_VABI pthread_setschedparam_nid_postfix(Pthread thread, int policy, const KernelSchedParam* param) {
