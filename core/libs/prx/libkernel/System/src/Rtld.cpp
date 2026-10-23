@@ -66,7 +66,10 @@ int releaseThreadAtexitImage(const void* address, const char* caller) {
     {
         std::lock_guard lock(threadAtexitMutex);
         const auto found = threadAtexitReferences.find(image);
-        if (found == threadAtexitReferences.end()) return 0;
+        if (found == threadAtexitReferences.end()) {
+            APS5_LOG_OUT("%s: image holds no thread atexit reference", caller);
+            return 0;
+        }
         handle = found->second;
         threadAtexitReferences.erase(found);
     }
