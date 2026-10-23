@@ -420,6 +420,12 @@ class TestWebRunnerTests(unittest.TestCase):
                 self.encoding = encoding
                 self.errors = errors
 
+            def write(self, text):
+                return len(text)
+
+            def flush(self):
+                pass
+
         out, err = Stream(), Stream()
         with patch.object(test_web.sys, "stdout", out), patch.object(test_web.sys, "stderr", err):
             with self.assertRaises(SystemExit):
