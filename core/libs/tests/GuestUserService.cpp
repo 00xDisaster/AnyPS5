@@ -61,7 +61,7 @@ int main() {
     Require(sceUserServiceGetUserColor(123, &color) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
     Require(sceUserServiceGetUserColor(USER_SERVICE_INITIAL_USER_ID, &color) == USER_SERVICE_OK);
 
-    using KeyboardSetting = int (*)(int, std::int32_t*);
+    using KeyboardSetting = decltype(&sceUserServiceGetKeyboardType);
     for (KeyboardSetting setting : {sceUserServiceGetKeyboardType, sceUserServiceGetJapaneseInputType, sceUserServiceGetTraditionalChineseInputType}) {
         std::int32_t value = 0x5A5A;
         Require(setting(USER_SERVICE_INITIAL_USER_ID, nullptr) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
