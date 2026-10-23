@@ -6,9 +6,12 @@
 #include <ctime>
 #include <limits>
 #include <mutex>
+#include <stdexcept>
+#include <string_view>
 #include "SceTypes.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
 
 namespace {
 
@@ -102,7 +105,20 @@ RtcDateTime fromTick(std::uint64_t tick) {
         static_cast<std::uint16_t>(timeOfDay % TICKS_PER_MINUTE / TICKS_PER_SECOND), static_cast<std::uint32_t>(timeOfDay % TICKS_PER_SECOND)};
 }
 
+bool ps4Title() {
+    try {
+        const auto titleId = GetAppTitleId_nid_postfix();
+        return std::string_view(titleId.value, strnlen(titleId.value, sizeof(titleId.value))).substr(0, 4) == "CUSA";
+    } catch (const std::runtime_error&) {
+        return false;
+    } catch (const std::length_error&) {
+        return false;
+    }
+}
+
 bool rangeChecked() {
+    static const bool ps4 = ps4Title();
+    if (!ps4) return true;
     const auto* process = static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch());
     std::uint32_t version;
     std::memcpy(&version, process + 16, sizeof(version));

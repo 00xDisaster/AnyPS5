@@ -7,7 +7,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <chrono>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <string_view>
 #include <initializer_list>
 #include <limits>
 
@@ -120,10 +125,36 @@ static void SetCompiledSdkVersion(std::byte* process, std::uint32_t version) {
     std::memcpy(process + 16, &version, sizeof(version));
 }
 
-int main() {
+static void EnterTitleDirectory(const char* titleId) {
+    const auto directory = std::filesystem::temp_directory_path() / ("rtc-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(directory / "app0" / "sce_sys");
+    std::filesystem::current_path(directory);
+    if (titleId == nullptr) return;
+    struct Entry { std::uint16_t key, format; std::uint32_t length, maximum, offset; };
+    const std::uint32_t header[5] = {0x46535000, 0x0101, 52, 72, 2};
+    const Entry entries[2] = {{0, 0x0204, 8, 8, 0}, {6, 0x0204, 10, 12, 8}};
+    std::ofstream file("app0/sce_sys/param.sfo", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(header), sizeof(header));
+    file.write(reinterpret_cast<const char*>(entries), sizeof(entries));
+    file << std::string("TITLE\0TITLE_ID\0\0\0\0\0\0", 20) << std::string("Example\0", 8) << titleId << std::string("\0\0\0", 3);
+}
+
+int main(int argc, char** argv) {
     static std::array<std::byte, 64> process{};
     Require(ProcessParametersFixture::Install(process.data(), process.size()));
     SetCompiledSdkVersion(process.data(), 0x01000051);
+    if (argc == 2 && std::string_view(argv[1]) == "ps5-title") {
+        EnterTitleDirectory(nullptr);
+        RtcDateTime untouched{0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaaaaaau};
+        RtcDateTime converted = untouched;
+        Require(sceRtcGetDayOfWeek(10000, 1, 1) == static_cast<int>(0x80B50008) && sceRtcGetDayOfWeek(0, 13, 1) == static_cast<int>(0x80B50009));
+        Require(sceRtcSetTime_t(&converted, -1) == static_cast<int>(0x80B50003) && Equal(converted, untouched));
+        char text[64];
+        RtcTick tick{std::numeric_limits<std::uint64_t>::max()};
+        Require(sceRtcFormatRFC3339(text, &tick, 1) == static_cast<int>(0x80B50003));
+        return 0;
+    }
+    EnterTitleDirectory("CUSA00000");
     constexpr int invalidPointer = static_cast<int>(0x80B50002);
     constexpr int invalidValue = static_cast<int>(0x80B50003);
     constexpr int badParse = static_cast<int>(0x80B50007);
