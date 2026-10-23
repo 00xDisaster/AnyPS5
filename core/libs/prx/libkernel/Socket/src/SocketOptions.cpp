@@ -40,6 +40,8 @@ constexpr int GuestNonBlocking = 0x1200;
 constexpr int GuestNonBlockingState = 0x100;
 constexpr int GuestUnix = 1;
 constexpr int GuestTcpNoDelay = 1;
+constexpr int KeptFlags = 0x1 | 0x40 | 0x200 | 0x400 | 0x2000 | 0x10000;
+constexpr int WriteOnlyFlags = 0x4000 | 0x8000;
 constexpr int GuestTcpNoDelayFlag = 4;
 constexpr int GuestTcpMaximumSegment = 2;
 constexpr int GuestTcpKeepIdle = 0x100;
@@ -202,6 +204,13 @@ int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
         if (::setsockopt(handle, SOL_SOCKET, NativeBoolean(option), reinterpret_cast<NativeOptionValue>(&enabled), sizeof(enabled))) return HostError();
         return 0;
     }
+    if ((option & (KeptFlags | WriteOnlyFlags)) != 0 && (option & (option - 1)) == 0) {
+        if (length < sizeof(int)) return ErrorInvalid;
+        int number;
+        std::memcpy(&number, value, sizeof(number));
+        if ((option & KeptFlags) != 0) state.keptFlags = number != 0 ? state.keptFlags | option : state.keptFlags & ~option;
+        return 0;
+    }
     return ErrorNoProtocolOption;
 }
 
@@ -244,6 +253,8 @@ int GetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
         number = listening ? GuestAcceptConnection : 0;
     } else if (option == GuestType) {
         number = type;
+    } else if ((option & KeptFlags) != 0 && (option & (option - 1)) == 0) {
+        number = state.keptFlags & option;
     } else if (option == GuestNoSigpipe) {
         number = state.noSignal ? GuestNoSigpipe : 0;
     } else if (option == GuestNonBlocking) {
