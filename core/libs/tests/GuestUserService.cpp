@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
+#include <utility>
 
 extern "C" {
 int APS5_VABI sceUserServiceGetUserNumber(int user_id, int32_t* number);
@@ -62,12 +63,14 @@ int main() {
     Require(sceUserServiceGetUserColor(USER_SERVICE_INITIAL_USER_ID, &color) == USER_SERVICE_OK);
 
     using KeyboardSetting = decltype(&sceUserServiceGetKeyboardType);
-    for (KeyboardSetting setting : {sceUserServiceGetKeyboardType, sceUserServiceGetJapaneseInputType, sceUserServiceGetTraditionalChineseInputType}) {
+    const std::pair<KeyboardSetting, std::int32_t> keyboardSettings[] = {
+        {sceUserServiceGetKeyboardType, 20}, {sceUserServiceGetJapaneseInputType, 0}, {sceUserServiceGetTraditionalChineseInputType, 0}};
+    for (const auto& [setting, expected] : keyboardSettings) {
         std::int32_t value = 0x5A5A;
         Require(setting(USER_SERVICE_INITIAL_USER_ID, nullptr) == USER_SERVICE_ERROR_INVALID_ARGUMENT);
         Require(setting(123, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == 0x5A5A);
         Require(setting(USER_SERVICE_USER_ID_INVALID, &value) == USER_SERVICE_ERROR_UNKNOWN_USER && value == 0x5A5A);
-        Require(setting(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == 0);
+        Require(setting(USER_SERVICE_INITIAL_USER_ID, &value) == USER_SERVICE_OK && value == expected);
     }
     Require(color == 0);
 

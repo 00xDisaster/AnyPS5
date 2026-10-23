@@ -143,12 +143,12 @@ int main() {
         Require(rejected && virtualKey == 0xABCD);
     }
 
-    // The exported function with the real UserService: unknown users fail, the initial user has no keyboard setting yet (0).
+    // The exported function with the real UserService: unknown users fail, the initial user reports the US-English default (keyboard type 20 -> IME 4).
     std::uint32_t type = 0xFFFFFFFFu;
     Require(sceConvertKeycodeGetImeKeyboardType(-1, &type) == invalidUserId);
     Require(sceConvertKeycodeGetImeKeyboardType(0, &type) == invalidUserId);
     Require(type == 0xFFFFFFFFu);
-    Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == 0);
+    Require(sceConvertKeycodeGetImeKeyboardType(0x10000000, &type) == 0 && type == 4);
 
     RequireImeKeyboardTypeMapping();
     Require(sceConvertKeycodeGetCharacter(4, 0, 0, nullptr) == invalidAddress);

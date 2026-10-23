@@ -22,15 +22,16 @@ static int ReportAccessibilitySetting(int user_id, int32_t* setting, int32_t val
 
 
 // Per-user keyboard settings. Nothing in AnyPS5 stores a keyboard language or input variant yet, so every known user
-// reports 0 (see docs/dev/debt/libSceUserService.md).
-static int ReportKeyboardSetting(int user_id, int32_t* type) {
+// reports the same default: 20 (US English) for the keyboard type, 0 for the input variants (see
+// docs/dev/debt/libSceUserService.md).
+static int ReportKeyboardSetting(int user_id, int32_t* type, int32_t value) {
  if (type == nullptr) {
   return USER_SERVICE_ERROR_INVALID_ARGUMENT;
  }
  if (user_id != USER_SERVICE_INITIAL_USER_ID) {
   return USER_SERVICE_ERROR_UNKNOWN_USER;
  }
- *type = 0;
+ *type = value;
  return USER_SERVICE_OK;
 }
 
@@ -233,15 +234,15 @@ int APS5_VABI sceUserServiceGetUserColor(int user_id, int* color) {
 }
 
 int APS5_VABI sceUserServiceGetKeyboardType(int user_id, int32_t* type) {
- return ReportKeyboardSetting(user_id, type);
+ return ReportKeyboardSetting(user_id, type, 20);
 }
 
 int APS5_VABI sceUserServiceGetJapaneseInputType(int user_id, int32_t* type) {
- return ReportKeyboardSetting(user_id, type);
+ return ReportKeyboardSetting(user_id, type, 0);
 }
 
 int APS5_VABI sceUserServiceGetTraditionalChineseInputType(int user_id, int32_t* type) {
- return ReportKeyboardSetting(user_id, type);
+ return ReportKeyboardSetting(user_id, type, 0);
 }
 
 int APS5_VABI sceUserServiceGetNpAccountId(int user_id, uint64_t* account_id) {
