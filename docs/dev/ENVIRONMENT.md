@@ -115,7 +115,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_DISPATCH_VARIANTS` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Dispatch/DispatchCache.cpp` | 4 | number of dispatch variants kept per cache entry, clamped to the maximum |
 | `APS5_DISPMOVE_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` | 1024 | upper bound in KiB on the read-only buffers a dispatch-cache hit moves into its template, above which the dispatch is prepared again |
 | `APS5_DRAIN_ALL` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Packets/PacketMemory.cpp` |  | drains every packet, disabling the batched recording path |
-| `APS5_DRAIN_COMPLETION_LABELS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/DeferredLabels.cpp` |  | records completion labels immediately instead of deferring them with the batch |
+| `APS5_DRAIN_COMPLETION_LABELS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/DeferredLabels.cpp` |  | records completion labels immediately instead of deferring them with the batch, and drains a label recorded while a copied write-back is pending instead of storing it behind the write-backs |
 | `APS5_DRAW_CACHE_ENTRIES` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Draw/DrawCache.cpp` | 4096 | number of entries in the draw cache; 0 keeps the default 4096 |
 | `APS5_DRAW_DRAIN` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Packets/PacketMemory.cpp` |  | treats draw packets as drains, waiting for them instead of recording ahead |
 | `APS5_DRAW_INPUTS_IN_PLACE` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | binds draw vertex and index ranges in place from host imports also with NVIDIA's Windows driver, which copies them by default |
@@ -456,7 +456,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_WRITE_EVIDENCE_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/WriteEvidence.cpp` | 16 | largest written range in KiB that the evidence may serve |
 | `APS5_WRITE_EVIDENCE_SAMPLE` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/WriteEvidence.cpp` | 16 | reads one in this many pending writes to sample them |
 | `APS5_WRITE_WATCH_IMPORTS` | string | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` |  | how host imports are write-tracked: `probe`, `watch` or `unwatch` |
-| `APS5_WRITTEN_SHADOW_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | 2048 | upper bound in KiB of the written staging window |
+| `APS5_WRITTEN_SHADOW_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | 2048 (8192 on a discrete GPU) | upper bound in KiB of the written staging window; a set value is used as given on both device types |
 | `APS5_WRITTEN_SHADOW_MIN_KIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | 16 | lower bound in KiB of the written staging window |
 
 ### libSceAjm.native
