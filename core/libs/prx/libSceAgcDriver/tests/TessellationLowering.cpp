@@ -272,12 +272,12 @@ void SkipHullProgram(Hull& hull, IrBlock& entry, std::uint32_t lanes, IrBlock& s
     info.condition = &outside;
 }
 
-std::uint32_t EmittedEvaluationControlPoint(std::uint32_t address) {
+std::uint32_t EmittedControlPoint(IrShaderStage stage, TessellationAttribute kind, std::uint32_t address) {
     constexpr std::uint32_t ControlStride = 16u;
     IrProgram program;
     IrBuilder builder{program};
     program.SetWaveSize(64);
-    program.Resources().stage = IrShaderStage::TessellationEvaluation;
+    program.Resources().stage = stage;
     program.Resources().srtPlanComplete = true;
     program.Resources().resourceTrackingComplete = true;
     program.Metadata().shaderInfoComplete = true;
@@ -290,7 +290,7 @@ std::uint32_t EmittedEvaluationControlPoint(std::uint32_t address) {
     info.id = block.Id();
     program.Metadata().blockInfo.push_back(info);
     builder.SetInsertionPoint(block);
-    auto& read = builder.Emit(IrOpcode::GetTessellationAttribute, IrType::U32, {&builder.Constant(static_cast<std::uint32_t>(TessellationAttribute::EvaluationInput)), &builder.Constant(address), &builder.ConstantBool(true)});
+    auto& read = builder.Emit(IrOpcode::GetTessellationAttribute, IrType::U32, {&builder.Constant(static_cast<std::uint32_t>(kind)), &builder.Constant(address), &builder.ConstantBool(true)});
     static_cast<void>(builder.Emit(IrOpcode::ReferenceU32, IrType::Void, {&read}));
     ShaderVertexInputInfo vertex;
     vertex.tess.inputControlPoints = InputControlPoints;
@@ -310,31 +310,16 @@ std::uint32_t EmittedEvaluationControlPoint(std::uint32_t address) {
     std::unordered_map<std::uint32_t, std::uint32_t> constants;
     for (std::size_t at = 5; at < words.size(); at += words[at] >> 16u) {
         const auto count = words[at] >> 16u;
-        if (count == 0u || at + count > words.size()) throw std::runtime_error("the domain program compiled to a malformed SPIR-V instruction");
+        if (count == 0u || at + count > words.size()) throw std::runtime_error("the tessellation program compiled to a malformed SPIR-V instruction");
         const auto opcode = words[at] & 0xffffu;
         if (opcode == spv::OpConstant && count == 4u) constants[words[at + 2u]] = words[at + 3u];
         if (opcode == spv::OpAccessChain && count == 7u) return constants.at(words[at + 4u]);
     }
-    throw std::runtime_error("the domain program reads no control point attribute");
+    throw std::runtime_error("the tessellation program reads no control point attribute");
 }
 
-enum class Conjunction { None, Before, After };
-
-bool LowersUnderComplementedBallot(Conjunction conjunction) {
-    Hull hull;
-    hull.program.SetWaveSize(32);
-    auto& first = hull.firstInvocation();
-    auto& notFirst = hull.builder.Emit(IrOpcode::LogicalNot, IrType::Bool, {&first});
-    auto& own = hull.complementedOwnLaneBit(notFirst);
-    auto& other = hull.builder.Emit(IrOpcode::ULessThan32, IrType::Bool, {&hull.invocation(), &hull.builder.Constant(2u)});
-    IrValue* predicate = &own;
-    if (conjunction == Conjunction::Before) predicate = &hull.builder.Emit(IrOpcode::LogicalAnd, IrType::Bool, {&own, &other});
-    if (conjunction == Conjunction::After) predicate = &hull.builder.Emit(IrOpcode::LogicalAnd, IrType::Bool, {&other, &own});
-    auto& square = hull.builder.IMul(hull.invocation(), hull.invocation());
-    auto& offset = hull.builder.Emit(IrOpcode::SelectU32, IrType::U32, {&notFirst, &square, &hull.computed(2u, LocalStride)});
-    auto& address = hull.inPatch(offset);
-    hull.read(address, *predicate);
-    return LoweredAt(hull.program, address);
+std::uint32_t EmittedEvaluationControlPoint(std::uint32_t address) {
+    return EmittedControlPoint(IrShaderStage::TessellationEvaluation, TessellationAttribute::EvaluationInput, address);
 }
 
 bool run(const char* name, const std::function<bool()>& body) {
@@ -536,6 +521,14 @@ int main() {
         hull.writeRing(hull.ownControlPoint(0u));
         hull.readRing(hull.controlPoint(OutputControlPoints, 0u), hull.builder.ConstantBool(true));
         return RingRefusedBecause(hull.program, "reads off-chip memory outside its patch's control points");
+    });
+
+    passed &= run("a hull read of another control point's output at an immediate address reads that control point", [] {
+        return EmittedControlPoint(IrShaderStage::TessellationControl, TessellationAttribute::ControlOutput, 2u * 16u + 4u) == 2u;
+    });
+
+    passed &= run("a hull read of another control point's output at an immediate address past the last control point reads the last control point", [] {
+        return EmittedControlPoint(IrShaderStage::TessellationControl, TessellationAttribute::ControlOutput, InputControlPoints * 16u) == InputControlPoints - 1u;
     });
 
     return passed ? 0 : 1;
