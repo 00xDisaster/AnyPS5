@@ -53,10 +53,14 @@ std::string SymbolName(const Domain::SysVDynamicSection& dynamic, const std::siz
     return std::string(start, end);
 }
 
-std::set<std::string> DefinedNames(const Domain::SysVDynamicSection& dynamic) {
+std::set<std::string> ExportedNames(const Domain::SysVDynamicSection& dynamic) {
     std::set<std::string> names;
-    for (std::size_t index = 1; index < dynamic.DynSymData.size() / 24; ++index)
-        if (Io::ReadU16(dynamic.DynSymData, index * 24 + 6) != 0) names.insert(SymbolName(dynamic, index));
+    for (std::size_t index = 1; index < dynamic.DynSymData.size() / 24; ++index) {
+        const auto info = dynamic.DynSymData[index * 24 + 4];
+        const auto visibility = dynamic.DynSymData[index * 24 + 5] & 3;
+        if (Io::ReadU16(dynamic.DynSymData, index * 24 + 6) != 0 && (info >> 4) != 0 && visibility != 1 && visibility != 2)
+            names.insert(SymbolName(dynamic, index));
+    }
     return names;
 }
 
@@ -320,7 +324,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         return directory == "." ? std::string("app0") : "app0/" + directory;
     };
     if (!windows) {
-        const auto executableExports = macos ? std::set<std::string>{} : DefinedNames(dynamic);
+        const auto executableExports = macos ? std::set<std::string>{} : ExportedNames(dynamic);
         for (auto& image : images) {
             for (std::size_t index = 1; index < image.Symbols.size(); ++index) {
                 const auto& symbol = image.Symbols[index];

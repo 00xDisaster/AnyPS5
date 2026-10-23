@@ -34,13 +34,13 @@ def guest_with_needed(symbols, needed):
     return image
 
 
-def exporting_executable(name):
+def exporting_executable(name, info=0x12, other=0):
     image = fixture()
     strings = b"\0" + name.encode() + b"\0"
     image[0x4600:0x4600 + len(strings)] = strings
     image[0x4210:0x4216] = bytes.fromhex("b82a000000c3")
     struct.pack_into("<IBBHQQ", image, 0x4900, 0, 0, 0, 0, 0, 0)
-    struct.pack_into("<IBBHQQ", image, 0x4918, 1, 0x12, 0, 1, 0x210, 6)
+    struct.pack_into("<IBBHQQ", image, 0x4918, 1, info, other, 1, 0x210, 6)
     tags = [(5, 0x600), (10, len(strings)), (6, 0x900), (11, 24), (7, 0x700), (8, 0), (9, 24), (0x6100003f, 48), (0, 0)]
     struct.pack_into("<IIQQQQQQ", image, 120, 2, 6, 0x4800, 0x800, 0x800, len(tags) * 16, len(tags) * 16, 8)
     for index, tag in enumerate(tags):
@@ -107,11 +107,14 @@ def main():
         needed = needed_libraries((dependencies.parent / "app0" / "sce_module" / "user.prx.guest.prx").read_bytes())
         assert needed == ["libSceLibcInternal.prx", "libkernel_web.prx", "libc.prx"], needed
 
-        exported = relink(relinker, work / "executable-export", exporting_executable("FixtureExport#A#B"), {
-            "user.prx": guest_with_needed([("FixtureExport", False), ("BBBBBBBBBBB", False)], "libkernel_web.sprx"),
-        })
-        symbols = module_symbols((exported.parent / "app0" / "sce_module" / "user.prx.guest.prx").read_bytes())
-        assert symbols == ["FixtureExport", nid("BBBBBBBBBBB")], symbols
+        for label, info, other, kept in (("global", 0x12, 0, True), ("weak", 0x22, 0, True), ("protected", 0x12, 3, True),
+                                         ("internal", 0x12, 1, False), ("hidden", 0x12, 2, False), ("local", 0x02, 0, False)):
+            exported = relink(relinker, work / ("executable-" + label), exporting_executable("FixtureExport#A#B", info, other), {
+                "user.prx": guest_with_needed([("FixtureExport", False), ("BBBBBBBBBBB", False)], "libkernel_web.sprx"),
+            })
+            symbols = module_symbols((exported.parent / "app0" / "sce_module" / "user.prx.guest.prx").read_bytes())
+            expected = "FixtureExport" if kept else nid("FixtureExport")
+            assert symbols == [expected, nid("BBBBBBBBBBB")], (label, symbols)
 
         if runnable:
             result = run_consumer(relinker, host, work / "by-nid", provider(work, "by-nid", nid("shared")))
