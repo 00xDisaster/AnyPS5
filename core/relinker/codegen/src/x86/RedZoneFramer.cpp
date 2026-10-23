@@ -16,9 +16,17 @@ constexpr std::uint8_t kRegRsp = 4;
 constexpr std::uint8_t kRegRbp = 5;
 constexpr std::size_t kJumpBytes = 5;
 constexpr std::int64_t kRedZoneBytes = 0x80;
-constexpr std::uint8_t kLowerRsp[] = {0x48, 0x8d, 0x64, 0x24, 0x80};
-constexpr std::uint8_t kRaiseRsp[] = {0x48, 0x8d, 0xa4, 0x24, 0x80, 0x00, 0x00, 0x00};
+constexpr std::int64_t kStackAlignment = 16;
 constexpr std::uint8_t kJumpBack[] = {0xe9, 0x00, 0x00, 0x00, 0x00};
+
+std::vector<std::uint8_t> lowerRsp(const std::int64_t shift) {
+    return {0x48, 0x8d, 0x64, 0x24, static_cast<std::uint8_t>(-shift)};
+}
+
+std::vector<std::uint8_t> raiseRsp(const std::int64_t shift) {
+    const auto value = static_cast<std::uint32_t>(shift);
+    return {0x48, 0x8d, 0xa4, 0x24, static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(value >> 8), static_cast<std::uint8_t>(value >> 16), static_cast<std::uint8_t>(value >> 24)};
+}
 
 struct Insn {
     std::size_t Offset;
@@ -47,19 +55,23 @@ struct MemoryUse {
     std::int64_t RspDisp = 0;
     std::uint8_t Mod = 0;
     std::size_t DispOffset = 0;
+    bool Indexed = false;
+    bool Address = false;
 };
 
-void extensionBits(const std::uint8_t* code, const Insn& insn, bool& r, bool& b) {
+void extensionBits(const std::uint8_t* code, const Insn& insn, bool& r, bool& x, bool& b) {
     const auto& info = insn.Info;
-    r = b = false;
+    r = x = b = false;
     if (info.RexPrefix != 0) {
         r = (info.RexPrefix & 4) != 0;
+        x = (info.RexPrefix & 2) != 0;
         b = (info.RexPrefix & 1) != 0;
         return;
     }
     const auto lead = code[info.OpcodeOffset];
     if ((lead == 0xc4 || lead == 0x8f || lead == 0x62) && info.OpcodeOffset + 1 < insn.Length) {
         r = (code[info.OpcodeOffset + 1] & 0x80) == 0;
+        x = (code[info.OpcodeOffset + 1] & 0x40) == 0;
         b = (code[info.OpcodeOffset + 1] & 0x20) == 0;
     } else if (lead == 0xc5 && info.OpcodeOffset + 1 < insn.Length) {
         r = (code[info.OpcodeOffset + 1] & 0x80) == 0;
@@ -90,8 +102,9 @@ MemoryUse memoryUse(const std::uint8_t* code, const Insn& insn) {
     const auto& info = insn.Info;
     if (!info.HasModRm || info.ModRmOffset == 0 || info.ModRmOffset >= insn.Length) return use;
     bool r = false;
+    bool x = false;
     bool b = false;
-    extensionBits(code, insn, r, b);
+    extensionBits(code, insn, r, x, b);
     const auto modrm = info.ModRmByte;
     const auto mod = static_cast<std::uint8_t>(modrm >> 6);
     const auto reg = static_cast<std::uint8_t>((modrm >> 3) & 7);
@@ -111,10 +124,12 @@ MemoryUse memoryUse(const std::uint8_t* code, const Insn& insn) {
     std::size_t at = info.ModRmOffset + 1;
     std::uint8_t base = rm;
     bool baseExtended = b;
+    bool indexed = false;
     if (rm == 4) {
         if (at >= insn.Length) return use;
         const auto sib = code[at++];
         base = sib & 7;
+        indexed = ((sib >> 3) & 7) != 4 || x;
         if (mod == 0 && base == 5) return use;
     } else if (mod == 0 && rm == 5) {
         return use;
@@ -132,6 +147,8 @@ MemoryUse memoryUse(const std::uint8_t* code, const Insn& insn) {
         use.RspDisp = disp;
         use.Mod = mod;
         use.DispOffset = at;
+        use.Indexed = indexed;
+        use.Address = !vex && !info.IsTwoByteOpcode && info.Opcode == 0x8d;
     }
     if (base == kRegRbp && !baseExtended && mod != 0) {
         use.RbpBased = true;
@@ -140,9 +157,9 @@ MemoryUse memoryUse(const std::uint8_t* code, const Insn& insn) {
     return use;
 }
 
-std::optional<std::vector<std::uint8_t>> movedDisplacement(const MemoryUse& use) {
-    const auto moved = use.RspDisp + kRedZoneBytes;
-    if (use.Mod == 1 && use.RspDisp < 0 && moved <= std::numeric_limits<std::int8_t>::max()) return std::vector<std::uint8_t>{static_cast<std::uint8_t>(moved)};
+std::optional<std::vector<std::uint8_t>> movedDisplacement(const MemoryUse& use, const std::int64_t shift) {
+    const auto moved = use.RspDisp + shift;
+    if (use.Mod == 1 && moved <= std::numeric_limits<std::int8_t>::max()) return std::vector<std::uint8_t>{static_cast<std::uint8_t>(moved)};
     if (use.Mod == 2 && moved <= std::numeric_limits<std::int32_t>::max()) {
         const auto value = static_cast<std::uint32_t>(static_cast<std::int32_t>(moved));
         return std::vector<std::uint8_t>{static_cast<std::uint8_t>(value), static_cast<std::uint8_t>(value >> 8), static_cast<std::uint8_t>(value >> 16), static_cast<std::uint8_t>(value >> 24)};
@@ -245,6 +262,15 @@ void frameSegment(
         std::vector<std::pair<std::size_t, std::size_t>> exits;
         std::vector<std::pair<std::size_t, std::vector<std::uint8_t>>> moves;
         const auto functionEnd = insns[body.back()].Offset + insns[body.back()].Length;
+        std::int64_t depth = 0;
+        bool wholeRedZone = rbpPrologue;
+        for (std::size_t k = p; k < body.size(); ++k) {
+            const auto use = memoryUse(at(k), insns[body[k]]);
+            if (!use.RspBased) continue;
+            if (use.RspDisp < 0) depth = std::max(depth, -use.RspDisp);
+            if (use.Indexed || (use.Address && use.RspDisp < 0)) wholeRedZone = true;
+        }
+        const auto shift = wholeRedZone ? kRedZoneBytes : std::min(kRedZoneBytes, (depth + kStackAlignment - 1) / kStackAlignment * kStackAlignment);
         for (std::size_t k = p; k < body.size(); ++k) {
             const auto& insn = insns[body[k]];
             const auto* code = at(k);
@@ -260,7 +286,7 @@ void frameSegment(
             } else {
                 if (use.RegisterRsp) { reason = "other use of rsp"; continue; }
                 if (use.RspBased) {
-                    auto moved = code[insn.Info.OpcodeOffset] == 0x62 ? std::nullopt : movedDisplacement(use);
+                    auto moved = code[insn.Info.OpcodeOffset] == 0x62 ? std::nullopt : movedDisplacement(use, shift);
                     if (!moved) { reason = "rsp operand that cannot move with rsp"; continue; }
                     if (overlapsExisting(insn.Offset, insn.Offset + insn.Length)) { reason = "overlaps another stub"; continue; }
                     moves.emplace_back(insn.Offset + use.DispOffset, std::move(*moved));
@@ -304,9 +330,10 @@ void frameSegment(
             site.OriginalBytes.assign(seg.begin() + static_cast<std::ptrdiff_t>(begin), seg.begin() + static_cast<std::ptrdiff_t>(end));
             if (entry) {
                 site.Body = site.OriginalBytes;
-                site.Body.insert(site.Body.end(), std::begin(kLowerRsp), std::end(kLowerRsp));
+                const auto lower = lowerRsp(shift);
+                site.Body.insert(site.Body.end(), lower.begin(), lower.end());
             } else {
-                site.Body.assign(std::begin(kRaiseRsp), std::end(kRaiseRsp));
+                site.Body = raiseRsp(shift);
                 site.Body.insert(site.Body.end(), site.OriginalBytes.begin(), site.OriginalBytes.end());
             }
             site.ReturnBranchOffset = site.Body.size();
