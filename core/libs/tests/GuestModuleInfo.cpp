@@ -189,6 +189,7 @@ int main(int argc, char** argv) {
     Require(sceKernelGetModuleInfo(*systemModule, &systemInfo) == 0 && systemInfo.segment_count > 0);
     const auto systemAddress = static_cast<std::uintptr_t>(systemInfo.segments[0].address);
     ModuleInfoEx anyModule{};
+    Require(sceKernelGetModuleInfoFromAddr(reinterpret_cast<std::uintptr_t>(&Query), 2, &anyModule) == 0 && anyModule.segment_count > 0 && anyModule.st_size == 0);
     Require(sceKernelGetModuleInfoFromAddr(systemAddress, 1, &anyModule) == 0 && anyModule.id == *systemModule);
     std::memset(&anyModule, 0xbb, sizeof(anyModule));
     Require(sceKernelGetModuleInfoFromAddr(systemAddress, 2, &anyModule) == SCE_KERNEL_ERROR_ESRCH && anyModule.segment_count == 0 && anyModule.name[0] == 0);
