@@ -272,11 +272,13 @@ int AddressLengthError(const void* input, std::uint32_t length) {
     if (length < 2) return 22;
     return input ? 0 : 14;
 }
-bool Address(int family, const void* input, std::uint32_t length, sockaddr_storage& native, socklen_t& size) {
+bool Address(int family, const void* input, std::uint32_t length, sockaddr_storage& native, socklen_t& size, bool lengthFirst = false) {
     if (const int error = AddressLengthError(input, length)) { Fail(error); return false; }
     const auto* bytes = static_cast<const unsigned char*>(input);
+    const bool wrongLength = (family == 2 && length != 16) || (family == 28 && length != 28);
+    if (lengthFirst && wrongLength) { Fail(22); return false; }
     if (family == 2 && bytes[1] != 2) { Fail(47); return false; }
-    if ((family == 2 && length != 16) || (family == 28 && length != 28)) { Fail(22); return false; }
+    if (wrongLength) { Fail(22); return false; }
     if (family == 2) {
         auto& v4 = reinterpret_cast<sockaddr_in&>(native);
         v4.sin_family = AF_INET;
@@ -1404,7 +1406,7 @@ std::int64_t APS5_VABI sendto_nid_postfix(int descriptor, const void* buffer, st
     } else {
         sockaddr_storage native{};
         socklen_t size;
-        if (!Address(socket->family, address, addressLength, native, size)) return -1;
+        if (!Address(socket->family, address, addressLength, native, size, true)) return -1;
         if (const auto answered = ZeroPortSend(*socket, native, length); answered != NotAnswered) return answered;
         result = static_cast<int>(::sendto(socket->value, static_cast<const char*>(buffer), static_cast<int>(length), SocketSendFlags(*socket, flags),
             reinterpret_cast<sockaddr*>(&native), size));

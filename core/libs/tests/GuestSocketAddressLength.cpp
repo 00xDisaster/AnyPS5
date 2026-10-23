@@ -93,6 +93,11 @@ void LongAddressesAndOtherFamiliesFail() {
     }
     address[1] = 28;
     Require(Fails(bind_nid_postfix(stream, address.data(), 28), ErrorFamily), "the family is checked before the length on an AF_INET socket");
+    Require(Fails(sendto_nid_postfix(datagram, "x", 1, 0, address.data(), 28), ErrorInvalid), "sendto checks the length before the family");
+    Require(Fails(sendto_nid_postfix(datagram, "x", 1, 0, address.data(), 16), ErrorFamily), "sendto of another family fails with EAFNOSUPPORT (47)");
+    address[1] = 2;
+    Require(Fails(bind_nid_postfix(stream6, address.data(), 16), ErrorInvalid), "an AF_INET6 socket checks the length before the family");
+    Require(Fails(connect_nid_postfix(stream6, address.data(), 28), ErrorFamily), "an AF_INET address of the AF_INET6 length fails with EAFNOSUPPORT (47)");
     Require(close_nid_postfix(stream) == 0 && close_nid_postfix(datagram) == 0 && close_nid_postfix(stream6) == 0, "close failed");
 }
 
