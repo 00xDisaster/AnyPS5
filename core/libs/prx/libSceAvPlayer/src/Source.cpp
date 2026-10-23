@@ -151,6 +151,7 @@ public:
         base = milliseconds;
         wall = std::chrono::steady_clock::now();
         running = true;
+        if (overrideTime >= 0.0) overrideTime = milliseconds;
     }
 
     void Reset(double milliseconds) {
