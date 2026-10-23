@@ -984,7 +984,10 @@ static void CheckInetPtonEx() {
     Require(sceNetInetPtonEx(2, "not an address", address.data(), 0) == 0);
     Require(Failed(sceNetInetPtonEx(99, "127.0.0.1", address.data(), 0), 47));
     Require(Failed(sceNetInetPtonEx(2, nullptr, address.data(), 0), 22));
-    Require(Failed(sceNetInetPtonEx(2, "127.0.0.1", nullptr, 0), 22));
+    *sceNetErrnoLoc() = 123;
+    Require(sceNetInetPtonEx(2, "127.0.0.1", nullptr, 0) == 1 && *sceNetErrnoLoc() == 123);
+    Require(sceNetInetPtonEx(2, "abc", nullptr, 0) == 0 && *sceNetErrnoLoc() == 123);
+    Require(sceNetInetPtonEx(2, "0x", address.data(), 0) == 1 && address[0] == 0 && address[1] == 0 && address[2] == 0 && address[3] == 0);
     for (const int flags : {1, 0x100, -1}) {
         address.fill(0);
         Require(sceNetInetPtonEx(2, "1.2.3", address.data(), flags) == 1);

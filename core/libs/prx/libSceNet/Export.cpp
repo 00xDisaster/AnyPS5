@@ -2474,12 +2474,15 @@ int APS5_VABI sceNetInetPtonEx(int af, const char* src, void* dst, int) {
     if (af != NET_AF_INET) {
         return sceNetInetPton(af, src, dst);
     }
-    if (src == nullptr || dst == nullptr) {
+    if (src == nullptr) {
         return fail(NET_EINVAL);
     }
     std::uint32_t address = 0;
     if (!parse_ipv4_parts(src, address)) {
         return 0;
+    }
+    if (dst == nullptr) {
+        return 1;
     }
     const std::array<unsigned char, 4> bytes{static_cast<unsigned char>(address >> 24), static_cast<unsigned char>(address >> 16),
                                              static_cast<unsigned char>(address >> 8), static_cast<unsigned char>(address)};
