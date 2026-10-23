@@ -1553,6 +1553,28 @@ static void CheckDinkumwareFloatCharacteristics() {
         for (std::size_t index = 24; index < 32; ++index) Require(reinterpret_cast<const unsigned char*>(table)[index] == 0);
 }
 
+static void CheckCbrtConsoleBits() {
+    constexpr std::uint64_t cases[][2] = {
+        {0x0000000000000000ull, 0x0000000000000000ull}, {0x8000000000000000ull, 0x8000000000000000ull},
+        {0x0000000000000001ull, 0x2990000000000000ull}, {0x8000000000000001ull, 0xa990000000000000ull},
+        {0x000fffffffffffffull, 0x2aa428a2f98d728aull}, {0x0010000000000000ull, 0x2aa428a2f98d728bull},
+        {0x3ff0000000000000ull, 0x3ff0000000000000ull}, {0xbff0000000000000ull, 0xbff0000000000000ull},
+        {0x4020000000000000ull, 0x4000000000000000ull}, {0xc03b000000000000ull, 0xc008000000000000ull},
+        {0x408f400000000000ull, 0x4024000000000000ull}, {0x4000000000000000ull, 0x3ff428a2f98d728bull},
+        {0x3fe0000000000000ull, 0x3fe965fea53d6e3dull}, {0x7fefffffffffffffull, 0x554428a2f98d728bull},
+        {0xffefffffffffffffull, 0xd54428a2f98d728bull}, {0x7ff0000000000000ull, 0x7ff0000000000000ull},
+        {0xfff0000000000000ull, 0xfff0000000000000ull}, {0x7ff8000000000001ull, 0x7ff8000000000001ull},
+        {0xfff8000000000002ull, 0xfff8000000000002ull}, {0x3ffa0ccfe147c94dull, 0x3ff2d29f09b6d6a3ull},
+        {0xbf840fe48e07e54dull, 0xbfcb634d0e8f50ffull}, {0x3fa7d31e3ec31ee2ull, 0x3fd70508d1167185ull},
+        {0xc050f6b81592ae3full, 0xc01050a4409443faull}, {0xc0506b7f30c60f3cull, 0xc0102385f7679661ull},
+        {0xc039809ec6db32bcull, 0xc0078c3d13f2e055ull},
+    };
+    for (const auto& [input, expected] : cases) {
+        errno = 1234;
+        Require(std::bit_cast<std::uint64_t>(cbrt_nid_postfix(std::bit_cast<double>(input))) == expected && errno == 1234);
+    }
+}
+
 int main() {
     CheckFloatClassification();
     CheckDinkumwareConstants();
@@ -1719,6 +1741,7 @@ int main() {
     CheckFegetenv();
     CheckLongDouble();
     CheckNearbyintl();
+    CheckCbrtConsoleBits();
     CheckExpm1ConsoleBits();
     CheckLog1pConsoleBits();
     CheckNextafterConsoleBits();
