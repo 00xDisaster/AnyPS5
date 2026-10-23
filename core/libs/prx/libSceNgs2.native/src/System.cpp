@@ -235,7 +235,8 @@ static int CheckSystemOption(const Ngs2SystemOption* option, Ngs2SystemOption& c
         return SCE_NGS2_OK;
     }
     if (option->size != sizeof(Ngs2SystemOption)) return SCE_NGS2_ERROR_INVALID_OPTION_SIZE;
-    if (option->flags != 0) throw std::runtime_error("NGS2: system option flags are not implemented");
+    constexpr std::uint32_t knownFlags = 0x2;
+    if ((option->flags & ~knownFlags) != 0) throw std::runtime_error("NGS2: system option flags " + Ngs2Hex(option->flags) + " are not implemented");
     if (!ValidGrainSamples(option->max_grain_samples, MAX_GRAIN_SAMPLES)) return SCE_NGS2_ERROR_INVALID_MAX_GRAIN_SAMPLES;
     if (!ValidGrainSamples(option->num_grain_samples, option->max_grain_samples)) return SCE_NGS2_ERROR_INVALID_NUM_GRAIN_SAMPLES;
     if (!ValidSampleRate(option->sample_rate)) return SCE_NGS2_ERROR_INVALID_SAMPLE_RATE;
