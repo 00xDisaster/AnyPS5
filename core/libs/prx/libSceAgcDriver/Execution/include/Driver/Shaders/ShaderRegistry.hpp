@@ -165,6 +165,8 @@ struct RegisteredShaderState {
     Registers shader;
     Registers context;
     Registers userConfig;
+
+    bool operator==(const RegisteredShaderState&) const = default;
 };
 
 struct ShaderSnapshot {
