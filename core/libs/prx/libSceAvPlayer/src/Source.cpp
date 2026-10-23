@@ -548,7 +548,8 @@ private:
         const auto currentClock = presentationClock.Now();
         const auto timestamp = static_cast<double>(info.timestamp);
         const bool drifted = currentClock > timestamp + 50.0 || timestamp > currentClock + 50.0;
-        const bool shouldRebase = !audioDriving || epoch > clockEpoch || drifted;
+        const bool exhausted = demuxEnded && !reposition && audio.ended && audio.packets.empty() && frames.empty();
+        const bool shouldRebase = !audioDriving || epoch > clockEpoch || drifted || exhausted;
         audioDriving = true;
         clockEpoch = std::max(clockEpoch, epoch);
         if (shouldRebase) presentationClock.Rebase(timestamp);
