@@ -3,7 +3,10 @@ target_sources(libSceLibreSsl PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/ProtocolSele
 if(BUILD_TESTING)
     add_test_executable(guest_libressl_protocol_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/GuestLibreSslProtocol.cpp)
     target_include_directories(guest_libressl_protocol_tests PRIVATE ${LIBS_INCLUDE_DIR})
-    target_link_libraries(guest_libressl_protocol_tests PRIVATE libc ${CMAKE_DL_LIBS})
+    target_link_libraries(guest_libressl_protocol_tests PRIVATE ${CMAKE_DL_LIBS})
+    if(WIN32)
+        target_link_libraries(guest_libressl_protocol_tests PRIVATE libc)
+    endif()
     add_dependencies(guest_libressl_protocol_tests libs)
     configure_windows_unwind(guest_libressl_protocol_tests)
     add_test(NAME guest_libressl_protocol COMMAND guest_libressl_protocol_tests
