@@ -300,6 +300,16 @@ bool Address(int family, const void* input, std::uint32_t length, sockaddr_stora
     Fail(47);
     return false;
 }
+int LongMappedDualStack(const Socket& socket, const void* address, std::uint32_t length) {
+    if (socket.family != 28 || socket.type != 2 || address == nullptr || length <= 28 || length > 255) return 0;
+    const auto* bytes = static_cast<const unsigned char*>(address);
+    constexpr unsigned char mapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+    if (bytes[1] != 28 || std::memcmp(bytes + 8, mapped, sizeof(mapped)) != 0) return 0;
+    int ipv6Only = 0;
+    socklen_t size = sizeof(ipv6Only);
+    if (::getsockopt(socket.value, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<char*>(&ipv6Only), &size)) return Fail(NativeError());
+    return ipv6Only ? 0 : 1;
+}
 std::uint16_t& PortOf(sockaddr_storage& address) {
     return address.ss_family == AF_INET ? reinterpret_cast<sockaddr_in&>(address).sin_port : reinterpret_cast<sockaddr_in6&>(address).sin6_port;
 }
@@ -1236,9 +1246,11 @@ int APS5_VABI connect_nid_postfix(int descriptor, const void* address, std::uint
         && Disconnect(*socket) != 0)
         return -1;
     if (socket->type == 1 && Listening(*socket)) return Fail(45);
+    const int mapped = LongMappedDualStack(*socket, address, length);
+    if (mapped < 0) return -1;
     sockaddr_storage native{};
     socklen_t size;
-    if (!Address(socket->family, address, length, native, size)) return -1;
+    if (!Address(socket->family, address, mapped ? 28 : length, native, size)) return -1;
 #ifdef _WIN32
     if (socket->type == 1) RefuseClosedLoopbackAtOnce_nid_no_patch(socket->value, reinterpret_cast<const sockaddr*>(&native));
 #endif
@@ -1320,7 +1332,9 @@ int APS5_VABI bind_nid_postfix(int descriptor, const void* address, std::uint32_
     if (!socket) return -1;
     sockaddr_storage native{};
     socklen_t size;
-    if (!Address(socket->family, address, length, native, size)) return -1;
+    const int mapped = LongMappedDualStack(*socket, address, length);
+    if (mapped < 0) return -1;
+    if (!Address(socket->family, address, mapped ? 28 : length, native, size)) return -1;
     return ::bind(socket->value, reinterpret_cast<sockaddr*>(&native), size) ? Fail(NativeError()) : 0;
 }
 int APS5_VABI shutdown_nid_postfix(int descriptor, int how) {
