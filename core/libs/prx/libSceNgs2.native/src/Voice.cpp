@@ -180,8 +180,11 @@ static void ApplyCommonParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param
 }
 
 static void SetupSampler(Ngs2Voice& voice, const Ngs2WaveformFormat& format) {
+    if (format.waveform_type == 0 && format.num_channels == 0 && format.sample_rate == 0) {
+        if (voice.channels == 0) voice.ResetSetup();
+        return;
+    }
     voice.ResetSetup();
-    if (format.waveform_type == 0 && format.num_channels == 0 && format.sample_rate == 0) return;
     if (format.waveform_type != SCE_NGS2_WAVEFORM_TYPE_PCM_I16L && format.waveform_type != SCE_NGS2_WAVEFORM_TYPE_ATRAC9) {
         throw std::runtime_error("NGS2: waveform type " + Ngs2Hex(format.waveform_type) + " is not implemented");
     }

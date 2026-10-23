@@ -41,6 +41,21 @@ static void TestPlayWithoutSetup() {
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
+static void TestEmptyFormatKeepsTheSetup() {
+    const auto system = CreateSystem();
+    const auto voice = Sampler(system);
+    Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, SamplerSetup);
+    Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{});
+    Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
+    Require(Flags(voice) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
+
+    const auto bare = Sampler(system);
+    Control(bare, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{});
+    const auto play = PlayParam();
+    Require(sceNgs2VoiceControl(bare, &play.header) == SCE_NGS2_ERROR_INVALID_VOICE_ACCESS);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
 static void TestPlayAfterSetupInOneList() {
     const auto system = CreateSystem();
     const auto voice = Sampler(system);
@@ -81,6 +96,7 @@ static void TestNeverSetUpVoicesOfOtherRacks() {
 
 int main() {
     TestPlayWithoutSetup();
+    TestEmptyFormatKeepsTheSetup();
     TestPlayAfterSetupInOneList();
     TestNeverSetUpVoicesOfOtherRacks();
     return 0;
