@@ -174,7 +174,6 @@ int main() {
     Require(*__error_nid_postfix() == 2);
     const auto symlinkLoop = root / "symlink-loop";
 #ifdef _WIN32
-    // CreateLinks already found out whether this host may create symbolic links; skip the loop checks the same way when it may not.
     if (links) {
         Require(CreateSymbolicLinkW(symlinkLoop.c_str(), L"symlink-loop", SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0);
         Require(opendir_nid_postfix(symlinkLoop.string().c_str()) == nullptr);
