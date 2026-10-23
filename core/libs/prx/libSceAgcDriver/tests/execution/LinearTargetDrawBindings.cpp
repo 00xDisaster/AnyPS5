@@ -250,7 +250,7 @@ void ExpectTexels(const std::uint8_t* target, const char* what, std::uint32_t fi
     }
 }
 
-bool Expect(AgcDriver::VulkanDevice& device) {
+bool Expect(AgcDriver::VulkanDevice& device, bool unwatch) {
     const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(device);
     if (!context.bufferDeviceAddress) {
         std::puts("skipped, the device lacks bufferDeviceAddress");
@@ -281,6 +281,9 @@ bool Expect(AgcDriver::VulkanDevice& device) {
     Draw(device, copied, PixelOpaque, {}, whole);
     device.WaitIdle();
     Require(!pending(drawn.address) && !pending(copied.address), "a linear target was still pending after the device wait");
+    if (unwatch) AgcDriver::GuestMemory::Unwatch(block.Address(), block.bytes);
+    const bool watched = AgcDriver::GuestMemory::Watched(copied.address, TargetBytes);
+    Require(!unwatch || !watched, "the copied target is still write-watched after its block was taken out of the write watch");
     const auto submitted = recorder->Submissions();
     const auto pointed = block.Address() + PointedOffset;
     const std::array<std::uint32_t, 4> pointer{0u, 0u, static_cast<std::uint32_t>(pointed), static_cast<std::uint32_t>(pointed >> 32u)};
@@ -296,7 +299,8 @@ bool Expect(AgcDriver::VulkanDevice& device) {
     const auto setsBetween = context.descriptorCache->Counters().sets;
     const auto secondCopy = CopyUserData(block.Address() + SecondSourceOffset, SecondOutput);
     Draw(device, copied, PixelCopy, secondCopy, {{static_cast<std::int32_t>(Width / 2u), 0}, {Width / 2u, Height}});
-    Require(recorder->Recording() && recorder->Submissions() == submitted + 1, "the second copying draw submitted recorded work");
+    if (watched) Require(recorder->Recording() && recorder->Submissions() == submitted + 1, "the second copying draw submitted recorded work");
+    else Require(recorder->Submissions() == submitted + 2, "the second copying draw into a stored target outside the write watch did not submit once to capture its bytes (" + std::to_string(recorder->Submissions() - submitted - 1) + " submissions)");
     const auto setsAfter = context.descriptorCache->Counters().sets;
     device.WaitIdle();
     Require(FirstOutput[0] == FirstSource, "the first copying draw's output holds " + Hex(FirstOutput[0]) + ", not its source's " + Hex(FirstSource));
@@ -319,7 +323,8 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        if (!Expect(*device)) return VulkanTestSkipped;
+        if (!Expect(*device, false)) return VulkanTestSkipped;
+        if (!Expect(*device, true)) return VulkanTestSkipped;
         std::puts("linear target draw binding tests passed");
         return 0;
     } catch (const std::exception& error) {
