@@ -113,6 +113,7 @@ struct SpirvEmitterState {
     bool robustBufferAccess2 = false;
     bool float32FlushToZero = false;
     bool float32DenormPreserve = false;
+    bool fusedExactArithmetic = false;
     bool meshBarycentricPixel = false;
     bool meshBarycentricVertex = false;
     std::uint32_t barycentricSmoothLocation = 0xffffffffu;
@@ -205,6 +206,7 @@ struct SpirvEmitterState {
     std::uint32_t ldsBufferVariable = 0;
     std::uint32_t ldsBufferU64Variable = 0;
     std::uint32_t ldsBufferBase = 0;
+    bool pixelFunctionLdsBuffer = false;
     std::uint32_t numWorkgroupsVariable = 0;
     std::array<std::uint32_t, 2> scratchVariable {};
     std::array<std::uint32_t, 2> vectorWindowVariable {};
