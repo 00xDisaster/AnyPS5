@@ -31,6 +31,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <new>
 #include <string>
 #include <thread>
 #include <tuple>
@@ -4229,7 +4230,7 @@ void Recorder::release(Batch& batch) noexcept {
             batch.fence = VK_NULL_HANDLE;
             if (profile) fencesKept.fetch_add(1, std::memory_order_relaxed);
             return;
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
         }
     }
     if (batch.fence != VK_NULL_HANDLE) context.Function<PFN_vkDestroyFence>("vkDestroyFence")(context.device, batch.fence, nullptr);
