@@ -262,8 +262,9 @@ int main() {
     char shortBuffer[5]{};
     Iovec single{shortBuffer, sizeof(shortBuffer)};
     Msghdr truncated{nullptr, 0, &single, 1, nullptr, 0, 0};
-    Require(recvmsg_nid_postfix(receiver, &truncated, 0) == 5);
-    Require(std::memcmp(shortBuffer, "scatt", 5) == 0 && truncated.flags == 0x10);
+    Require(recvmsg_nid_postfix(receiver, &truncated, 2) == 5 && truncated.flags == 0x12);
+    Require(recvmsg_nid_postfix(receiver, &truncated, 0x80) == 5);
+    Require(std::memcmp(shortBuffer, "scatt", 5) == 0 && truncated.flags == 0x90);
     Require(recvmsg_nid_postfix(receiver, &truncated, 0) == -1 && *__error_nid_postfix() == 35);
     Msghdr oversized{nullptr, 0, parts, 1025, nullptr, 0, 0};
     Require(sendmsg_nid_postfix(sender, &oversized, 0) == -1 && *__error_nid_postfix() == 40);
