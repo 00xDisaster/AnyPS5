@@ -22,7 +22,9 @@
 #include <span>
 #include <string>
 #include <tuple>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -115,6 +117,21 @@ alignas(256) constexpr std::array<std::uint32_t, 30> DomainCode{
     0xe0341020, 0x04030e01, 0xbf8c3f70, 0x08040af2, 0x08040d02, 0x10201505, 0x3e201906, 0x3e201d02,
     0x10221705, 0x3e221b06, 0x3e221f02, 0xd5510012, 0x040a0d05, 0x102424ff, 0x40400000, 0x7e260280,
     0x7e2802f2, 0xf80008cf, 0x14131110, 0xf800020f, 0x14131214, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 37> DomainComputedPoint{
+    0xf8000941, 0x00000000, 0x34020e84, 0x16020283, 0xe0341000, 0x04030a01, 0xbf8c3f70, 0x7c0214ff,
+    0x7f7fffff, 0xd5010002, 0x01a90280, 0xd7460002, 0x04050902, 0xe0341010, 0x04030c02, 0xe0341020,
+    0x04030e02, 0xbf8c3f70, 0x08040af2, 0x08040d02, 0x10201505, 0x3e201906, 0x3e201d02, 0x10221705,
+    0x3e221b06, 0x3e221f02, 0xd5510012, 0x040a0d05, 0x102424ff, 0x40400000, 0x7e260280, 0x7e2802f2,
+    0xf80008cf, 0x14131110, 0xf800020f, 0x14131214, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 31> DomainLoweredInterior{
+    0xf8000941, 0x00000000, 0x34020e84, 0x16020283, 0xe0341000, 0x04030a01, 0xe0341010, 0x04030c01,
+    0xe0341020, 0x04030e01, 0xbf8c3f70, 0x08040af2, 0x08040d02, 0x10201505, 0x3e201906, 0x3e201d02,
+    0x10221705, 0x3e221b06, 0x3e221f02, 0xd5510012, 0x040a0d05, 0x102424ff, 0x40400000, 0x08222511,
+    0x7e260280, 0x7e2802f2, 0xf80008cf, 0x14131110, 0xf800020f, 0x14131214, 0xbf810000,
 };
 
 alignas(256) constexpr std::array<std::uint32_t, 34> DomainRelativeData{
@@ -318,6 +335,90 @@ alignas(256) constexpr std::array<std::uint32_t, 38> QuadDomainCode{
     0x7e3402f2, 0xf80008cf, 0x1a191716, 0xf800020f, 0x1a19181a, 0xbf810000,
 };
 
+alignas(256) constexpr std::array<std::uint32_t, 87> MergedHullCode{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001c,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340000, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000, 0x000100c1,
+    0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101, 0x362402ff,
+    0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015, 0x162c2890,
+    0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0781000, 0x02020216, 0x7da82881, 0xbe94047e,
+    0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80048, 0x06000013, 0xd8dc1008, 0x07000013, 0xbf8cc07f,
+    0x7e300306, 0x7e320306, 0x7e340306, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000, 0x0403180a,
+    0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 87> MergedHullRegisters{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001c,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340000, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000, 0x000100c1,
+    0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101, 0x362402ff,
+    0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015, 0x162c2890,
+    0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0741000, 0x02020816, 0x7da82881, 0xbe94047e,
+    0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80048, 0x06000013, 0xd8dc1008, 0x07000013, 0xbf8cc07f,
+    0x7e300306, 0x7e320306, 0x7e340306, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000, 0x0403180a,
+    0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 87> MergedHullForeignRecord{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001c,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340020, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000, 0x000100c1,
+    0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101, 0x362402ff,
+    0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015, 0x162c2890,
+    0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0781000, 0x02020216, 0x7da82881, 0xbe94047e,
+    0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80048, 0x06000013, 0xd8dc1008, 0x07000013, 0xbf8cc07f,
+    0x7e300306, 0x7e320306, 0x7e340306, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000, 0x0403180a,
+    0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 88> MergedHullDivergentBarrier{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001d,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340000, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8a0000, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000,
+    0x000100c1, 0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101,
+    0x362402ff, 0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015,
+    0x162c2890, 0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0781000, 0x02020216, 0x7da82881,
+    0xbe94047e, 0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80048, 0x06000013, 0xd8dc1008, 0x07000013,
+    0xbf8cc07f, 0x7e300306, 0x7e320306, 0x7e340306, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000,
+    0x0403180a, 0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 87> MergedHullOutsidePatch{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001c,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340000, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000, 0x000100c1,
+    0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101, 0x362402ff,
+    0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015, 0x162c2890,
+    0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0781000, 0x02020216, 0x7da82881, 0xbe94047e,
+    0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80060, 0x06000013, 0xd8dc1008, 0x07000013, 0xbf8cc07f,
+    0x7e300306, 0x7e320306, 0x7e340306, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000, 0x0403180a,
+    0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 87> MergedHullReadLane{
+    0xbefe04c1, 0xd7650000, 0x000100c1, 0xd7660000, 0x000200c1, 0x7da206f9, 0x80060000, 0xbf88001c,
+    0xd5480004, 0x02090502, 0xd5480005, 0x02090102, 0xd5480006, 0x02110902, 0xd5480007, 0x02111102,
+    0x7e080d04, 0x7e0a0d05, 0x7e0c0d06, 0x7e0e0d07, 0x10100cff, 0x3f19999a, 0x061010ff, 0xbf666666,
+    0x3e1008ff, 0x3e800000, 0xd54b0009, 0x03c5e105, 0x161406a0, 0xd9340000, 0x0000080a, 0xd8340008,
+    0x0000070a, 0xd8340010, 0x0000070a, 0xbf8cc07f, 0xbefe04c1, 0xbf8cc07f, 0xd7650000, 0x000100c1,
+    0xd7660000, 0x000200c1, 0xbf8a0000, 0x7da206f9, 0x81060000, 0xd5480014, 0x02151101, 0x362402ff,
+    0x000000ff, 0x160028a0, 0xd5430015, 0x040224ff, 0x00000060, 0xdbfc0000, 0x02000015, 0x162c2890,
+    0xd5430016, 0x045a24ff, 0x00000030, 0xbf8cc07f, 0xe0781000, 0x02020216, 0x7da82881, 0xbe94047e,
+    0xb06a0060, 0x162602f9, 0x0086066a, 0xd8d80048, 0x06000013, 0xd8dc1008, 0x07000013, 0xbf8cc07f,
+    0xd7600010, 0x02010106, 0x7e300210, 0x7e360306, 0x34142484, 0xbefe0414, 0xe0781000, 0x0403180a,
+    0x4a162481, 0x16161690, 0x4c1616ff, 0x00008000, 0xe0741000, 0x0202070b, 0xbf810000,
+};
+
 alignas(256) constexpr std::array<std::uint32_t, 7> PixelCode{
     0xc8020002, 0xc8060102, 0xc80a0202, 0xc80e0302, 0xf800180f, 0x03020100, 0xbf810000,
 };
@@ -325,6 +426,7 @@ alignas(256) constexpr std::array<std::uint32_t, 7> PixelCode{
 using ShaderRecompiler::TessellationConfiguration;
 
 constexpr TessellationConfiguration Patches{3u, 3u, 1u, 2u, 2u};
+constexpr TessellationConfiguration MergedPatches{3u, 3u, 1u, 2u, 2u, 256u, 0u, false, 0u, false, true};
 constexpr std::array<std::uint32_t, 3> PatchLevels{1u, 0u, 5u};
 
 constexpr std::uint16_t Corner(std::uint32_t patch, std::uint32_t x, std::uint32_t y) {
@@ -359,6 +461,8 @@ struct PatchDraw {
     std::span<const std::uint16_t> indices;
     float minLevel = 1.0f;
     float maxLevel = 64.0f;
+    std::uint32_t instances = 1;
+    std::uint32_t firstInstance = 0;
 };
 
 alignas(256) constexpr std::array<std::uint16_t, 12> NextInputIndices{
@@ -369,6 +473,7 @@ alignas(256) constexpr std::array<std::uint16_t, 12> NextInputIndices{
 
 const PatchDraw Triangles{Patches, Indices};
 const PatchDraw NextInputTriangles{{4u, 3u, 1u, 2u, 2u}, NextInputIndices};
+const PatchDraw MergedTriangles{MergedPatches, Indices};
 
 struct Stages {
     ShaderRecompiler::RecompileResult local;
@@ -394,7 +499,7 @@ ShaderRecompiler::RecompileResult Compile(const ShaderRecompiler::SpirvTarget& t
         pixel = info;
     } else {
         vertex = ShaderRecompiler::ShaderVertexStageInfo{};
-        graphics = ShaderRecompiler::GraphicsCompileContext{hull ? 0u : 8u, {}, std::nullopt, patches.configuration, {reinterpret_cast<std::uintptr_t>(patches.indices.data()), static_cast<std::uint32_t>(patches.indices.size()), 2, 1}};
+        graphics = ShaderRecompiler::GraphicsCompileContext{hull ? 0u : 8u, {}, std::nullopt, patches.configuration, {reinterpret_cast<std::uintptr_t>(patches.indices.data()), static_cast<std::uint32_t>(patches.indices.size()), 2, patches.instances}};
     }
     auto layout = stage == ShaderStage::Fragment ? PixelPushLayout(pushCursor, target) : ShaderRecompiler::BindingLayout{0, 0, pushCursor, AgcDriver::Graphics::PipelinePushSlotBytes - pushCursor};
     if (layout.pushConstantOffsetBytes < AgcDriver::Graphics::PipelinePushSlotBytes) layout.pushConstantSizeBytes = ShaderRecompiler::TessellationLevelPushOffsetBytes - layout.pushConstantOffsetBytes;
@@ -477,7 +582,7 @@ void Draw(AgcDriver::VulkanDevice& device, const Stages& stages, VkCullModeFlags
     state.blend.colorWriteMask = 15;
     state.blends = {state.blend};
     state.blendConstants = {};
-    device.Draw(state, {reinterpret_cast<std::uintptr_t>(patches.indices.data()), static_cast<std::uint32_t>(patches.indices.size()), 2, 1, 0, true}, shaders);
+    device.Draw(state, {reinterpret_cast<std::uintptr_t>(patches.indices.data()), static_cast<std::uint32_t>(patches.indices.size()), 2, patches.instances, 0, true, 0, patches.firstInstance}, shaders);
     device.WaitIdle();
 }
 
@@ -494,12 +599,12 @@ std::uint32_t CoveredPixels(std::uint32_t patch, bool interior) {
     return count;
 }
 
-void RequirePatches(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, std::span<const std::uint32_t> hull, const std::string& program, const PatchDraw& patches = Triangles, std::span<const std::uint32_t> local = LocalCode) {
+void RequirePatches(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, std::span<const std::uint32_t> hull, const std::string& program, const PatchDraw& patches = Triangles, std::span<const std::uint32_t> local = LocalCode, std::span<const std::uint32_t> domain = DomainCode) {
     std::uint32_t cursor = 0;
     const Stages stages{
         Compile(target, ShaderStage::Local, local, cursor, patches),
         Compile(target, ShaderStage::TessellationControl, hull, cursor, patches),
-        Compile(target, ShaderStage::TessellationEvaluation, DomainCode, cursor, patches),
+        Compile(target, ShaderStage::TessellationEvaluation, domain, cursor, patches),
         Compile(target, ShaderStage::Fragment, PixelCode, cursor, patches),
     };
     const auto center = Row(-0.5f + 1.0f / 3.0f);
@@ -621,6 +726,33 @@ void RequireRelativePatches(AgcDriver::VulkanDevice& device, const ShaderRecompi
     }
 }
 
+void RequireInstancedRelativePatches(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target) {
+    const auto center = Row(-0.5f + 1.0f / 3.0f);
+    TessellationConfiguration restarting{3u, 3u, 1u, 2u, 2u, 4u, 8u};
+    restarting.breakAtInstance = true;
+    for (const auto& [patches, first, last] : {std::tuple{PatchDraw{{3u, 3u, 1u, 2u, 2u, 4u, 8u}, Indices, 1.0f, 64.0f, 2u, 1u}, 128, 64}, std::tuple{PatchDraw{{3u, 3u, 1u, 2u, 2u, 3u, 3u}, Indices, 1.0f, 64.0f, 2u, 1u}, 32, 96}, std::tuple{PatchDraw{restarting, Indices, 1.0f, 64.0f, 2u, 1u}, 32, 96}}) {
+        std::uint32_t cursor = 0;
+        const Stages stages{
+            Compile(target, ShaderStage::Local, LocalCode, cursor, patches),
+            Compile(target, ShaderStage::TessellationControl, HullRelativeData, cursor, patches),
+            Compile(target, ShaderStage::TessellationEvaluation, DomainPatchRead, cursor, patches),
+            Compile(target, ShaderStage::Fragment, PixelCode, cursor, patches),
+        };
+        Draw(device, stages, VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, patches);
+        for (const auto& [patch, expected] : {std::pair{0u, first}, std::pair{2u, last}}) {
+            const auto pixel = PixelAt(Column(patch, 0.25f), center);
+            Require(pixel[0] == 255 && std::abs(pixel[2] - expected) <= 1, "the patch in column " + std::to_string(patch) + " of an instanced draw with " + std::to_string(patches.configuration.patchesPerGroup) + " patches per group and " + std::to_string(patches.configuration.primitiveGroupSize) + " primitives per group" + (patches.configuration.breakAtInstance ? " and BREAK_WAVE_AT_EOI" : "") + " did not take its blue channel from the hull's relative patch index across instances, " + PixelText(pixel));
+        }
+    }
+    const PatchDraw shared{{3u, 3u, 1u, 2u, 2u, 4u, 8u}, Indices, 1.0f, 64.0f, 2u, 1u};
+    ExpectRefusal(target, ShaderStage::TessellationEvaluation, DomainRelativeData, "domain program uses its relative patch index as data in an instanced draw", shared);
+    std::vector<std::uint32_t> capabilities(target.supportedCapabilities.begin(), target.supportedCapabilities.end());
+    std::erase(capabilities, static_cast<std::uint32_t>(spv::CapabilityDrawParameters));
+    auto withoutDrawParameters = target;
+    withoutDrawParameters.supportedCapabilities = capabilities;
+    ExpectRefusal(withoutDrawParameters, ShaderStage::TessellationControl, HullRelativeData, "shaderDrawParameters", shared);
+}
+
 class GuestBlock {
 public:
     GuestBlock() {
@@ -687,6 +819,32 @@ void RequireHullBdaReads(AgcDriver::VulkanDevice& device, const ShaderRecompiler
         Require(failure.find("BDA access failed") != std::string::npos && failure.find("stage=7 reason=1") != std::string::npos, program + ": the unmapped read was reported as \"" + failure + "\", not as a tessellation-control BDA fault");
     }
     address(0u);
+}
+
+Stages CompileLoweredInterior(const ShaderRecompiler::SpirvTarget& target, const PatchDraw& patches) {
+    std::uint32_t cursor = 0;
+    return {
+        Compile(target, ShaderStage::Local, LocalCode, cursor, patches),
+        Compile(target, ShaderStage::TessellationControl, HullCode, cursor, patches),
+        Compile(target, ShaderStage::TessellationEvaluation, DomainLoweredInterior, cursor, patches),
+        Compile(target, ShaderStage::Fragment, PixelCode, cursor, patches),
+    };
+}
+
+void RequireFractionalEvenPartitioning(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target) {
+    const auto below = Row(-0.75f);
+    const PatchDraw integer{{3u, 3u, 1u, 0u, 2u}, Indices};
+    Draw(device, CompileLoweredInterior(target, integer), VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, integer);
+    Require(CoveredPixels(0, false) > 100 && PixelAt(Column(0, 0.25f), below) == Background, "integer partitioning: the level-1 patch has a domain point inside it, " + PixelText(PixelAt(Column(0, 0.25f), below)));
+    Require(PixelAt(Column(2, 0.25f), below) != Background, "integer partitioning: the level-5 patch has no domain point inside it");
+    const PatchDraw patches{{3u, 3u, 1u, 3u, 2u}, Indices};
+    const auto stages = CompileLoweredInterior(target, patches);
+    Require(HasSpacing(stages.domain, spv::ExecutionModeSpacingFractionalEven) && !HasSpacing(stages.domain, spv::ExecutionModeSpacingFractionalOdd) && !HasSpacing(stages.domain, spv::ExecutionModeSpacingEqual), "fractional-even partitioning did not compile to fractional-even spacing");
+    Require(HasLevelBound(stages.hull, 64.0f) && !HasLevelBound(stages.hull, 63.0f), "fractional-even partitioning did not bound its tessellation factors at 64");
+    Draw(device, stages, VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, patches);
+    Require(CoveredPixels(0, false) > 100 && PixelAt(Column(0, 0.25f), below) != Background, "fractional-even partitioning: the level-1 patch was not raised to level 2 with a domain point inside it");
+    Require(CoveredPixels(1, false) == 0 && PixelAt(Column(1, 0.25f), below) == Background, "fractional-even partitioning: the patch with level 0 was not culled");
+    Require(CoveredPixels(2, false) > 100 && PixelAt(Column(2, 0.25f), below) != Background, "fractional-even partitioning: the level-5 patch has no domain point inside it");
 }
 
 void RequireQuads(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target) {
@@ -779,6 +937,53 @@ void RequireSingleControlPointHulls(const ShaderRecompiler::SpirvTarget& target)
     Require(!CompileHull(target, HullSingleOutput, {1u, 1u, 1u, 2u, 2u}).spirv.empty(), "a hull with one output control point and unguarded patch outputs was not compiled");
 }
 
+void RequireMergedHullWithoutSubgroups(const ShaderRecompiler::SpirvTarget& target) {
+    std::uint32_t cursor = 0;
+    const auto hull = Compile(target, ShaderStage::TessellationControl, MergedHullCode, cursor, MergedTriangles);
+    const auto words = hull.spirv.Words();
+    for (std::size_t at = 5; at + 1u < words.size(); at += words[at] >> 16u) {
+        Require((words[at] >> 16u) != 0u, "the merged hull program compiled to a SPIR-V instruction without words");
+        Require((words[at] & 0xffffu) != spv::OpCapability || words[at + 1u] != spv::CapabilityGroupNonUniform, "the hull stage of a merged hull program declares subgroup operations, which a device without tessellation control subgroups rejects");
+    }
+}
+
+void RequireMergedHullConstantIndices(const ShaderRecompiler::SpirvTarget& target) {
+    std::uint32_t cursor = 0;
+    const auto hull = Compile(target, ShaderStage::TessellationControl, MergedHullCode, cursor, MergedTriangles);
+    const auto words = hull.spirv.Words();
+    std::unordered_set<std::uint32_t> constants;
+    std::unordered_set<std::uint32_t> folded;
+    for (std::size_t at = 5; at + 1u < words.size(); at += words[at] >> 16u) {
+        const auto count = words[at] >> 16u;
+        Require(count != 0u && at + count <= words.size(), "the merged hull program compiled to a malformed SPIR-V instruction");
+        const auto opcode = words[at] & 0xffffu;
+        if (opcode == spv::OpConstant && count >= 3u) constants.insert(words[at + 2u]);
+        const bool integer = opcode == spv::OpIAdd || opcode == spv::OpIMul || opcode == spv::OpUDiv || opcode == spv::OpUMod || opcode == spv::OpShiftRightLogical || opcode == spv::OpBitwiseAnd;
+        const auto operand = [&](std::uint32_t id) { return constants.contains(id) || folded.contains(id); };
+        if (integer && count == 5u && operand(words[at + 3u]) && operand(words[at + 4u])) folded.insert(words[at + 2u]);
+        if (opcode == spv::OpAccessChain) {
+            for (std::uint32_t index = 4u; index < count; ++index) {
+                Require(!folded.contains(words[at + index]), "the merged hull program indexes a tessellation attribute with arithmetic on constants instead of a constant, which AMD's Windows driver reads wrongly");
+            }
+        }
+    }
+}
+
+void RequireRegisteredMergedStages() {
+    const auto low = [](const auto& code) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(code.data()) >> 8u); };
+    const auto high = [](const auto& code) { return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(code.data()) >> 40u); };
+    RegisteredStage merged;
+    RegisteredStage domain;
+    Describe(merged, MergedHullCode, 3u, {{0x148u, low(MergedHullCode)}, {0x149u, high(MergedHullCode)}, {0x10au, 0u}, {0x10bu, 16u}}, {{0x2dbu, 0x40049u}, {0x286u, 0x42800000u}, {0x287u, 0x3f800000u}, {0x2d6u, 0xc355u}}, 0x105u);
+    Describe(domain, DomainCode, 2u, {{0xc8u, low(DomainCode)}, {0xc9u, high(DomainCode)}, {0x8au, 0u}, {0x8bu, 16u}}, {}, 0x02002008u);
+    for (const auto* stage : {&merged, &domain}) AgcDriverRegisterShader_nid_postfix(&stage->shader);
+    const std::array<const Shader*, 2> stages{&merged.shader, &domain.shader};
+    const std::array<ShaderRegister, 2> context{{{0x2d5u, 0x0200210du}, {0x29bu, 0u}}};
+    const std::array<ShaderRegister, 3> primitive{{{0x25bu, 0u}, {0x262u, 0u}, {0x242u, 9u}}};
+    AgcDriverResolveGraphicsStagesAbi_nid_postfix(stages, context, primitive);
+    AgcDriverResolveGraphicsStagesAbi_nid_postfix(stages, context, primitive);
+}
+
 }
 
 int main() {
@@ -802,8 +1007,6 @@ int main() {
         ExpectRefusal(target, ShaderStage::Local, LocalIndexAsData, "outside a tessellation ring or LDS address");
         ExpectRefusal(target, ShaderStage::TessellationControl, HullRelativeData, "GE_CNTL.PRIM_GRP_SIZE is 0", RecordPatches);
         ExpectRefusal(target, ShaderStage::TessellationEvaluation, DomainRelativeData, "GE_CNTL.PRIM_GRP_SIZE is 0", RecordPatches);
-        ExpectRefusal(target, ShaderStage::TessellationControl, HullRelativeData, "GE_CNTL.BREAK_WAVE_AT_EOI is clear", {{3u, 3u, 1u, 2u, 2u, 3u, 3u}, Indices});
-        ExpectRefusal(target, ShaderStage::TessellationEvaluation, DomainRelativeData, "GE_CNTL.BREAK_WAVE_AT_EOI is clear", {{3u, 3u, 1u, 2u, 2u, 3u, 3u}, Indices});
         ExpectRefusal(target, ShaderStage::TessellationControl, HullCode, "outside its patch's quad factors", {{3u, 3u, 2u, 2u, 2u}, Indices});
         ExpectRefusal(target, ShaderStage::TessellationControl, HullDescendingRecords, "not affine");
         ExpectRefusal(target, ShaderStage::TessellationControl, HullDescendingRecords, "not affine", {{3u, 3u, 1u, 2u, 2u, 158u}, Indices});
@@ -813,18 +1016,31 @@ int main() {
         RequirePatches(*device, target, HullRestoredExecSaved, "hull program saving its restored exec");
         RequirePatches(*device, target, HullNextInput, "hull program reading the next of 4 input control points of 24 bytes", NextInputTriangles, LocalCodeStride24);
         RequirePatches(*device, target, HullDynamicIndex, "hull program reading a control point at a computed index");
+        RequirePatches(*device, target, HullCode, "domain program reading control points at a computed index", Triangles, LocalCode, DomainComputedPoint);
         RequirePatches(*device, target, HullAndSaveexec, "hull program narrowing exec with s_and_saveexec_b64");
         RequirePatches(*device, target, HullSaveexecLoop, "hull program restoring exec through loop phis");
         RequirePatches(*device, target, HullDescendingRecords, "hull program with descending patch records in 128-patch groups", {{3u, 3u, 1u, 2u, 2u, 128u}, Indices});
+        ExpectRefusal(target, ShaderStage::TessellationControl, MergedHullCode, "more input than output control points", {{4u, 3u, 1u, 2u, 2u, 256u, 0u, false, 0u, false, true}, Indices});
+        ExpectRefusal(target, ShaderStage::TessellationControl, MergedHullForeignRecord, "outside its own control point's record", MergedTriangles);
+        ExpectRefusal(target, ShaderStage::TessellationControl, MergedHullDivergentBarrier, "s_barrier that some invocations do not reach", MergedTriangles);
+        ExpectRefusal(target, ShaderStage::TessellationControl, MergedHullOutsidePatch, "reads LDS outside its patch's control point records", MergedTriangles);
+        ExpectRefusal(target, ShaderStage::TessellationControl, MergedHullReadLane, "another lane's register", MergedTriangles);
+        RequireMergedHullWithoutSubgroups(target);
+        RequireMergedHullConstantIndices(target);
+        RequirePatches(*device, target, MergedHullCode, "merged hull program", MergedTriangles, MergedHullCode);
+        RequirePatches(*device, target, MergedHullRegisters, "merged hull program storing its local part's registers", MergedTriangles, MergedHullRegisters);
         RequireCounterClockwise(*device, target);
         RequireLevelClamps(*device, target);
         RequireIntegerPartitioning(*device, target);
+        RequireFractionalEvenPartitioning(*device, target);
         RequireQuads(*device, target);
         RequirePatchConstants(*device, target);
         RequireRelativePatches(*device, target);
+        RequireInstancedRelativePatches(*device, target);
         RequireHullBdaReads(*device, target);
         RequireCompareBranches(target);
         device.reset();
+        RequireRegisteredMergedStages();
         RequireRegisteredStages();
         std::puts("Tessellation tests passed");
         return 0;

@@ -16,12 +16,23 @@ std::uint64_t DeadlineNanos(std::uint64_t microseconds);
 std::uint64_t RemainingMicros(std::uint64_t deadlineNanos);
 void SleepNanos(std::uint64_t nanos);
 void SleepUntil(std::uint64_t deadlineNanos);
+bool SleepNanosUnlessChanged(std::uint64_t nanos, const std::atomic<std::uint64_t>& counter, std::uint64_t observed);
+void WakeChangeSleepers();
 
 struct Waiter;
 
 #ifdef _WIN32
 constexpr unsigned PARK_SPINS = 1000;
 
+class DeliveryDeferral {
+public:
+    DeliveryDeferral();
+    ~DeliveryDeferral();
+    DeliveryDeferral(const DeliveryDeferral&) = delete;
+    DeliveryDeferral& operator=(const DeliveryDeferral&) = delete;
+};
+
+void DeliverDeferred();
 void SpinPause();
 Waiter* BeginPark(const void* key);
 bool FinishPark(const void* key, Waiter* waiter, const std::uint64_t* deadlineNanos);

@@ -163,7 +163,7 @@ def check_internal_guest_libc(convert, work, relinker):
                 assert run.returncode == expected, (run.returncode, run.stdout, run.stderr)
 
 
-def consumer(owner, symbol='shared#A#B', expected=22, module_name=None):
+def consumer(owner, symbol='shared#A#B', expected=22, module_name=None, needed_module_tag=0x61000045):
     image = module_with_symbol(False)
     strings = b'\0' + symbol.encode() + b'\0' + owner.encode() + b'\0'
     owner_offset = len(symbol) + 2
@@ -174,7 +174,7 @@ def consumer(owner, symbol='shared#A#B', expected=22, module_name=None):
     image[0x800:0x800 + len(strings)] = strings
     tags = [(5, 0x2200), (10, len(strings)), (6, 0x2280), (11, 24),
             (4, 0x2240), (7, 0x2300), (8, 24), (9, 24), (12, 0x1010),
-            (1, owner_offset), (0x61000045, (1 << 48) | module_offset)]
+            (1, owner_offset), (needed_module_tag, (1 << 48) | module_offset)]
     dynamic(image, 0x600, 176, tags)
     code = b'\xff\x15' + struct.pack('<i', 0x2320 - 0x1016) + bytes([0x83, 0xf8, expected, 0x74, 2, 0x0f, 0x0b, 0xc3])
     image[0x410:0x410 + len(code)] = code
@@ -392,7 +392,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='anyps5-import-modules-') as directory:
         work = Path(directory)
 
-        def convert(name, owner, symbol='shared#A#B', guest_owner=None, module_name=None, provider_name='b.prx', extra_dependencies=(), windows_gui=False):
+        def convert(name, owner, symbol='shared#A#B', guest_owner=None, module_name=None, provider_name='b.prx', extra_dependencies=(), windows_gui=False, extra_symbols=()):
             case = work / name
             modules = case / 'prx'
             modules.mkdir(parents=True)
@@ -406,7 +406,7 @@ def main():
             for dependency in extra_dependencies:
                 (modules / dependency).write_bytes(provider(44))
             source = case / 'input.elf'
-            source.write_bytes(executable(owner, symbol, module_name, extra_dependencies))
+            source.write_bytes(executable(owner, symbol, module_name, extra_dependencies, extra_symbols))
             output = case / 'output.exe'
             arguments = [str(relinker), '--windows']
             if windows_gui:
@@ -625,6 +625,14 @@ def main():
             run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
             assert run.returncode != 0 and 'unresolved ELF import absent' in run.stderr, (run.returncode, run.stderr)
             assert not (output.parent / 'anyps5.log').exists()
+        result, output = convert('missing-symbols', 'a.prx', 'absent#A#B', extra_symbols=('shared#A#B', 'missing#A#B'))
+        assert result.returncode == 0, result.stderr
+        if os.name == 'nt':
+            run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+            assert run.returncode & 0xffffffff == 0xc0000139, (hex(run.returncode & 0xffffffff), run.stderr)
+            lines = [line for line in run.stderr.splitlines() if line.startswith('FAIL: unresolved ELF import ')]
+            assert lines == ['FAIL: unresolved ELF import absent from a.prx', 'FAIL: unresolved ELF import missing from a.prx'], run.stderr
+            assert 'Transferring control to ELF entry point' not in run.stderr, run.stderr
         result, output = convert('wrong-provider', 'c.prx')
         assert result.returncode == 0, result.stderr
         if os.name == 'nt':

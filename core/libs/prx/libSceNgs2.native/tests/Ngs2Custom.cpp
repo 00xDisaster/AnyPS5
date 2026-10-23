@@ -281,6 +281,13 @@ static void TestCustomSampler() {
     const auto out = Render(system);
     for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.5f && out[i * 2 + 1] == 0.75f);
 
+    Ngs2CustomSamplerVoiceState state{};
+    Require(sceNgs2VoiceGetState(voice, &state.voice_state, sizeof(Ngs2SamplerVoiceState)) == SCE_NGS2_ERROR_INVALID_OUT_SIZE);
+    Require(sceNgs2VoiceGetState(voice, &state.voice_state, sizeof(state)) == SCE_NGS2_OK);
+    Require(state.voice_state.state_flags == (SCE_NGS2_VOICE_STATE_FLAG_INUSE | SCE_NGS2_VOICE_STATE_FLAG_PLAYING) && state.num_decoded_samples == Grain);
+    Render(system);
+    Require(sceNgs2VoiceGetState(voice, &state.voice_state, sizeof(state)) == SCE_NGS2_OK && state.num_decoded_samples == Grain * 2);
+
     Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
@@ -335,6 +342,323 @@ static void TestCustomFilter() {
     const Ngs2RenderBufferInfo renderInfo{out.data(), out.size() * sizeof(float), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
     Require(sceNgs2SystemRender(system, &renderInfo, 1) == SCE_NGS2_OK);
     Require(out[0] > 0.0f && out[0] < 0.2f && out.back() > out[0]);
+
+    Ngs2CustomVoiceFilterParam unsupported{};
+    unsupported.type = 2;
+    Require(ControlThrows<std::runtime_error>(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_FILTER, unsupported));
+    Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_FILTER, Ngs2CustomVoiceFilterParam{});
+    Control(voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS,
+            Ngs2SamplerVoiceWaveformBlocksParam{{}, pcm.data(), SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET, 1, &block});
+    Require(sceNgs2SystemRender(system, &renderInfo, 1) == SCE_NGS2_OK);
+    Require(out[0] > 0.4f);
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
+
+struct ModuleOptionWords {
+    std::uint32_t size;
+    std::uint32_t words[15];
+};
+
+static int allocCalls = 0;
+
+static std::int32_t APS5_VABI CountAlloc(Ngs2ContextBufferInfo*) {
+    allocCalls++;
+    return SCE_NGS2_OK;
+}
+
+static std::int32_t APS5_VABI CountFree(Ngs2ContextBufferInfo*) {
+    return SCE_NGS2_OK;
+}
+
+static Ngs2CustomSubmixerRackOption BuiltInRackOption(const Ngs2CustomUserFx2ModuleOption& userFx2, std::uint32_t moduleId,
+                                                      const ModuleOptionWords* moduleOption, std::uint32_t stateSize) {
+    auto option = RackOption(&userFx2, 1);
+    auto& module = option.custom_rack_option.module[0];
+    module.module_id = moduleId;
+    module.option = reinterpret_cast<const Ngs2CustomModuleOption*>(moduleOption);
+    module.state_size = stateSize;
+    return option;
+}
+
+static void TestCustomRackChecks() {
+    calls = {};
+    const auto system = CreateSystem();
+    const auto userFx2 = Module(Gain);
+    const auto good = RackOption(&userFx2, 1);
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &good.custom_rack_option.rack_option, &query) == SCE_NGS2_OK);
+    const auto info = Buffer(query);
+    const auto create = [&](const Ngs2CustomSubmixerRackOption& option) {
+        uintptr_t rack = 0;
+        const int result = sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &option.custom_rack_option.rack_option, &info, &rack);
+        Require(rack == 0);
+        return result;
+    };
+
+    auto option = good;
+    option.custom_rack_option.num_buffers = 0;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
+    Require(CreateThrows<std::invalid_argument>(option));
+    option.custom_rack_option.num_buffers = SCE_NGS2_CUSTOM_MAX_BUFFERS + 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
+    option = good;
+    option.max_inputs = 2;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
+    option.custom_rack_option.num_buffers = 2;
+    Require(CreateThrows<std::runtime_error>(option));
+    option.custom_rack_option.num_buffers = SCE_NGS2_CUSTOM_MAX_BUFFERS;
+    option.custom_rack_option.module[0].dest_buffer_id = SCE_NGS2_CUSTOM_MAX_BUFFERS - 1;
+    Require(CreateThrows<std::runtime_error>(option));
+    option.custom_rack_option.module[0].dest_buffer_id = SCE_NGS2_CUSTOM_MAX_BUFFERS;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+    option = good;
+    option.max_inputs = 0;
+    Require(CreateThrows<std::runtime_error>(option));
+    option.max_inputs = SCE_NGS2_CUSTOM_SUBMIXER_MAX_INPUTS + 1;
+    Require(CreateThrows<std::runtime_error>(option));
+
+    option = good;
+    option.custom_rack_option.module[0].source_buffer_id = 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+    option = good;
+    option.custom_rack_option.module[0].extra_buffer_id = 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+
+    option = good;
+    option.max_channels = SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS + 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_NUM_CHANNELS);
+    option.max_channels = 16;
+    Require(CreateThrows<std::runtime_error>(option));
+    option.max_channels = SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS;
+    Require(CreateThrows<std::runtime_error>(option));
+
+    Require(!CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 0)));
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 4)) == SCE_NGS2_ERROR_INVALID_STATE_SIZE);
+    const ModuleOptionWords gainOption{sizeof(Ngs2CustomModuleOption), {}};
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, &gainOption, 0)));
+
+    const ModuleOptionWords reverb{SCE_NGS2_CUSTOM_REVERB_OPTION_SIZE, {1}};
+    const ModuleOptionWords reverbOff{SCE_NGS2_CUSTOM_REVERB_OPTION_SIZE, {0}};
+    const ModuleOptionWords reverbSize{16, {1}};
+    const ModuleOptionWords reverbWord{SCE_NGS2_CUSTOM_REVERB_OPTION_SIZE, {2}};
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_REVERB, &reverb, 0)));
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_REVERB, &reverbOff, 0)));
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_REVERB, &reverbSize, 0)) == SCE_NGS2_ERROR_INVALID_OPTION_SIZE);
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_REVERB, &reverbWord, 0)) == SCE_NGS2_ERROR_INVALID_REVERB_OPTION);
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_REVERB, &reverb, 4)) == SCE_NGS2_ERROR_INVALID_STATE_SIZE);
+
+    const ModuleOptionWords pitchShift{SCE_NGS2_CUSTOM_PITCH_SHIFT_OPTION_SIZE, {0}};
+    const ModuleOptionWords pitchShiftWord{SCE_NGS2_CUSTOM_PITCH_SHIFT_OPTION_SIZE, {1}};
+    const auto pitchShiftState = SCE_NGS2_CUSTOM_PITCH_SHIFT_STATE_SIZE;
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, pitchShiftState)));
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, 0)));
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, 4)) == SCE_NGS2_ERROR_INVALID_STATE_SIZE);
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShiftWord, pitchShiftState)) == SCE_NGS2_ERROR_INVALID_PITCH_SHIFT_OPTION);
+
+    const ModuleOptionWords convolution{64, {}};
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_CONVOLUTION, &convolution, 64)));
+    option = BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_CONVOLUTION, &convolution, 64);
+    option.custom_rack_option.module[0].dest_buffer_id = 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+
+    option = BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 0);
+    option.custom_rack_option.num_modules = 2;
+    option.custom_rack_option.module[1] = good.custom_rack_option.module[0];
+    option.custom_rack_option.module[1].dest_buffer_id = 1;
+    Require(create(option) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, 0x19, nullptr, 0)));
+
+    option = good;
+    option.custom_rack_option.num_buffers = 0;
+    bool rejected = false;
+    uintptr_t rack = 0;
+    try {
+        sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &option.custom_rack_option.rack_option, nullptr, &rack);
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    Require(rejected);
+    const Ngs2BufferAllocator allocator{CountAlloc, CountFree, 0};
+    Require(sceNgs2RackCreateWithAllocator(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &option.custom_rack_option.rack_option, &allocator, &rack) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
+    Require(rack == 0 && allocCalls == 0 && calls.setupVoices.empty());
+
+    Ngs2CustomSamplerRackOption sampler{};
+    sampler.custom_rack_option.rack_option.size = sizeof(sampler);
+    sampler.custom_rack_option.rack_option.max_grain_samples = 512;
+    sampler.custom_rack_option.rack_option.max_voices = 1;
+    sampler.custom_rack_option.num_modules = 1;
+    sampler.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_FILTER;
+    sampler.max_channel_works = 1;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &sampler.custom_rack_option.rack_option, &info, &rack) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
+    sampler.custom_rack_option.num_buffers = 1;
+    sampler.custom_rack_option.module[0].extra_buffer_id = 1;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &sampler.custom_rack_option.rack_option, &info, &rack) == SCE_NGS2_ERROR_INVALID_BUFFER_INDEX);
+    Require(rack == 0);
+    sampler.custom_rack_option.module[0].extra_buffer_id = 0;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &sampler.custom_rack_option.rack_option, &info, &rack) == SCE_NGS2_OK);
+    sampler.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_GAIN;
+    Require(CreateSamplerThrows<std::runtime_error>(sampler));
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
+struct LegacyUserFxState {
+    std::uint32_t calls = 0;
+    std::uint32_t flags = 0;
+    std::int32_t result = SCE_NGS2_OK;
+    float val0 = 0.25f;
+    float val1 = 0.5f;
+};
+
+static std::int32_t APS5_VABI ProcessLegacy(Ngs2UserFxProcessContext* context) {
+    auto& state = *reinterpret_cast<LegacyUserFxState*>(context->user_data0);
+    state.calls++;
+    state.flags = context->flags;
+    if (state.result != SCE_NGS2_OK) return state.result;
+    for (std::uint32_t i = 0; i < context->num_grain_samples; i++) {
+        context->channel_data[0][i] = state.val0;
+        context->channel_data[1][i] = state.val1;
+    }
+    return SCE_NGS2_OK;
+}
+
+static Ngs2CustomSubmixerRackOption LegacyRackOption(const Ngs2CustomModuleOption* option) {
+    Ngs2CustomSubmixerRackOption rack{};
+    auto& common = rack.custom_rack_option.rack_option;
+    common.size = sizeof(rack);
+    common.max_grain_samples = 512;
+    common.max_voices = 2;
+    common.max_matrices = 1;
+    common.max_ports = 1;
+    rack.custom_rack_option.num_buffers = 1;
+    rack.custom_rack_option.num_modules = 1;
+    rack.custom_rack_option.module[0].option = option;
+    rack.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_USER_FX;
+    rack.custom_rack_option.module[0].state_size = 16;
+    rack.max_channels = 2;
+    rack.max_inputs = 1;
+    return rack;
+}
+
+static void TestCustomLegacyUserFx() {
+    const auto system = CreateSystem();
+    const auto master = Mastering(system, 2);
+    const Ngs2CustomModuleOption header{sizeof(Ngs2CustomModuleOption)};
+    const auto rack = CustomRack(system, LegacyRackOption(&header));
+    const auto custom = Voice(rack);
+    Control(custom, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
+    Patch(custom, master);
+    Event(custom, SCE_NGS2_VOICE_EVENT_PLAY);
+
+    LegacyUserFxState state{};
+    Control(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX | 0,
+            Ngs2CustomVoiceUserFxParam{{}, ProcessLegacy, reinterpret_cast<std::uintptr_t>(&state), 123, 456});
+
+    auto out = Render(system);
+    Require(state.calls == 1 && state.flags == 1);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.25f && out[i * 2 + 1] == 0.5f);
+
+    out = Render(system);
+    Require(state.calls == 2 && state.flags == 0);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.25f && out[i * 2 + 1] == 0.5f);
+
+    struct BadSizeParam {
+        Ngs2VoiceParamHeader header;
+        std::uint8_t dummy[10];
+    };
+    Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX | 0, BadSizeParam{}));
+    Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX | 2, Ngs2CustomVoiceUserFxParam{{}, ProcessLegacy, 0, 0, 0}));
+
+    Ngs2CustomModuleOption badSize{2};
+    Require(CreateThrows<std::invalid_argument>(LegacyRackOption(&badSize)));
+
+    struct ExtendedOption {
+        std::uint32_t size = 20;
+        std::uint32_t reserved = 0;
+        std::uint32_t channels = 4;
+        float param0 = 1000.0f;
+        float param1 = 0.0f;
+    } extendedOption;
+    const auto rackExtended = CustomRack(system, LegacyRackOption(reinterpret_cast<const Ngs2CustomModuleOption*>(&extendedOption)));
+    Require(sceNgs2RackDestroy(rackExtended, nullptr) == SCE_NGS2_OK);
+
+    state.result = -1;
+    bool failed = false;
+    try {
+        Render(system);
+    } catch (const std::runtime_error&) {
+        failed = true;
+    }
+    Require(failed);
+    state.result = SCE_NGS2_OK;
+
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+
+    const auto rackNullOpt = CustomRack(system, LegacyRackOption(nullptr));
+    const auto voiceNullOpt = Voice(rackNullOpt);
+    Control(voiceNullOpt, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
+    Patch(voiceNullOpt, master);
+    Event(voiceNullOpt, SCE_NGS2_VOICE_EVENT_PLAY);
+
+    LegacyUserFxState state2{};
+    state2.val0 = 0.125f;
+    state2.val1 = 0.75f;
+    Control(voiceNullOpt, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX | 0,
+            Ngs2CustomVoiceUserFxParam{{}, ProcessLegacy, reinterpret_cast<std::uintptr_t>(&state2), 123, 456});
+    out = Render(system);
+    Require(state2.calls == 1 && state2.flags == 1);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.125f && out[i * 2 + 1] == 0.75f);
+
+    Require(sceNgs2RackDestroy(rackNullOpt, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
+static void TestCustomGain() {
+    const auto system = CreateSystem();
+    const auto master = Mastering(system, 2);
+    const auto userFx2 = Module(Gain);
+    const auto rack = CustomRack(system, BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_GAIN, nullptr, 0));
+    const auto custom = Voice(rack);
+    Control(custom, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
+    Patch(custom, master);
+    Event(custom, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::vector<std::int16_t> pcm(Grain * 2 * 8, 16384);
+    const auto sampler = Sampler(system, pcm);
+    Patch(sampler, custom);
+    Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+
+    auto out = Render(system);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.0f && out[i * 2 + 1] == 0.0f);
+
+    Ngs2CustomVoiceGainParam gain{};
+    gain.gain[0] = 2.0f;
+    gain.gain[1] = -0.5f;
+    Control(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 0, gain);
+    out = Render(system);
+    for (std::uint32_t i = 0; i < Grain; i++) {
+        Require(out[i * 2] == 0.5f * 2.0f * static_cast<float>(i + 1) / Grain);
+        Require(out[i * 2 + 1] == 0.5f * -0.5f * static_cast<float>(i + 1) / Grain);
+    }
+    out = Render(system);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 1.0f && out[i * 2 + 1] == -0.25f);
+
+    gain.gain[0] = 1.0f;
+    Control(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 0, gain);
+    out = Render(system);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.5f * (2.0f - static_cast<float>(i + 1) / Grain));
+
+    auto outside = gain;
+    outside.gain[2] = 33.0f;
+    Require(ControlThrows<std::runtime_error>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 0, outside));
+    Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 1, gain));
+    Require(ControlThrows<std::invalid_argument>(sampler, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 0, gain));
+    struct ShortGainParam {
+        Ngs2VoiceParamHeader header;
+        float gain[2];
+    };
+    Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 0, ShortGainParam{}));
+
     Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
@@ -342,7 +666,10 @@ static void TestCustomFilter() {
 int main() {
     TestUserFxChain();
     TestRackOptions();
+    TestCustomRackChecks();
     TestCustomSampler();
     TestCustomFilter();
+    TestCustomLegacyUserFx();
+    TestCustomGain();
     return 0;
 }

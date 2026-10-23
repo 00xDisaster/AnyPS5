@@ -5,6 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import debt_split
+
 TOOL = Path(__file__).resolve().parents[1] / "debt_split.py"
 INDEX = "docs/dev/TechnicalDebt.md"
 
@@ -25,6 +28,17 @@ ORIGINAL = index([A_STUB, B_STUB, C_STUB], [A_FUNCTIONAL, SHADER, SHARED])
 
 
 class DebtSplitTests(unittest.TestCase):
+    def test_split_preserves_root_relative_links(self):
+        targets = ("/AnyPS5/guide.html#usage", "/images/example.png", "/")
+        references = " ".join(f"[reference]({target})" for target in targets)
+        self.write(INDEX, ORIGINAL.replace(A_STUB, A_STUB + " " + references))
+        self.split()
+        moved = self.read("docs/dev/debt/libSceA.md")
+        for target in targets:
+            with self.subTest(target=target):
+                self.assertIn(f"[reference]({target})", moved)
+        self.assertIn("../../../core/libs/prx/libSceA/Export.cpp", moved)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
@@ -59,6 +73,20 @@ class DebtSplitTests(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-qm", "docs: split technical debt")
 
+    def test_split_preserves_external_urls_and_rewrites_local_links(self):
+        links = ["HTTPS://example.test/guide#intro", "//example.test/guide#intro",
+                 "https://example.test/guide", "MAILTO:author@example.test"]
+        references = " ".join(f"[reference]({target})" for target in links)
+        self.write(INDEX, ORIGINAL.replace(A_STUB, A_STUB + " " + references
+                   + " [local](ARCHITECTURE.md#layout)"))
+        self.split()
+        moved = self.read("docs/dev/debt/libSceA.md")
+        for target in links:
+            with self.subTest(target=target):
+                self.assertIn(f"[reference]({target})", moved)
+        self.assertIn("[local](../ARCHITECTURE.md#layout)", moved)
+        self.assertIn("../../../core/libs/prx/libSceA/Export.cpp", moved)
+
     def test_split_moves_entries_by_their_first_core_link(self):
         self.split()
         self.assertEqual(self.read("docs/dev/debt/libSceA.md"),
@@ -70,6 +98,8 @@ class DebtSplitTests(unittest.TestCase):
             self.assertNotIn(entry.split(" - ")[0], text)
         for kept in ("- A toolchain limitation", "Everything throws, except:", SHARED, "### Silent stubs", "[debt](debt/)"):
             self.assertIn(kept, text)
+        for path in (INDEX, "docs/dev/debt/libSceA.md"):
+            self.assertNotIn(b"\r", (self.root / path).read_bytes())
 
     def test_split_again_appends_to_existing_files(self):
         self.split()
@@ -102,6 +132,8 @@ class DebtSplitTests(unittest.TestCase):
         self.assertEqual(sorted(result.stdout.split()),
                          ["docs/dev/debt/libSceA.md", "docs/dev/debt/libSceB.md", "docs/dev/debt/libSceC.md"])
         self.assertEqual(self.git("diff", "--name-only", "--diff-filter=U").stdout, "")
+        for path in (INDEX, "docs/dev/debt/libSceA.md"):
+            self.assertNotIn(b"\r", (self.root / path).read_bytes())
         self.git("rebase", "--continue")
         a = self.read("docs/dev/debt/libSceA.md")
         self.assertLess(a.index("`sceAOne`"), a.index("`sceAFour`"))
@@ -168,6 +200,46 @@ class DebtSplitTests(unittest.TestCase):
                          "\n".join(entry.replace("../../", "../../../") for entry in (first, second, A_STUB)) +
                          "\n\n### Functional\n\n" + A_FUNCTIONAL.replace("../../", "../../../") + "\n")
         self.assertEqual(self.read(INDEX), self.git("show", "main:" + INDEX).stdout)
+
+    def test_resolve_places_an_entry_inserted_at_the_top_of_a_later_section(self):
+        added = "- [libSceA](../../core/libs/prx/libSceA/Added.cpp) - `sceAAdded` returns 0"
+        result = self.rebase([A_STUB, B_STUB, C_STUB], [added, A_FUNCTIONAL, SHADER, SHARED])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.git("rebase", "--continue")
+        self.assertEqual(self.read("docs/dev/debt/libSceA.md"),
+                         "# libSceA technical debt\n\n### Silent stubs\n\n" + A_STUB.replace("../../", "../../../") +
+                         "\n\n### Functional\n\n" +
+                         "\n".join(entry.replace("../../", "../../../") for entry in (added, A_FUNCTIONAL)) + "\n")
+
+    def test_indented_continuation_after_a_blank_line_moves_with_its_entry(self):
+        note = "  - sub note about sceAOne"
+        self.write(INDEX, "# Project technical debt\n\n### Silent stubs\n\n" + A_STUB + "\n\n" + note + "\n")
+        self.split()
+        self.assertIn(note, self.read("docs/dev/debt/libSceA.md"))
+        self.assertNotIn(note, self.read(INDEX))
+
+    def test_unindented_paragraph_after_a_blank_line_stays_in_the_index(self):
+        paragraph = "A plain paragraph after the stubs"
+        self.write(INDEX, "# Project technical debt\n\n### Silent stubs\n\n" + A_STUB + "\n\n" + paragraph + "\n")
+        self.split()
+        self.assertIn(paragraph, self.read(INDEX))
+        self.assertNotIn(paragraph, self.read("docs/dev/debt/libSceA.md"))
+
+    def test_read_debt_and_split_accept_utf8_bom(self):
+        self.write("docs/dev/debt/libSceA.md", "\ufeff### Silent stubs\n\n- entry 1\n")
+        sections = debt_split.read_debt(self.root, "libSceA")
+        self.assertEqual(sections, {"Silent stubs": ["- entry 1"]})
+        self.write(INDEX, "\ufeff" + ORIGINAL)
+        self.split()
+        self.assertTrue((self.root / "docs/dev/debt/libSceA.md").is_file())
+        self.assertIn("libSceA technical debt", self.read("docs/dev/debt/libSceA.md"))
+
+    def test_split_keeps_blank_line_between_staying_entry_and_paragraph(self):
+        paragraph = "A paragraph that belongs to no library."
+        self.write(INDEX, "# Project technical debt\n\n### Silent stubs\n\n" + A_STUB
+                          + "\n- A toolchain limitation\n\n" + paragraph + "\n")
+        self.split()
+        self.assertIn("- A toolchain limitation\n\n" + paragraph + "\n", self.read(INDEX))
 
 
 if __name__ == "__main__":
