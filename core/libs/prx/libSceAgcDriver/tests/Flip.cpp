@@ -408,10 +408,12 @@ void testPresentMode() {
     surface.maxImageCount = 8;
     check(AgcDriver::SwapchainImageCount(surface) == 3, "the swapchain has no image beyond the surface minimum");
     surface.minImageCount = 3;
-    check(AgcDriver::SwapchainImageCount(surface) == 4, "the swapchain does not follow a larger surface minimum");
-    surface.maxImageCount = 3;
-    check(AgcDriver::SwapchainImageCount(surface) == 3, "the swapchain exceeds the surface maximum");
+    check(AgcDriver::SwapchainImageCount(surface) == 3, "a three-image surface minimum gained an image");
+    surface.minImageCount = 5;
+    check(AgcDriver::SwapchainImageCount(surface) == 5, "the swapchain does not follow a larger surface minimum");
     surface.minImageCount = 2;
+    surface.maxImageCount = 2;
+    check(AgcDriver::SwapchainImageCount(surface) == 2, "the swapchain exceeds the surface maximum");
     surface.maxImageCount = 0;
     check(AgcDriver::SwapchainImageCount(surface) == 3, "an unlimited surface maximum capped the swapchain");
     const std::array wayland{VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
