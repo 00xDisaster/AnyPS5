@@ -12,6 +12,7 @@
 #include "prx/libc/include/CpuTopology.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
+#include "prx/libc/include/HostThreadLocal.hpp"
 #include "prx/libc/include/general/AtomicSharedPtr.hpp"
 #ifdef _WIN32
 #include <windows.h>
@@ -1279,7 +1280,8 @@ std::pair<std::size_t, std::size_t> continuedRun(const GuestAllocations::Lease& 
         std::uint64_t low = 0;
         std::pair<std::size_t, std::size_t> run;
     };
-    static thread_local std::array<Memo, 1024> memos{};
+    struct MemoStorage {};
+    auto& memos = HostThreadLocal<std::array<Memo, 1024>, MemoStorage>();
     const auto& snapshot = lease.Snapshot();
     const auto block = window != 0 ? low / window : 0;
     const auto slot = (reinterpret_cast<std::uintptr_t>(snapshot.get()) / 16u ^ index * 0x9e3779b1u ^ block * 0x85ebca6bu) % memos.size();
