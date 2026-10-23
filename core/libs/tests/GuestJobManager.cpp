@@ -343,6 +343,61 @@ static void APS5_VABI LeaderJob(void* argument, std::uint32_t) {
     nested.leaderFinished = true;
 }
 
+static void RequireParked(int clock);
+
+struct WorkerWait {
+    int spareClock = 0;
+    Sequence* child;
+    std::atomic<bool> publisherEntered{false};
+    std::atomic<bool> spareEntered{false};
+    std::atomic<bool> publish{false};
+    std::atomic<bool> finished{false};
+    std::atomic<unsigned> childCalls{0};
+};
+
+static void APS5_VABI WorkerWaitChild(void* argument, std::uint32_t) {
+    ++static_cast<WorkerWait*>(argument)->childCalls;
+}
+
+static void APS5_VABI WorkerWaitPublisher(void* argument, std::uint32_t index) {
+    auto& state = *static_cast<WorkerWait*>(argument);
+    if (index != 0) {
+        Require(pthread_getcpuclockid_nid_postfix(scePthreadSelf(), &state.spareClock) == 0);
+        state.spareEntered = true;
+        return;
+    }
+    state.publisherEntered = true;
+    while (!state.publish) std::this_thread::yield();
+    Require(state.child->Dispatch(WorkerWaitChild, &state, 1, "child") == 0);
+    Require(state.child->Wait() == 0);
+    state.finished = true;
+}
+
+static void WorkerWaitCase() {
+    Block block(SizeFor(2, 2, 4, 0, 4));
+    ManagerObject manager;
+    const ConfigParams config{0, 0x21fff, 0x10000, 0x2bc, "WorkerWait", 0, 0, 0, 0};
+    Require(Initialize(manager.storage, block.memory, block.bytes, 2, 2, &config) == 0);
+    Require(SetPersistentThreadCount(manager.storage, 0) == 0);
+    SequenceFactory* factory = Factories(manager.storage, 0);
+    Sequence* publisher = nullptr;
+    WorkerWait state{};
+    Require(factory->Create(&publisher, 2, 1, 0, 1, "publisher") == 0);
+    Require(factory->Create(&state.child, 1, 1, 0, 1, "child") == 0);
+    Require(publisher->Dispatch(WorkerWaitPublisher, &state, 2, "park spare") == 0);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while ((!state.publisherEntered || !state.spareEntered) && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    Require(state.publisherEntered && state.spareEntered);
+    RequireParked(state.spareClock);
+    state.publish = true;
+    deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (!state.finished && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    Require(state.finished && state.childCalls == 1);
+    Require(publisher->Wait() == 0);
+    Require(factory->Destroy(publisher) == 0 && factory->Destroy(state.child) == 0);
+    Require(Shutdown(manager.storage) == 0);
+}
+
 static void NestedCase() {
     Block block(SizeFor(2, 1, 4, 2, 2));
     ManagerObject manager;
@@ -892,6 +947,7 @@ int RunJobManagerCase(const char* caseName) {
     else if (name == "priority") PriorityCase();
     else if (name == "shutdown") ShutdownCase();
     else if (name == "worker_policy") WorkerPolicyCase();
+    else if (name == "worker_wait") WorkerWaitCase();
     else if (name == "worker_wake") WorkerWakeCase();
     else if (name == "worker_spin") WorkerSpinCase();
     else if (name == "worker_count") WorkerCountCase();
