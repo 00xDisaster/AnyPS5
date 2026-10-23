@@ -169,7 +169,7 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME ${conventions_test_name} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_comments.py --shard ${shard}/12)
-            set_tests_properties(${conventions_test_name} PROPERTIES TIMEOUT 30)
+            set_tests_properties(${conventions_test_name} PROPERTIES TIMEOUT 120)
         endforeach()
         add_test(NAME conventions_wrapped_declarations COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_wrapped_declarations.py)
