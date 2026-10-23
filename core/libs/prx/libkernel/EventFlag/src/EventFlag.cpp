@@ -25,6 +25,7 @@ static constexpr int SCE_KERNEL_ERROR_EACCES = 0x8002000D;
 static constexpr int SCE_KERNEL_ERROR_EBUSY = 0x80020010;
 static constexpr int SCE_KERNEL_ERROR_EINVAL = 0x80020016;
 static constexpr int SCE_KERNEL_ERROR_ETIMEDOUT = 0x8002003C;
+static constexpr int SCE_KERNEL_ERROR_EFAULT = 0x8002000E;
 static constexpr int SCE_KERNEL_ERROR_ENAMETOOLONG = 0x8002003F;
 static constexpr int SCE_KERNEL_ERROR_ECANCELED = 0x80020055;
 
@@ -178,7 +179,8 @@ int APS5_VABI sceKernelCreateEventFlag(KernelEventFlag* ef, const char* name, ui
 }
 
 int APS5_VABI sceKernelOpenEventFlag(KernelEventFlag* ef, const char* name) {
-    if (!ef || !name) return SCE_KERNEL_ERROR_EINVAL;
+    if (!name) return SCE_KERNEL_ERROR_EFAULT;
+    if (std::strlen(name) >= EVF_NAME_CAPACITY) return SCE_KERNEL_ERROR_ENAMETOOLONG;
     try {
         std::unique_lock lock(eventFlagRegistryMutex);
         std::shared_ptr<KernelEventFlagPrivate> target;
@@ -190,6 +192,7 @@ int APS5_VABI sceKernelOpenEventFlag(KernelEventFlag* ef, const char* name) {
             break;
         }
         if (!target) return SCE_KERNEL_ERROR_ESRCH;
+        if (!ef) return SCE_KERNEL_ERROR_EFAULT;
         *ef = RegisterEventFlag(std::make_shared<EventFlagHandle>(EventFlagHandle{std::move(target), true}));
     } catch (const std::bad_alloc&) {
         return SCE_KERNEL_ERROR_ENOMEM;

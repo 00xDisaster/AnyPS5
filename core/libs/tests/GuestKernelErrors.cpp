@@ -224,8 +224,10 @@ int main() {
     }
 
     KernelEventFlag opened = nullptr;
-    Require(sceKernelOpenEventFlag(nullptr, "test") == SCE_KERNEL_ERROR_EINVAL);
-    Require(sceKernelOpenEventFlag(&opened, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelOpenEventFlag(nullptr, "test") == SCE_KERNEL_ERROR_ESRCH);
+    Require(sceKernelOpenEventFlag(&opened, nullptr) == SCE_KERNEL_ERROR_EFAULT && opened == nullptr);
+    Require(sceKernelOpenEventFlag(&opened, "") == SCE_KERNEL_ERROR_ESRCH && opened == nullptr);
+    Require(sceKernelOpenEventFlag(&opened, "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn") == SCE_KERNEL_ERROR_ENAMETOOLONG && opened == nullptr);
     Require(sceKernelOpenEventFlag(&opened, "SceShellCoreUtilAppFocus") == SCE_KERNEL_ERROR_ESRCH && opened == nullptr);
     Require(sceKernelCloseEventFlag(nullptr) == SCE_KERNEL_ERROR_ESRCH);
 
@@ -242,6 +244,7 @@ int main() {
     KernelEventFlag sharedTwin = nullptr;
     Require(sceKernelCreateEventFlag(&sharedTwin, "test_open", EVF_ATTR_SHARED | EVF_ATTR_MULTI, 0, nullptr) == SCE_KERNEL_ERROR_EPERM && sharedTwin == nullptr);
     Require(sceKernelOpenEventFlag(&opened, "test_open") == SCE_OK && opened != nullptr && opened != ef && opened != plain);
+    Require(sceKernelOpenEventFlag(nullptr, "test_open") == SCE_KERNEL_ERROR_EFAULT);
     KernelEventFlag openedTwice = nullptr;
     Require(sceKernelOpenEventFlag(&openedTwice, "test_open") == SCE_OK && openedTwice != opened && openedTwice != ef);
     Require(sceKernelSetEventFlag(opened, 0x08) == SCE_OK);
