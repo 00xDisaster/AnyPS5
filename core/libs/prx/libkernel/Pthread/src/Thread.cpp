@@ -1167,7 +1167,10 @@ void APS5_VABI scePthreadTestcancel() {
 }
 
 int APS5_VABI scePthreadSetprio(Pthread thread, int prio) {
-    if (!thread) return SCE_KERNEL_ERROR_EINVAL;
+    const auto level = static_cast<std::uint32_t>(prio) & 0xffffu;
+    if (!thread || !((level >= 256 && level <= 767) || (level >= 896 && level <= 959))) return SCE_KERNEL_ERROR_EINVAL;
+    const auto live = LockLiveGuestThread(thread);
+    if (!live) return SCE_KERNEL_ERROR_ESRCH;
     thread->priority.store(prio, std::memory_order_relaxed);
     return SCE_OK;
 }
