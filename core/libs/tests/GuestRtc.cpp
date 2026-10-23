@@ -913,6 +913,9 @@ int main() {
         Require(sceRtcFormatRFC3339Precise(precise, &pastMaximum, -60, 3) == 0 && std::strcmp(precise, "9999-12-31T23:00:00.000-01:00") == 0);
         Require(sceRtcFormatRFC3339Precise(nullptr, &measured, 0, 9) == invalidPointer);
         Require(sceRtcFormatRFC3339PreciseLocalTime(precise, &pastMaximum, 3) == invalidYear);
+        SetTimeZone("XXX+3");
+        Require(sceRtcFormatRFC3339PreciseLocalTime(precise, &pastMaximum, 3) == 0 && std::strcmp(precise, "9999-12-31T21:00:00.000-03:00") == 0);
+        SetTimeZone("UTC0");
         Require(sceRtcCompareTick(&first, &second) == -1 && sceRtcCompareTick(&second, &first) == 1 && sceRtcCompareTick(&first, &first) == 0);
         Require(sceRtcCompareTick(nullptr, &first) == invalidPointer && sceRtcCompareTick(&first, nullptr) == invalidPointer);
         RtcTick current{};
