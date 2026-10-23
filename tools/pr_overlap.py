@@ -116,8 +116,15 @@ def fetch(base, prs):
 
 
 def merge(*args):
+    cwd = Path.cwd()
+    root = _REPO_ROOTS.get(cwd)
+    if root is None:
+        root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, check=True
+        ).stdout.decode("utf-8", errors="replace").strip()
+        _REPO_ROOTS[cwd] = root
     result = subprocess.run(["git", "-c", "core.quotePath=false", "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", *args],
-                            capture_output=True)
+                            cwd=root, capture_output=True)
     lines = result.stdout.decode("utf-8", errors="replace").rstrip("\0").split("\0")
     if result.returncode not in (0, 1) or not lines[0]:
         error = result.stderr.decode("utf-8", errors="replace").strip()
