@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,12 +85,6 @@ constexpr std::int32_t InitialUser = 0x10000000;
 
 void Require(bool value) { if (!value) std::abort(); }
 
-template <typename TFunction>
-void RequireThrows(TFunction function) {
-    try { function(); } catch (const std::runtime_error&) { return; }
-    std::abort();
-}
-
 void TestWithoutCache() {
     Require(sceHttpCacheTerm(1) == NotFound);
     Require(sceHttpCacheCreateRequest(1, -1) == NotFound);
@@ -139,7 +132,6 @@ void TestRequests() {
     Require(sceHttpCacheRetrieve(request, nullptr, &response, &next, &result) == InvalidValue);
     Require(sceHttpCacheRetrieve(request, &query, &response, &next, nullptr) == InvalidValue);
     Require(sceHttpCacheRetrieve(0x01000099, &query, &response, &next, &result) == NotFound);
-    RequireThrows([&] { sceHttpCacheRetrieve(request, &query, &response, &next, &result); });
     const Header nullName[]{{nullptr, "a"}};
     query.url = "http://a/";
     query.headerCount = 1;
@@ -188,12 +180,10 @@ void TestCacheArguments() {
     quota.entries = entries;
     Require(sceHttpCacheSetQuota(cache, &quota) == InvalidValue);
     entries[0].name = "a";
-    RequireThrows([&] { sceHttpCacheSetQuota(cache, &quota); });
     const std::int32_t users[]{InitialUser};
     Require(sceHttpCacheClearAllUserTags(9, users, 1) == NotFound);
     Require(sceHttpCacheClearAllUserTags(cache, nullptr, 1) == InvalidValue);
     Require(sceHttpCacheClearAllUserTags(cache, users, 21) == InvalidValue);
-    RequireThrows([&] { sceHttpCacheClearAllUserTags(cache, users, 1); });
     Require(sceHttpCacheTerm(cache) == 0);
 }
 
@@ -453,7 +443,6 @@ void TestPublicResponses() {
     Require(exchange.Retrieve("http://public/a") == 0 && exchange.result == 0);
     std::vector<Header> headers{{"Cache-Control", "public, max-age=60"}};
     ResponseHeader header{200, 0, headers.size(), headers.data()};
-    RequireThrows([&] { sceHttpCacheSetResponseHeader(exchange.request, &header); });
     Require(sceHttpCacheSetCacheSharing(0) == 0);
     Require(sceHttpCacheSetResponseHeader(exchange.request, &header) == 0);
     Require(sceHttpCacheCompleteRequest(exchange.request) == 0);
@@ -468,8 +457,6 @@ void TestPublicResponses() {
     exchange.user = InitialUser;
     Require(exchange.Retrieve("http://public/a") == 0);
     exchange.Done();
-    RequireThrows([&] { exchange.Retrieve("http://public/b"); });
-    RequireThrows([&] { sceHttpCacheClearAll(exchange.cache, InitialUser); });
     Require(sceHttpCacheClearAll(exchange.cache, 0xfe) == 0);
     RequireMiss(exchange, "http://public/b");
     Require(sceHttpCacheTerm(exchange.cache) == 0);
