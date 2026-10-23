@@ -74,6 +74,7 @@ class ShaderCachePathTests(unittest.TestCase):
             self.assertIn('does not hash', result.stdout + result.stderr)
             self.assertFalse(output.exists())
 
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows path separator semantics require Windows host')
     def test_windows_path_separators(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'windows separators'
@@ -88,6 +89,7 @@ class ShaderCachePathTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(windows_version, output.read_bytes())
 
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows path separator semantics require Windows host')
     def test_windows_path_separators_reject_unhashed_include(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'windows separators'
