@@ -14,7 +14,9 @@ if(BUILD_TESTING)
     add_test(NAME guest_libressl_protocol_nid COMMAND guest_libressl_protocol_tests
         ${PATCHED_DIR}/libSceLibreSsl.prx CpIzEs1Q1Ug)
     if(WIN32)
-        set_tests_properties(guest_libressl_protocol guest_libressl_protocol_nid PROPERTIES ENVIRONMENT_MODIFICATION
+        set_tests_properties(guest_libressl_protocol PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceLibreSsl>")
+        set_tests_properties(guest_libressl_protocol_nid PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:${PATCHED_DIR}")
     endif()
 endif()
