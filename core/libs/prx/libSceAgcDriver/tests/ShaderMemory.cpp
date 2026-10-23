@@ -170,7 +170,6 @@ void verifyFrontendIdentity() {
     require((preparation.AcquireFrontend(partial) == first) == reuse, "frontend pair: partial-thread state changed the frontend identity");
     auto target = request;
     target.target.subgroupSize = 64u;
-    target.context.waveSize = 32u;
     target.context.compute->numThreads = {32u, 2u, 1u};
     require((preparation.AcquireFrontend(target) == first) == reuse, "frontend pair: translation-only state changed the frontend identity");
     const std::array<std::uint32_t, 2> changedUserData{1u, 2u};
@@ -199,6 +198,10 @@ void verifyFrontendIdentity() {
     changed.context.userDataBaseRegister = 4u;
     verifyMiss(changed, "frontend pair: changed user-data base reused the frontend");
     changed = request;
+    changed.context.waveSize = 32u;
+    changed.context.compute->numThreads = {32u, 2u, 1u};
+    verifyMiss(changed, "frontend pair: a different wave size reused the frontend");
+    changed = request;
     changed.context.userData = std::span<const std::uint32_t>(userData).first(1u);
     verifyMiss(changed, "frontend pair: changed user-data count reused the frontend");
     changed = request;
@@ -222,6 +225,25 @@ void verifyFrontendIdentity() {
     }
     require(failed, "frontend pair: invalid code did not fail during frontend construction");
     require((preparation.AcquireFrontend(request) == first) == reuse, "frontend pair: a failed miss replaced the prior frontend");
+}
+
+void verifyFrontendWaveSizeCalls() {
+    using namespace ShaderRecompiler;
+    const std::vector<std::uint32_t> code{
+        0xbb0e0005u,
+        0xd4c2000eu, 0x00020300u,
+        0xd5010002u, 0x003a0300u,
+        0xbf820001u,
+        0xbe80200eu,
+        0xbf810000u};
+    const std::array<std::uint32_t, 2> userData{};
+    for (const std::uint32_t waveSize : {32u, 64u}) {
+        auto request = FrontendRequest(code, userData);
+        request.context.waveSize = waveSize;
+        request.context.compute->numThreads = {waveSize, 1u, 1u};
+        ShaderPreparationContext preparation;
+        require(preparation.AcquireFrontend(request) != nullptr, "frontend wave size: a mask write that reuses the link pair and its v_cndmask read were refused");
+    }
 }
 
 void verifyFrontendProgram(const ShaderRecompiler::IrProgram& reused, const ShaderRecompiler::IrProgram& fresh) {
@@ -258,6 +280,7 @@ void verifyFrontendProgram(const ShaderRecompiler::IrProgram& reused, const Shad
 void verifyFrontendPair() {
     using namespace ShaderRecompiler;
     verifyFrontendIdentity();
+    verifyFrontendWaveSizeCalls();
     const bool reuse = std::getenv("APS5_NO_PERF_FRONTEND_PAIR") == nullptr;
     const std::vector<std::uint32_t> code{0xe0700000u, 0x80000000u, 0xbf810000u};
     const std::array<std::uint32_t, 4> buffer{0x10000000u, 0u, 0x40u, 0x00027facu};
@@ -320,7 +343,7 @@ void verifyFrontendPair() {
         const auto freshChanged = PrepareResourceProgram(translated);
         verifyFrontendProgram(changed, freshChanged);
         require(changed.WaveSize() != freshFull.WaveSize(), "frontend pair: changed translation inputs were ignored");
-        require((preparation.AcquireFrontend(request) == retained) == reuse, "frontend pair: translating a variant replaced the frontend");
+        require(preparation.AcquireFrontend(request) != retained, "frontend pair: a variant with another wave size reused the frontend");
     }
 
     for (const bool partialFirst : {false, true}) {
@@ -7613,6 +7636,37 @@ void verifyVolumeArrayLoadMode() {
     expectFailure([&] { static_cast<void>(ResourceMaterializer::RuntimeImageMode(store, descriptor, ResourceMaterializer::RuntimeImageModes(store))); }, "incompatible with the static runtime image interface", "2D-array image atomic on a 3D T# was accepted");
 }
 
+void verifyMultisamplePlaneReadMode() {
+    using namespace ShaderRecompiler;
+    const DescriptorValue descriptor{{0x02754d00u, 0xc3800000u, 0x00cbc167u, 0xe1b20facu, 0u, 0x00700020u, 0u, 0u}, 8u};
+    ImageResource image{};
+    image.resourceClass = ImageResourceClass::Sampled;
+    image.dimension = RdnaImageDimension::Dim2D;
+    const auto modes = ResourceMaterializer::RuntimeImageModes(image);
+    const auto selected = ResourceMaterializer::RuntimeImageMode(image, descriptor, modes);
+    require(modes[selected].dimension == RdnaImageDimension::Dim2D && !modes[selected].cube && modes[selected].numericClass == IrTextureNumericClass::Float, "a 2D read of a 2D MSAA T# (PPSA18216's) did not select a 2D runtime mode");
+    for (const auto& [word1, word3, word5, numericClass] : std::array<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t, IrTextureNumericClass>, 4>{{{0xc0100000u, 0xe1b20facu, 0x00700020u, IrTextureNumericClass::Float}, {0xc0500000u, 0xe1810facu, 0x00700010u, IrTextureNumericClass::Uint}, {0xc0c00000u, 0xe1b20facu, 0x00700020u, IrTextureNumericClass::Sint}, {0xc0d00000u, 0xe1830facu, 0x00700030u, IrTextureNumericClass::Float}}}) {
+        const DescriptorValue narrow{{0x02754d00u, word1, 0x00cbc167u, word3, 0u, word5, 0u, 0u}, 8u};
+        const auto mode = ResourceMaterializer::RuntimeImageMode(image, narrow, modes);
+        require(modes[mode].dimension == RdnaImageDimension::Dim2D && !modes[mode].cube && modes[mode].numericClass == numericClass, "a 2D read of a 2D MSAA T# with 8-bit or 16-bit texels did not select a 2D runtime mode");
+    }
+    const DescriptorValue depthBits{{0x02754d00u, 0xc0b00000u, 0x00cbc167u, 0xe1820facu, 0u, 0x00700020u, 0u, 0u}, 8u};
+    expectFailure([&] { static_cast<void>(ResourceMaterializer::RuntimeImageMode(image, depthBits, modes)); }, "incompatible with the static runtime image interface", "a 2D read of a 16_UINT SW_64KB_Z_X 2D MSAA T#, read as depth bits, was accepted");
+    const auto refused = [&](const ImageResource& access, const char* what) {
+        expectFailure([&] { static_cast<void>(ResourceMaterializer::RuntimeImageMode(access, descriptor, ResourceMaterializer::RuntimeImageModes(access))); }, "incompatible with the static runtime image interface", what);
+    };
+    auto other = image;
+    other.cubeFaceCompatible = false;
+    refused(other, "a 2D read of a 2D MSAA T# through a mip, gather, bias, gradient or offset access was accepted");
+    other = image;
+    other.depthCompare = true;
+    refused(other, "a 2D depth comparison of a 2D MSAA T# was accepted");
+    other = image;
+    other.resourceClass = ImageResourceClass::Storage;
+    other.written = true;
+    refused(other, "a 2D storage access to a 2D MSAA T# was accepted");
+}
+
 void verifyVolumeBiasTableRejection() {
     using namespace ShaderRecompiler;
     namespace Abi = ImageTableAbi;
@@ -7654,6 +7708,85 @@ void verifyVolumeBiasTableRejection() {
         require(!match.mode.has_value() && match.reason == Abi::PoisonReason::Dimension, "volume bias: an unsupported direct descriptor selected a mode");
         expectFailure([&] { static_cast<void>(ResourceMaterializer::RuntimeImageMode(image, invalid, directModes)); }, "one slice and mip level zero only", "volume bias: direct use of an unsupported descriptor was accepted");
     }
+}
+
+void verifySamplerTableDeduplication() {
+    using namespace ShaderRecompiler;
+    namespace Abi = ImageTableAbi;
+    SamplerResource sampler0{};
+    sampler0.table = 0u;
+    SamplerResource sampler1{};
+    sampler1.table = 1u;
+    ShaderInfo info{};
+    info.samplers.push_back(sampler0);
+    info.samplers.push_back(sampler1);
+    ResourceSnapshot snapshot{};
+    snapshot.tables.tables.resize(2u);
+    const DescriptorValue s0{{0x00000600u, 0x00fff000u, 0x06f03fa0u, 0u}, 4u};
+    const DescriptorValue s1{{0x00000700u, 0x00fff000u, 0x06f03fa0u, 0u}, 4u};
+    const DescriptorValue s2{{0x00000800u, 0x00fff000u, 0x06f03fa0u, 0u}, 4u};
+    std::vector<std::uint32_t> codes(300u);
+    for (std::size_t i = 0; i < 300u; ++i) codes[i] = static_cast<std::uint32_t>(i % 3u);
+    for (std::uint32_t table = 0u; table < 2u; ++table) {
+        auto& column = snapshot.tables.tables[table];
+        column.records = 300u;
+        column.keys = 300u;
+        column.codes = SharedValues<std::uint32_t>(codes);
+        column.words = SharedValues<DescriptorValue>(std::vector<DescriptorValue>{s0, s1, s2});
+    }
+    const auto resolved = ResourceMaterializer::ResolveImageTables(info, snapshot);
+    require(resolved.samplers.size() == (3u + 1u) * Abi::SamplerEntryElements, "sampler table deduplication: duplicate sampler entries across tables were not deduplicated");
+    for (std::uint32_t table = 0u; table < 2u; ++table) {
+        const auto mapStart = resolved.map.at(Abi::TableHeader(table) + Abi::TableMapStart);
+        for (std::uint32_t key = 0; key < 300u; ++key) {
+            const auto record = resolved.map.at(mapStart + key);
+            const auto element = resolved.map.at(record + Abi::SamplerRecordElement);
+            require(element == (key % 3u) * Abi::SamplerEntryElements, "sampler table deduplication: record points to the wrong deduplicated sampler element");
+            require((resolved.map.at(record + Abi::SamplerRecordFlags) & Abi::PoisonFlag) == 0u, "sampler table deduplication: deduplicated sampler was poisoned");
+        }
+    }
+
+    constexpr std::uint32_t MaxUnique = Abi::SamplerElementBudget / Abi::SamplerEntryElements;
+    std::vector<DescriptorValue> budgetWords;
+    budgetWords.reserve(MaxUnique + 1u);
+    for (std::uint32_t i = 0; i < MaxUnique + 1u; ++i) {
+        budgetWords.push_back(DescriptorValue{{0x00000600u, 0x00fff000u, 0x06f03fa0u, i + 1u}, 4u});
+    }
+    std::vector<std::uint32_t> budgetCodes(MaxUnique + 2u);
+    for (std::uint32_t i = 0; i < MaxUnique; ++i) budgetCodes[i] = i;
+    budgetCodes[MaxUnique] = 0u;
+    budgetCodes[MaxUnique + 1u] = MaxUnique;
+
+    ShaderInfo budgetInfo{};
+    SamplerResource budgetSampler{};
+    budgetSampler.table = 0u;
+    budgetInfo.samplers.push_back(budgetSampler);
+    ResourceSnapshot budgetSnapshot{};
+    budgetSnapshot.tables.tables.resize(1u);
+    auto& budgetColumn = budgetSnapshot.tables.tables[0];
+    budgetColumn.records = static_cast<std::uint32_t>(budgetCodes.size());
+    budgetColumn.keys = static_cast<std::uint32_t>(budgetCodes.size());
+    budgetColumn.codes = SharedValues<std::uint32_t>(budgetCodes);
+    budgetColumn.words = SharedValues<DescriptorValue>(budgetWords);
+
+    const auto budgetResolved = ResourceMaterializer::ResolveImageTables(budgetInfo, budgetSnapshot);
+    require(budgetResolved.samplers.size() == Abi::SamplerElementBudget, "sampler table budget: valid unique samplers did not fill budget");
+    const auto budgetMapStart = budgetResolved.map.at(Abi::TableHeader(0) + Abi::TableMapStart);
+
+    const auto dupRecord = budgetResolved.map.at(budgetMapStart + MaxUnique);
+    const auto dupFlags = budgetResolved.map.at(dupRecord + Abi::SamplerRecordFlags);
+    require((dupFlags & Abi::PoisonFlag) == 0u, "sampler table budget: duplicate of existing sampler was poisoned when budget is full");
+    require(budgetResolved.map.at(dupRecord + Abi::SamplerRecordElement) == 0u, "sampler table budget: duplicate sampler did not reuse existing element");
+
+    const auto overflowRecord = budgetResolved.map.at(budgetMapStart + MaxUnique + 1u);
+    const auto overflowFlags = budgetResolved.map.at(overflowRecord + Abi::SamplerRecordFlags);
+    require((overflowFlags & Abi::PoisonFlag) != 0u, "sampler table budget: exceeding sampler budget did not poison record");
+    require(budgetResolved.poison.at(overflowFlags & ~Abi::PoisonFlag).reason == Abi::PoisonReason::Budget, "sampler table budget: poisoned reason is not Budget");
+
+    const auto outsideRecord = budgetResolved.map.at(Abi::TableHeader(0) + Abi::TableOutsideCode);
+    const auto outsideFlags = budgetResolved.map.at(outsideRecord + Abi::SamplerRecordFlags);
+    require((outsideFlags & Abi::PoisonFlag) != 0u, "sampler table budget: TableOutsideCode did not poison when budget is full");
+    require(budgetResolved.poison.at(outsideFlags & ~Abi::PoisonFlag).reason == Abi::PoisonReason::Budget, "sampler table budget: TableOutsideCode poisoned reason is not Budget");
 }
 
 void verifyDynamicStorageMipChain() {
@@ -7874,7 +8007,9 @@ int main(int argc, char** argv) {
         verifyCubeDepthCompareMode();
         verifyVolumeArrayLoadMode();
         verifyArrayVolumeStoreMode();
+        verifyMultisamplePlaneReadMode();
         verifyVolumeBiasTableRejection();
+        verifySamplerTableDeduplication();
         verifyDynamicStorageMipChain();
         verifySrgbDepthCompareModes();
         verifyQuadMaskNeighbourReads();
