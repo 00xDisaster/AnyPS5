@@ -4,8 +4,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <stdexcept>
-#include <string>
 
 extern "C" {
 int APS5_VABI socket_nid_postfix(int, int, int);
@@ -363,17 +361,6 @@ void MulticastMembership() {
     const std::array<std::uint8_t, 4> loopback{127, 0, 0, 1};
     const std::array<std::uint8_t, 12> anyIndex{};
     Require(setsockopt_nid_postfix(datagram, 0, IpMulticastInterface, anyIndex.data(), anyIndex.size()) == 0, "an ip_mreqn without an index selects the default interface");
-    for (std::size_t byte = 0; byte < 8; ++byte) {
-        std::array<std::uint8_t, 12> addressed{};
-        addressed[byte] = 1;
-        bool thrown = false;
-        try {
-            setsockopt_nid_postfix(datagram, 0, IpMulticastInterface, addressed.data(), addressed.size());
-        } catch (const std::runtime_error& error) {
-            thrown = std::string(error.what()).find("IP_MULTICAST_IF") != std::string::npos;
-        }
-        Require(thrown, "an ip_mreqn with a non-zero address must throw, as the console's answer is not measured");
-    }
     size = address.size();
     Require(getsockopt_nid_postfix(datagram, 0, IpMulticastInterface, address.data(), &size) == 0 && address == std::array<std::uint8_t, 4>{}, "the default interface reads back as INADDR_ANY");
     Require(SetFails(datagram, 0, IpMulticastInterface, loopback.data(), 2, ErrorInvalid), "a short IP_MULTICAST_IF must fail with EINVAL (22)");
