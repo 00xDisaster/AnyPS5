@@ -54,8 +54,8 @@ int APS5_VABI sceOpusDecDecodeFloatWithPriority(void* state, const std::uint8_t*
 }
 
 int APS5_VABI sceOpusDecDecodeFloatWithPriorityAndTimeout(void* state, const std::uint8_t* data, int bytes, float* pcm, int capacity, int priority,
-                                                         std::uint32_t, std::uint32_t*) {
-    return OpusDecodeVariant(library, ErrorBase, state, data, bytes, pcm, capacity, priority, true);
+                                                         std::uint32_t timeout, std::uint32_t*) {
+    return OpusDecodeVariantWithTimeout(library, ErrorBase, state, data, bytes, pcm, capacity, priority, true, timeout, __func__);
 }
 
 int APS5_VABI sceOpusDecDecodeWithPriority(void* state, const std::uint8_t* data, int bytes, std::int16_t* pcm, int capacity, int priority) {
@@ -63,8 +63,8 @@ int APS5_VABI sceOpusDecDecodeWithPriority(void* state, const std::uint8_t* data
 }
 
 int APS5_VABI sceOpusDecDecodeWithPriorityAndTimeout(void* state, const std::uint8_t* data, int bytes, std::int16_t* pcm, int capacity, int priority,
-                                                    std::uint32_t, std::uint32_t*) {
-    return OpusDecodeVariant(library, ErrorBase, state, data, bytes, pcm, capacity, priority, false);
+                                                    std::uint32_t timeout, std::uint32_t*) {
+    return OpusDecodeVariantWithTimeout(library, ErrorBase, state, data, bytes, pcm, capacity, priority, false, timeout, __func__);
 }
 
 }

@@ -120,18 +120,27 @@ void RequireTimeoutVariants() {
     const std::uint8_t packet = 0;
     std::uint32_t batch = 0xA5A5A5A5u;
     Require(sceOpusDecDecodeWithPriorityAndTimeout(invalidState.data(), &packet, 1, &output, 2, 19, 0, &batch) == static_cast<int>(0x8174000Au));
-    Require(sceOpusDecDecodeWithPriorityAndTimeout(invalidState.data(), &packet, 1, &output, 2, 20, 0, &batch) == static_cast<int>(0x81740001u));
+    Require(sceOpusDecDecodeWithPriorityAndTimeout(invalidState.data(), &packet, 1, &output, 2, 20, 0xFFFFFFFFu, &batch) == static_cast<int>(0x81740001u));
     Require(sceOpusDecDecodeFloatWithPriorityAndTimeout(nullptr, &packet, 1, nullptr, 2, 20, 0, &batch) == static_cast<int>(0x81740000u));
+    Require(sceOpusDecDecodeFloatWithPriorityAndTimeout(invalidState.data(), &packet, -1, nullptr, 2, 20, 1000, &batch) == static_cast<int>(0x81740007u));
     std::array<std::int16_t, 1920> reference{}, pcm{};
     std::array<float, 1920> floats{};
-    for (std::uint32_t timeout : {0xFFFFFFFFu, 0u, 1000u}) {
+    for (int frame = 0; frame < 2; ++frame) {
         Require(sceOpusDecDecode(states[0].data(), CELT_PACKET, sizeof(CELT_PACKET), reference.data(), 3840) == 3840);
-        Require(sceOpusDecDecodeWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), pcm.data(), 3840, 40, timeout, &batch) == 3840);
+        Require(sceOpusDecDecodeWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), pcm.data(), 3840, 40, 0xFFFFFFFFu, &batch) == 3840);
         Require(pcm == reference);
     }
+    pcm.fill(12345);
+    floats.fill(2.0f);
+    for (std::uint32_t timeout : {0u, 1u, 1000u, 0xFFFFFFFEu}) {
+        RequireThrows([&] { sceOpusDecDecodeWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), pcm.data(), 3840, 40, timeout, &batch); });
+        RequireThrows([&] { sceOpusDecDecodeFloatWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), floats.data(), 7680, 40, timeout, &batch); });
+    }
     Require(batch == 0xA5A5A5A5u);
+    Require(std::all_of(pcm.begin(), pcm.end(), [](auto value) { return value == 12345; }));
+    Require(std::all_of(floats.begin(), floats.end(), [](auto value) { return value == 2.0f; }));
     Require(sceOpusDecDecode(states[0].data(), CELT_PACKET, sizeof(CELT_PACKET), reference.data(), 3840) == 3840);
-    Require(sceOpusDecDecodeFloatWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), floats.data(), 7680, 40, 0, nullptr) == 7680);
+    Require(sceOpusDecDecodeFloatWithPriorityAndTimeout(states[1].data(), CELT_PACKET, sizeof(CELT_PACKET), floats.data(), 7680, 40, 0xFFFFFFFFu, nullptr) == 7680);
     for (std::size_t index = 0; index < floats.size(); ++index) Require(floats[index] == Converted(reference[index]));
     for (auto& state : states) Require(sceOpusDecDestroy(state.data()) == 0);
     Require(sceOpusDecTerminate(&context) == 0);
