@@ -217,6 +217,90 @@ void skipsLeavesThatCopyRsp() {
     require(sites.empty() && displacements.empty() && report.Skipped.at("other use of rsp") == 2, "a leaf that copies rsp into another register was framed");
 }
 
+const std::vector<std::uint8_t> InflatePrologue{0x55, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x40};
+const std::vector<std::uint8_t> InflatePops{0x5b, 0x41, 0x5c, 0x41, 0x5d, 0x41, 0x5e, 0x41, 0x5f, 0x5d, 0xc3};
+const std::vector<std::uint8_t> InflateFree{0x48, 0x83, 0xc4, 0x40};
+
+std::vector<std::uint8_t> inflateExit() {
+    std::vector<std::uint8_t> bytes = InflateFree;
+    append(bytes, InflatePops);
+    return bytes;
+}
+
+std::vector<std::uint8_t> inflateBody() {
+    return {
+        0x48, 0x89, 0x7c, 0x24, 0xe0,
+        0x48, 0x89, 0x7c, 0x24, 0x00,
+        0x48, 0x89, 0x74, 0x24, 0x08,
+        0x48, 0x89, 0x54, 0x24, 0x38,
+        0xb9, 0x04, 0x00, 0x00, 0x00,
+        0x31, 0xc0,
+        0x48, 0x03, 0x44, 0x24, 0x08,
+        0x48, 0x03, 0x44, 0x24, 0xe0,
+        0x48, 0x03, 0x44, 0x24, 0x00,
+        0xff, 0xc9,
+        0x75, 0xed,
+        0x48, 0x8b, 0x54, 0x24, 0x38,
+    };
+}
+
+void framesLeavesThatAllocateBelowTheirPushes() {
+    const auto body = inflateBody();
+    const auto input = image({framelessLeaf(InflatePrologue, body, inflateExit())});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(report.RedZoneFunctions == 1 && report.Framed == 1 && report.FramedWithoutFramePointer == 1 && report.Exits == 1 && sites.size() == 2, "a leaf that allocates with sub after its pushes and spills below its allocation was not framed");
+    const auto& entry = sites[0];
+    require(entry.Address == Base + 0x40 && entry.OriginalBytes == InflatePrologue, "the prologue site does not cover the pushes and the sub");
+    std::vector<std::uint8_t> entryBody = InflatePrologue;
+    append(entryBody, {0x48, 0x8d, 0x64, 0x24, 0xe0, 0xe9, 0, 0, 0, 0});
+    require(entry.Body == entryBody, "the prologue stub does not lower rsp by 0x20 after the sub");
+    const auto& exit = sites[1];
+    require(exit.Address == Base + 0x40 + InflatePrologue.size() + body.size() && exit.OriginalBytes == inflateExit(), "the exit site does not cover the add, the pops and the ret");
+    std::vector<std::uint8_t> exitBody{0x48, 0x8d, 0xa4, 0x24, 0x20, 0, 0, 0};
+    append(exitBody, inflateExit());
+    append(exitBody, {0xe9, 0, 0, 0, 0});
+    require(exit.Body == exitBody, "the exit stub does not raise rsp by 0x20 before the add");
+    const std::vector<std::uint8_t> moved{0x00, 0x20, 0x28, 0x58, 0x28, 0x00, 0x20, 0x58};
+    require(displacements.size() == moved.size() && report.MovedOperands == moved.size(), "not every rsp operand of the allocating leaf was moved");
+    for (std::size_t index = 0; index < moved.size(); ++index)
+        require(displacements[index].Bytes == std::vector<std::uint8_t>{moved[index]}, "an rsp operand of the allocating leaf was not moved by 0x20 from the post-sub rsp");
+    require(displacements[0].Offset == 0x40 + InflatePrologue.size() + 4, "the spill below the allocation was not the first operand moved");
+}
+
+void framesLeavesThatAllocateWithLeaOrALargeSub() {
+    const std::vector<std::uint8_t> leaPrologue{0x53, 0x41, 0x56, 0x48, 0x8d, 0x64, 0x24, 0xc0};
+    const std::vector<std::uint8_t> leaExit{0x48, 0x8d, 0x64, 0x24, 0x40, 0x41, 0x5e, 0x5b, 0xc3};
+    const std::vector<std::uint8_t> largePrologue{0x53, 0x48, 0x81, 0xec, 0x00, 0x01, 0x00, 0x00};
+    const std::vector<std::uint8_t> largeExit{0x48, 0x81, 0xc4, 0x00, 0x01, 0x00, 0x00, 0x5b, 0xc3};
+    std::vector<std::uint8_t> largeBody = StoreBelowRsp;
+    append(largeBody, {0x48, 0x8b, 0x84, 0x24, 0x80, 0x00, 0x00, 0x00});
+    const auto input = image({framelessLeaf(leaPrologue, StoreBelowRsp, leaExit), framelessLeaf(largePrologue, largeBody, largeExit)});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(report.Framed == 2 && sites.size() == 4 && displacements.size() == 3, "leaves that allocate with lea or a 32-bit sub were not framed");
+    require(sites[0].OriginalBytes == leaPrologue && sites[1].OriginalBytes == leaExit, "the lea allocation and free are not part of the prologue and exit sites");
+    require(sites[2].OriginalBytes == largePrologue && sites[3].OriginalBytes == largeExit, "the 32-bit sub and add are not part of the prologue and exit sites");
+    require(displacements[2].Bytes == std::vector<std::uint8_t>{0x90, 0x00, 0x00, 0x00}, "the 32-bit displacement into the allocation was not moved by the shift");
+}
+
+void skipsAllocatingLeavesWithoutAMatchingFree() {
+    const std::vector<std::uint8_t> otherFree{0x48, 0x83, 0xc4, 0x30};
+    std::vector<std::uint8_t> wrongFree = otherFree;
+    append(wrongFree, InflatePops);
+    std::vector<std::uint8_t> moreRsp = StoreBelowRsp;
+    append(moreRsp, {0x48, 0x83, 0xec, 0x08});
+    const auto input = image({framelessLeaf(InflatePrologue, StoreBelowRsp, InflatePops), framelessLeaf(InflatePrologue, StoreBelowRsp, wrongFree), framelessLeaf(InflatePrologue, moreRsp, inflateExit())});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, {}, report, displacements);
+    require(sites.empty() && displacements.empty() && report.RedZoneFunctions == 3, "an allocating leaf without a matching free, or with more rsp arithmetic, was framed");
+    require(report.Skipped.at("exit does not free the prologue's allocation") == 1, "an exit that does not free the allocation was not reported with its own reason");
+    require(report.Skipped.at("other use of rsp") == 2, "an add of another size before the pops, or more rsp arithmetic in the body, was not reported as another use of rsp");
+}
+
 Image calledThenUncalled(const std::vector<std::uint8_t>& called, const std::vector<std::uint8_t>& uncalled) {
     Image result;
     result.bytes = callTo(0, 0x40);
@@ -303,6 +387,9 @@ int main() {
         movesPositiveOperandsThatFitAfterTheShift();
         shiftsByTheWholeRedZoneForAddressesBelowRsp();
         shiftsByTheWholeRedZoneForIndexedOperands();
+        framesLeavesThatAllocateBelowTheirPushes();
+        framesLeavesThatAllocateWithLeaOrALargeSub();
+        skipsAllocatingLeavesWithoutAMatchingFree();
         skipsLeavesWithOperandsThatCannotMove();
         skipsLeavesThatCopyRsp();
         endsBodiesAtAlignedCodeAfterARet();

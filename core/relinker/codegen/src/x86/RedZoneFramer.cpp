@@ -46,6 +46,24 @@ std::optional<std::uint8_t> poppedRegister(const std::uint8_t* code, const Insn&
     return std::nullopt;
 }
 
+std::optional<std::int64_t> rspAdjustment(const std::uint8_t* code, const Insn& insn) {
+    std::int32_t value = 0;
+    if (insn.Length == 4 && code[0] == 0x48 && code[1] == 0x83 && (code[2] == 0xec || code[2] == 0xc4)) {
+        const std::int64_t amount = static_cast<std::int8_t>(code[3]);
+        return code[2] == 0xec ? -amount : amount;
+    }
+    if (insn.Length == 7 && code[0] == 0x48 && code[1] == 0x81 && (code[2] == 0xec || code[2] == 0xc4)) {
+        std::memcpy(&value, code + 3, 4);
+        return code[2] == 0xec ? -std::int64_t{value} : std::int64_t{value};
+    }
+    if (insn.Length == 5 && std::memcmp(code, "\x48\x8d\x64\x24", 4) == 0) return static_cast<std::int8_t>(code[4]);
+    if (insn.Length == 8 && std::memcmp(code, "\x48\x8d\xa4\x24", 4) == 0) {
+        std::memcpy(&value, code + 4, 4);
+        return value;
+    }
+    return std::nullopt;
+}
+
 struct MemoryUse {
     bool UsesRsp = false;
     bool RegisterRsp = false;
@@ -255,6 +273,24 @@ void frameSegment(
         std::size_t p = rbpPrologue ? 2 : 0;
         while (p < body.size())
             if (const auto reg = pushedRegister(at(p), insns[body[p]])) { pushed.push_back(*reg); ++p; } else break;
+        std::int64_t allocation = 0;
+        if (!rbpPrologue && p < body.size())
+            if (const auto adjustment = rspAdjustment(at(p), insns[body[p]]); adjustment && *adjustment < 0) { allocation = -*adjustment; ++p; }
+        std::vector<std::uint8_t> expected(pushed.begin(), pushed.end());
+        if (rbpPrologue) expected.insert(expected.begin(), kRegRbp);
+        const auto popsBefore = [&](const std::size_t k) -> std::optional<std::size_t> {
+            std::size_t q = k;
+            std::vector<std::uint8_t> popped;
+            while (q > p && popped.size() < expected.size())
+                if (const auto reg = poppedRegister(at(q - 1), insns[body[q - 1]])) { popped.push_back(*reg); --q; } else break;
+            if (popped != expected) return std::nullopt;
+            return q;
+        };
+        std::set<std::size_t> frees;
+        if (allocation > 0)
+            for (std::size_t k = p; k < body.size(); ++k)
+                if (insns[body[k]].Info.FlowKind == ControlFlowKind::Return)
+                    if (const auto q = popsBefore(k); q && *q > p && rspAdjustment(at(*q - 1), insns[body[*q - 1]]) == allocation) frees.insert(*q - 1);
 
         bool leaf = true;
         bool redZone = false;
@@ -276,6 +312,7 @@ void frameSegment(
             const auto* code = at(k);
             const auto flow = insn.Info.FlowKind;
             if (flow == ControlFlowKind::Call || flow == ControlFlowKind::IndirectCall) { leaf = false; break; }
+            if (frees.contains(k)) continue;
             const auto use = memoryUse(code, insn);
             if (use.RbpBased && rbpPrologue && use.RbpDisp < -static_cast<std::int64_t>(8 * pushed.size())) redZone = true;
             if (use.RspBased && use.RspDisp < 0) redZone = true;
@@ -299,13 +336,13 @@ void frameSegment(
             }
             if (flow == ControlFlowKind::Return) {
                 if (insn.Length != 1 || code[0] != 0xc3) { reason = "ret with an immediate"; continue; }
-                std::vector<std::uint8_t> expected(pushed.begin(), pushed.end());
-                if (rbpPrologue) expected.insert(expected.begin(), kRegRbp);
-                std::size_t q = k;
-                std::vector<std::uint8_t> popped;
-                while (q > p && popped.size() < expected.size())
-                    if (const auto reg = poppedRegister(at(q - 1), insns[body[q - 1]])) { popped.push_back(*reg); --q; } else break;
-                if (popped != expected) { reason = "exit does not pop the prologue's registers"; continue; }
+                const auto pops = popsBefore(k);
+                if (!pops) { reason = "exit does not pop the prologue's registers"; continue; }
+                auto q = *pops;
+                if (allocation > 0) {
+                    if (q == p || !frees.contains(q - 1)) { reason = "exit does not free the prologue's allocation"; continue; }
+                    --q;
+                }
                 const auto siteStart = insns[body[q]].Offset;
                 const auto siteEnd = insn.Offset + 1;
                 if (siteEnd - siteStart < kJumpBytes) { reason = "exit shorter than a jump"; continue; }
@@ -316,7 +353,7 @@ void frameSegment(
         if (!leaf || !redZone) continue;
         ++report.RedZoneFunctions;
         const auto prologueEnd = p > 0 ? insns[body[p - 1]].Offset + insns[body[p - 1]].Length : start;
-        if (reason == nullptr && (pushed.empty() || prologueEnd - start < kJumpBytes)) reason = "prologue shorter than a jump";
+        if (reason == nullptr && ((pushed.empty() && allocation == 0) || prologueEnd - start < kJumpBytes)) reason = "prologue shorter than a jump";
         if (reason == nullptr && targetInside(start, prologueEnd)) reason = "branch into the prologue";
         if (reason == nullptr && exits.empty()) reason = "no ret exit";
         if (reason == nullptr && (overlapsExisting(start, prologueEnd) || std::any_of(exits.begin(), exits.end(), [&](const auto& exit) { return overlapsExisting(exit.first, exit.second); }))) reason = "overlaps another stub";
