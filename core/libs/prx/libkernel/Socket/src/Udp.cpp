@@ -1583,17 +1583,21 @@ std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message,
         return Fail(55);
     }
     sockaddr_storage native{};
-    socklen_t size = sizeof(native);
-    if (const int waited = WaitForTransfer(*socket, false, flags)) return Fail(waited);
-    std::int64_t received = ::recvfrom(socket->value, buffer.data(), static_cast<int>(buffer.size()),
-        NativeReceiveFlags(flags, socket->type), reinterpret_cast<sockaddr*>(&native), &size);
-    if (received < 0) {
+    socklen_t size = 0;
+    std::int64_t received = 0;
+    if (total != 0 || socket->type == 1 || ReadableNow(*socket)) {
+        size = sizeof(native);
+        if (const int waited = WaitForTransfer(*socket, false, flags)) return Fail(waited);
+        received = ::recvfrom(socket->value, buffer.data(), static_cast<int>(buffer.size()),
+            NativeReceiveFlags(flags, socket->type), reinterpret_cast<sockaddr*>(&native), &size);
+        if (received < 0) {
 #ifdef _WIN32
-        if (!records || WSAGetLastError() != WSAEMSGSIZE) return Fail(NativeError());
-        received = static_cast<std::int64_t>(buffer.size());
+            if (!records || WSAGetLastError() != WSAEMSGSIZE) return Fail(NativeError());
+            received = static_cast<std::int64_t>(buffer.size());
 #else
-        return Fail(NativeError());
+            return Fail(NativeError());
 #endif
+        }
     }
     header.flags = flags;
     if (received > total) {
