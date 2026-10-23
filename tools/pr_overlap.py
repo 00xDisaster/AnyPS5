@@ -21,10 +21,22 @@ PLAIN_DEPENDS = re.compile(r'Depends on[ \t]+(#\d+\b(?:(?:[ \t]*,[ \t]*(?:and[ \
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))?", re.M)
 MARKER = "<!-- pr-overlap -->"
 FETCH_REFS = 100
+_REPO_ROOTS = {}
 
 
 def git(*args):
-    result = subprocess.run(["git", "-c", "core.quotePath=false", *args], capture_output=True)
+    cwd = Path.cwd()
+    root = _REPO_ROOTS.get(cwd)
+    if root is None:
+        root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, check=True
+        ).stdout.decode("utf-8", errors="replace").strip()
+        _REPO_ROOTS[cwd] = root
+    result = subprocess.run(
+        ["git", "-c", "core.quotePath=false", *args],
+        cwd=root,
+        capture_output=True,
+    )
     result.stdout = result.stdout.decode("utf-8", errors="replace")
     result.stderr = result.stderr.decode("utf-8", errors="replace")
     result.check_returncode()
