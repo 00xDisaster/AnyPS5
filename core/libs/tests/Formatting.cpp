@@ -11,6 +11,12 @@
 #include <stdexcept>
 #include <cstdint>
 #include <cstdio>
+#ifdef __APPLE__
+#include <cstdarg>
+#define __builtin_sysv_va_list va_list
+#define __builtin_sysv_va_start va_start
+#define __builtin_sysv_va_end va_end
+#endif
 
 extern "C" {
 int APS5_VABI snprintf_nid_postfix(char*, size_t, const char*, ...);
