@@ -9,6 +9,7 @@
 #include <string>
 
 extern "C" {
+int APS5_VABI sceAudioOutInit();
 int APS5_VABI sceAudioOut2Initialize();
 int APS5_VABI sceAudioOut2ContextResetParam(AudioOut2ContextParam*);
 int APS5_VABI sceAudioOut2ContextCreate(const AudioOut2ContextParam*, void*, std::size_t, AudioOut2ContextHandle*);
@@ -118,6 +119,13 @@ void SpeakerInfoRequiresInitialization() {
     Require(std::memcmp(&info, &untouched, sizeof(info)) == 0);
 }
 
+void SpeakerInfoAfterAudioOutInit() {
+    AudioOut2SpeakerInfo info;
+    std::memset(&info, 0xAB, sizeof(info));
+    Require(sceAudioOutInit() == 0);
+    Require(sceAudioOut2GetSpeakerInfo(&info, 0) == 0);
+}
+
 void SpeakerInfoRejectsBadFlags() {
     AudioOut2SpeakerInfo info;
     std::memset(&info, 0xAB, sizeof(info));
@@ -148,6 +156,7 @@ int main() {
     SetEnvironment("SDL_DISKAUDIOFILE", path.string());
 
     SpeakerInfoRequiresInitialization();
+    SpeakerInfoAfterAudioOutInit();
     Require(sceAudioOut2Initialize() == 0);
 
     AudioOut2ContextParam params{};

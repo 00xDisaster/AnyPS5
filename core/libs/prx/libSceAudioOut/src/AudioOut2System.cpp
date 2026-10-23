@@ -9,18 +9,10 @@ static constexpr std::uint32_t MAX_SUPPORTED_3D_OUTPUT = 2;
 static constexpr int SCE_AUDIO_OUT2_ERROR_INVALID_PARAM = static_cast<int>(0x80268001);
 
 static std::atomic<bool> g_chatEnabled{false};
-static std::atomic<bool> g_initialized{false};
-
-bool AudioOut2IsInitialized_nid_no_patch() {
-    return g_initialized.load();
-}
 
 extern "C" {
 
-int APS5_VABI sceAudioOut2Initialize(void) {
-    g_initialized.store(true);
-    return 0;
-}
+int APS5_VABI sceAudioOut2Initialize(void);
 
 int APS5_VABI sceAudioOut2InitializeEx(std::uint32_t param) {
     (void)param;
