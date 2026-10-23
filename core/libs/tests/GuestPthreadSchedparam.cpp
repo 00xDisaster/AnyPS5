@@ -12,6 +12,7 @@ int APS5_VABI scePthreadGetschedparam(Pthread thread, int* policy, KernelSchedPa
 int APS5_VABI scePthreadSetschedparam(Pthread thread, int policy, const KernelSchedParam* param);
 int APS5_VABI pthread_getschedparam_nid_postfix(Pthread thread, int* policy, KernelSchedParam* param);
 int APS5_VABI pthread_getprio_nid_postfix(Pthread thread);
+int APS5_VABI pthread_setprio_nid_postfix(Pthread thread, int prio);
 int* APS5_VABI __error_nid_postfix();
 int APS5_VABI pthread_setschedparam_nid_postfix(Pthread thread, int policy, const KernelSchedParam* param);
 int APS5_VABI scePthreadAttrInit(PthreadAttr* attr);
@@ -208,6 +209,12 @@ int main() {
     Require(scePthreadJoin(thread, nullptr) == SCE_OK);
     *__error_nid_postfix() = 1234;
     Require(pthread_getprio_nid_postfix(retired) == -1 && *__error_nid_postfix() == GUEST_ESRCH);
+    *__error_nid_postfix() = 1234;
+    Require(pthread_setprio_nid_postfix(scePthreadSelf(), 100) == GUEST_EINVAL && *__error_nid_postfix() == GUEST_EINVAL);
+    *__error_nid_postfix() = 1234;
+    Require(pthread_setprio_nid_postfix(nullptr, 700) == GUEST_EINVAL && *__error_nid_postfix() == 1234);
+    Require(pthread_setprio_nid_postfix(retired, 700) == GUEST_ESRCH && *__error_nid_postfix() == 1234);
+    Require(pthread_setprio_nid_postfix(scePthreadSelf(), pthread_getprio_nid_postfix(scePthreadSelf())) == 0 && *__error_nid_postfix() == 1234);
     Require(CreatedPolicy(EXPLICIT_SCHED, GUEST_SCHED_RR) == GUEST_SCHED_RR);
     Require(CreatedPolicy(EXPLICIT_SCHED, GUEST_SCHED_FIFO) == GUEST_SCHED_FIFO);
     Require(CreatedPolicy(INHERIT_SCHED, GUEST_SCHED_RR) == GUEST_SCHED_FIFO);
