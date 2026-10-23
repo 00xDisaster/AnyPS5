@@ -428,8 +428,9 @@ class TestWebRunnerTests(unittest.TestCase):
 
         out, err = Stream(), Stream()
         with patch.object(test_web.sys, "stdout", out), patch.object(test_web.sys, "stderr", err):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit) as error:
                 test_web.main([])
+        self.assertEqual(error.exception.code, 2)
         self.assertEqual(out.encoding, "utf-8")
         self.assertEqual(out.errors, "backslashreplace")
         self.assertEqual(err.encoding, "utf-8")
