@@ -194,7 +194,7 @@ class EnvReferenceTests(unittest.TestCase):
             self.assertEqual(env_reference.main(["--root", str(core)]), 0)
         self.assertEqual((out.encoding, out.errors), ("utf-8", "backslashreplace"))
         self.assertEqual((err.encoding, err.errors), ("utf-8", "backslashreplace"))
-        self.assertIn(str(core / "Sample.cpp"), out.text)
+        self.assertIn((core / "Sample.cpp").as_posix(), out.text)
 
     def test_main_reports_unicode_scan_root_with_non_utf8_stderr(self):
         class Stream:
