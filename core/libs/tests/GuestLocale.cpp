@@ -208,6 +208,28 @@ static void CheckStreamWidth() {
     RequireException([&] { manipulator.function(nullptr, manipulator.argument); });
 }
 
+static void CheckStreamPrecision() {
+    struct GuardedStream {
+        std::uint64_t before = 0x12345678;
+        GuestLocale::IosBase stream{};
+        std::uint64_t after = 0x87654321;
+    } object;
+    object.stream.flags = 0x4000;
+    object.stream.width = 5;
+    const auto manipulator = _ZSt12setprecisioni_nid_postfix(12);
+    Require(manipulator.argument == 12 && manipulator.function != nullptr);
+    Require(manipulator.function(&object.stream, manipulator.argument) == &object.stream);
+    Require(object.stream.precision == 12 && object.stream.flags == 0x4000 && object.stream.width == 5);
+    Require(object.before == 0x12345678 && object.after == 0x87654321);
+    const auto zero = _ZSt12setprecisioni_nid_postfix(0);
+    zero.function(&object.stream, zero.argument);
+    Require(object.stream.precision == 0);
+    const auto negative = _ZSt12setprecisioni_nid_postfix(-3);
+    negative.function(&object.stream, negative.argument);
+    Require(object.stream.precision == -3);
+    RequireException([&] { manipulator.function(nullptr, manipulator.argument); });
+}
+
 static void CheckStandardStreams() {
     struct GuardedStream {
         std::uint64_t before = 0x12345678;
@@ -360,6 +382,7 @@ int main() {
     CheckCharacterConversions();
     CheckStreamDestruction();
     CheckStreamWidth();
+    CheckStreamPrecision();
     CheckStandardStreams();
     CheckWideCaseTranslation();
     CheckInputFacetObjects();
