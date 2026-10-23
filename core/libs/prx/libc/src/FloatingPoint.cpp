@@ -52,7 +52,7 @@ int APS5_VABI fesetround_nid_postfix(int rounding) {
 int APS5_VABI fetestexcept_nid_postfix(int exceptions) {
     std::uint16_t status;
     asm volatile("fnstsw %0" : "=am"(status));
-    return static_cast<int>((status | _mm_getcsr()) & static_cast<unsigned>(exceptions));
+    return (status | _mm_getcsr()) & static_cast<unsigned>(exceptions) & Exceptions;
 }
 
 int APS5_VABI fegetexceptflag_nid_postfix(std::uint16_t* flags, int exceptions) {
