@@ -3,8 +3,6 @@
 ### Silent stubs
 
 - [scePadEnableExtensionPort](../../../core/libs/prx/libScePad/Export.cpp) returns success without changing extension-port state. The boolean argument is recovered; connected-device behavior is not modeled.
-- [scePadSetLotusEnableIrKey and scePadSetLotusDisableIrKey](../../../core/libs/prx/libScePad/Export.cpp) return success on valid open handle without hardware Lotus IR key dispatching.
-- [scePadVirtualDeviceDisableButtonRemapping](../../../core/libs/prx/libScePad/Export.cpp) returns success without changing virtual-device remapping tables.
 
 ### Unknown function info
 
@@ -22,7 +20,6 @@
 - [scePadIsDS4Connected, scePadIsBlasterConnected and scePadIsMoveConnected](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - the `bool (int handle)` signatures are recovered; the library reports one DualSense to every title (see Touchpad resolution below), so no DualShock 4, Blaster or Move controller is ever behind a handle and each call answers false for any handle. The console's answer for an invalid handle is not measured
 - [scePadSetAngularVelocityBiasCorrectionState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - inferred signature `(int handle, bool enabled)` follows `scePadSetTiltCorrectionState` and `scePadSetAngularVelocityDeadbandState`; an invalid handle returns `PAD_ERROR_INVALID_HANDLE`, disabling is a no-op, and enabling throws because bias correction is not modelled
 - [scePadGetAccessibilityControllerState](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - the value a console reports for a DualSense is not measured; the emulated pad, which is not an Access controller, reports 0. The name hashes to NID `zBsgF0q8DIM`. In the OS 10.01 system module the `(int handle, uint32_t* state)` function returns `0x80920005` before `scePadInit`, then `INVALID_ARG` for a NULL `state` and `INVALID_HANDLE` for a bad handle, and otherwise asks the pad driver for a per-device value of the device behind the handle: 0 when no device is behind it, 1 when the driver has no answer, else the driver's value. What the values mean is unknown
-- [scePadVirtualDeviceGetRemoteSetting](../../../core/libs/prx/libScePad/Export.cpp) (libScePad) - checks the output pointer and non-zero device id, returning `PAD_ERROR_DEVICE_NOT_CONNECTED` (0x80920007) when no virtual device is connected. Remote setting payload uses a 64-byte record whose internal field meanings remain unverified on hardware.
 
 - [libScePad internal data and device control](../../../core/libs/prx/libScePad/Export.cpp) - kernel-owned version, telemetry, Lotus-button and update payload fields remain unresolved. Lotus-button parameter units and the three blinking byte meanings are unknown. Port information occupies 152 bytes; history records occupy 72 bytes; Leonardo unique data occupies 24 bytes. Their complete field semantics remain unresolved.
 
