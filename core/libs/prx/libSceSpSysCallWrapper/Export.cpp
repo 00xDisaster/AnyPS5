@@ -7,6 +7,7 @@ extern "C" {
 
 std::int64_t APS5_VABI GuestNetRecv_nid_no_patch(int s, void* buf, std::size_t len, int flags);
 std::int64_t APS5_VABI GuestNetSend_nid_no_patch(int s, const void* buf, std::size_t len, int flags);
+int APS5_VABI getpid_nid_postfix(void);
 int APS5_VABI sceKernelGettimeofday(KernelTimeval* tp);
 int APS5_VABI sceKernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rmtp);
 int APS5_VABI sceNetConnect(int s, const void* addr, std::uint32_t addrlen);
@@ -50,10 +51,10 @@ int APS5_VABI scePthreadMutexattrInit(PthreadMutexattr* attr);
 int APS5_VABI scePthreadMutexattrSetprotocol(PthreadMutexattr* attr, int protocol);
 int APS5_VABI scePthreadMutexattrSettype(PthreadMutexattr* attr, int type);
 int APS5_VABI scePthreadSetprio(Pthread thread, int prio);
+int APS5_VABI select_nid_postfix(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout);
 
 int APS5_VABI sceSpGetPid() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return getpid_nid_postfix();
 }
 
 int APS5_VABI sceSpKernelGettimeofday(KernelTimeval* tp) {
@@ -241,9 +242,8 @@ int APS5_VABI sceSpPthreadSetprio(Pthread thread, int prio) {
     return scePthreadSetprio(thread, prio);
 }
 
-int APS5_VABI sceSpSelect() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceSpSelect(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout) {
+    return select_nid_postfix(nfds, readfds, writefds, exceptfds, timeout);
 }
 
 }

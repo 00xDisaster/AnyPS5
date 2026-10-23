@@ -4,6 +4,8 @@
 #include <cstdlib>
 
 extern "C" {
+int APS5_VABI sceSpGetPid();
+int APS5_VABI sceSpSelect(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout);
 int APS5_VABI sceSpKernelGettimeofday(KernelTimeval* tp);
 int APS5_VABI sceSpKernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rmtp);
 int APS5_VABI sceSpNetConnect(int s, const void* addr, std::uint32_t addrlen);
@@ -66,6 +68,9 @@ int APS5_VABI scePthreadAttrSetschedparam(PthreadAttr* attr, const KernelSchedPa
 int APS5_VABI scePthreadMutexattrSetprotocol(PthreadMutexattr* attr, int protocol);
 int APS5_VABI scePthreadSetprio(Pthread thread, int prio);
 Pthread APS5_VABI scePthreadSelf();
+int APS5_VABI getpid_nid_postfix(void);
+int APS5_VABI select_nid_postfix(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout);
+int* APS5_VABI __error_nid_postfix();
 }
 
 namespace {
@@ -188,10 +193,28 @@ void Net() {
     SameError([&] { return sceSpNetResolverStartNtoa(-1, "localhost", &resolved, 0, 0, 0); }, [&] { return sceNetResolverStartNtoa(-1, "localhost", &resolved, 0, 0, 0); });
 }
 
+void Posix() {
+    Require(sceSpGetPid() > 0);
+    Require(sceSpGetPid() == getpid_nid_postfix());
+
+    const std::int64_t zero[2]{0, 0};
+    Require(sceSpSelect(0, nullptr, nullptr, nullptr, zero) == 0);
+    const std::int64_t invalid[2]{0, 1000000};
+    *__error_nid_postfix() = 0;
+    Require(sceSpSelect(0, nullptr, nullptr, nullptr, invalid) == -1);
+    const int wrappedErrno = *__error_nid_postfix();
+    *__error_nid_postfix() = 0;
+    Require(select_nid_postfix(0, nullptr, nullptr, nullptr, invalid) == -1);
+    Require(wrappedErrno == 22 && *__error_nid_postfix() == 22);
+    *__error_nid_postfix() = 0;
+    Require(sceSpSelect(-1, nullptr, nullptr, nullptr, nullptr) == -1 && *__error_nid_postfix() == 22);
+}
+
 }
 
 int main() {
     Threads();
     Time();
     Net();
+    Posix();
 }
