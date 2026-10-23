@@ -43,7 +43,7 @@ bool RequiresGuestFormatting(const char* format) {
         if (*format == 'S' || *format == 'C' || *format == 'p' ||
             (*format == 'l' && (format[1] == 's' || format[1] == 'c' || format[1] == 'p'))) return true;
         while (*format && std::strchr("hljztL", *format)) ++format;
-        if (*format && !std::strchr("diouxXeEfFgGaAcsn", *format)) return true;
+        if (*format && !std::strchr(LibcDetail::KnownConversions, *format)) return true;
         if (*format) ++format;
     }
     return false;

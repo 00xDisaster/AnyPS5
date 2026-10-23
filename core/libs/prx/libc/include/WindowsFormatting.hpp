@@ -212,15 +212,18 @@ inline std::string FormatPointer(const std::string& spec, const void* pointer) {
     return std::string(padding, ' ') + digits;
 }
 
+inline constexpr char KnownConversions[] = "diouxXeEfFgGaAcCsSpn";
+constexpr size_t maximumArgumentPosition = 65535;
+
 inline size_t ArgumentPosition(const char*& format) {
     const char* end = format;
     while (*end >= '0' && *end <= '9') ++end;
     if (end == format || *end != '$') return 0;
     size_t position = 0;
-    for (const char* digit = format; digit != end && position <= static_cast<size_t>(INT_MAX); ++digit)
+    for (const char* digit = format; digit != end && position <= maximumArgumentPosition; ++digit)
         position = position * 10 + static_cast<size_t>(*digit - '0');
     if (position == 0) return 0;
-    if (position > static_cast<size_t>(INT_MAX)) throw std::invalid_argument("Format argument position out of range");
+    if (position > maximumArgumentPosition) throw std::invalid_argument("Format argument position out of range");
     format = end + 1;
     return position;
 }
@@ -324,7 +327,7 @@ inline int FormatWindows(char* buffer, size_t size, const char* format, const vo
         const char conversion = *format;
         if (!conversion) throw std::invalid_argument("Incomplete format conversion");
         ++format;
-        if (!secure && !std::strchr("diouxXeEfFgGaAcCsSpn", conversion)) {
+        if (!secure && !std::strchr(KnownConversions, conversion)) {
             const char text[] = {'%', conversion, '\0'};
             output.Value(PaddedStringSpec(spec), text);
             continue;
