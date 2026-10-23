@@ -1833,13 +1833,13 @@ const HostImport* importRunAt(const Context& context, HostImports& state, Import
         }
 #endif
         return step == nullptr;
-    }, watchedHostPointer);
+    }, watchedHostPointer, false);
 #ifndef _WIN32
     if (BackingFile backing; step != nullptr && watchedDmaBuf != watchedHostPointer && sharedBacking(context, entry, backing)) {
         GuestMemory::ImportWatched(base, bytes, [&] {
             step = createBackingImport(context, entry, backing, result);
             return step == nullptr;
-        }, watchedDmaBuf);
+        }, watchedDmaBuf, false);
     }
     if (step == nullptr && entry.dmaBuf && bytes >= settleFloorBytes && context.settleQueue != VK_NULL_HANDLE && context.settleQueueMutex != nullptr) {
         static const bool traceSettle = std::getenv("APS5_TRACE_HOST_IMPORT") != nullptr;
