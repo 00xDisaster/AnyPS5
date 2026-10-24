@@ -1358,4 +1358,19 @@ const char* APS5_VABI _ZNSt8__sce_v213_Syserror_mapEi_nid_postfix(int value);
 int APS5_VABI feupdateenv_nid_postfix(const GuestFloatingPointEnvironment* environment);
 void APS5_VABI srandomdev_nid_postfix();
 
+double APS5_VABI _Stodx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+float APS5_VABI _Stofx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+long double APS5_VABI _Stoldx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
+float APS5_VABI _Stof_nid_postfix(const char* text, char** end, std::int64_t pten);
+long double APS5_VABI _Stold_nid_postfix(const char* text, char** end, std::int64_t pten);
+long long APS5_VABI _Stollx_nid_postfix(const char* text, char** end, int base, int* error);
+unsigned long long APS5_VABI _Stoullx_nid_postfix(const char* text, char** end, int base, int* error);
+std::uint64_t APS5_VABI _Stoulx_nid_postfix(const char* text, char** end, int base, int* error);
+std::int64_t APS5_VABI _Stolx_nid_postfix(const char* text, char** end, int base, int* error);
+std::size_t APS5_VABI _ZNSt7codecvtIcc9_MbstatetE7_GetcatEPPKNSt6locale5facetEPKS2__nid_postfix(GuestLocale::Facet** facet, const GuestLocale::Implementation* const*);
+std::size_t APS5_VABI _ZNSt8numpunctIcE7_GetcatEPPKNSt6locale5facetEPKS1__nid_postfix(GuestLocale::Facet** facet, const GuestLocale::Implementation* const*);
+std::size_t APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(GuestLocale::Facet** facet, const GuestLocale::Implementation* const*);
+std::size_t APS5_VABI _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(GuestLocale::Facet** facet, const GuestLocale::Implementation* const*);
+int APS5_VABI siginterrupt_nid_postfix(int guest, int flag);
+
 }

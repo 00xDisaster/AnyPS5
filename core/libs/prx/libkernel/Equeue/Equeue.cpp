@@ -14,8 +14,6 @@
 #include <stdexcept>
 #include <unordered_map>
 
-extern "C" int APS5_VABI sceKernelFstat(int d, FileStat* sb);
-
 static constexpr std::uint64_t FileRepollNs = 1000000;
 
 struct UnreadFile {
