@@ -442,6 +442,13 @@ struct FontMetrics {
     float slantRatio;
 };
 
+struct FontOutlineProfile {
+    std::uint32_t maxContours;
+    std::uint32_t maxPoints;
+    std::uint32_t maxCompositeContours;
+    std::uint32_t maxCompositePoints;
+};
+
 struct FontStyleInformation {
     const char* familyName;
     const char* styleName;
@@ -463,6 +470,7 @@ static_assert(offsetof(FontMetrics, xMin) == 0x1C);
 static_assert(offsetof(FontMetrics, emWidth) == 0x2C);
 static_assert(offsetof(FontMetrics, effectWeightX) == 0x34);
 static_assert(sizeof(FontStyleInformation) == 0x18);
+static_assert(sizeof(FontOutlineProfile) == 0x10);
 static_assert(offsetof(FontStyleInformation, styleFlags) == 0x10);
 static_assert(sizeof(FontGlyphImageMetrics) == 0x18);
 static_assert(sizeof(FontGenerateGlyphDetail) == 0x20);

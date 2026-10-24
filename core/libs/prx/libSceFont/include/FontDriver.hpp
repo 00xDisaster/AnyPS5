@@ -209,6 +209,7 @@ using DriverGlyphIndexFunction = int (APS5_VABI*)(FontObj* fontObj, std::uint32_
 using DriverSetCharWithDpiFunction = int (APS5_VABI*)(FontObj* fontObj, std::uint32_t dpiX, std::uint32_t dpiY, float scaleX, float scaleY, float* outScaleX, float* outScaleY);
 using DriverSetCharDefaultDpiFunction = int (APS5_VABI*)(FontObj* fontObj, float scaleX, float scaleY, float* outScaleX, float* outScaleY);
 using DriverFontMetricsFunction = int (APS5_VABI*)(FontObj* fontObj, std::uint32_t form, FontMetrics* outMetrics);
+using DriverOutlineProfileFunction = int (APS5_VABI*)(FontObj* fontObj, FontOutlineProfile* outProfile);
 using DriverStyleInformationFunction = int (APS5_VABI*)(FontObj* fontObj, FontStyleInformation* outInformation);
 using DriverComputeLayoutFunction = int (APS5_VABI*)(FontObj* fontObj, const StyleStateBlock* style, std::uint8_t* outWords);
 using DriverLoadGlyphCachedFunction = int (APS5_VABI*)(FontObj* fontObj, std::uint32_t glyphIndex, std::int32_t mode, std::uint64_t* outWords);
@@ -232,7 +233,7 @@ struct SysDriver {
     std::uint8_t reserved_0x58[0x08];
     DriverMetricFunction metric;
     DriverGlyphsCountFunction glyphs_count;
-    std::uint8_t reserved_0x70[0x08];
+    DriverOutlineProfileFunction outline_profile;
     DriverGlyphIndexFunction glyph_index;
     DriverSetCharWithDpiFunction set_char_with_dpi;
     DriverSetCharDefaultDpiFunction set_char_default_dpi;
@@ -346,6 +347,7 @@ static_assert(offsetof(SysDriver, pixel_resolution) == 0x10);
 static_assert(offsetof(SysDriver, open) == 0x38);
 static_assert(offsetof(SysDriver, style_information) == 0x48);
 static_assert(offsetof(SysDriver, scale) == 0x50);
+static_assert(offsetof(SysDriver, outline_profile) == 0x70);
 static_assert(offsetof(SysDriver, glyph_index) == 0x78);
 static_assert(offsetof(SysDriver, font_metrics) == 0x98);
 static_assert(offsetof(SysDriver, compute_layout) == 0xA0);

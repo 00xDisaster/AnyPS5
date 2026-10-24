@@ -881,6 +881,19 @@ int APS5_VABI LibraryGetFontMetrics(FontObj* obj, std::uint32_t form, FontMetric
     return SCE_FONT_OK;
 }
 
+int APS5_VABI LibraryGetOutlineProfile(FontObj* obj, FontOutlineProfile* profile) {
+    const FT_Face face = obj ? FaceOf(obj) : nullptr;
+    if (!face) return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    const auto* maxp = static_cast<const TT_MaxProfile*>(FT_Get_Sfnt_Table(face, FT_SFNT_MAXP));
+    if (!maxp) throw std::runtime_error("FontFt: outline profile of a face without a maxp table");
+    if (maxp->version < 0x10000) return SCE_FONT_ERROR_NO_SUPPORT_FUNCTION;
+    profile->maxContours = maxp->maxContours;
+    profile->maxPoints = maxp->maxPoints;
+    profile->maxCompositeContours = maxp->maxCompositeContours;
+    profile->maxCompositePoints = maxp->maxCompositePoints;
+    return SCE_FONT_OK;
+}
+
 std::uint16_t WeightClass(std::uint16_t weight) {
     return weight >= 100 && weight <= 900 && weight % 100 == 0 ? static_cast<std::uint16_t>(weight / 100) : 0;
 }
@@ -917,6 +930,7 @@ SysDriver MakeDriverTable() {
     driver.set_char_default_dpi = &LibrarySetCharSizeDefaultDpi;
     driver.font_metrics = &LibraryGetFontMetrics;
     driver.style_information = &LibraryGetFontStyleInformation;
+    driver.outline_profile = &LibraryGetOutlineProfile;
     driver.compute_layout = &LibraryComputeLayout;
     driver.compute_layout_alt = &LibraryComputeLayoutAlt;
     driver.load_glyph_cached = &LibraryLoadGlyphCached;

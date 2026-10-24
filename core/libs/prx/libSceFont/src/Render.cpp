@@ -198,6 +198,22 @@ int APS5_VABI sceFontGetFontStyleInformation(FontHandle fontHandle, FontStyleInf
     return rc;
 }
 
+int APS5_VABI sceFontGetFontGlyphsOutlineProfile(FontHandle fontHandle, FontOutlineProfile* profile) {
+    auto* font = GetNativeFont(fontHandle);
+    std::uint32_t fontLock = 0;
+    int rc = SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    if (font && font->magic == HANDLE_MAGIC) {
+        if (font->open_info.fontset_record) NotImplemented_nid_no_patch(__func__);
+        if (AcquireFontLock(font, fontLock)) {
+            rc = ComputeFontGlyphsOutlineProfile(fontHandle, profile);
+            ReleaseFontLock(font, fontLock);
+            if (rc == SCE_FONT_OK) return rc;
+        }
+    }
+    if (profile) *profile = {};
+    return rc;
+}
+
 int APS5_VABI sceFontGetVerticalLayout(FontHandle fontHandle, FontVerticalLayout* layout) {
     int rc = SCE_FONT_ERROR_INVALID_FONT_HANDLE;
     auto* font = GetNativeFont(fontHandle);

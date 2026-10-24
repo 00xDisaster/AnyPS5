@@ -600,3 +600,35 @@ int Font::ComputeFontStyleInformation(FontHandle handle, FontStyleInformation* i
     ReleaseFontCtxEntryLock(entry, modeLow, lockWord);
     return rc;
 }
+
+int Font::ComputeFontGlyphsOutlineProfile(FontHandle handle, FontOutlineProfile* profile) {
+    auto* font = GetNativeFont(handle);
+    if (!profile) return SCE_FONT_ERROR_INVALID_PARAMETER;
+    auto* library = static_cast<FontLibNative*>(font->library);
+    auto* context = library ? FontContext(library, font) : nullptr;
+    if (!context) return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    *profile = {};
+    const std::uint32_t fontId = font->open_info.ctx_entry_index;
+    if (static_cast<std::int32_t>(fontId) < 0) return SCE_FONT_OK;
+    const SysDriver* driver = library->sys_driver;
+    if (!driver || !driver->outline_profile) return SCE_FONT_ERROR_FATAL;
+    const std::uint32_t modeLow = font->flags & 0x0Fu;
+    FontObj* head = nullptr;
+    std::uint32_t lockWord = 0;
+    auto* entry = AcquireFontCtxEntry(context, fontId, modeLow, &head, &lockWord);
+    if (!entry) return SCE_FONT_ERROR_FATAL;
+    FontObj* match = FindSubFont(head, font->open_info.sub_font_index);
+    int rc = SCE_FONT_ERROR_FATAL;
+    FontOutlineProfile faceProfile{};
+    if ((lockWord & OPEN_BIT) != 0 && (lockWord & COUNT_MASK) != 0 && match) {
+        match->font_handle = handle;
+        rc = driver->outline_profile(match, &faceProfile);
+    }
+    ReleaseFontCtxEntryLock(entry, modeLow, lockWord);
+    if (rc != SCE_FONT_OK) return rc;
+    profile->maxContours = std::max(profile->maxContours, faceProfile.maxContours);
+    profile->maxPoints = std::max(profile->maxPoints, faceProfile.maxPoints);
+    profile->maxCompositeContours = std::max(profile->maxCompositeContours, faceProfile.maxCompositeContours);
+    profile->maxCompositePoints = std::max(profile->maxCompositePoints, faceProfile.maxCompositePoints);
+    return SCE_FONT_OK;
+}

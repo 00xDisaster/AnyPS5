@@ -135,6 +135,7 @@ int GetCharGlyphMetrics(FontHandle handle, std::uint32_t code, FontGlyphMetrics*
 int RenderCharGlyphImageCore(FontHandle handle, std::uint32_t code, FontRenderSurface* surface, float x, float y, FontGlyphMetrics* metrics, FontRenderOutput* result);
 int ComputeFontMetrics(FontHandle handle, std::uint32_t form, FontMetrics* metrics);
 int ComputeFontStyleInformation(FontHandle handle, FontStyleInformation* information);
+int ComputeFontGlyphsOutlineProfile(FontHandle handle, FontOutlineProfile* profile);
 
 }
 
