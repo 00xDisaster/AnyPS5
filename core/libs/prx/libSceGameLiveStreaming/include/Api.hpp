@@ -1,8 +1,18 @@
 #pragma once
 
 #include "SceTypes.hpp"
+#include <cstddef>
+#include <cstdint>
 
 struct GameLiveStreamingProgramInfo;
+
+struct GameLiveStreamingStatus {
+    std::uint8_t opaque00[12];
+    std::uint8_t reserved[60];
+};
+
+static_assert(offsetof(GameLiveStreamingStatus, reserved) == 0x0C);
+static_assert(sizeof(GameLiveStreamingStatus) == 0x48);
 
 struct GameLiveStreamingStatus2 {
     std::int32_t userId;
@@ -30,7 +40,7 @@ int APS5_VABI sceGameLiveStreamingScreenOpenSeparateMode(void);
 int APS5_VABI sceGameLiveStreamingScreenSetMode(void);
 int APS5_VABI sceGameLiveStreamingPermitLiveStreaming(void);
 int APS5_VABI sceGameLiveStreamingSetMaxBitrate(void);
-int APS5_VABI sceGameLiveStreamingGetCurrentStatus(void);
+int APS5_VABI sceGameLiveStreamingGetCurrentStatus(GameLiveStreamingStatus* status);
 int APS5_VABI sceGameLiveStreamingEnableSocialFeedback(void);
 int APS5_VABI sceGameLiveStreamingGetSocialFeedbackMessagesCount(void);
 int APS5_VABI sceGameLiveStreamingGetSocialFeedbackMessages(void);

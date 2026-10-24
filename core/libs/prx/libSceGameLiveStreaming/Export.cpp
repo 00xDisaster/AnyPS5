@@ -97,7 +97,7 @@ int APS5_VABI sceGameLiveStreamingSetMaxBitrate(void) {
     return 0;
 }
 
-int APS5_VABI sceGameLiveStreamingGetCurrentStatus(void) {
+int APS5_VABI sceGameLiveStreamingGetCurrentStatus(GameLiveStreamingStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
