@@ -266,6 +266,7 @@ def exit_code_with_preloaded_runtime(executable_path, runtime_library):
     startf_usestdhandles = 0x00000100
     create_suspended = 0x00000004
     mem_commit_and_reserve = 0x3000
+    mem_release = 0x8000
     page_readwrite = 0x04
     wait_object_0 = 0
     wait_timeout = 0x00000102
@@ -314,6 +315,8 @@ def exit_code_with_preloaded_runtime(executable_path, runtime_library):
     kernel32.GetProcAddress.restype = ctypes.c_void_p
     kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
     kernel32.VirtualAllocEx.restype = ctypes.c_void_p
+    kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD]
+    kernel32.VirtualFreeEx.restype = wintypes.BOOL
     kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t,
                                             ctypes.POINTER(ctypes.c_size_t)]
     kernel32.WriteProcessMemory.restype = wintypes.BOOL
@@ -341,6 +344,7 @@ def exit_code_with_preloaded_runtime(executable_path, runtime_library):
     if not kernel32.CreateProcessW(str(executable_path), command, None, None, False, create_suspended, None, None,
                                    ctypes.byref(info), ctypes.byref(process)):
         raise OSError(ctypes.get_last_error(), 'CreateProcessW failed')
+    child_exited = False
     try:
         load_library = kernel32.GetProcAddress(kernel32.GetModuleHandleW('kernel32.dll'), b'LoadLibraryA')
         assert load_library, ctypes.get_last_error()
@@ -360,21 +364,66 @@ def exit_code_with_preloaded_runtime(executable_path, runtime_library):
             assert loaded.value, (runtime_library, 'LoadLibraryA returned NULL in the suspended child')
         finally:
             kernel32.CloseHandle(loader)
+        assert kernel32.VirtualFreeEx(process.hProcess, remote_name, 0, mem_release), ctypes.get_last_error()
         assert kernel32.ResumeThread(process.hThread) == 1
         result = kernel32.WaitForSingleObject(process.hProcess, 30_000)
         if result == wait_timeout:
-            kernel32.TerminateProcess(process.hProcess, 0xffffffff)
-            kernel32.WaitForSingleObject(process.hProcess, 0xffffffff)
             raise TimeoutError('GUI child did not exit')
         if result != wait_object_0:
             raise OSError(f'WaitForSingleObject returned {result}')
+        child_exited = True
         exit_code = wintypes.DWORD()
         if not kernel32.GetExitCodeProcess(process.hProcess, ctypes.byref(exit_code)):
             raise OSError(ctypes.get_last_error(), 'GetExitCodeProcess failed')
         return exit_code.value
     finally:
+        if not child_exited:
+            kernel32.TerminateProcess(process.hProcess, 0xffffffff)
+            kernel32.WaitForSingleObject(process.hProcess, 10_000)
         kernel32.CloseHandle(process.hThread)
         kernel32.CloseHandle(process.hProcess)
+
+
+def live_children_named(executable_name):
+    th32cs_snapprocess = 0x00000002
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ('dwSize', wintypes.DWORD),
+            ('cntUsage', wintypes.DWORD),
+            ('th32ProcessID', wintypes.DWORD),
+            ('th32DefaultHeapID', ctypes.c_size_t),
+            ('th32ModuleID', wintypes.DWORD),
+            ('cntThreads', wintypes.DWORD),
+            ('th32ParentProcessID', wintypes.DWORD),
+            ('pcPriClassBase', wintypes.LONG),
+            ('dwFlags', wintypes.DWORD),
+            ('szExeFile', wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+    kernel32.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    snapshot = kernel32.CreateToolhelp32Snapshot(th32cs_snapprocess, 0)
+    assert snapshot not in (None, ctypes.c_void_p(-1).value), ctypes.get_last_error()
+    try:
+        children = []
+        entry = ProcessEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            if entry.th32ParentProcessID == os.getpid() and entry.szExeFile.lower() == executable_name.lower():
+                children.append(entry.th32ProcessID)
+            found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        return children
+    finally:
+        kernel32.CloseHandle(snapshot)
 
 
 def run_with_standard_pipes(executable_path, capture_stdout, capture_stderr):
@@ -717,6 +766,16 @@ def main():
                     content = log.read_text(errors='replace')
                     assert 'Windows DLL stdout probe' in content, (runtime, content)
                     assert 'Windows DLL stderr probe' in content, (runtime, content)
+
+                    executable_path, log = convert_stdio_case(f'gui-dll-{runtime}-preloaded-runtime-loader-failure')
+                    try:
+                        exit_code_with_preloaded_runtime(executable_path, 'anyps5_planted_missing_runtime.dll')
+                    except AssertionError as error:
+                        assert 'LoadLibraryA returned NULL' in str(error), error
+                    else:
+                        raise AssertionError('planted loader failure did not raise')
+                    assert not live_children_named(executable_path.name), (runtime, executable_path)
+                    assert not log.exists(), (runtime, log)
 
             for name, owner, symbol, expected, message in [
                     ('missing-symbol-gui', 'a.prx', 'absent#A#B', 0xc0000139, 'unresolved ELF import absent'),
