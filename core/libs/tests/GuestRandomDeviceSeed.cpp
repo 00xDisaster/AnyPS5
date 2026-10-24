@@ -68,8 +68,11 @@ int main() {
             Require(random_nid_postfix() == sum / 2, "srandomdev resets the front and rear positions");
             Require(Word(table, 1 + separations[type]) == sum, "random advances the newly seeded table");
         } else {
-            const std::uint64_t seed = Word(table, 1);
-            const auto expected = ((seed % 0x7ffffffe + 1) * 16807) % 0x7fffffff - 1;
+            std::int64_t x = static_cast<std::int32_t>(Word(table, 1));
+            if (x == 0) x = 123459876;
+            x = 16807 * (x % 127773) - 2836 * (x / 127773);
+            if (x < 0) x += 0x7fffffff;
+            const auto expected = x;
             Require(random_nid_postfix() == static_cast<std::int64_t>(expected), "the linear generator uses the entropy word");
         }
         setstate_nid_postfix(previous);
