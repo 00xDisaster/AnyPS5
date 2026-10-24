@@ -454,6 +454,12 @@ struct PhysicalPage {
     std::uint64_t offset;
 };
 
+struct PhysicalBlock {
+    std::uint64_t end;
+    std::uint64_t base;
+    std::shared_ptr<PhysicalBacking> backing;
+};
+
 struct DirectMapping {
     std::uintptr_t end;
     std::uint64_t phys;
@@ -477,6 +483,7 @@ struct DirectMemoryState {
 #endif
     std::map<std::uint64_t, PhysicalSpan> physicalSpans;
     std::mutex directLock;
+    std::map<std::uint64_t, PhysicalBlock> physBlocks;
     std::map<std::uint64_t, PhysicalPage> physPages;
     std::map<std::uintptr_t, DirectMapping> directMappings;
     std::mutex protectionLock;
@@ -495,6 +502,7 @@ std::vector<bool>& PhysicalUsed() { return MemoryState().physicalUsed; }
 #endif
 
 auto& g_directLock = MemoryState().directLock;
+auto& g_physBlocks = MemoryState().physBlocks;
 auto& g_physPages = MemoryState().physPages;
 auto& g_directMappings = MemoryState().directMappings;
 auto& g_physicalSpans = MemoryState().physicalSpans;
@@ -573,6 +581,15 @@ void EraseMappings(std::uintptr_t start, std::uintptr_t end) {
     }
 }
 
+void SplitPhysicalBlock(std::uint64_t at) {
+    auto block = g_physBlocks.upper_bound(at);
+    if (block == g_physBlocks.begin()) return;
+    --block;
+    if (block->first == at || block->second.end <= at) return;
+    g_physBlocks.emplace_hint(std::next(block), at, PhysicalBlock{block->second.end, block->second.base, block->second.backing});
+    block->second.end = at;
+}
+
 void ErasePhysMappings(std::uint64_t first, std::uint64_t last) {
     for (const auto base : MappingsSharingPhys(first, last)) {
         const auto it = g_directMappings.find(base);
@@ -593,12 +610,17 @@ void ErasePhysMappings(std::uint64_t first, std::uint64_t last) {
 }
 
 void ValidatePhysicalRange(std::uint64_t phys, std::size_t len) {
-    for (std::size_t offset = 0; offset < len; offset += PS5_PAGE_SIZE) {
-        if (!g_physPages.contains(phys + offset)) {
+    const auto last = phys + len;
+    auto it = g_physBlocks.upper_bound(phys);
+    if (it != g_physBlocks.begin()) --it;
+    for (auto cursor = phys; cursor < last;) {
+        if (it == g_physBlocks.end() || it->first > cursor || it->second.end <= cursor) {
             char message[160];
-            std::snprintf(message, sizeof(message), "direct memory range 0x%llx+0x%zx references unallocated physical page 0x%llx", static_cast<unsigned long long>(phys), len, static_cast<unsigned long long>(phys + offset));
+            std::snprintf(message, sizeof(message), "direct memory range 0x%llx+0x%zx references unallocated physical page 0x%llx", static_cast<unsigned long long>(phys), len, static_cast<unsigned long long>(cursor));
             throw std::invalid_argument(message);
         }
+        cursor = std::min(last, it->second.end);
+        ++it;
     }
 }
 
@@ -683,17 +705,15 @@ bool WriteSharedBacking(std::uintptr_t address, const void* source, std::size_t 
 void AddMapping(std::uintptr_t address, std::size_t len, std::uint64_t phys, int nativeProt) {
     ValidatePhysicalRange(phys, len);
     EraseMappings(address, address + len);
-    for (std::size_t offset = 0; offset < len;) {
-        const auto& page = g_physPages.at(phys + offset);
-        std::size_t bytes = PS5_PAGE_SIZE;
-        while (offset + bytes < len) {
-            const auto& next = g_physPages.at(phys + offset + bytes);
-            if (next.backing != page.backing || next.offset != page.offset + bytes) break;
-            bytes += PS5_PAGE_SIZE;
-        }
-        page.backing->Map(address + offset, bytes, page.offset, nativeProt);
-        InsertMapping(address + offset, DirectMapping{address + offset + bytes, phys + offset, page.backing->MemoryType(), page.backing});
-        offset += bytes;
+    const auto last = phys + len;
+    auto it = g_physBlocks.upper_bound(phys);
+    --it;
+    for (auto cursor = phys; cursor < last; ++it) {
+        const auto runEnd = std::min(last, it->second.end);
+        const auto bytes = static_cast<std::size_t>(runEnd - cursor);
+        it->second.backing->Map(address + (cursor - phys), bytes, cursor - it->second.base, nativeProt);
+        InsertMapping(address + (cursor - phys), DirectMapping{address + (cursor - phys) + bytes, cursor, it->second.backing->MemoryType(), it->second.backing});
+        cursor = runEnd;
     }
 #if defined(__linux__)
     WatchMapping(address, len);
@@ -745,7 +765,10 @@ bool RemapFixedIntoRegistered(GuestAllocations::Mutation& mutation, void* addr, 
         const auto address = reinterpret_cast<std::uintptr_t>(addr);
         std::lock_guard lock(g_directLock);
         if (physStart >= 0) {
-            AddMapping(address, len, static_cast<std::uint64_t>(physStart), nativeProtection);
+            const auto phys = static_cast<std::uint64_t>(physStart);
+            auto existing = g_directMappings.upper_bound(address);
+            if (existing != g_directMappings.begin() && (--existing)->first <= address && existing->second.end >= address + len && existing->second.phys + (address - existing->first) == phys) return;
+            AddMapping(address, len, phys, nativeProtection);
         } else {
             EraseMappings(address, address + len);
 #ifdef _WIN32
@@ -1451,9 +1474,8 @@ int DoReserveVirtual(void** addr, size_t len, int flags, size_t alignment) {
 void CreateDirectMemoryBacking(int64_t start, size_t len, int memoryType) {
     std::lock_guard lock(g_directLock);
     const auto first = static_cast<std::uint64_t>(start);
-    for (std::size_t offset = 0; offset < len; offset += PS5_PAGE_SIZE) {
-        if (g_physPages.contains(first + offset)) throw std::runtime_error("physical allocation overlaps live direct memory");
-    }
+    const auto last = first + len;
+    if (auto block = g_physBlocks.upper_bound(first); (block != g_physBlocks.end() && block->first < last) || (block != g_physBlocks.begin() && std::prev(block)->second.end > first)) throw std::runtime_error("physical allocation overlaps live direct memory");
 #if defined(__linux__)
     static std::once_flag registered;
     std::call_once(registered, [] {
@@ -1462,9 +1484,12 @@ void CreateDirectMemoryBacking(int64_t start, size_t len, int memoryType) {
     });
 #endif
     const auto backing = std::make_shared<PhysicalBacking>(len, memoryType, first);
+    g_physBlocks.emplace(first, PhysicalBlock{last, first, backing});
+#if defined(__linux__)
     std::map<std::uint64_t, PhysicalPage> pages;
     for (std::size_t offset = 0; offset < len; offset += PS5_PAGE_SIZE) pages.emplace(first + offset, PhysicalPage{backing, offset});
     g_physPages.merge(pages);
+#endif
     Trace("allocate physical 0x%llx+0x%zx", static_cast<unsigned long long>(first), len);
 }
 
@@ -1472,7 +1497,12 @@ void ForgetDirectMemory(int64_t start, size_t len) {
     const auto first = static_cast<std::uint64_t>(start);
     std::lock_guard lock(g_directLock);
     ValidatePhysicalRange(first, len);
+    SplitPhysicalBlock(first);
+    SplitPhysicalBlock(first + len);
+    g_physBlocks.erase(g_physBlocks.lower_bound(first), g_physBlocks.lower_bound(first + len));
+#if defined(__linux__)
     g_physPages.erase(g_physPages.lower_bound(first), g_physPages.lower_bound(first + len));
+#endif
     ErasePhysMappings(first, first + len);
     Trace("release physical 0x%llx+0x%zx", static_cast<unsigned long long>(first), len);
 }
