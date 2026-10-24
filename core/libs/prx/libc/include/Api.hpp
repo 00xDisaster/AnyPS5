@@ -199,6 +199,7 @@ int APS5_VABI setenv_nid_postfix(const char* name, const char* value, int overwr
 int APS5_VABI unsetenv_nid_postfix(const char* name);
 int APS5_VABI putenv_nid_postfix(char* text);
 char* APS5_VABI strerror_nid_postfix(int error);
+int APS5_VABI strerror_r_nid_postfix(int error, char* buffer, std::size_t length);
 void APS5_VABI perror_nid_postfix(const char* prefix);
 FileStream* APS5_VABI fdopen_nid_postfix(int descriptor, const char* mode);
 FileStream* APS5_VABI freopen_nid_postfix(const char* filename, const char* mode, FileStream* stream);
@@ -1356,6 +1357,7 @@ const char* APS5_VABI _ZNKSt13__sce_cxxvers16_Error_exception4whatEv_nid_postfix
 std::int64_t APS5_VABI _ZNSt8__sce_v216_Xtime_get_ticksEv_nid_postfix();
 const char* APS5_VABI _ZNSt8__sce_v213_Syserror_mapEi_nid_postfix(int value);
 int APS5_VABI feupdateenv_nid_postfix(const GuestFloatingPointEnvironment* environment);
+int APS5_VABI feholdexcept_nid_postfix(GuestFloatingPointEnvironment* environment);
 void APS5_VABI srandomdev_nid_postfix();
 
 double APS5_VABI _Stodx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);

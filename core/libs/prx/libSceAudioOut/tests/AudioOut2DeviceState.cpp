@@ -1,4 +1,4 @@
-#include "prx/libSceAudioOut/include/AudioOut2.hpp"
+#include "prx/libSceAudioOut/libSceAudioOut.hpp"
 #include "SceTypes.hpp"
 
 #include <cstddef>
