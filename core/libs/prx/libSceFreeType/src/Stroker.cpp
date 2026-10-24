@@ -100,4 +100,11 @@ int APS5_VABI FT_Stroker_ConicTo_nid_postfix(void* stroker, const GuestVector* c
     return FT_Stroker_ConicTo(static_cast<FT_Stroker>(stroker), nativeControl.pointer, nativeTo.pointer);
 }
 
+int APS5_VABI FT_Stroker_CubicTo_nid_postfix(void* stroker, const GuestVector* control1, const GuestVector* control2, const GuestVector* to) {
+    NativeVector first(control1, __func__);
+    NativeVector second(control2, __func__);
+    NativeVector end(to, __func__);
+    return FT_Stroker_CubicTo(static_cast<FT_Stroker>(stroker), first.pointer, second.pointer, end.pointer);
+}
+
 }
