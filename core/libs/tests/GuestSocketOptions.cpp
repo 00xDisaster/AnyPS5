@@ -303,6 +303,7 @@ void IpLevelFollowsThePs5() {
     Require(getsockopt_nid_postfix(datagram, 0, IpMulticastTimeToLive, &narrow, &size) == 0 && size == 1 && narrow == 7, "a one-byte read gets the IP_MULTICAST_TTL byte");
     Require(SetIp(datagram, IpMulticastLoop, 5) && GetIp(datagram, IpMulticastLoop) == 1, "IP_MULTICAST_LOOP reads back as 1");
     Require(SetIp(datagram, IpMulticastLoop, 0) && GetIp(datagram, IpMulticastLoop) == 0, "IP_MULTICAST_LOOP can be turned off");
+    Require(SetIp(datagram, IpMulticastLoop, 1) && SetIp(datagram, IpMulticastLoop, 0x100) && GetIp(datagram, IpMulticastLoop) == 0, "an int IP_MULTICAST_LOOP keeps only its low byte");
     int value = 0;
     size = sizeof(value);
     Require(getsockopt_nid_postfix(datagram6, 0, IpTimeToLive, &value, &size) == -1 && *__error_nid_postfix() == ErrorInvalid, "IPPROTO_IP on an AF_INET6 socket must fail with EINVAL (22)");
