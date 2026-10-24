@@ -94,8 +94,7 @@ VrTracker2InitializeParameter TrackerParameter(std::vector<std::uint8_t>& memory
 }
 
 bool WorkMemoryCleared(const std::vector<std::uint8_t>& memory) {
-    const auto* middle = memory.data() + TrackerMemory / 2;
-    return AllEqual(middle, middle + 4096, 0) && AllEqual(memory.data() + TrackerMemory, memory.data() + memory.size(), 0xAA);
+    return AllEqual(memory.data(), memory.data() + TrackerMemory, 0) && AllEqual(memory.data() + TrackerMemory, memory.data() + memory.size(), 0xAA);
 }
 
 bool WorkMemoryUntouched(const std::vector<std::uint8_t>& memory) {
