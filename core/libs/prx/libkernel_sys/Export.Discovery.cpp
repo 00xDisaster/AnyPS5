@@ -775,7 +775,7 @@ int APS5_VABI sceKernelGetCoredumpAppInfo(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelGetCpuUsage(void) {
+int APS5_VABI sceKernelGetCpuUsage(void* stats, int32_t* size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1075,7 +1075,7 @@ int APS5_VABI sceKernelGetSystemSwBeta(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelGetThreadName(void) {
+int APS5_VABI sceKernelGetThreadName(uint32_t id, char* name) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1445,17 +1445,17 @@ int APS5_VABI sceKernelLoadStartModuleInternalForMono(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelLwfsAllocateBlock(void) {
+int APS5_VABI sceKernelLwfsAllocateBlock(int32_t fd, int64_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceKernelLwfsLseek(void) {
+int64_t APS5_VABI sceKernelLwfsLseek(int32_t fd, int64_t offset, int32_t whence) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
-int APS5_VABI sceKernelLwfsSetAttribute(void) {
+int APS5_VABI sceKernelLwfsSetAttribute(int32_t fd, int32_t attribute) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1465,7 +1465,7 @@ int APS5_VABI sceKernelLwfsTrimBlock(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelLwfsWrite(void) {
+int64_t APS5_VABI sceKernelLwfsWrite(int32_t fd, const void* data, std::size_t size) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1685,7 +1685,7 @@ int APS5_VABI sceKernelSetCallRecord(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelSetCompressionAttribute(void) {
+int APS5_VABI sceKernelSetCompressionAttribute(int32_t fd, int32_t attribute) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1710,7 +1710,7 @@ int APS5_VABI sceKernelSetEmergencyErrorLog(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelSetFsstParam(void) {
+int APS5_VABI sceKernelSetFsstParam(int32_t fd, void* param) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
