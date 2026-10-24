@@ -5,12 +5,14 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 import warnings
 import zipfile
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_web
@@ -26,6 +28,26 @@ def library_zip(entries):
 
 
 class LibraryPublicationTests(unittest.TestCase):
+    def test_unicode_path_rewrite_is_rejected_before_decompression(self):
+        original = "libs/../libc.prx"
+        rewritten = "libs/libc.prx"
+        entry = zipfile.ZipInfo(original)
+        unicode_path = b"\x01" + struct.pack("<I", zlib.crc32(original.encode())) + rewritten.encode()
+        entry.extra = struct.pack("<HH", 0x7075, len(unicode_path)) + unicode_path
+        invalid = library_zip([(entry, b"content")])
+        with zipfile.ZipFile(io.BytesIO(invalid)) as archive:
+            decoded = archive.infolist()[0]
+            self.assertEqual(decoded.orig_filename, original)
+            if decoded.filename == original:
+                self.skipTest("zipfile does not interpret Unicode Path extra fields")
+            self.assertEqual(decoded.filename, rewritten)
+        valid = library_zip([("libs/libc.prx", b"valid")])
+        with patch.object(zipfile.ZipFile, "testzip", side_effect=AssertionError("archive decompressed")):
+            with self.assertRaisesRegex(ValueError, "Invalid library archive layout"):
+                self.publish(invalid, valid)
+        self.assertEqual(self.manifest.read_bytes(), self.previous)
+        self.assertEqual(list(self.libraries.iterdir()), [self.existing])
+
     def test_original_archive_paths_are_rejected_before_decompression(self):
         valid = library_zip([("libs/libc.prx", b"valid")])
         for name in ("libs/libc.prx\0ignored", "libs/sub\0dir/libc.prx",
