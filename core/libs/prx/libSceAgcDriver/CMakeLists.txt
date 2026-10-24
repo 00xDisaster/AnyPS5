@@ -3362,7 +3362,6 @@ if(BUILD_TESTING)
         endif()
     endforeach()
 
-    # Quarantined (#10711): the recorder can capture zeros for the second copy, so the test fails on some runs.
     option(ANYPS5_RUN_QUARANTINED_FRAME_REPLAY "Build and register agc_driver_frame_replay on Windows" OFF)
     if(WIN32 AND ANYPS5_RUN_QUARANTINED_FRAME_REPLAY)
         add_test_executable(agc_driver_frame_replay_tests tests/FrameReplay.cpp Execution/src/FrameCapture.cpp)
