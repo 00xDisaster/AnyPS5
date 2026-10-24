@@ -73,12 +73,12 @@ class PatchAdvisorTests(unittest.TestCase):
 
                 def verify(command, **options):
                     script = f"import os; os.write(1, {stdout!r}); os.write(2, {stderr!r})"
+                    options.setdefault("encoding", "ascii")
                     result = actual_run([sys.executable, "-c", script], **options)
                     captured.append(result)
                     return result
 
-                with patch.object(suggest_patches.subprocess, "_text_encoding", return_value="ascii"), \
-                        patch.object(suggest_patches.subprocess, "run", side_effect=verify):
+                with patch.object(suggest_patches.subprocess, "run", side_effect=verify):
                     self.assertEqual(self.advise(), 0)
                 self.assertEqual(captured[0].stdout, stdout.decode("utf-8", errors="replace"))
                 self.assertEqual(captured[0].stderr, stderr.decode("utf-8", errors="replace"))
