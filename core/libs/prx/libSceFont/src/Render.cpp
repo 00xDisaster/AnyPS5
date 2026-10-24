@@ -178,6 +178,26 @@ int APS5_VABI sceFontGetFontMetrics(FontHandle fontHandle, std::uint32_t form, F
     return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
 }
 
+int APS5_VABI sceFontGetFontStyleInformation(FontHandle fontHandle, FontStyleInformation* information) {
+    auto* font = GetNativeFont(fontHandle);
+    std::uint32_t fontLock = 0;
+    int rc = SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    if (font && font->magic == HANDLE_MAGIC && AcquireFontLock(font, fontLock)) {
+        rc = ComputeFontStyleInformation(fontHandle, information);
+        ReleaseFontLock(font, fontLock);
+        if (rc == SCE_FONT_OK) return rc;
+    }
+    if (information) {
+        information->familyName = "";
+        information->styleName = "";
+        information->styleFlags = 0;
+        information->weight = 0;
+        information->width = 0;
+        information->layoutFlags = 0;
+    }
+    return rc;
+}
+
 int APS5_VABI sceFontGetVerticalLayout(FontHandle fontHandle, FontVerticalLayout* layout) {
     int rc = SCE_FONT_ERROR_INVALID_FONT_HANDLE;
     auto* font = GetNativeFont(fontHandle);

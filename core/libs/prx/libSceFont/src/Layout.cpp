@@ -567,3 +567,36 @@ int Font::ComputeFontMetrics(FontHandle handle, std::uint32_t form, FontMetrics*
     ReleaseFontCtxEntryLock(entry, modeLow, lockWord);
     return rc == SCE_FONT_OK ? rc : SCE_FONT_ERROR_INVALID_FONT_HANDLE;
 }
+
+int Font::ComputeFontStyleInformation(FontHandle handle, FontStyleInformation* information) {
+    auto* font = GetNativeFont(handle);
+    auto* library = static_cast<FontLibNative*>(font->library);
+    if (!library) return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    if (!information) return SCE_FONT_ERROR_INVALID_PARAMETER;
+    if (const auto* record = static_cast<const std::uint8_t*>(font->open_info.fontset_record)) {
+        std::memcpy(&information->familyName, record + 8, sizeof(information->familyName));
+        std::memcpy(&information->styleName, record + 16, sizeof(information->styleName));
+        information->styleFlags = record[4];
+        information->weight = static_cast<std::uint16_t>(record[5] * 100);
+        information->width = record[6];
+        information->layoutFlags = record[7];
+        return SCE_FONT_OK;
+    }
+    const SysDriver* driver = library->sys_driver;
+    auto* context = FontContext(library, font);
+    if (!driver || !driver->style_information || !context) return SCE_FONT_ERROR_FATAL;
+    const std::uint32_t modeLow = font->flags & 0x0Fu;
+    FontObj* head = nullptr;
+    std::uint32_t lockWord = 0;
+    auto* entry = AcquireFontCtxEntry(context, font->open_info.ctx_entry_index, modeLow, &head, &lockWord);
+    if (!entry) return SCE_FONT_ERROR_FATAL;
+    FontObj* match = FindSubFont(head, font->open_info.sub_font_index);
+    int rc = SCE_FONT_ERROR_FATAL;
+    if ((lockWord & OPEN_BIT) != 0 && (lockWord & COUNT_MASK) != 0 && match) {
+        match->font_handle = handle;
+        rc = driver->style_information(match, information);
+        information->weight = static_cast<std::uint16_t>(information->weight * 100);
+    }
+    ReleaseFontCtxEntryLock(entry, modeLow, lockWord);
+    return rc;
+}

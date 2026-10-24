@@ -881,6 +881,26 @@ int APS5_VABI LibraryGetFontMetrics(FontObj* obj, std::uint32_t form, FontMetric
     return SCE_FONT_OK;
 }
 
+std::uint16_t WeightClass(std::uint16_t weight) {
+    return weight >= 100 && weight <= 900 && weight % 100 == 0 ? static_cast<std::uint16_t>(weight / 100) : 0;
+}
+
+int APS5_VABI LibraryGetFontStyleInformation(FontObj* obj, FontStyleInformation* information) {
+    const FT_Face face = obj ? FaceOf(obj) : nullptr;
+    if (!face || !information) return SCE_FONT_ERROR_FATAL;
+    const auto* header = static_cast<const TT_Header*>(FT_Get_Sfnt_Table(face, FT_SFNT_HEAD));
+    if (!header) throw std::runtime_error("FontFt: style information of a face without a head table");
+    const auto* os2 = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face, FT_SFNT_OS2));
+    if (os2 && os2->version == 0xFFFF) os2 = nullptr;
+    information->familyName = face->family_name;
+    information->styleName = face->style_name;
+    information->styleFlags = static_cast<std::uint16_t>(face->style_flags & (FT_STYLE_FLAG_ITALIC | FT_STYLE_FLAG_BOLD));
+    information->weight = os2 ? WeightClass(os2->usWeightClass) : 0;
+    information->width = os2 && os2->usWidthClass < 10 ? os2->usWidthClass : 0;
+    information->layoutFlags = static_cast<std::uint16_t>(1 + (header->Font_Direction < 0 ? 1 : 0) + (FT_HAS_VERTICAL(face) ? 0x80 : 0));
+    return SCE_FONT_OK;
+}
+
 SysDriver MakeDriverTable() {
     SysDriver driver{};
     driver.pixel_resolution = &LibraryGetPixelResolution;
@@ -896,6 +916,7 @@ SysDriver MakeDriverTable() {
     driver.set_char_with_dpi = &LibrarySetCharSizeWithDpi;
     driver.set_char_default_dpi = &LibrarySetCharSizeDefaultDpi;
     driver.font_metrics = &LibraryGetFontMetrics;
+    driver.style_information = &LibraryGetFontStyleInformation;
     driver.compute_layout = &LibraryComputeLayout;
     driver.compute_layout_alt = &LibraryComputeLayoutAlt;
     driver.load_glyph_cached = &LibraryLoadGlyphCached;
