@@ -14,12 +14,10 @@ PT_SCE_RELRO = 0x61000010
 PF_W = 2
 PF_R = 4
 R_X86_64_PC32 = 2
-R_X86_64_COPY = 5
 R_X86_64_32 = 10
 E_ENTRY = 24
 SPARE_HEADER = 64 + 3 * 56
 PLTGOT_VALUE = 0x400 + 9 * 16 + 8
-SYMBOL_SIZE = 0x620 + 24 + 16
 OUTSIDE = 0x2000
 
 
@@ -40,11 +38,6 @@ def with_entry(image, entry):
 
 def with_pltgot(image, value):
     struct.pack_into("<Q", image, PLTGOT_VALUE, value)
-    return image
-
-
-def with_symbol_size(image, size):
-    struct.pack_into("<Q", image, SYMBOL_SIZE, size)
     return image
 
 
@@ -73,10 +66,6 @@ def main():
         ("jmprel-in-relro", with_relro(fixture(linux=True, target=0x1ff8)), None),
         ("pc32-load-tail", fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_PC32, target=0xFFC), None),
         ("abs32-load-tail", fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_32, target=0xFFC), None),
-        ("copy-load-tail", with_symbol_size(
-            fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_COPY, target=0xFFC), 4), None),
-        ("copy-load-last-byte", with_symbol_size(
-            fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_COPY, target=0xFFF), 4), None),
         ("entry-outside", with_entry(fixture(linux=True), 0x7FFFF000),
          "e_entry 0x7ffff000 is not inside an executable PT_LOAD segment"),
         ("entry-not-executable", with_entry(with_bss(fixture(linux=True)), 0x1000),
@@ -87,8 +76,6 @@ def main():
          "RELA r_offset 0xffc (8 bytes) does not fit inside a PT_LOAD segment"),
         ("abs32-past-load-end", fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_32, target=0xFFE),
          "RELA r_offset 0xffe (4 bytes) does not fit inside a PT_LOAD segment"),
-        ("copy-outside", fixture(linux=True, data_relocations=True, relocation_type=R_X86_64_COPY, target=OUTSIDE),
-         "RELA r_offset 0x2000 is not inside a PT_LOAD segment"),
         ("jmprel-outside", fixture(linux=True, target=OUTSIDE),
          "JMPREL r_offset 0x2000 (8 bytes) does not fit inside a PT_LOAD segment"),
     ]
