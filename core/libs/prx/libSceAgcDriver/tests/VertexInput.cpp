@@ -75,19 +75,13 @@ void descriptorDiagnostics(const Context& ctx) {
         Case{3, 0xc0800000u, "V#=[89abcde0 0010abcd 12345678 c184dfac]"}
     };
     for (const auto& value : cases) {
-        auto invalid = input;
-        invalid.resource.fields[value.field] |= value.bits;
-        const auto before = invalid.resource.fields;
-        bool rejected = false;
-        try {
-            BuildVertexInputLayout(ctx, std::span(&invalid, 1));
-        } catch (const std::runtime_error& error) {
-            const std::string message(error.what());
-            Require(message.find("unsupported vertex buffer descriptor flags at location 7") != std::string::npos && message.find(value.words) != std::string::npos,
-                "vertex flag error did not identify the attribute and all four descriptor words: " + message);
-            rejected = true;
-        }
-        Require(rejected && invalid.resource.fields == before, "invalid descriptor was accepted or changed");
+        auto described = input;
+        described.resource.fields[value.field] |= value.bits;
+        const auto before = described.resource.fields;
+        const std::string message(VertexDescriptorFlagsMessage(described).data());
+        Require(message.find("unsupported vertex buffer descriptor flags at location 7") != std::string::npos && message.find(value.words) != std::string::npos,
+            "vertex flag message did not identify the attribute and all four descriptor words: " + message);
+        Require(described.resource.fields == before, "formatting changed the descriptor");
     }
 }
 

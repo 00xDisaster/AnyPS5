@@ -112,6 +112,14 @@ struct VertexInputLayout {
     std::vector<VkVertexInputAttributeDescription> attributes;
 };
 
+inline std::array<char, 160> VertexDescriptorFlagsMessage(const ShaderRecompiler::VertexAttribute& attribute) {
+    std::array<char, 160> message{};
+    const auto& fields = attribute.resource.fields;
+    std::snprintf(message.data(), message.size(), "unsupported vertex buffer descriptor flags at location %u (V#=[%08x %08x %08x %08x])",
+        attribute.location, fields[0], fields[1], fields[2], fields[3]);
+    return message;
+}
+
 inline VertexInputLayout BuildVertexInputLayout(const Context& context, std::span<const ShaderRecompiler::VertexAttribute> attributes) {
     Require(attributes.size() <= context.limits.maxVertexInputBindings && attributes.size() <= context.limits.maxVertexInputAttributes, "vertex input count exceeds device limits");
     VertexInputLayout result;
@@ -122,10 +130,7 @@ inline VertexInputLayout BuildVertexInputLayout(const Context& context, std::spa
         Require(attribute.location < context.limits.maxVertexInputAttributes && locations.insert(attribute.location).second, "invalid or duplicate vertex attribute location");
         Require(attribute.fetchIndex <= 1, "unsupported vertex fetch index");
         if ((fields[1] & 0x80000000u) != 0 || (fields[3] & 0x00800000u) != 0 || (fields[3] >> 30u) != 0) {
-            char message[160];
-            std::snprintf(message, sizeof(message), "unsupported vertex buffer descriptor flags at location %u (V#=[%08x %08x %08x %08x])",
-                attribute.location, fields[0], fields[1], fields[2], fields[3]);
-            Require(false, message);
+            Require(false, VertexDescriptorFlagsMessage(attribute).data());
         }
         const auto stride = (fields[1] >> 16u) & 0x3fffu;
         const auto address = fields[0] | (static_cast<std::uint64_t>(fields[1] & 0xffffu) << 32u);
