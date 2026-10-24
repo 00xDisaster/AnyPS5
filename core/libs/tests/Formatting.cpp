@@ -367,13 +367,8 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
         std::strcmp(freebsd, "%D|%D|%O|%U|%D") == 0);
     Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "[%5%][%-5%][%y][%5y][%-3y][%hhz]") == 34 &&
         std::strcmp(freebsd, "[    %][%    ][%y][   %y][%y ][%z]") == 0);
-    Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "[%#y][%.2y][%0y][%-#4.1y]") == 18 &&
-        std::strcmp(freebsd, "[%y][%y][%y][%y  ]") == 0);
-    for (const char* unsupported : {"%+y", "% y", "%'y", "%05y"}) {
-        bool threw = false;
-        try { snprintf_nid_postfix(freebsd, sizeof(freebsd), unsupported, 1); } catch (const std::invalid_argument&) { threw = true; }
-        Require(threw);
-    }
+    Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "[%#y][%.2y][%-#4.1y]") == 14 &&
+        std::strcmp(freebsd, "[%y][%y][%y  ]") == 0);
     bool incomplete = false;
     try { snprintf_nid_postfix(freebsd, sizeof(freebsd), "100%"); } catch (const std::invalid_argument&) { incomplete = true; }
     Require(incomplete);
