@@ -75,4 +75,9 @@ int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void* stroker) {
     return FT_Stroker_EndSubPath(static_cast<FT_Stroker>(stroker));
 }
 
+void APS5_VABI FT_Stroker_Set_nid_postfix(void* stroker, std::int64_t radius, std::int32_t lineCap, std::int32_t lineJoin, std::int64_t miterLimit) {
+    FT_Stroker_Set(static_cast<FT_Stroker>(stroker), HostCoordinate(radius, __func__), static_cast<FT_Stroker_LineCap>(lineCap),
+                   static_cast<FT_Stroker_LineJoin>(lineJoin), HostCoordinate(miterLimit, __func__));
+}
+
 }
