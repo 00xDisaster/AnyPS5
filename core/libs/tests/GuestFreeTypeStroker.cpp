@@ -18,6 +18,7 @@ int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
 int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void*);
 void APS5_VABI FT_Stroker_Set_nid_postfix(void*, std::int64_t, std::int32_t, std::int32_t, std::int64_t);
 void APS5_VABI FT_Stroker_Rewind_nid_postfix(void*);
+int APS5_VABI FT_Stroker_GetBorderCounts_nid_postfix(void*, std::int32_t, std::uint32_t*, std::uint32_t*);
 }
 
 static void Check(bool value, int line) {
@@ -174,6 +175,23 @@ static void TestRewind(GuestLibrary& library, FT_Library native) {
     FT_Stroker_Rewind_nid_postfix(nullptr);
 }
 
+static void TestGetBorderCounts(GuestLibrary& library, FT_Library native) {
+    Pair pair(library, native);
+    FT_Stroker_Set_nid_postfix(pair.guest, 64, FT_STROKER_LINECAP_SQUARE, FT_STROKER_LINEJOIN_BEVEL, 0);
+    FT_Stroker_Set(pair.native, 64, FT_STROKER_LINECAP_SQUARE, FT_STROKER_LINEJOIN_BEVEL, 0);
+    pair.Square(0);
+    for (const std::int32_t border : {0, 1, 2, -1}) {
+        std::uint32_t points = 5;
+        std::uint32_t contours = 6;
+        FT_UInt nativePoints = 5;
+        FT_UInt nativeContours = 6;
+        Require(FT_Stroker_GetBorderCounts_nid_postfix(pair.guest, border, &points, &contours) ==
+                FT_Stroker_GetBorderCounts(pair.native, static_cast<FT_StrokerBorder>(border), &nativePoints, &nativeContours));
+        Require(points == nativePoints && contours == nativeContours);
+    }
+    Require(FT_Stroker_GetBorderCounts_nid_postfix(nullptr, 0, nullptr, nullptr) == FT_Stroker_GetBorderCounts(nullptr, FT_STROKER_BORDER_LEFT, nullptr, nullptr));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -186,5 +204,6 @@ int main() {
     TestEndSubPath(library, native);
     TestSet(library, native);
     TestRewind(library, native);
+    TestGetBorderCounts(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
