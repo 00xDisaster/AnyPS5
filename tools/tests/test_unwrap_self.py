@@ -1077,11 +1077,11 @@ class JobManagerModuleRefusalTests(unittest.TestCase):
         for index, (data, diagnostic) in enumerate(cases):
             with self.subTest(diagnostic=diagnostic):
                 self.module.write_bytes(data)
-                output = self.root / f"artifacts-{index}"
+                output = self.build / ".." / f"artifacts-{index}"
                 code, stdout, stderr, process = self.invoke(output)
                 self.assertEqual(code, 2)
                 self.assertEqual(stderr, diagnostic + "\n")
-                self.assertIn(f"Artifacts: {output}", stdout)
+                self.assertEqual(stdout, f"Artifacts: {output.resolve()}\n")
                 self.assertNotIn("Traceback", stderr)
                 self.assertEqual(self.module.read_bytes(), data)
                 self.assertEqual((output / "libs" / "jobref.prx").read_bytes(), b"reference helper")
@@ -1089,7 +1089,7 @@ class JobManagerModuleRefusalTests(unittest.TestCase):
                 self.assertFalse((output / "relink.log").exists())
                 self.assertFalse((output / "results.json").exists())
                 process.assert_called_once()
-                self.assertEqual(process.call_args.args[0][0], str(self.build / "core/libs/nid_patcher.exe"))
+                self.assertEqual(process.call_args.args[0][0], str(self.build.resolve() / "core/libs/nid_patcher.exe"))
 
     def test_missing_reference_helper_keeps_existing_error_handling(self):
         self.helper.unlink()
