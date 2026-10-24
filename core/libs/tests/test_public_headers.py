@@ -54,9 +54,10 @@ def reachable(header, visited):
 
 
 def exported_definitions(text):
+    text = text.replace("\\\n", "").replace("\\\r\n", "")
     masked = code(text)
     ranges = []
-    for match in re.finditer(r"\bnamespace\s*(?:[\w:]+\s*)?\{", masked):
+    for match in re.finditer(r"\bnamespace\s*\{", masked):
         depth = 1
         end = match.end()
         while depth and end < len(masked):
@@ -64,20 +65,30 @@ def exported_definitions(text):
             end += 1
         ranges.append((match.start(), end))
     result = set()
+    position = 0
+    parentheses = 0
     for match in NIDS.source_definitions(text):
+        prefix = masked[position:match.start()]
+        parentheses += prefix.count("(") - prefix.count(")")
+        position = match.start()
+        if parentheses:
+            continue
         if any(start < match.start() < end for start, end in ranges):
             continue
-        line_start = masked.rfind("\n", 0, match.start()) + 1
-        if re.search(r"\b(?:static|GCC_HIDDEN_FN)\b", masked[line_start:match.start()]):
+        start = max(masked.rfind(delimiter, 0, match.start()) for delimiter in ";{}") + 1
+        if re.search(r"\b(?:static|GCC_HIDDEN_FN)\b", masked[start:match.start()]):
             continue
         result.add(match.group(1))
     return result
 
 
 def audit():
-    umbrellas = sorted(path for path in (LIBS / "prx").glob("*/*.hpp") if path.stem == path.parent.name)
+    umbrellas = sorted(path / f"{path.name}.hpp" for path in (LIBS / "prx").iterdir() if path.is_dir())
     if not umbrellas:
         raise RuntimeError("No library umbrella headers found")
+    missing = [str(path.relative_to(ROOT)) for path in umbrellas if not path.is_file()]
+    if missing:
+        raise RuntimeError("Missing library umbrella headers: " + ", ".join(missing))
     exports = {}
     for umbrella in umbrellas:
         included = set()
@@ -90,7 +101,7 @@ def audit():
             definitions = exported_definitions(text)
             definitions.update(NIDS.source_assembly_definitions(text))
             for name in definitions | aliases:
-                if "_nid_no_patch" in name and name not in aliases:
+                if name.endswith(("_nid_no_patch", "_nid_no_patch_cut")):
                     continue
                 exports.setdefault(name, []).append((source, included))
     declarations = {name: [] for name in exports}
