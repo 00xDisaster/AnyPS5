@@ -627,6 +627,34 @@ class CheckCompileOutputTests(CheckCompileFixture):
 
 
 class CheckCompileResponseTests(CheckCompileFixture):
+    def test_response_forwarded_dependencies_preserve_outputs(self):
+        compilers = list(dict.fromkeys(compiler for compiler in (shutil.which("gcc"), shutil.which("clang")) if compiler))
+        if not compilers:
+            self.skipTest("needs GCC or Clang")
+        source = self.source("unit.c", "#ifndef REQUIRED\n#error missing definition\n#endif\nint value;\n")
+        response = self.build / "flags.rsp"
+        outputs = [self.build / name for name in ("unit.o", "dependency with spaces.d")]
+        response.write_text(" ".join('"' + value + '"' for value in
+                                    ("-c", source.as_posix(), "-o", outputs[0].as_posix(),
+                                     "-Wp,-D,REQUIRED=1", "-Wp,-MD," + outputs[1].as_posix())), encoding="utf-8")
+        for compiler in compilers:
+            arguments = [compiler, "@" + str(response)]
+            original = subprocess.run(arguments, cwd=self.build, capture_output=True, text=True, check=False)
+            self.assertEqual(original.returncode, 0, original.stderr)
+            outputs[1].write_bytes(b"existing dependency output\n")
+            preserved = {path: path.read_bytes() for path in (source, response, *outputs)}
+            for field in ("arguments", "command"):
+                for jobs in ("1", "2"):
+                    with self.subTest(compiler=compiler, field=field, jobs=jobs):
+                        command = (subprocess.list2cmdline(arguments) if os.name == "nt" else
+                                   " ".join(shlex.quote(argument) for argument in arguments))
+                        self.manifest([{"directory": str(self.build), "file": str(source),
+                                        field: arguments if field == "arguments" else command}])
+                        result = self.tool("--jobs", jobs, "unit.c")
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        for path, data in preserved.items():
+                            self.assertEqual(path.read_bytes(), data, path.name)
+
     @unittest.skipUnless(os.name == "nt", "Windows GCC response-file text mode")
     def test_windows_gcc_response_text_mode_is_not_reinterpreted(self):
         compiler = shutil.which("gcc")
