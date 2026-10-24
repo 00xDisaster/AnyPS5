@@ -171,6 +171,12 @@ void OwnershipAndLinkTests(const std::filesystem::path& root) {
     Require(linkat_nid_postfix(directory, "missing.txt", directory, "absent.txt", 0) == -1 && Error() == 2);
     Require(linkat_nid_postfix(4321, "owned.txt", directory, "absent.txt", 0) == -1 && Error() == 9);
     Require(linkat_nid_postfix(directory, "owned.txt", 4321, "absent.txt", 0) == -1 && Error() == 9);
+    Require(linkat_nid_postfix(directory, "missing.txt", 4321, "absent.txt", 0) == -1 && Error() == 2);
+    Require(linkat_nid_postfix(directory, "missing.txt", -100, nullptr, 0) == -1 && Error() == 2);
+    Require(linkat_nid_postfix(-100, root.string().c_str(), 4321, "absent.txt", 0) == -1 && Error() == 1);
+    Require(linkat_nid_postfix(-100, root.string().c_str(), -100, "", 0) == -1 && Error() == 1);
+    Require(linkat_nid_postfix(directory, "owned.txt", -100, nullptr, 0) == -1 && Error() == 14);
+    Require(linkat_nid_postfix(directory, "owned.txt", -100, "", 0) == -1 && Error() == 2);
     const int plain = sceKernelOpen(file.c_str(), SCE_KERNEL_O_RDONLY, 0);
     Require(plain >= 0);
     Require(linkat_nid_postfix(plain, "owned.txt", directory, "absent.txt", 0) == -1 && Error() == 20);
