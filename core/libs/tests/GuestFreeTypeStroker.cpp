@@ -11,6 +11,7 @@ using namespace FreeType;
 
 extern "C" {
 int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary*, void**);
+void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
 }
 
 static void Check(bool value, int line) {
@@ -33,10 +34,23 @@ static void TestNew(GuestLibrary& library, FT_Library native) {
     FT_Stroker_Done(expected);
 }
 
+static void TestDone(GuestLibrary& library, FT_Library native) {
+    for (int round = 0; round < 3; ++round) {
+        void* guest = nullptr;
+        FT_Stroker expected = nullptr;
+        Require(FT_Stroker_New_nid_postfix(&library, &guest) == 0 && FT_Stroker_New(native, &expected) == 0);
+        FT_Stroker_Done_nid_postfix(guest);
+        FT_Stroker_Done(expected);
+    }
+    FT_Stroker_Done_nid_postfix(nullptr);
+    FT_Stroker_Done(nullptr);
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
     Require(FT_Init_FreeType(&library.host) == 0 && FT_Init_FreeType(&native) == 0);
     TestNew(library, native);
+    TestDone(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
