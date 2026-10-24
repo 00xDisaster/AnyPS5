@@ -165,8 +165,12 @@ alignas(256) constexpr std::array<std::uint32_t, 8> LocalRestoredIndex{
     0x7e108704, 0x160e06a8, 0x7da80b02, 0x7e060302, 0xbefe04c1, 0xd9340020, 0x00000207, 0xbe802006,
 };
 
-alignas(256) constexpr std::array<std::uint32_t, 6> LocalObservedWindow{
-    0x7da80b02, 0x160e06a8, 0x7e108704, 0xd9340020, 0x00000807, 0xbe802006,
+alignas(256) constexpr std::array<std::uint32_t, 7> LocalObservedWindow{
+    0xbefc0383, 0x7da80b02, 0x160e06a8, 0x7e108704, 0xd9340020, 0x00000807, 0xbe802006,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 9> LocalNegatedConjunction{
+    0x7d880b02, 0x160e06a8, 0x02100e80, 0x7da20d02, 0x87fe6a7e, 0xbefe087e, 0xd9340020, 0x00000807, 0xbe802006,
 };
 
 alignas(256) constexpr std::array<std::uint32_t, 50> HullDescendingRecords{
@@ -1023,6 +1027,7 @@ int main() {
         }
         ExpectRefusal(target, ShaderStage::Local, LocalRestoredIndex, "outside a tessellation ring or LDS address");
         ExpectRefusal(target, ShaderStage::Local, LocalObservedWindow, "outside a tessellation ring or LDS address");
+        ExpectRefusal(target, ShaderStage::Local, LocalNegatedConjunction, "outside a tessellation ring or LDS address");
         ExpectRefusal(target, ShaderStage::TessellationControl, HullRelativeData, "GE_CNTL.PRIM_GRP_SIZE is 0", RecordPatches);
         ExpectRefusal(target, ShaderStage::TessellationEvaluation, DomainRelativeData, "GE_CNTL.PRIM_GRP_SIZE is 0", RecordPatches);
         ExpectRefusal(target, ShaderStage::TessellationControl, HullCode, "outside its patch's quad factors", {{3u, 3u, 2u, 2u, 2u}, Indices});
