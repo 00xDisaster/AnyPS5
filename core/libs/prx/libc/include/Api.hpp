@@ -984,6 +984,7 @@ void APS5_VABI vsyslog_nid_postfix(int priority, const char* format, VaList* arg
 void APS5_VABI syslog_nid_postfix(int priority, const char* format, ...);
 int APS5_VABI _Mtx_init_nid_postfix(void** handle, int type);
 int APS5_VABI _Mtx_init_with_name_nid_postfix(void** handle, int type, const char*);
+int APS5_VABI _Mtx_init_with_default_name_override_nid_postfix(void** handle, int type, const char* name);
 void APS5_VABI _Mtx_destroy_nid_postfix(void** handle);
 int APS5_VABI _Mtx_lock_nid_postfix(void** handle);
 int APS5_VABI _Mtx_trylock_nid_postfix(void** handle);
