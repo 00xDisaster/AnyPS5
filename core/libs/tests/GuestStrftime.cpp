@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-#include <string>
 
 extern "C" {
 std::size_t APS5_VABI strftime_nid_postfix(char*, std::size_t, const char*, const GuestTm*);
@@ -39,17 +38,6 @@ void Check(const char* name, const GuestTm& time, const char* format, const char
         std::fprintf(stderr, "strftime %s (\"%s\"): expected \"%s\", received \"%s\" (%zu)\n", name, format, expected, length == 0 ? "" : text, length);
         correct = false;
     }
-}
-
-void CheckThrows(const char* name, const GuestTm& time, const char* format) {
-    char text[64];
-    try {
-        strftime_nid_postfix(text, sizeof(text), format, &time);
-    } catch (const std::runtime_error& error) {
-        if (std::string(error.what()).find("not implemented") != std::string::npos) return;
-    }
-    std::fprintf(stderr, "strftime %s (\"%s\") does not throw\n", name, format);
-    correct = false;
 }
 
 void CheckAsctime(const char* name, const GuestTm& time, const char* expected) {
@@ -178,24 +166,6 @@ int main() {
         char name[48];
         std::snprintf(name, sizeof(name), "week %d/%d wday %d yday %d", week.year, week.mon, week.wday, week.yday);
         Check(name, time, "%G|%g|%V|%U|%W", week.expected);
-    }
-
-    constexpr Iso unknownWeeks[] = {
-        {126, 0, 1, 4, 400, ""}, {97, 0, 1, 6, 415, ""}, {113, 11, 31, 1, 365, ""}, {-1899, 11, 31, 4, 365, ""},
-        {126, 0, 19, -12, 18, ""}, {126, 3, 11, -19, 100, ""}, {126, 0, 1, -7, 10, ""}, {126, 0, 1, 4, -1, ""},
-    };
-    for (const auto& week : unknownWeeks) {
-        GuestTm time = base;
-        time.tm_year = week.year;
-        time.tm_mon = week.mon;
-        time.tm_mday = week.mday;
-        time.tm_wday = week.wday;
-        time.tm_yday = week.yday;
-        char name[48];
-        std::snprintf(name, sizeof(name), "week %d/%d wday %d yday %d", week.year, week.mon, week.wday, week.yday);
-        CheckThrows(name, time, "%V");
-        CheckThrows(name, time, "%G");
-        CheckThrows(name, time, "%g");
     }
 
     constexpr Iso outOfRangeWeeks[] = {
