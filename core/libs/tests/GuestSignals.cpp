@@ -438,6 +438,15 @@ int main() {
     Require(signal_nid_postfix(19, nullptr) == nullptr);
     Require(sigpending_nid_postfix(&pendingIgnored) == 0 && pendingIgnored.bits[0] == 0);
     Require(sigprocmask_nid_postfix(3, &noneBlocked, nullptr) == 0 && received == 0);
+
+    const GuestSignalSet highSignal{{0, 1u << 7, 0, 0}};
+    Require(sigprocmask_nid_postfix(3, &highSignal, nullptr) == 0);
+    Require(raise_nid_postfix(40) == 0);
+    Require(sigpending_nid_postfix(&pendingIgnored) == 0 && pendingIgnored.bits[1] == highSignal.bits[1]);
+    Require(sigaction_nid_postfix(40, &ignored, nullptr) == 0);
+    Require(sigpending_nid_postfix(&pendingIgnored) == 0 && pendingIgnored.bits[0] == 0 && pendingIgnored.bits[1] == 0);
+    Require(sigaction_nid_postfix(40, &restored, nullptr) == 0);
+    Require(sigprocmask_nid_postfix(3, &noneBlocked, nullptr) == 0);
     Require(_sigintr_nid_postfix.bits[0] == 0 && _sigintr_nid_postfix.bits[1] == 0 && _sigintr_nid_postfix.bits[2] == 0 &&
         _sigintr_nid_postfix.bits[3] == 0);
     GuestSigaction interruptible{};
