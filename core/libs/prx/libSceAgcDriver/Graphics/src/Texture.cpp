@@ -4639,17 +4639,19 @@ std::uint64_t StorageTexture::StampKeepingNewerResults(std::uint64_t address, st
     if (recorded != 0 && bytes != 0) {
         auto& pending = Pending();
         std::lock_guard lock(pending.mutex);
-        for (auto* texture : pending.textures) {
-            if (!texture->blockUnits || !texture->overlaps(address, bytes)) continue;
+        const auto consider = [&](StorageTexture* texture) {
+            if ((!texture->blockUnits && !texture->drawnListed) || !texture->overlaps(address, bytes)) return;
             auto alive = texture->weak_from_this().lock();
-            if (alive == nullptr) continue;
+            if (alive == nullptr) return;
             for (std::uint32_t unit = 0; unit < texture->trackedLayers; ++unit) {
                 const auto begin = texture->layerBegin(unit);
                 const auto unitBytes = texture->layerBytes(unit);
                 if (!texture->layerPending[unit] || begin >= address + bytes || address >= begin + unitBytes) continue;
                 if (texture->layerGeneration[unit] >= recorded) kept.emplace_back(alive, unit);
             }
-        }
+        };
+        for (auto* texture : pending.textures) consider(texture);
+        for (auto* texture : pending.flushing) consider(texture);
     }
     std::erase_if(kept, [](const auto& entry) {
         const auto& [texture, unit] = entry;
