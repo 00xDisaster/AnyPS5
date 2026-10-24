@@ -375,7 +375,7 @@ def main():
                     raise AssertionError((windows, existing, result.returncode, result.stdout, result.stderr))
                 if not windows:
                     assert Path(f"{output}.png").read_bytes() == image
-                    assert Path(f"{output}.desktop").read_text().startswith("[Desktop Entry]\n")
+                    assert Path(f"{output}.desktop").read_text(encoding="utf-8").startswith("[Desktop Entry]\n")
     print("Input preservation tests passed")
 
 
