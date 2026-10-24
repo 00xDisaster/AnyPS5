@@ -3562,6 +3562,34 @@ bool VulkanDevice::present(std::uint32_t width, std::uint32_t height, bool opaqu
     barrier.image = state->images[index];
     barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     auto pipelineBarrier = state->DeviceFunction<PFN_vkCmdPipelineBarrier>("vkCmdPipelineBarrier");
+    const auto planeSlot = static_cast<std::size_t>(&slot - state->presentSlots.data());
+    VkImageMemoryBarrier planeBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    bool planeBound = false;
+    const auto bindPlane = [&] {
+        if (planeBound) return;
+        planeBound = true;
+        if (!state->planePass) state->planePass = std::make_unique<PresentationPass>(graphicsContext(), state->presentSlots.size());
+        if (planeSource.resident == nullptr) {
+            state->planePass->BindTexels(planeSlot, commands, planeSource.texels, plane->width, plane->height, plane->pixelFormat, whiteNits);
+            return;
+        }
+        planeBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        planeBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        planeBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        planeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        planeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        planeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        planeBarrier.image = planeSource.resident->Image();
+        planeBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+        pipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &planeBarrier);
+        Graphics::Recorder::CountBarriers(CommandClass::PresentBlit);
+        state->planePass->Bind(planeSlot, planeSource.resident->Image(), plane->width, plane->height, plane->pixelFormat, whiteNits, planeSource.layer);
+    };
+    const auto blendPlaneInto = [&](VkImage image, VkFormat format, VkExtent2D extent) {
+        if (plane == nullptr) return;
+        bindPlane();
+        state->planePass->RecordOverlay(commands, planeSlot, image, format, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, extent, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    };
     if (!drawn) {
         pipelineBarrier(commands, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
         Graphics::Recorder::CountBarriers(CommandClass::PresentBlit);
@@ -3630,13 +3658,17 @@ bool VulkanDevice::present(std::uint32_t width, std::uint32_t height, bool opaqu
             const auto dumpBytes = static_cast<std::size_t>(slot.dumpWidth) * slot.dumpHeight * 4;
             if (!slot.dumpBuffer || slot.dumpBuffer->Bytes().size() != dumpBytes) slot.dumpBuffer = std::make_unique<Graphics::Buffer>(graphicsContext(), dumpBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             if (drawn) {
-                state->presentation->RecordDump(commands, slotIndex, scale, slot.dumpBuffer->Handle());
+                state->presentation->RecordDumpImage(commands, slotIndex, scale);
+                blendPlaneInto(state->presentation->DumpImage(slotIndex), VK_FORMAT_B8G8R8A8_UNORM, state->presentation->DumpImageExtent(slotIndex));
+                state->presentation->RecordDumpReadback(commands, slotIndex, slot.dumpBuffer->Handle());
             } else if (direct) {
                 if (!slot.dumpScaler) slot.dumpScaler = std::make_unique<PresentationScaler>(graphicsContext(), VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM);
                 slot.dumpScaler->EnsureSourceImage(slot.dumpWidth, slot.dumpHeight);
                 slot.dumpScaler->RecordBlitInto(commands, resident->Image(), VK_IMAGE_LAYOUT_GENERAL, VK_FILTER_NEAREST, width, height, residentLayer);
+                blendPlaneInto(slot.dumpScaler->SourceImage(), VK_FORMAT_B8G8R8A8_UNORM, {slot.dumpWidth, slot.dumpHeight});
                 slot.dumpScaler->RecordReadback(commands, slot.dumpBuffer->Handle());
             } else {
+                blendPlaneInto(scaler->SourceImage(), scaler->SourceFormat(), {scaler->SourceWidth(), scaler->SourceHeight()});
                 scaler->RecordReadback(commands, slot.dumpBuffer->Handle());
             }
         }
@@ -3648,25 +3680,8 @@ bool VulkanDevice::present(std::uint32_t width, std::uint32_t height, bool opaqu
         }
     }
     if (plane != nullptr) {
-        const auto slotIndex = static_cast<std::size_t>(&slot - state->presentSlots.data());
-        if (!state->planePass) state->planePass = std::make_unique<PresentationPass>(graphicsContext(), state->presentSlots.size());
-        VkImageMemoryBarrier planeBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-        if (planeSource.resident != nullptr) {
-            planeBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            planeBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            planeBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            planeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            planeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            planeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            planeBarrier.image = planeSource.resident->Image();
-            planeBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
-            pipelineBarrier(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &planeBarrier);
-            Graphics::Recorder::CountBarriers(CommandClass::PresentBlit);
-            state->planePass->Bind(slotIndex, planeSource.resident->Image(), plane->width, plane->height, plane->pixelFormat, whiteNits, planeSource.layer);
-        } else {
-            state->planePass->BindTexels(slotIndex, commands, planeSource.texels, plane->width, plane->height, plane->pixelFormat, whiteNits);
-        }
-        state->planePass->RecordOverlay(commands, slotIndex, barrier.image, state->surfaceFormat, state->surfaceColorSpace, state->extent, drawn ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, overlay ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        bindPlane();
+        state->planePass->RecordOverlay(commands, planeSlot, barrier.image, state->surfaceFormat, state->surfaceColorSpace, state->extent, drawn ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, overlay ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         if (planeSource.resident != nullptr) {
             planeBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
             planeBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
