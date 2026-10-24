@@ -258,7 +258,7 @@ bool ImpliesNot(IrValue* rawPredicate, IrValue* rawCondition) {
     IrValue* condition = rawCondition->Resolve();
     if (condition->HasImmediate() && condition->Type() == IrType::Bool && !condition->ImmediateBool()) return true;
     if (condition->Opcode() == IrOpcode::LogicalNot) return Implies(predicate, condition->Argument(0));
-    if (predicate->Opcode() == IrOpcode::LogicalNot) return Implies(predicate->Argument(0), condition);
+    if (predicate->Opcode() == IrOpcode::LogicalNot) return Implies(condition, predicate->Argument(0));
     return predicate->Opcode() == IrOpcode::LogicalAnd && (ImpliesNot(predicate->Argument(0), condition) || ImpliesNot(predicate->Argument(1), condition));
 }
 
