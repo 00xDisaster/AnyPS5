@@ -157,7 +157,6 @@ int main() {
 
     SpeakerInfoRequiresInitialization();
     SpeakerInfoAfterAudioOutInit();
-    Require(sceAudioOut2Initialize() == 0);
 
     AudioOut2ContextParam params{};
     Require(sceAudioOut2ContextResetParam(&params) == 0);
