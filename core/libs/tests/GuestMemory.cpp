@@ -705,6 +705,10 @@ static void CheckReleaseDirectMemoryClearsMappings() {
     }
 }
 
+static void CheckDirectMemorySize() {
+    Require(sceKernelGetDirectMemorySize() == 0x300000000ull);
+}
+
 static void CheckReleaseDirectMemoryRejectsInvalidRanges() {
     constexpr std::size_t page = 0x4000;
     Require(sceKernelReleaseDirectMemory(-1, page) == SCE_KERNEL_ERROR_EINVAL);
@@ -3348,6 +3352,7 @@ int main(int argc, char** argv) {
     CheckSavedDirectMemorySurvivesCachePressure();
     CheckReusedDirectMemorySections();
     CheckReleaseDirectMemoryClearsMappings();
+    CheckDirectMemorySize();
     CheckReleaseDirectMemoryRejectsInvalidRanges();
     CheckFixedMappingReplacesPartialOverlap();
     CheckFixedMappingOverHoleInsideAllocation();
