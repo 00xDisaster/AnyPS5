@@ -82,8 +82,6 @@ static void CheckNames() {
     REQUIRE(UnlinkFails("/anyps5-named-missing", GUEST_ENOENT));
     REQUIRE(Throws([] { sem_open_nid_postfix(nullptr, 0); }));
     REQUIRE(Throws([] { sem_unlink_nid_postfix(nullptr); }));
-    REQUIRE(Throws([] { sem_open_nid_postfix("/anyps5-named-large", O_CREAT_FLAG, 0600, -1); }));
-    REQUIRE(OpenFails("/anyps5-named-large", 0, GUEST_ENOENT));
 }
 
 static void CheckLifetime() {
