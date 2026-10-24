@@ -1,4 +1,4 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceSulphaDrv/libSceSulphaDrv.hpp"
 #include <array>
 #include <cerrno>
 #include <cstddef>
@@ -6,8 +6,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
-extern "C" int APS5_VABI sceSulphaGetDefaultConfig(void* config);
 
 static void Require(bool condition, const char* message) {
     if (condition) return;
