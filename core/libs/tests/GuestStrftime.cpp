@@ -1,16 +1,10 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/GuestTime.hpp"
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-
-extern "C" {
-std::size_t APS5_VABI strftime_nid_postfix(char*, std::size_t, const char*, const GuestTm*);
-char* APS5_VABI asctime_nid_postfix(const GuestTm*);
-int APS5_VABI setenv_nid_postfix(const char*, const char*, int);
-void APS5_VABI tzset_nid_postfix(void);
-}
 
 namespace {
 
