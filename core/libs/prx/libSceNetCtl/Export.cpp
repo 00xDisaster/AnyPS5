@@ -49,6 +49,8 @@ static constexpr int NET_CTL_STATE_DISCONNECTED = 0;
 static constexpr int NET_CTL_STATE_IPOBTAINED = 3;
 static constexpr int NET_CTL_EVENT_DISCONNECTED = 1;
 static constexpr int NET_CTL_EVENT_IPOBTAINED = 3;
+static constexpr int NET_CTL_STUN_STATUS_OK = 2;
+static constexpr int NET_CTL_NAT_TYPE_2 = 2;
 static constexpr int NET_CTL_INFO_DEVICE = 1;
 static constexpr int NET_CTL_INFO_ETHER_ADDR = 2;
 static constexpr int NET_CTL_INFO_MTU = 3;
@@ -574,7 +576,12 @@ int APS5_VABI sceNetCtlGetNatInfo(NetCtlNatInfo* info) {
     if (!g_initialized.load()) return SCE_NET_CTL_ERROR_NOT_INITIALIZED;
     if (!info) return SCE_NET_CTL_ERROR_INVALID_ADDR;
     if (info->size != sizeof(NetCtlNatInfo)) return SCE_NET_CTL_ERROR_INVALID_SIZE;
-    throw std::logic_error("sceNetCtlGetNatInfo: NAT discovery is not implemented");
+    HostIpv4Interface host;
+    if (!FindHostIpv4Interface(host)) return SCE_NET_CTL_ERROR_NOT_CONNECTED;
+    info->stun_status = NET_CTL_STUN_STATUS_OK;
+    info->nat_type = NET_CTL_NAT_TYPE_2;
+    info->mapped_addr = host.address.s_addr;
+    return 0;
 }
 
 int APS5_VABI sceNetCtlGetResult(int event, int* result) {

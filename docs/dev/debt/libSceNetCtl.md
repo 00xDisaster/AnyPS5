@@ -2,7 +2,7 @@
 
 ### Functional
 
-- [sceNetCtlGetNatInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) - NAT discovery is not implemented and throws after native initialization and argument checks. NAT information is 16 bytes with a 32-bit size prefix; the remaining fields are unresolved.
+- [sceNetCtlGetNatInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - answers from the host IPv4 interface: reports STUN status OK (2), NAT type 2 (moderate), and the host's IPv4 address as the mapped address when connected, or `SCE_NET_CTL_ERROR_NOT_CONNECTED` (`0x80412108`) when no interface is available. Actual STUN server discovery against PlayStation network infrastructure is not performed.
 
 ### Unknown function info
 

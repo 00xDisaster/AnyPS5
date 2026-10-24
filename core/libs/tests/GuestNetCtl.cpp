@@ -349,13 +349,12 @@ int main() {
         Require(sceNetCtlGetNatInfo(&natInfo) == static_cast<int>(0x80412111));
     }
     natInfo.size = sizeof(natInfo);
-    std::memset(natInfo.opaque, kFill, sizeof(natInfo.opaque));
-    bool natUnsupported = false;
-    try {
-        sceNetCtlGetNatInfo(&natInfo);
-    } catch (const std::logic_error&) {
-        natUnsupported = true;
-    }
-    Require(natUnsupported && natInfo.size == sizeof(natInfo));
-    for (const auto value : natInfo.opaque) Require(value == kFill);
+    natInfo.stun_status = 0;
+    natInfo.nat_type = 0;
+    natInfo.mapped_addr = 0;
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 2);
+    Require(natInfo.mapped_addr == address.s_addr);
 }
