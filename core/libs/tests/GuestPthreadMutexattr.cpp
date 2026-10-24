@@ -123,7 +123,7 @@ static void CheckSceAccessors() {
     Require(scePthreadMutexattrSetprioceiling(&attr, 300) == SCE_KERNEL_ERROR_EINVAL);
     Require(scePthreadMutexattrGetprioceiling(&attr, &value) == SCE_KERNEL_ERROR_EINVAL);
     Require(scePthreadMutexattrSetprotocol(&attr, PRIO_PROTECT) == SCE_OK);
-    Require(scePthreadMutexattrGetprioceiling(&attr, &value) == SCE_OK && value == sched_get_priority_max_nid_postfix(SCHED_RR));
+    Require(scePthreadMutexattrGetprioceiling(&attr, &value) == SCE_OK && value == sched_get_priority_max_nid_postfix(GuestSched_Rr));
     Require(scePthreadMutexattrSetprioceiling(&attr, 300) == SCE_OK);
     Require(scePthreadMutexattrGetprioceiling(&attr, &value) == SCE_OK && value == 300);
     int protocol = -1;
