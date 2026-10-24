@@ -52,4 +52,13 @@ void APS5_VABI FT_Stroker_Done_nid_postfix(void* stroker) {
     FT_Stroker_Done(static_cast<FT_Stroker>(stroker));
 }
 
+int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void* stroker, std::uint32_t* points, std::uint32_t* contours) {
+    FT_UInt nativePoints = 0;
+    FT_UInt nativeContours = 0;
+    const FT_Error error = FT_Stroker_GetCounts(static_cast<FT_Stroker>(stroker), points ? &nativePoints : nullptr, contours ? &nativeContours : nullptr);
+    WriteCount(points, nativePoints);
+    WriteCount(contours, nativeContours);
+    return error;
+}
+
 }
