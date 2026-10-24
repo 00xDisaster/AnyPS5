@@ -63,6 +63,39 @@ class PatchAdvisorTests(unittest.TestCase):
                                                  str(self.input)])
         self.assertFalse((self.root / "relinker-patches.toml").exists())
 
+    def test_relinker_output_is_utf8_independent_of_host_encoding(self):
+        actual_run = subprocess.run
+        for diagnostic in ("caf\u00e9 \u65e5\u672c\u8a9e".encode(), b"invalid byte \xff"):
+            with self.subTest(diagnostic=diagnostic):
+                stdout = VERIFIED.encode() + diagnostic + b"\n"
+                stderr = diagnostic + b"\n"
+                captured = []
+
+                def verify(command, **options):
+                    script = f"import os; os.write(1, {stdout!r}); os.write(2, {stderr!r})"
+                    result = actual_run([sys.executable, "-c", script], **options)
+                    captured.append(result)
+                    return result
+
+                with patch.object(suggest_patches.subprocess, "_text_encoding", return_value="ascii"), \
+                        patch.object(suggest_patches.subprocess, "run", side_effect=verify):
+                    self.assertEqual(self.advise(), 0)
+                self.assertEqual(captured[0].stdout, stdout.decode("utf-8", errors="replace"))
+                self.assertEqual(captured[0].stderr, stderr.decode("utf-8", errors="replace"))
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_output_streams_use_utf8(self, run):
+        stdout = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+        stderr = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+        self.addCleanup(stdout.close)
+        self.addCleanup(stderr.close)
+        run.return_value = subprocess.CompletedProcess([], 0, VERIFIED, "")
+        with patch.object(suggest_patches.sys, "stdout", stdout), patch.object(suggest_patches.sys, "stderr", stderr):
+            self.assertEqual(self.advise(), 0)
+            for stream in (stdout, stderr):
+                self.assertEqual(stream.encoding, "utf-8")
+                self.assertEqual(stream.errors, "backslashreplace")
+
     @patch.object(suggest_patches.subprocess, "run")
     def test_changed_module_is_not_sent_to_relinker(self, run):
         self.module.write_bytes(b"module version two")
