@@ -53,6 +53,6 @@ int APS5_VABI sceSpPthreadMutexattrSetprioceiling();
 int APS5_VABI sceSpPthreadMutexattrSetprotocol(PthreadMutexattr* attr, int protocol);
 int APS5_VABI sceSpPthreadMutexattrSettype(PthreadMutexattr* attr, int type);
 int APS5_VABI sceSpPthreadSetprio(Pthread thread, int prio);
-int APS5_VABI sceSpSelect();
+int APS5_VABI sceSpSelect(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout);
 
 }
