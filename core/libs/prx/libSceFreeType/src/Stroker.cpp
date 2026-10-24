@@ -48,4 +48,8 @@ int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary* library, void** stroker) 
     return error;
 }
 
+void APS5_VABI FT_Stroker_Done_nid_postfix(void* stroker) {
+    FT_Stroker_Done(static_cast<FT_Stroker>(stroker));
+}
+
 }
