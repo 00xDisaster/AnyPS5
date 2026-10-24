@@ -6,10 +6,10 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -42,23 +42,10 @@ int APS5_VABI scePadGetExtControllerInformation(int, void*);
 int APS5_VABI scePadResetLightBar(int);
 int APS5_VABI scePadSetLightBar(int, const PadLightBarParam*);
 int APS5_VABI scePadSetMotionSensorState(int, bool);
-int APS5_VABI scePadSetLotusEnableIrKey(std::int32_t);
-int APS5_VABI scePadSetLotusDisableIrKey(std::int32_t);
-int APS5_VABI scePadVirtualDeviceDisableButtonRemapping(bool);
-int APS5_VABI scePadVirtualDeviceGetRemoteSetting(std::int32_t, void*);
+int APS5_VABI scePadGetControllerType(int, std::int32_t*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
-
-template<typename TCall>
-static bool Throws(TCall call, const char* function) {
-    try {
-        static_cast<void>(call());
-    } catch (const std::runtime_error& error) {
-        return std::strstr(error.what(), function) != nullptr;
-    }
-    return false;
-}
 
 static void CheckInputCommands() {
     const auto path = std::filesystem::temp_directory_path() / ("anyps5-pad-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -435,6 +422,40 @@ static void CheckTrackerDevices(int handle) {
     }
 }
 
+static void CheckSystemRemote(int handle) {
+    constexpr int noHandle = static_cast<int>(0x80920008);
+    Require(scePadGetHandle(PAD_USER_ID_SYSTEM, PAD_PORT_TYPE_REMOTE, 0) == noHandle);
+    const int remote = scePadOpen_nid_postfix(PAD_USER_ID_SYSTEM, PAD_PORT_TYPE_REMOTE, 0, nullptr);
+    Require(remote > 0 && remote != handle);
+    Require(scePadGetHandle(PAD_USER_ID_SYSTEM, PAD_PORT_TYPE_REMOTE, 0) == remote);
+    Require(scePadGetHandle(PAD_USER_ID_SYSTEM, PAD_PORT_TYPE_REMOTE, 1) == noHandle);
+    PadData drained[64]{};
+    scePadRead_nid_postfix(handle, drained, 64);
+    PadInputState pressed;
+    pressed.buttons = static_cast<std::uint32_t>(Pad::PadButton::Cross);
+    PadPublishInput_nid_postfix(pressed);
+    PadData data{};
+    data.buttons = ~0u;
+    data.connected = true;
+    Require(scePadReadState(remote, &data) == PAD_OK);
+    Require(data.buttons == 0 && !data.connected);
+    Require(scePadReadState(remote, nullptr) == PAD_ERROR_INVALID_ARG);
+    PadData queued[4]{};
+    queued[0].connected = true;
+    Require(scePadRead_nid_postfix(remote, queued, 4) == 1);
+    Require(queued[0].buttons == 0 && !queued[0].connected);
+    PadLightBarParam lightBar{1, 2, 3};
+    Require(scePadSetLightBar(remote, &lightBar) == PAD_ERROR_INVALID_HANDLE);
+    Require(scePadReadState(handle, &data) == PAD_OK);
+    Require((data.buttons & pressed.buttons) != 0 && data.connected);
+    PadPublishInput_nid_postfix(PadInputState{});
+    scePadRead_nid_postfix(handle, drained, 64);
+    Require(scePadClose_nid_postfix(remote) == PAD_OK);
+    Require(scePadGetHandle(PAD_USER_ID_SYSTEM, PAD_PORT_TYPE_REMOTE, 0) == noHandle);
+    Require(scePadReadState(remote, &data) == PAD_ERROR_INVALID_HANDLE);
+    Require(scePadReadState(handle, &data) == PAD_OK);
+}
+
 static void CheckAccessibilityControllerState(int handle) {
     std::uint32_t state = 7;
     Require(scePadGetAccessibilityControllerState(handle + 1, nullptr) == PAD_ERROR_INVALID_ARG);
@@ -442,6 +463,15 @@ static void CheckAccessibilityControllerState(int handle) {
     Require(state == 7);
     Require(scePadGetAccessibilityControllerState(handle, &state) == PAD_OK);
     Require(state == 0);
+}
+
+static void CheckControllerType(int handle) {
+    std::int32_t type = -1;
+    Require(scePadGetControllerType(handle + 1, nullptr) == PAD_ERROR_INVALID_ARG);
+    Require(scePadGetControllerType(handle + 1, &type) == PAD_ERROR_INVALID_HANDLE);
+    Require(type == -1);
+    Require(scePadGetControllerType(handle, &type) == PAD_OK);
+    Require(type == PAD_CONTROLLER_TYPE_DUAL_SENSE);
 }
 
 static void CheckInjectedState(const std::filesystem::path& path) {
@@ -502,12 +532,53 @@ static void CheckInjectedState(const std::filesystem::path& path) {
     PadPublishInput_nid_postfix(PadInputState{});
 }
 
+static void CheckInjectedQueueTimes(const std::filesystem::path& path) {
+    PadData drained[64]{};
+    Pad::Read(drained, 64);
+    PadInputState physical;
+    physical.buttons = 0x2000;
+    PadPublishInput_nid_postfix(physical);
+    const auto before = Pad::ReadState();
+    std::ofstream(path) << "5 16384 300\n";
+    PadData pressed{};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    do {
+        pressed = Pad::ReadState();
+        if ((pressed.buttons & 0x4000) != 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < deadline);
+    Require(pressed.buttons == 0x6000 && pressed.timestamp > before.timestamp);
+    PadData queued{};
+    Require(Pad::Read(&queued, 1) == 1);
+    Require(queued.buttons == pressed.buttons);
+    if (queued.timestamp < pressed.timestamp) {
+        std::fputs("queued input predates its injected button press\n", stderr);
+        std::abort();
+    }
+    physical.sticks[0] = 130;
+    PadPublishInput_nid_postfix(physical);
+    std::this_thread::sleep_for(std::chrono::milliseconds(310));
+    const auto released = Pad::ReadState();
+    Require(released.buttons == 0x2000 && released.timestamp > pressed.timestamp);
+    Require(Pad::Read(&queued, 1) == 1);
+    Require(queued.buttons == released.buttons && queued.left_stick_x == 130);
+    if (queued.timestamp < released.timestamp) {
+        std::fputs("queued input predates its injected button release\n", stderr);
+        std::abort();
+    }
+    PadPublishInput_nid_postfix(PadInputState{});
+}
+
 int main() {
     CheckInputCommands();
     std::uint32_t accessibilityState = 7;
     Require(scePadGetAccessibilityControllerState(PAD_HANDLE, nullptr) == PAD_ERROR_NOT_INITIALIZED);
     Require(scePadGetAccessibilityControllerState(PAD_HANDLE, &accessibilityState) == PAD_ERROR_NOT_INITIALIZED);
     Require(accessibilityState == 7);
+    std::int32_t controllerType = -1;
+    Require(scePadGetControllerType(PAD_HANDLE, nullptr) == PAD_ERROR_NOT_INITIALIZED);
+    Require(scePadGetControllerType(PAD_HANDLE, &controllerType) == PAD_ERROR_NOT_INITIALIZED);
+    Require(controllerType == -1);
     Require(scePadUnknown_n3kSX62fgNo() == static_cast<int>(0x80920005));
     const auto path = std::filesystem::temp_directory_path() / ("anyps5-pad-state-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     struct Cleanup {
@@ -553,7 +624,7 @@ int main() {
     for (const int type : {0, 2, 3, 4}) Require(scePadOpen_nid_postfix(-1, type, 0, nullptr) == static_cast<int>(0x809b0001));
     Require(scePadOpen_nid_postfix(-1, 0, 1, nullptr) == static_cast<int>(0x809b0001));
     Require(scePadOpen_nid_postfix(-1, 1, 0, nullptr) == PAD_ERROR_INVALID_ARG);
-    for (const int type : {5, 6, 0xff, -1}) Require(scePadOpen_nid_postfix(user, type, 0, nullptr) == PAD_ERROR_INVALID_ARG);
+    for (const int type : {5, 6, 16, 0xff, -1}) Require(scePadOpen_nid_postfix(user, type, 0, nullptr) == PAD_ERROR_INVALID_ARG);
     Require(scePadGetHandle(user, 0, 0) == noHandle);
     const unsigned char wheel[16]{0xb7, 0x0e, 0x04, 0x0e, 0x08, 0x6e, 0x01};
     Require(scePadOpenExt(user, PAD_PORT_TYPE_SPECIAL, 0, wheel) == static_cast<int>(0x80920007));
@@ -587,7 +658,9 @@ int main() {
     CheckRemoteController(handle);
     CheckTrackerDevices(handle);
     CheckAccessibilityControllerState(handle);
+    CheckControllerType(handle);
     CheckInjectedState(commandPath);
+    CheckInjectedQueueTimes(commandPath);
     PadLightBarParam lightBar{255, 128, 64};
     Require(scePadSetLightBar(handle, &lightBar) == PAD_OK);
     Require(scePadSetLightBar(handle, nullptr) == PAD_ERROR_INVALID_ARG);
@@ -604,11 +677,9 @@ int main() {
     Require(scePadSetVibrationMode(handle, 5) == 0);
     Require(scePadSetVibrationMode(handle, 6) == PAD_ERROR_INVALID_ARG);
     Require(scePadSetVibrationMode(handle, -1) == PAD_ERROR_INVALID_ARG);
-    Require(scePadGetHandle(0xff, 16, 0) == handle);
+    CheckSystemRemote(handle);
     Require(scePadGetHandle(user, 16, 0) == noHandle);
     Require(scePadGetHandle(user, 0, 1) == noHandle);
-    Require(Throws([&] { return scePadSetLotusEnableIrKey(handle); }, "scePadSetLotusEnableIrKey"));
-    Require(Throws([&] { return scePadSetLotusDisableIrKey(handle); }, "scePadSetLotusDisableIrKey"));
     Require(scePadClose_nid_postfix(handle) == 0);
     Require(scePadGetHandle(user, 0, 0) == noHandle);
     Require(scePadUnknown_n3kSX62fgNo() == PAD_OK);
@@ -618,15 +689,4 @@ int main() {
     Require(scePadSetAngularVelocityDeadbandState(handle + 1, true) == PAD_ERROR_INVALID_HANDLE);
     Require(scePadSetAngularVelocityBiasCorrectionState(handle, false) == PAD_OK);
     Require(scePadSetAngularVelocityBiasCorrectionState(handle + 1, false) == PAD_ERROR_INVALID_HANDLE);
-    Require(Throws([&] { return scePadSetLotusEnableIrKey(handle + 1); }, "scePadSetLotusEnableIrKey"));
-    Require(Throws([&] { return scePadSetLotusDisableIrKey(handle + 1); }, "scePadSetLotusDisableIrKey"));
-    Require(Throws([] { return scePadVirtualDeviceDisableButtonRemapping(true); }, "scePadVirtualDeviceDisableButtonRemapping"));
-    Require(Throws([] { return scePadVirtualDeviceDisableButtonRemapping(false); }, "scePadVirtualDeviceDisableButtonRemapping"));
-    std::array<std::uint8_t, 16> scratch{};
-    scratch.fill(0xAB);
-    Require(Throws([&] { return scePadVirtualDeviceGetRemoteSetting(1, scratch.data()); }, "scePadVirtualDeviceGetRemoteSetting"));
-    Require(Throws([] { return scePadVirtualDeviceGetRemoteSetting(1, nullptr); }, "scePadVirtualDeviceGetRemoteSetting"));
-    Require(Throws([&] { return scePadVirtualDeviceGetRemoteSetting(0, scratch.data()); }, "scePadVirtualDeviceGetRemoteSetting"));
-    Require(Throws([&] { return scePadVirtualDeviceGetRemoteSetting(-1, scratch.data()); }, "scePadVirtualDeviceGetRemoteSetting"));
-    for (std::uint8_t byte : scratch) Require(byte == 0xAB);
 }
