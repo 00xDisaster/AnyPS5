@@ -193,6 +193,70 @@ class PatchAdvisorTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
 
     @patch.object(suggest_patches.subprocess, "run")
+    def test_list_verified_shows_each_match_and_quoted_patch_path(self, run):
+        second = self.catalog / "second patch.toml"
+        second.write_bytes((self.catalog / "patch.toml").read_bytes())
+        self.write_index([self.entry, dict(self.entry, patch=second.name)])
+        run.return_value.returncode = 0
+        run.return_value.stdout = VERIFIED
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise("--list-verified"), 0)
+        self.assertIn("Verified catalog entries: 2", output.getvalue())
+        self.assertIn(f"Catalog entry 1: {self.catalog / 'patch.toml'}", output.getvalue())
+        self.assertIn(f"Catalog entry 2: {second}", output.getvalue())
+        self.assertIn(suggest_patches.command_line(["--patches", str(second), "--module-dir", "Media/Modules"]), output.getvalue())
+        self.assertEqual(output.getvalue().count("SHA-256"), 2)
+        self.assertNotIn("Recommended:", output.getvalue())
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_list_verified_single_match_preserves_conversion_options(self, run):
+        self.additional_executable()
+        run.return_value.returncode = 0
+        run.return_value.stdout = VERIFIED
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise("--list-verified", "--executable", "picker/picker.bin",
+                                         "--sce-module-path", str(self.root)), 0)
+        expected = suggest_patches.command_line(["--patches", str(self.catalog / "patch.toml"),
+                                                  "--sce-module-path", str(self.root), "--module-dir",
+                                                  "Media/Modules", "--executable", "picker/picker.bin"])
+        self.assertIn(expected, output.getvalue())
+        self.assertIn("Verified catalog entries: 1", output.getvalue())
+        self.assertNotIn("Recommended:", output.getvalue())
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_list_verified_skips_individual_errors(self, run):
+        bad = dict(self.entry, patch="missing.toml")
+        self.write_index([bad, self.entry, self.entry])
+        run.side_effect = [subprocess.CompletedProcess([], 2, "", "FAIL: invalid patch"),
+                           subprocess.CompletedProcess([], 0, VERIFIED, "")]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise("--list-verified"), 0)
+        self.assertIn("Catalog entry 1 ('missing.toml'): rejected", output.getvalue())
+        self.assertIn("Catalog entry 2 ('patch.toml'): relinker error (exit 2)", output.getvalue())
+        self.assertIn("Verified catalog entries: 1", output.getvalue())
+        self.assertIn(f"Catalog entry 3: {self.catalog / 'patch.toml'}", output.getvalue())
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(suggest_patches.subprocess, "run")
+    def test_list_verified_no_match_keeps_exit_statuses(self, run):
+        self.write_index([])
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(self.advise("--list-verified"), 1)
+        self.assertIn("No verified catalog entries: no catalog entry", output.getvalue())
+        run.assert_not_called()
+        self.write_index()
+        run.return_value = subprocess.CompletedProcess([], 2, "", "FAIL: invalid patch")
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            self.assertEqual(self.advise("--list-verified"), 2)
+        self.assertIn("No verified catalog entries: relinker errors occurred", errors.getvalue())
+
+    @patch.object(suggest_patches.subprocess, "run")
     def test_not_checked_patch_is_not_recommended(self, run):
         run.return_value.returncode = 0
         run.return_value.stdout = "Verified 1 patches: 0 ok, 1 not-checked, 0 mismatch\n"

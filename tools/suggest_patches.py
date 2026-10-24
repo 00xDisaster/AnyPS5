@@ -38,6 +38,19 @@ def command_line(arguments):
     return subprocess.list2cmdline(arguments) if os.name == "nt" else shlex.join(arguments)
 
 
+def conversion_options(args, patch):
+    options = ["--patches", str(patch)]
+    if args.skip_sce_module:
+        options.append("--skip-sce-module")
+    if args.sce_module_path:
+        options.extend(("--sce-module-path", str(args.sce_module_path)))
+    for module_dir in args.module_dir:
+        options.extend(("--module-dir", module_dir))
+    for executable in args.executable:
+        options.extend(("--executable", executable))
+    return command_line(options)
+
+
 def load_catalog(directory, title, version):
     data = json.loads(confined(directory, "index.json").read_text(encoding="utf-8"))
     if not isinstance(data, dict) or set(data) != {"format", "entries"} or type(data["format"]) is not int or data["format"] != 1 or not isinstance(data["entries"], list):
@@ -79,6 +92,7 @@ def main(argv=None):
     parser.add_argument("--executable", action="append", default=[], help="additional title executable relative to the module parent; repeatable")
     parser.add_argument("--skip-sce-module", action="store_true", help="skip bundled modules during verification")
     parser.add_argument("--timeout-seconds", type=int, default=120, help="maximum seconds per relinker verification (default: 120)")
+    parser.add_argument("--list-verified", action="store_true", help="list every verified catalog entry without choosing one")
     args = parser.parse_args(argv)
     try:
         metadata = json.loads(args.param_json.read_text(encoding="utf-8"))
@@ -102,7 +116,8 @@ def main(argv=None):
         matches = []
         entries = load_catalog(args.catalog.resolve(), title, version)
         if not entries:
-            print(f"No recommendation: no catalog entry for {title} {version}.")
+            prefix = "No verified catalog entries" if args.list_verified else "No recommendation"
+            print(f"{prefix}: no catalog entry for {title} {version}.")
             return 1
         relinker_errors = False
         for number, entry in entries:
@@ -157,29 +172,30 @@ def main(argv=None):
                 print(f"{label}: rejected: relinker did not confirm every patch")
                 continue
             matches.append((number, entry, patch, targets))
+        if args.list_verified and matches:
+            print(f"Verified catalog entries: {len(matches)}")
+            for number, entry, patch, targets in matches:
+                print(f"Catalog entry {number}: {patch}")
+                for name, digest in targets.items():
+                    print(f"  {name} SHA-256 {digest}")
+                print(f"Use these options when converting:\n  {conversion_options(args, patch)}")
+            return 0
         if len(matches) == 1:
             number, entry, patch, targets = matches[0]
             print(f"Recommended: {patch} (catalog entry {number})")
             for name, digest in targets.items():
                 print(f"  {name} SHA-256 {digest}")
-            conversion = ["--patches", str(patch)]
-            if args.skip_sce_module:
-                conversion.append("--skip-sce-module")
-            if args.sce_module_path:
-                conversion.extend(("--sce-module-path", str(args.sce_module_path)))
-            for module_dir in args.module_dir:
-                conversion.extend(("--module-dir", module_dir))
-            for executable in args.executable:
-                conversion.extend(("--executable", executable))
-            print(f"Use these options when converting:\n  {command_line(conversion)}")
+            print(f"Use these options when converting:\n  {conversion_options(args, patch)}")
             return 0
         if len(matches) > 1:
             print("No recommendation: multiple verified catalog entries match.")
             return 1
         if relinker_errors:
-            print("No recommendation: relinker errors occurred; see catalog entries above.", file=sys.stderr)
+            prefix = "No verified catalog entries" if args.list_verified else "No recommendation"
+            print(f"{prefix}: relinker errors occurred; see catalog entries above.", file=sys.stderr)
             return 2
-        print("No recommendation: no catalog entry passed all checks.")
+        prefix = "No verified catalog entries" if args.list_verified else "No recommendation"
+        print(f"{prefix}: no catalog entry passed all checks.")
         return 1
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
         print(f"Patch advisor: {error}", file=sys.stderr)
