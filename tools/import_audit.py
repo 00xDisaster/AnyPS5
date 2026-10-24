@@ -550,7 +550,10 @@ def variant_calls(body):
 def unconditional_calls(body):
     names = set()
     for offset, statement in top_level_statements(body):
-        if not (CONDITIONAL.match(statement.strip()) or BRANCHING.search(statement)):
+        block = statement.strip()
+        if block.startswith("{") and block.endswith("}"):
+            names |= unconditional_calls(block)
+        elif not (CONDITIONAL.match(block) or BRANCHING.search(statement)):
             for call in progress.CALL.finditer(statement):
                 before = statement[:call.start()]
                 if before.count("{") == before.count("}") and not progress.QUALIFIED.search(body, 0, offset + call.start()):

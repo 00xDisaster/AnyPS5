@@ -1414,17 +1414,21 @@ class ImportAuditTests(unittest.TestCase):
                      "int APS5_VABI sceGuardGoto(int value) { if (value == 0) goto done; Fail(); done: return 0; }\n"
                      "int APS5_VABI sceGuardHost(int value) {\n#ifdef HOST_A\n    if (value == 0) return 0;\n#endif\n    Fail();\n    return 1;\n}\n"
                      "int APS5_VABI sceSoftHelper(int value) { SoftFail(value); return 0; }\n"
-                     "int APS5_VABI sceHardHelper(int value) { HardFail(value); return 0; }\n")
+                     "int APS5_VABI sceHardHelper(int value) { HardFail(value); return 0; }\n"
+                     "int APS5_VABI scePlainBlock(int value) { { NotImplemented_nid_no_patch(__func__); } return 0; }\n"
+                     "int APS5_VABI sceNestedBlock(int value) { value += 1; { { Fail(); } } return value; }\n"
+                     "int APS5_VABI sceBlockThenGuard(int value) { { if (value == 0) return 0; NotImplemented_nid_no_patch(__func__); } return 1; }\n")
         write_source(source, "libShared", '#include "prx/libGuard/Export.cpp"\n')
         stubs, partial = import_audit.source_stub_classes(source)
         names = ("sceDirect", "sceReturned", "sceWrapped", "sceIf", "sceBlock", "sceElse", "sceGuarded",
                  "sceLoop", "sceSwitch", "sceTernary", "sceShort", "sceLambda", "sceMember", "sceHost", "sceHostHelper",
                  "sceOuter", "sceEveryHost", "sceEveryElif", "sceNested", "sceGuardReturn", "sceGuardThrow",
-                 "sceGuardBlock", "sceGuardGoto", "sceGuardHost", "sceSoftHelper", "sceHardHelper")
+                 "sceGuardBlock", "sceGuardGoto", "sceGuardHost", "sceSoftHelper", "sceHardHelper",
+                 "scePlainBlock", "sceNestedBlock", "sceBlockThenGuard")
         kinds = {name: "partial" if ("libGuard.prx", nid_names.compute_nid(name)) in partial else "stub" for name in names}
         self.assertEqual({name for name, kind in kinds.items() if kind == "stub"},
                          {"sceDirect", "sceReturned", "sceWrapped", "sceOuter", "sceEveryHost", "sceEveryElif",
-                          "sceGuardThrow", "sceHardHelper"})
+                          "sceGuardThrow", "sceHardHelper", "scePlainBlock", "sceNestedBlock"})
         self.assertEqual(set(stubs), {(library, nid_names.compute_nid(name)) for library in ("libGuard.prx", "libShared.prx") for name in names})
         self.assertEqual(partial, {(library, nid_names.compute_nid(name)) for library in ("libGuard.prx", "libShared.prx")
                                    for name, kind in kinds.items() if kind == "partial"})
@@ -2211,15 +2215,17 @@ class ImportAuditTests(unittest.TestCase):
         registry = self.work.root / "game.json"
         output = self.work.root / "audit.json"
         (self.work.libs / "libSceExample.prx").write_bytes(exporting(nid))
-        write_source(self.work.source, "libSceExample", STUB_SOURCE.format(name=name))
-        for weak in (False, True):
-            with self.subTest(weak=weak):
-                write_registry(registry, [(nid, "libSceExample.prx", weak)])
-                self.assertEqual(self.work.run(registry)[0], 0)
-                code, out, err = self.work.run(registry, "--strict-stubs", "--json", str(output))
-                self.assertEqual((code, err), (1, ""))
-                self.assertIn("stub", out)
-                self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["unique_by_class"]["stub"], 1)
+        block = "int APS5_VABI {name}(int value) {{ {{ NotImplemented_nid_no_patch(__func__); }} return 0; }}\n"
+        for form in (STUB_SOURCE, block):
+            write_source(self.work.source, "libSceExample", form.format(name=name))
+            for weak in (False, True):
+                with self.subTest(form=form, weak=weak):
+                    write_registry(registry, [(nid, "libSceExample.prx", weak)])
+                    self.assertEqual(self.work.run(registry)[0], 0)
+                    code, out, err = self.work.run(registry, "--strict-stubs", "--json", str(output))
+                    self.assertEqual((code, err), (1, ""))
+                    self.assertIn("stub", out)
+                    self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["unique_by_class"]["stub"], 1)
         write_source(self.work.source, "libSceExample", DONE_SOURCE.format(name=name)
                      + STUB_SOURCE.format(name="sceUnreferencedPending"))
         self.assertEqual(self.work.run(registry, "--strict-stubs")[0], 0)
