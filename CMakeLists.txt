@@ -260,6 +260,9 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_agent_files.py)
         add_test(NAME conventions_pr_template COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_pr_template.py)
+        add_test(NAME check_compile_preprocessor COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_compile_preprocessor.py)
+        set_tests_properties(check_compile_preprocessor PROPERTIES TIMEOUT 20)
         set(check_compile_test_source "${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_compile.py")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${check_compile_test_source}")
         file(STRINGS "${check_compile_test_source}" check_compile_cases REGEX "^class CheckCompile|^    def test_")
