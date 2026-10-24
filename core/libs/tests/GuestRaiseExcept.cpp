@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
 #include <barrier>
@@ -15,7 +16,6 @@
 #include <dlfcn.h>
 #endif
 
-extern "C" int* APS5_VABI __error_nid_postfix();
 using Raise = int (APS5_VABI*)(int);
 Raise raiseFlags;
 

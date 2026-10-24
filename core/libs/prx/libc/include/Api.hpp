@@ -321,6 +321,7 @@ int APS5_VABI fegetexceptflag_nid_postfix(std::uint16_t* flags, int exceptions);
 void APS5_VABI _Feraise_nid_postfix(int exceptions);
 int APS5_VABI fesetexceptflag_nid_postfix(const std::uint16_t* flags, int exceptions);
 int APS5_VABI feclearexcept_nid_postfix(int exceptions);
+int APS5_VABI feraiseexcept_nid_postfix(int exceptions);
 int APS5_VABI feenableexcept_nid_postfix(int exceptions);
 int APS5_VABI fedisableexcept_nid_postfix(int exceptions);
 int APS5_VABI __feenableexcept_nid_postfix(int exceptions);
