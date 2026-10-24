@@ -11,12 +11,13 @@ NO_DISPLAY = re.compile(r"skipped,.*no display", re.IGNORECASE)
 NO_VULKAN_DEVICE = re.compile(r"skipped,.*no usable Vulkan device", re.IGNORECASE)
 
 HIGH_REFRESH_LIMITATION = re.compile(r"current display does not provide 120 Hz", re.IGNORECASE)
+CTEST_SKIP_STATUS = re.compile(r"SKIP_RETURN_CODE=\d+|SKIP_REGULAR_EXPRESSION_MATCHED", re.IGNORECASE)
 
 WINDOWS_PREFIX = "agc"
 
 
 def device_limitations(output, patterns):
-    reasons = [line.strip() for line in output.splitlines() if line.strip().lower().startswith("skipped,")]
+    reasons = [match.group(0) for line in output.splitlines() if (match := re.search(r"skipped,.*", line, re.IGNORECASE))]
     return bool(reasons) and all(any(pattern.search(reason) for pattern in patterns) for reason in reasons)
 
 
@@ -24,8 +25,8 @@ def high_refresh_limitation(output):
     reasons = []
     for line in output.splitlines():
         reason = line.strip()
-        if reason.lower().startswith("skipped,"):
-            reason = reason[len("skipped,"):].strip()
+        if match := re.search(r"skipped,", reason, re.IGNORECASE):
+            reason = reason[match.end():].strip()
         if reason:
             reasons.append(reason)
     return bool(reasons) and all(HIGH_REFRESH_LIMITATION.fullmatch(reason) for reason in reasons)
@@ -44,7 +45,8 @@ def skips(path):
         name = case.get("name")
         if not name:
             raise ValueError(f"{path}: skipped testcase has no name")
-        output = ["skipped, " + reason.strip() for reason in (skipped.get("message", ""), skipped.text or "") if reason.strip()]
+        output = ["skipped, " + reason.strip() for reason in (skipped.get("message", ""), skipped.text or "")
+                  if reason.strip() and not CTEST_SKIP_STATUS.fullmatch(reason.strip())]
         output += [case.findtext(channel) or "" for channel in ("system-out", "system-err")]
         yield name, "\n".join(output)
 
@@ -64,7 +66,8 @@ def main(argv=None):
         parser.error(str(error))
     if args.list:
         for name, output in found:
-            reason = next((line.strip() for line in output.splitlines() if line.strip().lower().startswith("skipped")), "")
+            reason = next((match.group(0) for line in output.splitlines()
+                           if (match := re.search(r"skipped,.*", line, re.IGNORECASE))), "")
             print(f"{name}: {reason}")
         return 0
     if args.job == "windows":
