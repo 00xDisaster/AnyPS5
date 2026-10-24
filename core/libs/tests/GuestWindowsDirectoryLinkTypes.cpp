@@ -114,7 +114,7 @@ static void OutsideApp0() {
         Require(lstat_nid_postfix(path.string().c_str(), &status) == 0);
         Require((status.st_mode & 0170000) == 0120000);
     }
-    for (const auto& name : links) Require(std::filesystem::remove(root / name));
+    for (const auto& name : links) Require(RemoveDirectoryW((root / name).c_str()) != 0 || DeleteFileW((root / name).c_str()) != 0);
     Require(std::filesystem::remove_all(root) == 3);
 }
 
@@ -166,11 +166,11 @@ int main() {
     junction("data/saved", "external");
     junction("app0-sibling/saved", "external");
     { std::ofstream file(root / "external/regular"); file << "data"; }
-    const bool symbolic = CreateSymbolicLinkW((root / "app0/file-link").c_str(), L"../external/regular",
+    const bool symbolic = CreateSymbolicLinkW((root / "app0/file-link").c_str(), L"..\\external\\regular",
         SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
     if (symbolic) {
         links.push_back("app0/file-link");
-        Require(CreateSymbolicLinkW((root / "app0/relative").c_str(), L"../external",
+        Require(CreateSymbolicLinkW((root / "app0/relative").c_str(), L"..\\external",
             SYMBOLIC_LINK_FLAG_DIRECTORY | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0);
         links.push_back("app0/relative");
     } else {
@@ -188,7 +188,7 @@ int main() {
     Require(Types((root / "app0-sibling").string().c_str()).at("saved") == 10);
     FileStat status{};
     Require(lstat_nid_postfix("/app0/packed", &status) == 0 && (status.st_mode & 0170000) == 0120000);
-    for (auto it = links.rbegin(); it != links.rend(); ++it) Require(std::filesystem::remove(root / *it));
+    for (auto it = links.rbegin(); it != links.rend(); ++it) Require(RemoveDirectoryW((root / *it).c_str()) != 0 || DeleteFileW((root / *it).c_str()) != 0);
     std::filesystem::rename(root / "app0", root / "application");
     Junction(root / "app0", root / "application");
     Junction(root / "application/packed", root / "external");
