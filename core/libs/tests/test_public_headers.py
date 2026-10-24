@@ -1,9 +1,11 @@
 import argparse
 import concurrent.futures
 import importlib.util
+import json
 import re
 import subprocess
 import sys
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -17,6 +19,7 @@ INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
 TYPE_TOKEN = re.compile(r"\bnamespace\s*([\w:]*)\s*\{|\bextern\s*\{|\b(?:struct|union|class)\s+(\w+)\s*([;{])|\busing\s+(\w+)\s*=|[{}]")
 
 
+@cache
 def code(text):
     return NIDS.CPP_TOKEN.sub(lambda match: match.group() if match.group("code") else re.sub(r"[^\n]", " ", match.group()), text)
 
@@ -42,15 +45,28 @@ def declared_types(text):
     return result
 
 
+@cache
+def source_text(path):
+    return path.read_text(encoding="utf-8")
+
+
+@cache
+def included_headers(header):
+    result = []
+    for name in INCLUDE.findall(source_text(header)):
+        candidates = {path.resolve() for path in (header.parent / name, LIBS / name) if path.is_file()}
+        if len(candidates) != 1:
+            raise RuntimeError(f"{header}: include {name} resolves to {len(candidates)} files")
+        result.append(candidates.pop())
+    return result
+
+
 def reachable(header, visited):
     if header in visited:
         return
     visited.add(header)
-    for name in INCLUDE.findall(header.read_text(encoding="utf-8")):
-        candidates = {path.resolve() for path in (header.parent / name, LIBS / name) if path.is_file()}
-        if len(candidates) != 1:
-            raise RuntimeError(f"{header}: include {name} resolves to {len(candidates)} files")
-        reachable(candidates.pop(), visited)
+    for included in included_headers(header):
+        reachable(included, visited)
 
 
 def exported_definitions(text):
@@ -67,7 +83,7 @@ def exported_definitions(text):
     result = set()
     position = 0
     parentheses = 0
-    for match in NIDS.source_definitions(text):
+    for match in NIDS.DEFINITION.finditer(masked):
         prefix = masked[position:match.start()]
         parentheses += prefix.count("(") - prefix.count(")")
         position = match.start()
@@ -96,10 +112,11 @@ def audit():
         for source in NIDS.source_files(umbrella.parent):
             if "tools" in source.relative_to(umbrella.parent).parts:
                 continue
-            text = source.read_text(encoding="utf-8")
-            aliases = {name for nid, name in NIDS.source_aliases(text)}
+            text = source_text(source).replace("\\\n", "").replace("\\\r\n", "")
+            aliases = {name for nid, name in NIDS.source_aliases(text)} if "APS5_EXPORT" in text else set()
             definitions = exported_definitions(text)
-            definitions.update(NIDS.source_assembly_definitions(text))
+            if any(macro in text for macro in NIDS.ASM_FUNCTION_MACROS):
+                definitions.update(NIDS.source_assembly_definitions(text))
             for name in definitions | aliases:
                 if name.endswith(("_nid_no_patch", "_nid_no_patch_cut")):
                     continue
@@ -108,13 +125,15 @@ def audit():
     for source in sorted((ROOT / "core").rglob("*")):
         if source.suffix not in {".cpp", ".h", ".hpp"}:
             continue
-        text = code(source.read_text(encoding="utf-8"))
+        text = code(source_text(source))
+        resolved = source.resolve()
         for match in DECLARATION.finditer(text):
+            if match.group(1) not in declarations:
+                continue
             prefix = match.group()[:match.start(1) - match.start()]
             if re.search(r"\b(?:return|co_return|throw|else|case)\b|&&|\|\|", prefix):
                 continue
-            if match.group(1) in declarations:
-                declarations[match.group(1)].append((source.resolve(), text.count("\n", 0, match.start()) + 1))
+            declarations[match.group(1)].append((resolved, text.count("\n", 0, match.start()) + 1))
     errors = []
     headers = set(umbrellas)
     for name, definitions in exports.items():
@@ -132,10 +151,10 @@ def audit():
         raise RuntimeError("\n".join(errors))
     public_types = set()
     for header in headers:
-        text = code(header.read_text(encoding="utf-8"))
+        text = code(source_text(header))
         public_types.update(declared_types(text))
     for source in sorted((ROOT / "core").rglob("*.cpp")):
-        text = code(source.read_text(encoding="utf-8"))
+        text = code(source_text(source))
         types = declared_types(text)
         for name in sorted(public_types & types):
             errors.append(f"{source.relative_to(ROOT)}: duplicate public type {name}; include its header")
@@ -144,7 +163,7 @@ def audit():
     return umbrellas, sorted(headers), len(exports)
 
 
-def compile_headers(compiler, compiler_args, umbrellas, headers):
+def compile_headers(compiler, compiler_args, groups, workers=4):
     macros = subprocess.run([compiler, *compiler_args, "-dM", "-E", "-x", "c++", "-"], input="", text=True, capture_output=True, check=True).stdout
     warnings = ["-Werror"]
     if re.search(r"^#define __clang__\b", macros, re.M):
@@ -156,18 +175,43 @@ def compile_headers(compiler, compiler_args, umbrellas, headers):
         if result.returncode:
             raise RuntimeError(f"Header compilation failed: {group}\n{result.stdout}{result.stderr}")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        list(pool.map(compile_one, [[header] for header in headers] + [umbrellas]))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(compile_one, groups))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--compiler", required=True)
+    parser.add_argument("--compiler")
     parser.add_argument("--compiler-arg", action="append", default=[])
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument("--batch-index", type=int)
+    parser.add_argument("--batch-count", type=int, default=64)
     args = parser.parse_args()
+    if args.batch_count < 1:
+        parser.error("--batch-count must be positive")
+    if args.audit_only and args.batch_index is not None:
+        parser.error("--audit-only cannot be combined with --batch-index")
+    if not args.audit_only and not args.compiler:
+        parser.error("--compiler is required for header compilation")
+    if args.batch_index is not None:
+        if not args.manifest or not 0 <= args.batch_index < args.batch_count:
+            parser.error("a batch requires --manifest and an index within --batch-count")
+        groups = [[LIBS / name for name in group] for group in json.loads(args.manifest.read_text(encoding="utf-8"))]
+        selected = groups[args.batch_index::args.batch_count]
+        if not selected:
+            raise RuntimeError("Header compilation batch is empty")
+        compile_headers(args.compiler, args.compiler_arg, selected, workers=1)
+        print(f"Batch {args.batch_index}: {len(selected)} header compilation units verified")
+        return
     umbrellas, headers, count = audit()
-    compile_headers(args.compiler, args.compiler_arg, umbrellas, headers)
-    print(f"{len(umbrellas)} libraries, {count} exports: unique declarations, umbrella coverage and standalone headers verified")
+    groups = [[header] for header in headers] + [umbrellas]
+    if args.manifest:
+        args.manifest.write_text(json.dumps([[header.relative_to(LIBS).as_posix() for header in group] for group in groups]), encoding="utf-8")
+    print(f"{len(umbrellas)} libraries, {count} exports: unique declarations and umbrella coverage verified", flush=True)
+    if not args.audit_only:
+        compile_headers(args.compiler, args.compiler_arg, groups)
+        print("Standalone headers verified")
 
 
 if __name__ == "__main__":
