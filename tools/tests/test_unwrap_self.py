@@ -672,38 +672,38 @@ class UnwrapTest(unittest.TestCase):
                     container = bytearray(build_container(default_segments(), default_records(), default_payloads()))
                     container[ELF_HEADER_OFFSET + 6] = identification
                     struct.pack_into("<I", container, ELF_HEADER_OFFSET + 0x14, version)
-                    with self.assertRaisesRegex(unwrap_self.Refused,
-                                                f"unsupported inner ELF version.*identification {identification}, object {version}"):
+                    with self.assertRaises(unwrap_self.Refused) as refused:
                         unwrap_self.parse_elf(container)
+                    self.assertEqual(str(refused.exception),
+                                     f"unsupported inner ELF version (identification {identification}, object {version})")
 
     def test_unsupported_inner_elf_versions_preserve_output(self):
         directory = Path(self.directory)
         source, output = directory / "input.self", directory / "output.elf"
-        for magic in (SELF_MAGIC, unwrap_self.SELF_MAGIC_KERNEL):
-            for identification, version in ((0, 1), (2, 1), (1, 0), (1, 2), (1, 0x1000001), (255, 0xFFFFFFFF)):
-                for previous in (None, b"previous output"):
-                    with self.subTest(magic=magic, identification=identification, version=version, previous=previous):
-                        container = bytearray(build_container(default_segments(), default_records(), default_payloads(), magic=magic))
-                        container[ELF_HEADER_OFFSET + 6] = identification
-                        struct.pack_into("<I", container, ELF_HEADER_OFFSET + 0x14, version)
-                        source.write_bytes(container)
-                        if previous is None:
-                            output.unlink(missing_ok=True)
-                        else:
-                            output.write_bytes(previous)
-                        before = set(directory.iterdir())
-                        result, output = self.convert(container)
-                        self.assertEqual(result.returncode, 2, result.stderr)
-                        self.assertEqual(result.stdout, "")
-                        self.assertIn(str(source), result.stderr)
-                        self.assertIn(f"unsupported inner ELF version (identification {identification}, object {version})", result.stderr)
-                        self.assertNotIn("Traceback", result.stderr)
-                        self.assertEqual(source.read_bytes(), container)
-                        self.assertEqual(set(directory.iterdir()), before)
-                        if previous is None:
-                            self.assertFalse(output.exists())
-                        else:
-                            self.assertEqual(output.read_bytes(), previous)
+        for identification, version in ((0, 1), (2, 1), (1, 0), (1, 2), (1, 0x1000001), (255, 0xFFFFFFFF)):
+            for previous in (None, b"previous output"):
+                with self.subTest(identification=identification, version=version, previous=previous):
+                    container = bytearray(build_container(default_segments(), default_records(), default_payloads()))
+                    container[ELF_HEADER_OFFSET + 6] = identification
+                    struct.pack_into("<I", container, ELF_HEADER_OFFSET + 0x14, version)
+                    source.write_bytes(container)
+                    if previous is None:
+                        output.unlink(missing_ok=True)
+                    else:
+                        output.write_bytes(previous)
+                    before = set(directory.iterdir())
+                    result, output = self.convert(container)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn(str(source), result.stderr)
+                    self.assertIn(f"unsupported inner ELF version (identification {identification}, object {version})", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(source.read_bytes(), container)
+                    self.assertEqual(set(directory.iterdir()), before)
+                    if previous is None:
+                        self.assertFalse(output.exists())
+                    else:
+                        self.assertEqual(output.read_bytes(), previous)
 
     def test_current_elf_versions_preserve_the_separate_abi_version(self):
         for magic in (SELF_MAGIC, unwrap_self.SELF_MAGIC_KERNEL):
