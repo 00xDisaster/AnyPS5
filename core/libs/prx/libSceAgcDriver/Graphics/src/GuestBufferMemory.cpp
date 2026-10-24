@@ -4051,7 +4051,7 @@ void GuestBufferMemory::AcquireRegistered() {
                 region.hostBacked = true;
                 region.direct = entry;
                 regions.push_back(std::move(region));
-                imported.push_back(range->address);
+                imported.emplace_back(range->address, range->address + range->bytes);
                 continue;
             }
             copiedBytes += committed;
