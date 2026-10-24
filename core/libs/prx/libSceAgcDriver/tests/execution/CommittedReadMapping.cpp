@@ -48,10 +48,21 @@ void Run() {
         MEMORY_BASIC_INFORMATION memory{};
         Require(VirtualQuery(source + 2 * page, &memory, sizeof(memory)) == sizeof(memory), "cannot query snapshot hole");
         Require(memory.Protect == protection, "snapshot read changed the hole's protection");
+        Require(!AgcDriver::GuestMemory::Accessible(source, bytes), "failed snapshot retained stale readable page states");
         Require(VirtualProtect(source + 2 * page, page, PAGE_READWRITE, &previous), "cannot restore snapshot hole");
         prime();
         AgcDriver::GuestMemory::ReadCommittedUnsynced(address, snapshot);
         check(false);
+        prime();
+        Require(VirtualProtect(source + 2 * page, page, protection, &previous), "cannot protect comparison hole");
+        std::fill(snapshot.begin() + 2 * page, snapshot.begin() + 3 * page, std::byte{0x77});
+        Require(AgcDriver::GuestMemory::EqualsCommitted(address, snapshot), "committed comparison did not skip an inaccessible page");
+        snapshot[page - 1] = std::byte{};
+        Require(!AgcDriver::GuestMemory::EqualsCommittedUnsynced(address, snapshot), "committed comparison missed a readable byte difference");
+        Require(!AgcDriver::GuestMemory::Accessible(source, bytes), "failed comparison retained stale readable page states");
+        Require(VirtualQuery(source + 2 * page, &memory, sizeof(memory)) == sizeof(memory), "cannot query comparison hole");
+        Require(memory.Protect == protection, "committed comparison changed the hole's protection");
+        Require(VirtualProtect(source + 2 * page, page, PAGE_READWRITE, &previous), "cannot restore comparison hole");
     }
     prime();
     std::atomic<bool> done{false};
