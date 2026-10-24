@@ -61,4 +61,9 @@ int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void* stroker, std::uint32_t* poi
     return error;
 }
 
+int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void* stroker, const GuestVector* to, std::uint8_t open) {
+    NativeVector vector(to, __func__);
+    return FT_Stroker_BeginSubPath(static_cast<FT_Stroker>(stroker), vector.pointer, open);
+}
+
 }
