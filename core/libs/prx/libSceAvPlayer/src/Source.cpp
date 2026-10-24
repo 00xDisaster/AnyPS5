@@ -356,6 +356,7 @@ public:
             lastPresented = 0;
             audioHasTimestamp = false;
             lastAudioTimestamp = 0.0;
+            reconciledAudioClock = false;
             presentationClock.Reset(static_cast<double>(start));
             for (auto* decoder : {&video, &audio}) {
                 decoder->switchTo = -1;
@@ -545,9 +546,19 @@ private:
         return audioHasTimestamp && demuxEnded && !reposition && audio.ended && audio.packets.empty() && audio.frames.empty();
     }
 
+    bool audioClockReconciled() const {
+        return reconciledAudioClock && reconciledAudioEpoch == clockEpoch;
+    }
+
+    void markAudioClockReconciled() {
+        reconciledAudioClock = true;
+        reconciledAudioEpoch = clockEpoch;
+    }
+
     void reconcileExhaustedAudioClock() {
-        if (!audioDriving || !audioExhausted()) return;
+        if (!audioDriving || !audioExhausted() || audioClockReconciled()) return;
         presentationClock.Rebase(lastAudioTimestamp);
+        markAudioClockReconciled();
     }
 
     void waitBeforeAudioEof() {
@@ -602,10 +613,12 @@ private:
         lastAudioTimestamp = timestamp;
         audioHasTimestamp = true;
         const bool drifted = currentClock > timestamp + 50.0 || timestamp > currentClock + 50.0;
-        const bool shouldRebase = !audioDriving || epoch > clockEpoch || drifted || audioExhausted();
+        const bool exhausted = audioExhausted() && !audioClockReconciled();
+        const bool shouldRebase = !audioDriving || epoch > clockEpoch || drifted || exhausted;
         audioDriving = true;
         clockEpoch = std::max(clockEpoch, epoch);
         if (shouldRebase) presentationClock.Rebase(timestamp);
+        if (exhausted) markAudioClockReconciled();
         return true;
     }
 
@@ -853,6 +866,7 @@ private:
                     pushAll(PacketKind::Flush, demuxEpoch, requested->target);
                     demuxEnded = false;
                     audioDriving = false;
+                    reconciledAudioClock = false;
                 }
                 condition.notify_all();
                 if (requested->announce) events.OnWarning(SCE_AVPLAYER_ERROR_WAR_JUMP_COMPLETE);
@@ -1160,6 +1174,8 @@ private:
     bool audioDriving = false;
     bool audioHasTimestamp = false;
     double lastAudioTimestamp = 0.0;
+    bool reconciledAudioClock = false;
+    std::uint64_t reconciledAudioEpoch = 0;
     bool holdAudioEof = false;
     bool audioEofHeld = false;
     bool presented = false;
