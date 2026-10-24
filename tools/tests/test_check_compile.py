@@ -373,6 +373,40 @@ class CheckCompileTests(CheckCompileFixture):
                 self.assertEqual(json.loads(seen.read_text(encoding="utf-8")),
                                  [*flags, "-fsyntax-only", str(source)])
 
+    def test_parallel_checks_overlap_but_diagnostics_keep_source_order(self):
+        barrier = self.root / "barrier"
+        barrier.mkdir()
+        compiler = self.compiler(
+            "import sys, time\nfrom pathlib import Path\n"
+            "root, name = Path(sys.argv[1]), sys.argv[2]\n"
+            "(root / name).touch()\n"
+            "deadline = time.monotonic() + 5\n"
+            "while not all((root / value).exists() for value in ('first', 'second')):\n"
+            "    if time.monotonic() > deadline: sys.exit('checks did not overlap')\n"
+            "    time.sleep(0.01)\n"
+            "if name == 'second': (root / 'second.done').touch()\n"
+            "while name == 'first' and not (root / 'second.done').exists():\n"
+            "    if time.monotonic() > deadline: sys.exit('second did not finish')\n"
+            "    time.sleep(0.01)\n"
+            "sys.exit(name + ': diagnostic')\n")
+        entries = []
+        for name in ("first", "second"):
+            source = self.source(name + ".c")
+            entries.append(self.entry(name + ".c", f'"{sys.executable}" "{compiler}" "{barrier}" {name} "{source}"'))
+        self.manifest(entries)
+        result = self.tool("--jobs", "2", "first.c", "second.c")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("2 of 2 translation units did not compile", result.stderr)
+        self.assertLess(result.stderr.index("first: diagnostic"), result.stderr.index("second: diagnostic"))
+        self.assertNotIn("did not overlap", result.stderr)
+        for jobs in ("0", "-1"):
+            with self.subTest(jobs=jobs):
+                result = self.tool("--jobs", jobs, "first.c")
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("positive integer", result.stderr)
+
+
+class CheckCompileDatabaseTests(CheckCompileFixture):
     def test_invalid_argument_arrays_are_rejected_without_a_traceback(self):
         source = self.source("unit.cpp")
         for arguments in (None, [], "compiler -c unit.cpp", ["compiler", 3], [""]):
@@ -433,38 +467,6 @@ class CheckCompileTests(CheckCompileFixture):
                 with self.assertRaisesRegex(ValueError, "ninja -t compdb: " + message):
                     check_compile.check(self.root, self.build, [source])
                 compiler.assert_not_called()
-
-    def test_parallel_checks_overlap_but_diagnostics_keep_source_order(self):
-        barrier = self.root / "barrier"
-        barrier.mkdir()
-        compiler = self.compiler(
-            "import sys, time\nfrom pathlib import Path\n"
-            "root, name = Path(sys.argv[1]), sys.argv[2]\n"
-            "(root / name).touch()\n"
-            "deadline = time.monotonic() + 5\n"
-            "while not all((root / value).exists() for value in ('first', 'second')):\n"
-            "    if time.monotonic() > deadline: sys.exit('checks did not overlap')\n"
-            "    time.sleep(0.01)\n"
-            "if name == 'second': (root / 'second.done').touch()\n"
-            "while name == 'first' and not (root / 'second.done').exists():\n"
-            "    if time.monotonic() > deadline: sys.exit('second did not finish')\n"
-            "    time.sleep(0.01)\n"
-            "sys.exit(name + ': diagnostic')\n")
-        entries = []
-        for name in ("first", "second"):
-            source = self.source(name + ".c")
-            entries.append(self.entry(name + ".c", f'"{sys.executable}" "{compiler}" "{barrier}" {name} "{source}"'))
-        self.manifest(entries)
-        result = self.tool("--jobs", "2", "first.c", "second.c")
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("2 of 2 translation units did not compile", result.stderr)
-        self.assertLess(result.stderr.index("first: diagnostic"), result.stderr.index("second: diagnostic"))
-        self.assertNotIn("did not overlap", result.stderr)
-        for jobs in ("0", "-1"):
-            with self.subTest(jobs=jobs):
-                result = self.tool("--jobs", jobs, "first.c")
-                self.assertEqual(result.returncode, 2)
-                self.assertIn("positive integer", result.stderr)
 
 
 class CheckCompileOutputTests(CheckCompileFixture):
