@@ -84,4 +84,14 @@ void APS5_VABI FT_Stroker_Rewind_nid_postfix(void* stroker) {
     FT_Stroker_Rewind(static_cast<FT_Stroker>(stroker));
 }
 
+int APS5_VABI FT_Stroker_GetBorderCounts_nid_postfix(void* stroker, std::int32_t border, std::uint32_t* points, std::uint32_t* contours) {
+    FT_UInt nativePoints = 0;
+    FT_UInt nativeContours = 0;
+    const FT_Error error = FT_Stroker_GetBorderCounts(static_cast<FT_Stroker>(stroker), static_cast<FT_StrokerBorder>(border),
+                                                      points ? &nativePoints : nullptr, contours ? &nativeContours : nullptr);
+    WriteCount(points, nativePoints);
+    WriteCount(contours, nativeContours);
+    return error;
+}
+
 }
