@@ -101,6 +101,7 @@ int main() {
     std::array<std::byte, 116> record{};
     auto* nativeFont = reinterpret_cast<Font::FontHandleNative*>(profiled);
     nativeFont->open_info.fontset_record = record.data();
+    Require(sceFontGetFontGlyphsOutlineProfile(profiled, nullptr) == SCE_FONT_ERROR_INVALID_PARAMETER);
     bool recordThrew = false;
     try {
         sceFontGetFontGlyphsOutlineProfile(profiled, &profile);
