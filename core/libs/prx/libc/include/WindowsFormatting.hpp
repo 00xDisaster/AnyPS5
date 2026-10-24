@@ -279,8 +279,11 @@ inline int FormatWindows(char* buffer, size_t size, const char* format, const vo
         }
         if (const size_t position = ArgumentPosition(format)) args.Seek(position);
         std::string spec = "%";
-        for (; *format && std::strchr("-+ #0'", *format); ++format)
+        bool unsupportedUnknownFlag = false;
+        for (; *format && std::strchr("-+ #0'", *format); ++format) {
             if (*format != '\'') spec += *format;
+            if (*format != '-') unsupportedUnknownFlag = true;
+        }
         if (*format == '*') {
             ++format;
             const int width = star();
@@ -311,19 +314,14 @@ inline int FormatWindows(char* buffer, size_t size, const char* format, const vo
             }
         }
         std::string length;
-        if (*format && std::strchr("hljztLq", *format)) {
+        if (*format && std::strchr("hljztL", *format)) {
             length += *format++;
             if ((length == "h" && *format == 'h') || (length == "l" && *format == 'l'))
                 length += *format++;
         }
-        if (length == "q") length = "ll";
         char conversion = *format;
-        if (!conversion) break;
+        if (!conversion) throw std::invalid_argument("Incomplete format conversion");
         ++format;
-        if (conversion == 'D' || conversion == 'O' || conversion == 'U') {
-            if (length != "j" && length != "z" && length != "t" && length != "ll") length = "l";
-            conversion = static_cast<char>(conversion + 'a' - 'A');
-        }
         const bool integerLength = length.empty() || length == "h" || length == "hh" ||
             length == "l" || length == "ll" || length == "j" || length == "z" || length == "t";
         if (conversion == 'd' || conversion == 'i') {
@@ -409,8 +407,11 @@ inline int FormatWindows(char* buffer, size_t size, const char* format, const vo
             else if (length == "h") *static_cast<short*>(pointer) = static_cast<short>(count);
             else if (length.empty()) *static_cast<int*>(pointer) = count;
             else *static_cast<long long*>(pointer) = count;
-        } else if (!std::strchr(" #*-+'.0123456789$LhjlqtzCcDdiaAeEfFgGmnOopSsUuXx", conversion)) {
-            output.Value(spec + 'c', static_cast<int>(static_cast<unsigned char>(conversion)));
+        } else if (!std::strchr("diouxXaAeEfFgGcsSpnmCS", conversion)) {
+            if (secure || unsupportedUnknownFlag || spec.find_first_not_of("%-0123456789") != std::string::npos)
+                throw std::invalid_argument("Unsupported format conversion '" + spec + length + conversion + "' in \"" + std::string(formatStart).substr(0, 160) + "\"");
+            const std::string text = conversion == '%' ? "%" : std::string("%") + conversion;
+            output.Value(spec + 's', text.c_str());
         } else {
             throw std::invalid_argument("Unsupported format conversion '" + spec + length + conversion + "' in \"" + std::string(formatStart).substr(0, 160) + "\"");
         }
