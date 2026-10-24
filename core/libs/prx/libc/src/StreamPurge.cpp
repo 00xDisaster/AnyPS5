@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cerrno>
@@ -5,11 +6,6 @@
 #if defined(__linux__)
 #include <stdio_ext.h>
 #endif
-
-extern "C" {
-void APS5_VABI flockfile_nid_postfix(FileStream*);
-void APS5_VABI funlockfile_nid_postfix(FileStream*);
-}
 
 namespace {
 

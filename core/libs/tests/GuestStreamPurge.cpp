@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
@@ -12,13 +13,6 @@
 #else
 #include <unistd.h>
 #endif
-
-extern "C" {
-int APS5_VABI fpurge_nid_postfix(FileStream*);
-int APS5_VABI fgetc_nid_postfix(FileStream*);
-int APS5_VABI ungetc_nid_postfix(int, FileStream*);
-std::size_t APS5_VABI fwrite_nid_postfix(const void*, std::size_t, std::size_t, FileStream*);
-}
 
 namespace {
 
