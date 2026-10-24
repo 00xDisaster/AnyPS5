@@ -38,6 +38,19 @@ static Request* findRequest(int requestId) {
     return nullptr;
 }
 
+static int followingRequestId(int requestId) {
+    return requestId == LAST_REQUEST_ID ? FIRST_REQUEST_ID : requestId + 1;
+}
+
+static int takeRequestId() {
+    int requestId = nextRequestId;
+    while (findRequest(requestId) != nullptr) {
+        requestId = followingRequestId(requestId);
+    }
+    nextRequestId = followingRequestId(requestId);
+    return requestId;
+}
+
 static int checkRequestId(int requestId, Request** request) {
     if (requestId <= 0) {
         return SCE_GAME_UPDATE_ERROR_REQUEST_NOT_FOUND;
@@ -108,8 +121,7 @@ int APS5_VABI sceGameUpdateCreateRequest(void) {
         if (request.id != 0) {
             continue;
         }
-        const int requestId = nextRequestId;
-        nextRequestId = requestId == LAST_REQUEST_ID ? FIRST_REQUEST_ID : requestId + 1;
+        const int requestId = takeRequestId();
         request = {requestId, false};
         return requestId;
     }
