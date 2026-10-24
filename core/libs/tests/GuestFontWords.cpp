@@ -1,23 +1,10 @@
-#include "prx/libSceFont/include/FontTypes.hpp"
+#include "prx/libSceFont/libSceFont.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
-
-struct FontWords;
-
-extern "C" {
-int APS5_VABI sceFontMemoryInit(FontMemory*, void*, std::uint32_t, const FontMemoryInterface*, void*, FontMemoryDestroyFunction, void*);
-int APS5_VABI sceFontTextSourceInit(FontTextSource*, const void*, std::uint32_t, FontTextParseFunction, void*);
-int APS5_VABI sceFontTextSourceRewind(FontTextSource*);
-int APS5_VABI sceFontTextSourceSetDefaultFont(FontTextSource*, FontHandle);
-int APS5_VABI sceFontTextSourceSetWritingForm(FontTextSource*, std::int32_t);
-int APS5_VABI sceFontCreateWords(const FontMemory*, FontTextSource*, std::uint64_t, FontWords**);
-int APS5_VABI sceFontDestroyWords(FontWords**);
-int APS5_VABI sceFontWordsFindWordCharacters(FontWords*, FontTextCharacter*, FontTextCharacter*, FontTextCharacter**, FontTextCharacter**);
-}
 
 static void Check(bool value, int line) {
     if (!value) {

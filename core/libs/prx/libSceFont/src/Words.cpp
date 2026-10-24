@@ -5,10 +5,9 @@
 #include <new>
 #include <vector>
 
+#include "prx/libSceFont/include/Api.hpp"
 #include "prx/libSceFont/include/FontDriver.hpp"
 #include "prx/libSceFont/include/FontWords.hpp"
-
-extern "C" int APS5_VABI sceFontTextSourceRewind(FontTextSource* textSource);
 
 namespace {
 
