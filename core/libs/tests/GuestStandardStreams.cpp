@@ -584,7 +584,7 @@ static void CheckClosedStreamReopen() {
     const std::string overlong(300, 'n');
     Require(freopen_nid_postfix(overlong.c_str(), "w", &stream) == nullptr && *__error_nid_postfix() == 63);
     Require(fputs_nid_postfix("text", &stream) == -1 && *__error_nid_postfix() == 9);
-    Require(freopen_nid_postfix(nullptr, "w", &stream) == nullptr && *__error_nid_postfix() == 22);
+    Require(freopen_nid_postfix(nullptr, "w", &stream) == nullptr && *__error_nid_postfix() == 9);
     Require(freopen_nid_postfix(filename.c_str(), "w", &stream) == &stream);
     Require(fputs_nid_postfix("reopened\n", &stream) >= 0 && fflush_nid_postfix(&stream) == 0);
     Require(fileno_nid_postfix(&stream) >= 0);

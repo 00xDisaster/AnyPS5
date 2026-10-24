@@ -375,7 +375,8 @@ static FileStream* OpenDirectoryStream(const std::filesystem::path& path) {
 #endif
 
 FileStream* APS5_VABI freopen_nid_postfix(const char* filename, const char* mode, FileStream* stream) {
-    if (!stream || !mode || (!filename && !stream->IsOpen())) { errno = 22; return nullptr; }
+    if (!stream || !mode) { errno = 22; return nullptr; }
+    if (!filename && !stream->IsOpen()) { errno = 9; return nullptr; }
     if (!filename) { errno = 45; return nullptr; } // Mode-only reopening is not supported.
     const auto parsed = ParseFileMode(mode);
     if (!parsed) { errno = 22; return nullptr; }
