@@ -806,10 +806,12 @@ def main():
                                             + b'\xff\x15' + struct.pack('<i', 0x4a28 - 0x400c) + b'\xc3')
                     executable_path, log = convert_stdio_case(f'gui-dll-{runtime}-preloaded-runtime-stub-after-crt',
                                                               image=image, lazy_binding=True)
+                    log.write_text('stale previous run', encoding='utf-8')
                     run_status = exit_code_with_preloaded_runtime(executable_path, preloaded_runtime)
                     assert run_status == 0xc0000139, (runtime, hex(run_status))
                     assert log.is_file(), (runtime, log)
                     content = log.read_text(errors='replace')
+                    assert 'stale previous run' not in content, (runtime, content)
                     assert 'Transferring control to ELF entry point' in content, (runtime, content)
                     assert 'Windows DLL stdout probe' in content, (runtime, content)
                     assert 'Windows DLL stderr probe' in content, (runtime, content)
