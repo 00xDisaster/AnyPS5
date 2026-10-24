@@ -918,7 +918,7 @@ if(BUILD_TESTING)
     file(MAKE_DIRECTORY ${relinkerTestTemp})
     get_property(relinkerTests DIRECTORY PROPERTY TESTS)
     set_property(TEST ${relinkerTests} APPEND PROPERTY ENVIRONMENT_MODIFICATION
-        "TMPDIR=set:${relinkerTestTemp};TEMP=set:${relinkerTestTemp};TMP=set:${relinkerTestTemp}")
+        "TMPDIR=set:${relinkerTestTemp};TEMP=set:${relinkerTestTemp};TMP=set:${relinkerTestTemp};PYTHONUTF8=set:1")
 endif()
 
 if(BUILD_TESTING AND Python3_Interpreter_FOUND)
