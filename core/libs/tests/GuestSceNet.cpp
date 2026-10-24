@@ -1,3 +1,5 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libSceNetCtl/include/NetCtl.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #ifdef _WIN32
@@ -39,21 +41,8 @@ extern const std::uint32_t sce_net_in6addr_any[4];
 extern const std::uint8_t sce_net_in6addr_linklocal_allnodes[16];
 
 std::uint64_t NetCtlReadByteCounter_nid_no_patch(const char*);
-int APS5_VABI select_nid_postfix(int, void*, void*, void*, const void*);
-int APS5_VABI open_nid_postfix(const char*, int, int);
-int APS5_VABI socket_nid_postfix(int, int, int);
-int APS5_VABI bind_nid_postfix(int, const void*, std::uint32_t);
-int APS5_VABI close_nid_postfix(int);
+
 bool GuestSocketIsOpen_nid_no_patch(int);
-int APS5_VABI setsockopt_nid_postfix(int, int, int, const void*, std::uint32_t);
-int APS5_VABI fcntl_nid_postfix(int, int, ...);
-struct GuestPollEntry {
-    int descriptor;
-    short events;
-    short revents;
-};
-int APS5_VABI poll_nid_postfix(GuestPollEntry*, std::uint32_t, int);
-int* APS5_VABI __error_nid_postfix();
 
 }
 
@@ -771,7 +760,7 @@ static void CheckIoctl() {
     Require(sceNetIoctl(socket, 0x4004667f, &readable) == 0 && readable == 0);
     const char payload[5] = {'i', 'o', 'c', 't', 'l'};
     Require(sceNetSendto(socket, payload, sizeof(payload), 0, address.data(), address.size()) == sizeof(payload));
-    GuestPollEntry entry{socket, 1, 0};
+    GuestPollDescriptor entry{socket, 1, 0};
     Require(poll_nid_postfix(&entry, 1, 1000) == 1 && entry.revents == 1);
     Require(sceNetIoctl(socket, 0x4004667f, &readable) == 0 && readable == sizeof(payload));
     Require(sceNetRecv(socket, buffer, sizeof(buffer), 0) == sizeof(payload));
@@ -1991,12 +1980,12 @@ int main() {
     Require(select_nid_postfix(std::max(kernel_socket, udp_sender) + 1, nullptr, mixed_writable, nullptr, wait_second) == 2);
     Require(((mixed_writable[kernel_socket / 64] >> (kernel_socket % 64)) & 1u) != 0);
     Require(((mixed_writable[udp_sender / 64] >> (udp_sender % 64)) & 1u) != 0);
-    GuestPollEntry net_read{udp_receiver, 1, 0};
+    GuestPollDescriptor net_read{udp_receiver, 1, 0};
     Require(poll_nid_postfix(&net_read, 1, 0) == 0 && net_read.revents == 0);
     Require(sceNetSendto(udp_sender, datagram, sizeof(datagram), 0, address.data(), address.size()) == sizeof(datagram));
     Require(poll_nid_postfix(&net_read, 1, 1000) == 1 && net_read.revents == 1);
     Require(sceNetRecvfrom(udp_receiver, datagram_result, sizeof(datagram_result), 0, nullptr, nullptr) == sizeof(datagram_result));
-    GuestPollEntry mixed_poll[2]{{kernel_socket, 4, 0}, {udp_sender, 4, 0}};
+    GuestPollDescriptor mixed_poll[2]{{kernel_socket, 4, 0}, {udp_sender, 4, 0}};
     Require(poll_nid_postfix(mixed_poll, 2, 1000) == 2 && mixed_poll[0].revents == 4 && mixed_poll[1].revents == 4);
     Require(close_nid_postfix(kernel_socket) == 0);
     std::uint64_t stdio_readable[16]{1};

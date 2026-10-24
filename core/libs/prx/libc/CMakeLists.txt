@@ -1187,6 +1187,7 @@ if(MINGW)
         set_tests_properties(windows_exceptions PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
         add_test_executable(windows_backtrace_report_tests ${LIBS_INCLUDE_DIR}/tests/WindowsBacktraceReport.cpp)
         target_link_libraries(windows_backtrace_report_tests PRIVATE libc)
+        target_include_directories(windows_backtrace_report_tests PRIVATE ${LIBS_INCLUDE_DIR})
         add_test(NAME windows_backtrace_report COMMAND windows_backtrace_report_tests)
         set_tests_properties(windows_backtrace_report PROPERTIES TIMEOUT 20
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>"

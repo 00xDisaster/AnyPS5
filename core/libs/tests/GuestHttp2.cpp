@@ -1,19 +1,9 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libSceHttp2/include/Http2.hpp"
 #include "SceTypes.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
-
-extern "C" {
-
-int APS5_VABI sceKernelCreateEqueue(KernelEqueue* eq, const char* name);
-int APS5_VABI sceKernelDeleteEqueue(KernelEqueue eq);
-int APS5_VABI sceKernelWaitEqueue(KernelEqueue eq, KernelEvent* ev, int num, int* out, const KernelUseconds* timo);
-int APS5_VABI sceKernelAddUserEventEdge(KernelEqueue eq, int id);
-int APS5_VABI sceKernelDeleteUserEvent(KernelEqueue eq, int id);
-uintptr_t APS5_VABI sceKernelGetEventId(const KernelEvent* ev);
-void* APS5_VABI sceKernelGetEventUserData(const KernelEvent* ev);
-}
 
 static void Require(bool value) { if (!value) std::abort(); }
 

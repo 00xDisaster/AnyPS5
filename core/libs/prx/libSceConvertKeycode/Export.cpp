@@ -1,3 +1,4 @@
+#include "prx/libSceConvertKeycode/include/Api.hpp"
 #include "prx/libSceUserService/UserService.hpp"
 #include <array>
 #include <cstddef>

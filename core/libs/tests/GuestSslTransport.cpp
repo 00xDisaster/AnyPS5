@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libSceSsl/include/Ssl.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #ifdef _WIN32
@@ -29,15 +30,6 @@
 #include <exception>
 #include <string>
 #include <thread>
-
-extern "C" {
-
-int APS5_VABI socket_nid_postfix(int, int, int);
-int APS5_VABI connect_nid_postfix(int, const void*, std::uint32_t);
-int APS5_VABI setsockopt_nid_postfix(int, int, int, const void*, std::uint32_t);
-int APS5_VABI close_nid_postfix(int);
-
-}
 
 namespace {
 
@@ -291,6 +283,7 @@ struct Sockets {
     int Set(int descriptor, int option, const void* value, std::uint32_t length) const {
         return net ? sceNetSetsockopt(descriptor, GuestSocketLevel, option, value, length)
                    : setsockopt_nid_postfix(descriptor, GuestSocketLevel, option, value, length);
+
     }
 
     int Close(int descriptor) const { return net ? sceNetSocketClose(descriptor) : close_nid_postfix(descriptor); }

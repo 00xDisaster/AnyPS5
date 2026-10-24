@@ -1,3 +1,5 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -349,7 +351,6 @@ int* errno_slot() {
     return &e;
 }
 
-extern "C" int* APS5_VABI __error_nid_postfix();
 extern "C" std::size_t NetCtlHostDnsServers_nid_no_patch(std::uint32_t* servers, std::size_t capacity);
 
 void set_errno(int err) {
@@ -898,8 +899,6 @@ int APS5_VABI sceNetSocket(const char* name, int family, int type, int protocol)
     return fd;
 }
 
-extern "C" int APS5_VABI close_nid_postfix(int d);
-
 int APS5_VABI sceNetSocketClose(int s) {
     std::shared_ptr<NativeSocketHandle> native;
     bool found = false;
@@ -1353,8 +1352,6 @@ int APS5_VABI sceNetShutdown(int s, int how) {
     }
     return error == 0 ? 0 : fail(error);
 }
-
-extern "C" int APS5_VABI setsockopt_nid_postfix(int descriptor, int level, int option, const void* value, std::uint32_t length);
 
 int APS5_VABI sceNetSetsockopt(int s, int level, int optname, const void* optval, uint32_t optlen) {
     Sock socket;
@@ -2478,8 +2475,6 @@ int APS5_VABI sceNetInetPtonEx(int af, const char* src, void* dst, int) {
     std::memcpy(dst, bytes.data(), bytes.size());
     return 1;
 }
-
-extern "C" int APS5_VABI ioctl_nid_postfix(int descriptor, std::uint64_t request, void* argument);
 
 int APS5_VABI sceNetIoctl(int socketId, std::uint32_t command, void* argument) {
     constexpr std::uint32_t nonblockingRequest = 0x8004667e;

@@ -1,3 +1,4 @@
+#include "prx/libkernel/Time/include/Time.hpp"
 #include "prx/libSceAudioOut/include/AudioOut.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
@@ -9,11 +10,6 @@
 #include <cstdlib>
 #include <thread>
 #include <vector>
-
-extern "C" {
-
-std::uint64_t APS5_VABI sceKernelGetProcessTime();
-}
 
 static void Require(bool value, const char* message) {
     if (value) return;
@@ -227,6 +223,7 @@ int main() {
     setenv("SDL_AUDIODRIVER", "dummy", 1);
 #endif
     sceKernelGetProcessTime();
+
     TestOutput(portTypeMain);
     TestOutput(portTypeVibration);
     TestPortsAreIndependent();

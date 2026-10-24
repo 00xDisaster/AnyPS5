@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #include "SceTypes.hpp"
 #include <algorithm>
@@ -12,11 +13,6 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-
-extern "C" {
-
-int APS5_VABI fcntl_nid_postfix(int, int, ...);
-}
 
 namespace {
 

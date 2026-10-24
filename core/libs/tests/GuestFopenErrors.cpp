@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 
 #include <chrono>
@@ -7,14 +8,6 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
-
-extern "C" {
-void* APS5_VABI fopen_nid_postfix(const char* filename, const char* mode);
-int APS5_VABI fclose_nid_postfix(void* stream);
-void* APS5_VABI freopen_nid_postfix(const char* filename, const char* mode, void* stream);
-int APS5_VABI fopen_s_nid_postfix(void** result, const char* filename, const char* mode);
-int* APS5_VABI __error_nid_postfix();
-}
 
 namespace {
 

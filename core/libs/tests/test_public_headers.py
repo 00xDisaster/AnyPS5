@@ -53,8 +53,29 @@ def reachable(header, visited):
         reachable(candidates.pop(), visited)
 
 
+def exported_definitions(text):
+    masked = code(text)
+    ranges = []
+    for match in re.finditer(r"\bnamespace\s*(?:[\w:]+\s*)?\{", masked):
+        depth = 1
+        end = match.end()
+        while depth and end < len(masked):
+            depth += (masked[end] == "{") - (masked[end] == "}")
+            end += 1
+        ranges.append((match.start(), end))
+    result = set()
+    for match in NIDS.source_definitions(text):
+        if any(start < match.start() < end for start, end in ranges):
+            continue
+        line_start = masked.rfind("\n", 0, match.start()) + 1
+        if re.search(r"\b(?:static|GCC_HIDDEN_FN)\b", masked[line_start:match.start()]):
+            continue
+        result.add(match.group(1))
+    return result
+
+
 def audit():
-    umbrellas = sorted((LIBS / "prx").glob("libSce*/libSce*.hpp"))
+    umbrellas = sorted(path for path in (LIBS / "prx").glob("*/*.hpp") if path.stem == path.parent.name)
     if not umbrellas:
         raise RuntimeError("No library umbrella headers found")
     exports = {}
@@ -62,9 +83,11 @@ def audit():
         included = set()
         reachable(umbrella.resolve(), included)
         for source in NIDS.source_files(umbrella.parent):
+            if "tools" in source.relative_to(umbrella.parent).parts:
+                continue
             text = source.read_text(encoding="utf-8")
             aliases = {name for nid, name in NIDS.source_aliases(text)}
-            definitions = {match.group(1) for match in NIDS.source_definitions(text)}
+            definitions = exported_definitions(text)
             definitions.update(NIDS.source_assembly_definitions(text))
             for name in definitions | aliases:
                 if "_nid_no_patch" in name and name not in aliases:
@@ -113,7 +136,7 @@ def audit():
 def compile_headers(compiler, umbrellas, headers):
     def compile_one(group):
         includes = "".join(f'#include "{header.relative_to(LIBS).as_posix()}"\n' for header in group)
-        result = subprocess.run([compiler, "-std=c++20", "-Werror", "-fsyntax-only", "-x", "c++", f"-I{LIBS}", "-"], input=includes * 2, text=True, capture_output=True)
+        result = subprocess.run([compiler, "-std=c++20", "-Werror", "-fsyntax-only", "-x", "c++", f"-I{LIBS}", f"-I{ROOT / '3rdparty/freetype/include'}", "-"], input=includes * 2, text=True, capture_output=True)
         if result.returncode:
             raise RuntimeError(f"Header compilation failed: {group}\n{result.stdout}{result.stderr}")
 

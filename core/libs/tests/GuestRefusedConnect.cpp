@@ -1,3 +1,5 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
@@ -5,18 +7,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <thread>
-
-extern "C" {
-int APS5_VABI socket_nid_postfix(int, int, int);
-int APS5_VABI bind_nid_postfix(int, const void*, std::uint32_t);
-int APS5_VABI connect_nid_postfix(int, const void*, std::uint32_t);
-int APS5_VABI listen_nid_postfix(int, int);
-int APS5_VABI accept_nid_postfix(int, void*, std::uint32_t*);
-int APS5_VABI getsockname_nid_postfix(int, void*, std::uint32_t*);
-int APS5_VABI close_nid_postfix(int);
-int* APS5_VABI __error_nid_postfix();
-
-}
 
 namespace {
 

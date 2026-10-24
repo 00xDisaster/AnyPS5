@@ -1,3 +1,4 @@
+#include "prx/libSceCdlgG2P/include/Api.hpp"
 #include "prx/libSceUserService/UserService.hpp"
 #include "SceTypes.hpp"
 #include <atomic>

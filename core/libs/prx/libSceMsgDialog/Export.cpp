@@ -1,3 +1,4 @@
+#include "prx/libSceMsgDialog/include/Api.hpp"
 // libSceMsgDialog: message dialog state machine (NONE -> INITIALIZED -> RUNNING -> FINISHED) without a visible dialog.
 // The dialog "closes" with the affirmative button after a couple of status polls, so a title waiting for the user
 // never blocks. The message text is logged for the first calls.
@@ -138,7 +139,7 @@ int APS5_VABI sceMsgDialogUpdateStatus(void) {
  return Poll();
 }
 // SceMsgDialogResult: { int32 mode; int32 result; int32 buttonId; uint8 reserved[32] }.
-int APS5_VABI sceMsgDialogGetResult(void* result) {
+int APS5_VABI sceMsgDialogGetResult(MsgDialogResult* result) {
  if (result == nullptr) return kErrArgNull;
  std::lock_guard g(g_lock);
  if (g_status != kStatusFinished) return kErrNotFinished;

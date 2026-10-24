@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libSceSystemService/include/SystemService.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
@@ -6,11 +7,6 @@
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
-
-extern "C" {
-
-int APS5_VABI dup2_nid_postfix(int, int);
-}
 
 namespace {
 

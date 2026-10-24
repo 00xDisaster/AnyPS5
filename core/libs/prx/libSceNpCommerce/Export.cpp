@@ -1,3 +1,4 @@
+#include "prx/libSceNpCommerce/include/Api.hpp"
 #include "prx/libSceUserService/UserService.hpp"
 #include <cstdint>
 #include <cstddef>

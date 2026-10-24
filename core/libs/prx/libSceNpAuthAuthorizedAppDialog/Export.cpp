@@ -1,3 +1,4 @@
+#include "prx/libSceNpAuthAuthorizedAppDialog/include/Api.hpp"
 #include "prx/libSceUserService/UserService.hpp"
 #include <atomic>
 #include <cstdint>

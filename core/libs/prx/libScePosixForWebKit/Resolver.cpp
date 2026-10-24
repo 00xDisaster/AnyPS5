@@ -1,3 +1,4 @@
+#include "prx/libScePosixForWebKit/include/Api.hpp"
 #include "prx/libSceNet/include/Net.hpp"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN

@@ -1,3 +1,4 @@
+#include "prx/libSceInvitationDialog/include/Api.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 

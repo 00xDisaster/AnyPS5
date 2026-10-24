@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libSceVideoOut/include/Output.hpp"
 #include "prx/libSceVideoOut/include/Event.hpp"
 #include "prx/libSceSystemService/include/SystemService.hpp"
@@ -16,14 +17,6 @@
 #include <cstring>
 #include <stdexcept>
 #include <thread>
-
-extern "C" {
-
-int APS5_VABI sceKernelCreateEqueue(KernelEqueue* eq, const char* name);
-int APS5_VABI sceKernelDeleteEqueue(KernelEqueue eq);
-int APS5_VABI sceKernelWaitEqueue(KernelEqueue eq, KernelEvent* ev, int num, int* out, const KernelUseconds* timo);
-
-}
 
 namespace {
 
