@@ -1,3 +1,12 @@
+#include "prx/libSceAgcDriver/Submit/include/Acb.hpp"
+#include "prx/libSceAgcDriver/Eq/include/Event.hpp"
+#include "prx/libSceAgc/Cb/include/Sync.hpp"
+#include "prx/libSceAgc/Cb/include/Registers.hpp"
+#include "prx/libSceAgc/Cb/include/Dispatch.hpp"
+#include "prx/libSceAgc/Acb/include/Sync.hpp"
+#include "prx/libSceAgc/Acb/include/Memory.hpp"
+#include "prx/libSceAgc/Acb/include/Dispatch.hpp"
+#include "prx/libSceAgc/Acb/include/Control.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -34,20 +43,7 @@ int APS5_VABI sceKernelAddUserEventEdge(KernelEqueue eq, int id);
 int APS5_VABI sceKernelTriggerUserEvent(KernelEqueue eq, int id, void* udata);
 int APS5_VABI sceKernelGetEventFilter(const KernelEvent* ev);
 std::uintptr_t APS5_VABI sceKernelGetEventId(const KernelEvent* ev);
-int APS5_VABI sceAgcDriverAddEqEvent(KernelEqueue eq, int id, void* udata);
-int APS5_VABI sceAgcDriverDeleteEqEvent(KernelEqueue eq, int id);
-int APS5_VABI sceAgcDriverSubmitAcb(std::uint32_t queue, const Packet* packet);
-std::uint32_t* APS5_VABI sceAgcAcbAcquireMem(CommandBuffer* buf, std::uint32_t gcrControl, const volatile void* base, std::uint64_t sizeBytes, std::uint32_t pollCycles);
-std::uint32_t* APS5_VABI sceAgcCbSetShRegistersDirect(CommandBuffer* buf, const volatile ShaderRegister* regs, std::uint32_t numRegs);
-std::uint32_t* APS5_VABI sceAgcCbSetShRegisterRangeDirect(CommandBuffer* buf, std::uint32_t offset, const std::uint32_t* values, std::uint32_t numValues);
-std::uint32_t* APS5_VABI sceAgcAcbPushMarker(CommandBuffer* buf, const char* str, std::uint32_t color);
-std::uint32_t* APS5_VABI sceAgcAcbPopMarker(CommandBuffer* buf);
-std::uint32_t* APS5_VABI sceAgcCbDispatch(CommandBuffer* buf, std::uint32_t threadGroupX, std::uint32_t threadGroupY, std::uint32_t threadGroupZ, std::uint32_t modifier);
-std::uint32_t* APS5_VABI sceAgcAcbDispatchIndirect(CommandBuffer* buf, const volatile void* indirectArguments, std::uint32_t modifier);
-std::uint32_t* APS5_VABI sceAgcCbReleaseMem(CommandBuffer* buf, std::uint8_t action, std::uint16_t gcrControl, std::uint8_t dst, std::uint8_t cachePolicy, const volatile Label* address, std::uint8_t dataSelect, std::uint64_t data, std::uint16_t gdsOffset, std::uint16_t gdsSize, std::uint8_t interrupt, std::uint32_t interruptContextId);
-std::uint32_t* APS5_VABI sceAgcAcbWaitRegMem(CommandBuffer* buf, std::uint8_t size, std::uint8_t compareFunction, std::uint8_t cachePolicy, const volatile void* address, std::uint64_t reference, std::uint64_t mask, std::uint32_t pollCycles);
-std::uint32_t* APS5_VABI sceAgcAcbRewind(CommandBuffer* buf, std::uint32_t initialState);
-std::uint32_t* APS5_VABI sceAgcAcbWriteData(CommandBuffer* buf, std::uint8_t dst, std::uint8_t cachePolicy, std::uint64_t address, const void* data, std::uint32_t numDwords, std::uint8_t increment, std::uint8_t writeConfirm);
+
 }
 
 namespace {

@@ -1,3 +1,4 @@
+#include "prx/libSceNet/include/Net.hpp"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -18,7 +19,7 @@
 
 extern "C" {
 GuestResolver::HostEntry* APS5_VABI gethostbyname_nid_postfix(const char*);
-int* APS5_VABI sceNetErrnoLoc();
+
 int APS5_VABI getaddrinfo_nid_postfix(const char*, const char*, const GuestResolver::AddressInfo*, GuestResolver::AddressInfo**);
 void APS5_VABI freeaddrinfo_nid_postfix(GuestResolver::AddressInfo*);
 int APS5_VABI getnameinfo_nid_postfix(const void*, std::uint32_t, char*, std::uint32_t, char*, std::uint32_t, int);

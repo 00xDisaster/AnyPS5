@@ -1,3 +1,4 @@
+#include "prx/libSceHttp/include/Http.hpp"
 #include "SceTypes.hpp"
 #include "ProcessParametersFixture.hpp"
 #include <array>
@@ -12,43 +13,6 @@
 #include <exception>
 #include <string>
 #include <thread>
-
-extern "C" {
-int APS5_VABI sceHttpUriParse(SceHttpUriElement*, const char*, void*, std::size_t*, std::size_t);
-int APS5_VABI sceHttpUriCopy(SceHttpUriElement*, const SceHttpUriElement*, void*, std::size_t, std::size_t*);
-int APS5_VABI sceHttpUriMerge(char*, const char*, const char*, std::size_t*, std::size_t, std::uint32_t);
-int APS5_VABI sceHttpSetInflateGZIPEnabled(int, int);
-int APS5_VABI sceHttpSetRequestStatusCallback(int, void (APS5_VABI *)(int, int, void*), void*);
-int APS5_VABI sceHttpSendRequest(int, const void*, std::size_t);
-int APS5_VABI sceHttpUriBuild(char*, std::size_t*, std::size_t, const SceHttpUriElement*, std::uint32_t);
-int APS5_VABI sceHttpUriEscape(char*, std::size_t*, std::size_t, const char*);
-int APS5_VABI sceHttpUriUnescape(char*, std::size_t*, std::size_t, const char*);
-int APS5_VABI sceHttpUriSweepPath(char*, const char*, std::size_t);
-int APS5_VABI sceHttpCreateEpoll(int, HttpEpollHandle*);
-int APS5_VABI sceHttpDestroyEpoll(int, HttpEpollHandle);
-int APS5_VABI sceHttpWaitRequest(HttpEpollHandle, HttpNBEvent*, int, int);
-int APS5_VABI sceHttpAbortWaitRequest(HttpEpollHandle);
-int APS5_VABI sceHttpInit_nid_postfix(int, int, std::uint64_t);
-int APS5_VABI sceHttpTerm_nid_postfix(int);
-int APS5_VABI sceHttpAuthCacheFlush(int);
-int APS5_VABI sceHttpCookieFlush(int);
-int APS5_VABI sceHttpGetMemoryPoolStats(int, void*);
-int APS5_VABI sceHttpReadData(int, void*, std::size_t);
-int APS5_VABI sceHttpCreateRequest2(int, const char*, const char*, std::uint64_t);
-int APS5_VABI sceHttpsEnableOption(int, std::uint32_t);
-int APS5_VABI sceHttpsLoadCert(int, int, void*, void*, void*);
-int APS5_VABI sceHttpGetLastErrno(int, int*);
-int APS5_VABI sceHttpSetResponseHeaderMaxSize(int, std::uint64_t);
-int APS5_VABI sceHttpSetRecvBlockSize(int, std::uint32_t);
-int APS5_VABI sceHttpRedirectCacheFlush(int);
-int APS5_VABI sceHttpsUnloadCert(int);
-int APS5_VABI sceHttpsSetSslVersion(int, int);
-int APS5_VABI sceHttpsGetSslError(int, int*, std::uint32_t*);
-int APS5_VABI sceHttpSetRedirectCallback(int, HttpRedirectCallback, void*);
-int APS5_VABI sceHttpSetCookieRecvCallback(int, HttpCookieRecvCallback, void*);
-int APS5_VABI sceHttpSetAuthInfoCallback(int, HttpAuthInfoCallback, void*);
-int APS5_VABI sceHttpParseStatusLine(const char*, std::size_t, std::int32_t*, std::int32_t*, std::int32_t*, const char**, std::size_t*);
-}
 
 alignas(16) static std::array<std::byte, 0x40> processParameters{};
 

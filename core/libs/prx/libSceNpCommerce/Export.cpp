@@ -1,3 +1,4 @@
+#include "prx/libSceUserService/UserService.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -6,8 +7,6 @@
 #include "SceTypes.hpp"
 #include "prx/libSceCommonDialog/CommonDialog.hpp"
 #include "prx/libc/include/General.hpp"
-
-extern "C" int APS5_VABI sceUserServiceGetLoginUserIdList(UserServiceLoginUserIdList* users);
 
 namespace {
 

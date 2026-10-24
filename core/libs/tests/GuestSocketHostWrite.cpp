@@ -1,3 +1,4 @@
+#include "prx/libSceNet/include/Net.hpp"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "prx/libc/include/GuestArena.hpp"
@@ -12,20 +13,6 @@
 #include <cstring>
 #include <thread>
 
-struct NetIovec {
-    void* base;
-    std::uint64_t length;
-};
-
-struct NetMsghdr {
-    void* name;
-    std::uint32_t nameLength;
-    NetIovec* iov;
-    int iovLength;
-    void* control;
-    std::uint32_t controlLength;
-    int flags;
-};
 static_assert(sizeof(NetMsghdr) == 48 && offsetof(NetMsghdr, iov) == 16 && offsetof(NetMsghdr, flags) == 44);
 
 extern "C" {
@@ -43,19 +30,7 @@ std::int64_t APS5_VABI read_nid_postfix(int, void*, std::uint64_t);
 std::int64_t APS5_VABI sceKernelRead(int, void*, std::size_t);
 int APS5_VABI close_nid_postfix(int);
 int* APS5_VABI __error_nid_postfix();
-int APS5_VABI sceNetSocket(const char*, int, int, int);
-int APS5_VABI sceNetBind_nid_postfix(int, const void*, std::uint32_t);
-int APS5_VABI sceNetGetsockname(int, void*, std::uint32_t*);
-int APS5_VABI sceNetListen(int, int);
-int APS5_VABI sceNetConnect(int, const void*, std::uint32_t);
-int APS5_VABI sceNetAccept(int, void*, std::uint32_t*);
-int APS5_VABI sceNetSetsockopt(int, int, int, const void*, std::uint32_t);
-std::int64_t APS5_VABI sceNetSendto(int, const void*, std::size_t, int, const void*, std::uint32_t);
-std::int64_t APS5_VABI sceNetRecv(int, void*, std::size_t, int);
-std::int64_t APS5_VABI sceNetRecvfrom(int, void*, std::size_t, int, void*, std::uint32_t*);
-std::int64_t APS5_VABI sceNetRecvmsg(int, NetMsghdr*, int);
-int APS5_VABI sceNetSocketClose(int);
-int* APS5_VABI sceNetErrnoLoc();
+
 int APS5_VABI sceKernelAllocateDirectMemory(std::int64_t, std::int64_t, std::size_t, std::size_t, int, std::int64_t*);
 int APS5_VABI sceKernelMapDirectMemory(void**, std::size_t, int, int, std::int64_t, std::size_t);
 int APS5_VABI sceKernelMprotect(void*, std::size_t, int);
@@ -355,7 +330,7 @@ int main(int argc, char** argv) {
         waitForPacket();
         Require(sceNetRecvmsg(receiver, message, 0) == static_cast<int>(0x8041010eu) && *error == 14,
             "read-only message outputs fail with EFAULT");
-        Require(message->flags == -1 && message->controlLength == 123, "rejected message outputs unchanged");
+        Require(message->flags == -1 && message->control_length == 123, "rejected message outputs unchanged");
         Require(receive(recovery.data(), recovery.size(), 0, nullptr, nullptr) == sizeof(payload),
             "a rejected message preserves queued data");
         Require(sceKernelMprotect(twin, page, 3) == 0, "restore receive message write permission");

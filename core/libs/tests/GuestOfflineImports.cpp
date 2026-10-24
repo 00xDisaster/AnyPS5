@@ -1,3 +1,4 @@
+#include "prx/libSceHttp/include/Http.hpp"
 #include "SceTypes.hpp"
 
 #include <array>
@@ -12,7 +13,7 @@ int APS5_VABI sceVideoRecordingGetInfo(std::int32_t info, void* data, std::size_
 int APS5_VABI sceVideoRecordingSetInfo(std::int32_t info, const void* data, std::size_t size);
 int APS5_VABI sceNpEntitlementAccessAbortRequest(std::int64_t);
 int APS5_VABI sceNpEntitlementAccessDeleteRequest(std::int64_t);
-int APS5_VABI sceHttpSendRequest(int, const void*, std::size_t);
+
 int APS5_VABI sceNpEntitlementAccessGetEntitlementKey(
     std::uint32_t, const NpUnifiedEntitlementLabel*, NpEntitlementAccessEntitlementKey*);
 int APS5_VABI sceNpEntitlementAccessGetGameTrialsFlag(std::uint32_t*);

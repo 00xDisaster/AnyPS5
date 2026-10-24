@@ -1,3 +1,5 @@
+#include "prx/libSceUserService/UserService.hpp"
+#include "prx/libSceRtc/include/Rtc.hpp"
 #include <algorithm>
 #include <atomic>
 #include <iterator>
@@ -43,13 +45,10 @@ int APS5_VABI sceKernelClearEventFlag(KernelEventFlag ef, uint64_t bit_pattern);
 int APS5_VABI sceKernelPollEventFlag(KernelEventFlag ef, uint64_t bit_pattern, uint32_t wait_mode, uint64_t* result_pat);
 int APS5_VABI sceKernelCancelEventFlag(KernelEventFlag ef, uint64_t set_pattern, int* num_wait_threads);
 int APS5_VABI getpid_nid_postfix(void);
-int APS5_VABI sceRtcParseRFC3339(RtcTick* utc, const char* date_time);
-int APS5_VABI sceRtcFormatRFC3339(char* date_time, const RtcTick* utc, int time_zone_minutes);
-int APS5_VABI sceRtcSetTick(RtcDateTime* time, const RtcTick* tick);
-int APS5_VABI sceRtcGetTime_t(const RtcDateTime* time, int64_t* seconds);
+
 int APS5_VABI sceKernelGetSystemSwVersion_nid_postfix(void* version);
 int APS5_VABI sceKernelClockGettime(KernelClockid clock_id, KernelTimespec* tp);
-int APS5_VABI sceUserServiceGetRegisteredUserIdList(UserServiceRegisteredUserIdList* user_id_list);
+
 int32_t APS5_VABI sceKernelMapNamedFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags, const char* name);
 int APS5_VABI sceKernelMunmap(uint64_t vaddr, size_t len);
 void* APS5_VABI sceLibcMspaceCreate_nid_postfix(const char* name, void* base, std::size_t size, unsigned flags);
@@ -211,7 +210,6 @@ int BcdPair(std::uint32_t value, int shift) {
     return static_cast<int>((value >> (shift + 4)) & 0xF) * 10 + static_cast<int>((value >> shift) & 0xF);
 }
 
-
 constexpr int NP_ERROR_OUT_OF_MEMORY = static_cast<int>(0x80550005);
 constexpr int NP_ERROR_NULL_OBJECT = static_cast<int>(0x80558005);
 constexpr int NP_ERROR_HEAP_CREATE = static_cast<int>(0x8055800A);
@@ -372,19 +370,6 @@ int APS5_VABI sceNpAtomicDec32(std::int32_t* value) {
     return std::atomic_ref<std::int32_t>(*value).fetch_sub(1);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 int APS5_VABI sceNpCondSignalAll(PthreadCond* cond) {
     return scePthreadCondBroadcast(cond);
 }
@@ -396,7 +381,6 @@ int APS5_VABI sceNpCondSignalTo(PthreadCond* cond, Pthread thread) {
 int APS5_VABI sceNpCondWait(PthreadCond* cond, PthreadMutex* mutex) {
     return scePthreadCondWait(cond, mutex);
 }
-
 
 int APS5_VABI sceNpLwCondInit(PthreadCond* cond, const char* name) {
     return InitCond(cond, name);
@@ -490,7 +474,6 @@ int APS5_VABI sceNpCreateThread(Pthread* thread, PthreadEntry entry, void* arg, 
     scePthreadAttrDestroy(&attr);
     return result;
 }
-
 
 int APS5_VABI sceNpThreadGetId(Pthread* thread) {
     if (thread == nullptr) return NP_ERROR_INVALID_ARGUMENT;
@@ -628,12 +611,10 @@ int APS5_VABI sceNpFreeKernelMemory(NpKernelMemory* memory) {
     return 0;
 }
 
-
 void APS5_VABI sceNpGetSdkVersionUInt(std::uint32_t* version) {
     const std::uint32_t value = SystemVersion();
     if (version != nullptr) *version = value;
 }
-
 
 int APS5_VABI sceNpRtcConvertToPosixTime(const RtcTick* tick, std::int64_t* seconds) {
     if (tick->tick == 0) return NP_ERROR_INVALID_ARGUMENT;
@@ -778,7 +759,6 @@ std::uint32_t APS5_VABI sceNpGetRandom(void) {
     return static_cast<std::uint32_t>(g_random());
 }
 
-
 int APS5_VABI sceNpUtilCmpAccountId(std::uint64_t left, std::uint64_t right) {
     return left != right ? 1 : 0;
 }
@@ -798,7 +778,6 @@ int APS5_VABI sceNpCmpNpId(const void* npId1, const void* npId2) {
 bool APS5_VABI sceNpIntIsOnlineIdString(const char* text) {
     return text != nullptr && IsOnlineIdText(text);
 }
-
 
 int APS5_VABI sceNpUtilGetNpLanguageCode(int language, char* code) {
     const NpLanguageCodes* codes = FindLanguageCodes(language);

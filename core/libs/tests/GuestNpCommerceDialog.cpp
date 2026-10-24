@@ -10,8 +10,7 @@
 #include <cstring>
 
 extern "C" {
-int APS5_VABI sceUserServiceInitialize(const UserServiceInitParam* param);
-int APS5_VABI sceUserServiceTerminate();
+
 int APS5_VABI sceNpCommerceDialogInitialize();
 int APS5_VABI sceNpCommerceDialogInitializeInternal();
 int APS5_VABI sceNpCommerceDialogOpen(const NpCommerceDialogParam* param);

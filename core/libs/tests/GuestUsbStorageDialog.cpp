@@ -9,8 +9,7 @@
 #include "prx/libSceUserService/UserService.hpp"
 
 extern "C" {
-int APS5_VABI sceUserServiceInitialize(const UserServiceInitParam* param);
-int APS5_VABI sceUserServiceTerminate();
+
 int APS5_VABI sceUsbStorageDialogInitialize(void);
 int APS5_VABI sceUsbStorageDialogOpen(const UsbStorageDialogParam* param);
 int APS5_VABI sceUsbStorageDialogUpdateStatus(void);

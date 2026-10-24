@@ -1,3 +1,4 @@
+#include "prx/libSceSystemService/include/SystemService.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/Shutdown.hpp"
 #include "prx/libc/include/General.hpp"
@@ -17,7 +18,6 @@
 #include <unistd.h>
 #endif
 
-extern "C" int APS5_VABI sceSystemServiceLoadExec(const char*, const char* const*);
 extern "C" int APS5_VABI __cxa_atexit_nid_postfix(void (APS5_VABI*)(void*), void*, void*);
 extern "C" int APS5_VABI getargc_nid_postfix();
 extern "C" const char** APS5_VABI getargv_nid_postfix();

@@ -6,8 +6,7 @@
 #include "prx/libSceUserService/UserService.hpp"
 
 extern "C" {
-int APS5_VABI sceUserServiceInitialize(const UserServiceInitParam* param);
-int APS5_VABI sceUserServiceTerminate();
+
 int APS5_VABI scePlayerSelectionDialogInitialize(void);
 int APS5_VABI scePlayerSelectionDialogOpen(const PlayerSelectionDialogParam* param);
 int APS5_VABI scePlayerSelectionDialogUpdateStatus(void);

@@ -5,8 +5,7 @@
 #include <cstdlib>
 
 extern "C" {
-int APS5_VABI sceUserServiceInitialize(const UserServiceInitParam* param);
-int APS5_VABI sceUserServiceTerminate();
+
 int APS5_VABI sceG2PDialogInitialize(void);
 int APS5_VABI sceG2PDialogOpen(const void* param);
 int APS5_VABI sceG2PDialogUpdateStatus(void);
