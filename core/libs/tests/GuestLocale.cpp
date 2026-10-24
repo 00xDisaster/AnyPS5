@@ -1,6 +1,8 @@
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <climits>
@@ -48,6 +50,17 @@ std::size_t APS5_VABI _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIc
 
 static void Require(bool condition) {
     if (!condition) throw std::runtime_error("Guest locale check failed");
+}
+
+void* APS5_VABI TestHeapAllocate(std::size_t bytes) { return std::malloc(bytes); }
+void APS5_VABI TestHeapFree(void* pointer) { std::free(pointer); }
+void* APS5_VABI TestHeapCalloc(std::size_t count, std::size_t bytes) { return std::calloc(count, bytes); }
+void* APS5_VABI TestHeapReallocate(void* pointer, std::size_t bytes) { return std::realloc(pointer, bytes); }
+void* APS5_VABI TestHeapAlign(std::size_t, std::size_t bytes) { return std::malloc(bytes); }
+void* APS5_VABI TestHeapRealign(void* pointer, std::size_t bytes, std::size_t) { return std::realloc(pointer, bytes); }
+int APS5_VABI TestHeapPosixAlign(void** pointer, std::size_t, std::size_t bytes) {
+    *pointer = std::malloc(bytes);
+    return *pointer == nullptr ? 12 : 0;
 }
 
 template<typename TAction>
@@ -319,6 +332,15 @@ static void CheckFacetGetcat() {
 }
 
 int main() {
+    std::array<void*, 10> heapApi{};
+    heapApi[0] = reinterpret_cast<void*>(&TestHeapAllocate);
+    heapApi[1] = reinterpret_cast<void*>(&TestHeapFree);
+    heapApi[2] = reinterpret_cast<void*>(&TestHeapCalloc);
+    heapApi[3] = reinterpret_cast<void*>(&TestHeapReallocate);
+    heapApi[4] = reinterpret_cast<void*>(&TestHeapAlign);
+    heapApi[5] = reinterpret_cast<void*>(&TestHeapRealign);
+    heapApi[6] = reinterpret_cast<void*>(&TestHeapPosixAlign);
+    ApplicationHeapRegister_nid_no_patch(heapApi.data());
     CheckGuestCalls();
     CheckLocinfoAlignment();
     CheckCharacterTables();
