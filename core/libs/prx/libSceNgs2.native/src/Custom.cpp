@@ -97,7 +97,6 @@ int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN && option.module[m].option != nullptr) throw std::runtime_error("NGS2: an option for the custom Gain module is not implemented");
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN && rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) continue;
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT) {
-            if (rackId != SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER) throw std::runtime_error("NGS2: PitchShift on a custom sampler rack is not implemented");
             continue;
         }
         if (moduleId == SCE_NGS2_CUSTOM_MODULE_ID_GAIN) throw std::runtime_error("NGS2: the custom Gain module on a custom sampler rack is not implemented");

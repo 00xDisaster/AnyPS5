@@ -176,7 +176,7 @@ static void TestUserFxChain() {
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
 
     auto out = Render(system);
-    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.5f && out[i * 2 + 1] == 0.75f);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == (i < 3 ? 0.0f : 0.5f) && out[i * 2 + 1] == (i < 3 ? 0.25f : 0.75f));
     Require(calls.processFlags == (std::vector<std::uint32_t>{1}) && calls.order == (std::vector<int>{0, 1}));
 
     const float gain = 0.5f;
@@ -301,7 +301,7 @@ static void TestCustomSampler() {
     Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
 
     const auto out = Render(system);
-    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.5f && out[i * 2 + 1] == 0.75f);
+    for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == (i < 3 ? 0.0f : 0.5f) && out[i * 2 + 1] == (i < 3 ? 0.25f : 0.75f));
 
     Ngs2CustomSamplerVoiceState state{};
     Require(sceNgs2VoiceGetState(voice, &state.voice_state, sizeof(Ngs2SamplerVoiceState)) == SCE_NGS2_ERROR_INVALID_OUT_SIZE);
@@ -363,7 +363,7 @@ static void TestCustomFilter() {
     std::vector<float> out(Grain, -1.0f);
     const Ngs2RenderBufferInfo renderInfo{out.data(), out.size() * sizeof(float), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
     Require(sceNgs2SystemRender(system, &renderInfo, 1) == SCE_NGS2_OK);
-    Require(out[0] > 0.0f && out[0] < 0.2f && out.back() > out[0]);
+    Require(out[0] == 0.0f && out[1] == 0.0f && out[2] == 0.0f && out[3] > 0.0f && out[3] < 0.2f && out.back() > out[3]);
 
     Ngs2CustomVoiceFilterParam unsupported{};
     unsupported.type = 2;
@@ -702,7 +702,8 @@ static void TestCustomDelay(std::uint32_t count, const DelayOption& delay) {
     const auto checkGrain = [&](std::uint32_t grain) {
         const auto out = Render(system);
         for (std::uint32_t i = 0; i < Grain * 2; ++i) {
-            Require(out[i] == static_cast<float>(pcm[grain * Grain * 2 + i]) / 32768.0f);
+            const auto offset = grain * Grain * 2 + i;
+            Require(out[i] == (offset < 6 ? 0.0f : static_cast<float>(pcm[offset - 6]) / 32768.0f));
         }
     };
     for (std::uint32_t grain = 0; grain < 3; ++grain) checkGrain(grain);
@@ -723,7 +724,7 @@ static void TestCustomDelay(std::uint32_t count, const DelayOption& delay) {
     }
     checkGrain(3);
     Require(state.calls == 0);
-    Event(sampler, SCE_NGS2_VOICE_EVENT_STOP);
+    Event(sampler, SCE_NGS2_VOICE_EVENT_STOP_IMM);
     for (const float sample : Render(system)) Require(sample == 0.0f);
 
     option.custom_rack_option.module[0].state_size = 4;
@@ -883,7 +884,7 @@ static void TestCustomMastering() {
 
     auto out = Render(system);
     Require(out.size() == Grain * 2);
-    Require(out[0] != 0.0f);
+    Require(out[0] == 0.0f && out[6] != 0.0f);
 
     Require(sceNgs2VoiceGetState(voice, &state, sizeof(state)) == SCE_NGS2_OK);
     Require((state.state_flags & SCE_NGS2_VOICE_STATE_FLAG_PLAYING) != 0);

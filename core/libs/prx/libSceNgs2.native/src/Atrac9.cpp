@@ -202,7 +202,7 @@ static bool DecodeSuperframe(Ngs2Voice& voice) {
 
 static bool EnsureFrames(Ngs2Voice& voice, std::size_t count) {
     auto& atrac9 = voice.atrac9;
-    while (voice.state == Ngs2PlayState::Playing && BufferedFrames(voice) < count) {
+    while ((voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop) && BufferedFrames(voice) < count) {
         if (atrac9.finishOnDrain) {
             if (BufferedFrames(voice) != 0) return false;
             atrac9.finishOnDrain = false;
@@ -210,47 +210,26 @@ static bool EnsureFrames(Ngs2Voice& voice, std::size_t count) {
         }
         if (!DecodeSuperframe(voice)) return false;
     }
-    return voice.state == Ngs2PlayState::Playing;
+    return voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop;
 }
 
-static bool AdvanceAtrac9(Ngs2Voice& voice) {
-    while ((voice.phase >> 32) != 0 && voice.state == Ngs2PlayState::Playing) {
-        if (!EnsureFrames(voice, 1)) return false;
-        const auto count = std::min<std::uint64_t>(voice.phase >> 32, BufferedFrames(voice));
-        voice.atrac9.windowCursor += static_cast<std::uint32_t>(count);
-        voice.decodedSamples += count;
-        voice.phase -= count << 32;
-        if (BufferedFrames(voice) == 0 && voice.atrac9.finishOnDrain) {
-            voice.atrac9.finishOnDrain = false;
-            if (!Ngs2FinishBlock(voice)) return false;
-        }
-    }
-    return voice.state == Ngs2PlayState::Playing;
-}
-
-void Ngs2ConsumeAtrac9(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t systemRate) {
-    constexpr double phaseOne = 4294967296.0;
-    const auto initialRevision = voice.waveformRevision;
-    const auto step = static_cast<std::uint64_t>(std::llround(voice.sampleRate * static_cast<double>(voice.pitch) / systemRate * phaseOne));
+std::uint32_t Ngs2ReadSamplerAtrac9(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count) {
+    const auto revision = voice.waveformRevision;
     std::uint32_t written = 0;
-    for (; written < grain; ++written) {
-        if (!AdvanceAtrac9(voice) || !EnsureFrames(voice, 1)) break;
-        const auto revision = voice.waveformRevision;
-        const auto fraction = static_cast<float>(voice.phase / phaseOne);
-        if (fraction != 0.0f) EnsureFrames(voice, 2);
-        if (voice.state != Ngs2PlayState::Playing || voice.waveformRevision != revision) break;
-        const auto* current = voice.atrac9.window.data() + static_cast<std::size_t>(voice.atrac9.windowCursor) * voice.channels;
-        const auto* next = BufferedFrames(voice) > 1 ? current + voice.channels : current;
-        for (std::uint32_t channel = 0; channel < voice.channels; ++channel)
-            voice.samples[static_cast<std::size_t>(channel) * grain + written] = std::lerp(current[channel], next[channel], fraction);
-        voice.phase += step;
+    while (written < count && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop) && voice.waveformRevision == revision) {
+        if (!EnsureFrames(voice, 1) || voice.waveformRevision != revision) break;
+        const auto available = std::min<std::size_t>(count - written, BufferedFrames(voice));
+        const auto* source = voice.atrac9.window.data() + static_cast<std::size_t>(voice.atrac9.windowCursor) * voice.channels;
+        for (std::size_t frame = 0; frame < available; ++frame) {
+            for (std::uint32_t channel = 0; channel < voice.channels; ++channel) {
+                dest[static_cast<std::size_t>(channel) * stride + written + frame] = source[frame * voice.channels + channel];
+            }
+        }
+        written += static_cast<std::uint32_t>(available);
+        voice.atrac9.windowCursor += static_cast<std::uint32_t>(available);
+        voice.decodedSamples += available;
     }
-    voice.hasSamples = written != 0;
-    if (voice.state != Ngs2PlayState::Playing || voice.waveformRevision != initialRevision) return;
-    AdvanceAtrac9(voice);
-    if (voice.state != Ngs2PlayState::Playing || voice.waveformRevision != initialRevision) return;
-    if (!voice.acceptsBlocks && voice.blocks.empty() && BufferedFrames(voice) == 0 && voice.atrac9.remainingSamples != 0)
-        throw std::invalid_argument("NGS2: the ATRAC9 stream ends before its declared samples");
+    return written;
 }
 
 static std::uint16_t ReadLe16(const std::uint8_t* data) {

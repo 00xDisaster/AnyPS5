@@ -11,9 +11,6 @@
 #include "prx/libc/include/General.hpp"
 #include "Ngs2Internal.hpp"
 
-static constexpr double PHASE_ONE = 4294967296.0;
-static constexpr std::uint64_t PHASE_FRACTION = 0xffffffff;
-
 static const std::uint8_t* FrameAt(const Ngs2Voice& voice, const Ngs2Block& block, std::uint32_t frame) {
     const std::size_t frameBytes = voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
     if (block.data == nullptr) return nullptr;
@@ -28,16 +25,6 @@ static const std::uint8_t* FrameAt(const Ngs2Voice& voice, const Ngs2Block& bloc
 
 static void ReadPcm(const Ngs2Voice& voice, const std::uint8_t* frame, float* out) {
     Ngs2ReadPcmFrame(voice.waveformType, voice.channels, frame, out);
-}
-
-static void ReadFrames(Ngs2Voice& voice, float* current, float* next) {
-    auto& block = voice.blocks.front();
-    ReadPcm(voice, FrameAt(voice, block, block.cursor), current);
-    if (block.streaming && block.cursor + 1 >= block.availableFrames) std::memcpy(next, current, voice.channels * sizeof(float));
-    else if (block.cursor + 1 < block.info.num_samples) ReadPcm(voice, FrameAt(voice, block, block.cursor + 1), next);
-    else if (block.info.num_repeats != 0) ReadPcm(voice, FrameAt(voice, block, 0), next);
-    else if (voice.blocks.size() > 1) ReadPcm(voice, FrameAt(voice, voice.blocks[1], 0), next);
-    else std::memcpy(next, current, voice.channels * sizeof(float));
 }
 
 bool Ngs2FinishBlock(Ngs2Voice& voice) {
@@ -74,45 +61,33 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
         const Ngs2Unlocked unlocked;
         voice.callback(&info);
     }
-    return voice.waveformRevision == revision && voice.state == Ngs2PlayState::Playing;
+    return voice.waveformRevision == revision && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop);
 }
 
-static void Advance(Ngs2Voice& voice, std::uint64_t frames) {
-    while (frames != 0 && voice.state == Ngs2PlayState::Playing && !voice.blocks.empty()) {
+std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count) {
+    const auto revision = voice.waveformRevision;
+    std::uint32_t written = 0;
+    while (written < count && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop) && voice.waveformRevision == revision) {
+        if (voice.blocks.empty()) break;
         auto& block = voice.blocks.front();
-        const std::uint64_t limit = block.streaming ? std::min<std::uint64_t>(block.info.num_samples, block.availableFrames) : block.info.num_samples;
-        if (block.cursor >= limit && block.cursor != block.info.num_samples && !(block.streaming && !voice.acceptsBlocks)) break;
-        const auto step = std::min<std::uint64_t>(frames, limit - block.cursor);
-        block.cursor += static_cast<std::uint32_t>(step);
-        voice.decodedSamples += step;
-        if (voice.waveformType != SCE_NGS2_WAVEFORM_TYPE_ATRAC9) voice.decodedBytes += step * voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
-        frames -= step;
+        const auto limit = block.streaming ? std::min<std::uint64_t>(block.info.num_samples, block.availableFrames) : block.info.num_samples;
+        if (block.cursor >= limit) {
+            if (block.cursor < block.info.num_samples && !(block.streaming && !voice.acceptsBlocks)) break;
+            if (!Ngs2FinishBlock(voice)) break;
+            continue;
+        }
+        float frame[NGS2_MAX_CHANNELS];
+        ReadPcm(voice, FrameAt(voice, block, block.cursor), frame);
+        for (std::uint32_t channel = 0; channel < voice.channels; ++channel) dest[static_cast<std::size_t>(channel) * stride + written] = frame[channel];
+        ++written;
+        ++block.cursor;
+        ++voice.decodedSamples;
+        voice.decodedBytes += voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
         if (block.streaming) {
             while (block.pieces.size() > 1 && block.cursor >= block.pieces.front().firstFrame + block.pieces.front().frames) block.pieces.erase(block.pieces.begin());
         }
-        if (block.cursor == block.info.num_samples || (block.streaming && !voice.acceptsBlocks && block.cursor == block.availableFrames)) {
-            if (!Ngs2FinishBlock(voice)) return;
-        }
     }
-}
-
-static void ConsumeSamples(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t systemRate) {
-    const auto revision = voice.waveformRevision;
-    const auto step = static_cast<std::uint64_t>(std::llround(voice.sampleRate * static_cast<double>(voice.pitch) / systemRate * PHASE_ONE));
-    std::uint32_t written = 0;
-    float current[NGS2_MAX_CHANNELS];
-    float next[NGS2_MAX_CHANNELS];
-    for (; written < grain && voice.state == Ngs2PlayState::Playing && !voice.blocks.empty() && voice.waveformRevision == revision; written++) {
-        ReadFrames(voice, current, next);
-        const auto fraction = static_cast<float>(static_cast<double>(voice.phase) / PHASE_ONE);
-        for (std::uint32_t channel = 0; channel < voice.channels; channel++) {
-            voice.samples[channel * grain + written] = std::lerp(current[channel], next[channel], fraction);
-        }
-        voice.phase += step;
-        Advance(voice, voice.phase >> 32);
-        voice.phase &= PHASE_FRACTION;
-    }
-    voice.hasSamples = written != 0;
+    return written;
 }
 
 static bool Bypasses(const Ngs2Filter& filter, std::uint32_t channel) {
@@ -145,8 +120,7 @@ static void ApplyFilter(Ngs2Voice& voice, Ngs2Filter& filter, std::uint32_t grai
 
 static void RenderSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t systemRate) {
     const auto channels = voice.channels;
-    if (voice.waveformType == SCE_NGS2_WAVEFORM_TYPE_ATRAC9) Ngs2ConsumeAtrac9(voice, grain, systemRate);
-    else ConsumeSamples(voice, grain, systemRate);
+    Ngs2ConsumeSampler(voice, grain, systemRate);
     if (voice.channels != channels) {
         voice.samples.assign(static_cast<std::size_t>(grain) * voice.channels, 0.0f);
         voice.hasSamples = false;
@@ -246,8 +220,8 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
     } renderingScope{voice.rendering};
     voice.samples.assign(static_cast<std::size_t>(grain) * voice.InputChannels(), 0.0f);
     voice.hasSamples = false;
-    const bool pitchShiftActive = Ngs2HasPitchShift(voice) &&
-        (voice.state == Ngs2PlayState::Paused || voice.pitchShiftTransition == Ngs2PitchShiftTransition::Stop);
+    const bool pitchShiftActive = (Ngs2HasPitchShift(voice) || voice.IsSampler()) &&
+        (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop);
     if ((voice.state == Ngs2PlayState::Playing || pitchShiftActive) && voice.channels != 0) {
         if (voice.rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || voice.rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) {
             RenderSampler(voice, grain, systemRate);
@@ -257,7 +231,7 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
         if (voice.rack->rackId == SCE_NGS2_RACK_ID_REVERB && voice.reverb) voice.hasSamples = Ngs2ProcessReverb(voice, grain, systemRate);
         Ngs2ProcessLegacyUserFx(voice, grain, systemRate);
         Ngs2ProcessUserFx(voice, grain, systemRate);
-        Ngs2ApplyPitchShiftGain(voice, grain);
+        Ngs2ApplyVoiceGain(voice, grain);
     }
     if (voice.samples.size() != static_cast<std::size_t>(grain) * voice.channels) voice.samples.assign(static_cast<std::size_t>(grain) * voice.channels, 0.0f);
     voice.rendered = true;
@@ -348,7 +322,9 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
     }
     for (auto* voice : voices) {
         if (voice->state == Ngs2PlayState::Stopped) voice->state = Ngs2PlayState::Empty;
+        const bool wasPaused = (voice->stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
         voice->stateFlags = static_cast<std::uint32_t>(voice->state);
+        if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
         if (voice->state == Ngs2PlayState::Playing && voice->rack->rackId == SCE_NGS2_RACK_ID_SAMPLER && voice->blocks.empty() && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
     }
     system.renderCount++;

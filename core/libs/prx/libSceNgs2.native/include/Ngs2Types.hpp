@@ -490,7 +490,10 @@ static_assert(sizeof(Ngs2WaveformBlock) == 40);
 struct Ngs2SamplerVoiceSetupParam {
     Ngs2VoiceParamHeader header;
     Ngs2WaveformFormat format;
+    std::uint32_t channel_mask;
+    std::uint32_t reserved;
 };
+static_assert(sizeof(Ngs2SamplerVoiceSetupParam) == 40);
 
 struct Ngs2SamplerVoiceWaveformBlocksParam {
     Ngs2VoiceParamHeader header;
@@ -503,7 +506,9 @@ struct Ngs2SamplerVoiceWaveformBlocksParam {
 struct Ngs2SamplerVoicePitchParam {
     Ngs2VoiceParamHeader header;
     float ratio;
+    std::uint32_t reserved;
 };
+static_assert(sizeof(Ngs2SamplerVoicePitchParam) == 16);
 
 struct Ngs2SamplerVoiceFilterParam {
     Ngs2VoiceParamHeader header;

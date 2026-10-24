@@ -137,6 +137,8 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
     std::memcpy(rack->name, options.common.name, sizeof(rack->name));
     rack->name[sizeof(rack->name) - 1] = '\0';
     rack->maxGrainSamples = options.common.max_grain_samples;
+    rack->maxWaveformBlocks = rackId == SCE_NGS2_RACK_ID_SAMPLER ? options.sampler.max_waveform_blocks
+        : rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER ? options.customSampler.max_waveform_blocks : 0;
     if (rackId == SCE_NGS2_RACK_ID_SAMPLER) rack->maxChannelWorks = options.sampler.max_channel_works;
     if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) rack->maxChannelWorks = options.customSampler.max_channel_works;
     if (rackId == SCE_NGS2_RACK_ID_SUBMIXER) rack->maxInputs = options.submixer.max_inputs;

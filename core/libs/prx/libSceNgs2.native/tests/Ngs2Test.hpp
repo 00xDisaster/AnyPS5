@@ -78,6 +78,17 @@ inline bool FrameInfoThrows(const Ngs2WaveformFormat& format) {
 
 inline constexpr std::uint32_t Grain = 8;
 
+template <typename TSignal>
+inline float SamplerReference(std::uint32_t frame, float pitch, TSignal signal) {
+    const float position = frame * pitch;
+    const auto index = static_cast<std::uint32_t>(position);
+    const auto source = [&](std::uint32_t offset) { return offset < 4 ? 0.0f : signal(offset - 4); };
+    if (position == index) return source(index + 1);
+    Require(position - index == 0.5f);
+    return (source(index) * -0.0303300861f + source(index + 1) * 0.530330062f) +
+           (source(index + 2) * 0.530330062f + source(index + 3) * -0.0303300861f);
+}
+
 inline std::vector<std::vector<std::uint64_t>> buffers;
 inline std::size_t usedBuffers = 0;
 

@@ -208,8 +208,7 @@ void Ngs2ResetPitchShift(Ngs2Voice& voice) {
         state.changed = false;
         state.initializedChannels = 0;
     }
-    voice.pitchShiftTransition = Ngs2PitchShiftTransition::None;
-    voice.pitchShiftPlayed = false;
+    voice.outputTransition = Ngs2VoiceTransition::None;
 }
 
 void Ngs2RestartPitchShift(Ngs2Voice& voice) {
@@ -241,20 +240,20 @@ void Ngs2ProcessPitchShift(Ngs2Voice& voice, std::size_t module, std::uint32_t g
     voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
 }
 
-void Ngs2ApplyPitchShiftGain(Ngs2Voice& voice, std::uint32_t grain) {
-    if (!Ngs2HasPitchShift(voice)) return;
-    const auto transition = voice.pitchShiftTransition;
-    if (transition == Ngs2PitchShiftTransition::None && voice.state != Ngs2PlayState::Paused) return;
-    if (transition != Ngs2PitchShiftTransition::None && grain < 64) throw std::runtime_error("NGS2: PitchShift voice transitions require at least 64 samples");
+void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain) {
+    if (!Ngs2HasPitchShift(voice) && !voice.IsSampler()) return;
+    const auto transition = voice.outputTransition;
+    if (transition == Ngs2VoiceTransition::None && voice.state != Ngs2PlayState::Paused) return;
+    if (transition != Ngs2VoiceTransition::None && grain < 64) throw std::runtime_error("NGS2: voice transitions require at least 64 samples");
     for (std::uint32_t c = 0; c < voice.channels; ++c) {
         auto* samples = voice.samples.data() + static_cast<std::size_t>(c) * grain;
         for (std::uint32_t i = 0; i < grain; ++i) {
             float gain = 1.0f;
-            if (transition == Ngs2PitchShiftTransition::Pause) {
+            if (transition == Ngs2VoiceTransition::Pause) {
                 if (i >= grain - 64) gain = static_cast<float>(grain - i) / 64.0f;
-            } else if (transition == Ngs2PitchShiftTransition::Resume) {
+            } else if (transition == Ngs2VoiceTransition::Resume) {
                 if (i < 64) gain = static_cast<float>(i) / 64.0f;
-            } else if (transition == Ngs2PitchShiftTransition::Stop) {
+            } else if (transition == Ngs2VoiceTransition::Stop) {
                 gain = i < 64 ? 1.0f - static_cast<float>(i) / 64.0f : 0.0f;
             } else if (voice.state == Ngs2PlayState::Paused) {
                 gain = 0.0f;
@@ -262,6 +261,6 @@ void Ngs2ApplyPitchShiftGain(Ngs2Voice& voice, std::uint32_t grain) {
             samples[i] *= gain;
         }
     }
-    voice.pitchShiftTransition = Ngs2PitchShiftTransition::None;
+    voice.outputTransition = Ngs2VoiceTransition::None;
     voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
 }

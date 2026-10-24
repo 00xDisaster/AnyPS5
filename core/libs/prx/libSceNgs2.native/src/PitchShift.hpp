@@ -34,13 +34,13 @@ struct Ngs2PitchShift {
     std::uint32_t initializedChannels = 0;
 };
 
-enum class Ngs2PitchShiftTransition { None, Pause, Resume, Stop };
+enum class Ngs2VoiceTransition { None, Pause, Resume, Stop };
 
 struct Ngs2Voice;
 bool Ngs2HasPitchShift(const Ngs2Voice& voice);
 void Ngs2ResetPitchShift(Ngs2Voice& voice);
 void Ngs2RestartPitchShift(Ngs2Voice& voice);
 void Ngs2ProcessPitchShift(Ngs2Voice& voice, std::size_t module, std::uint32_t grain);
-void Ngs2ApplyPitchShiftGain(Ngs2Voice& voice, std::uint32_t grain);
+void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain);
 
 #endif

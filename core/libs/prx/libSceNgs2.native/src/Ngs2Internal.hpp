@@ -126,6 +126,10 @@ struct Ngs2Voice {
     std::unique_ptr<Ngs2ReverbState, Ngs2ReverbDeleter> reverb;
     float pitch = 1.0f;
     std::uint64_t phase = 0;
+    std::array<std::array<float, 4>, NGS2_MAX_CHANNELS> samplerHistory{};
+    std::vector<float> samplerScratch;
+    std::vector<Ngs2Block> samplerReplayBlocks;
+    bool samplerReplayKnown = true;
     std::deque<Ngs2Block> blocks;
     bool acceptsBlocks = true;
     std::uint64_t decodedSamples = 0;
@@ -145,8 +149,7 @@ struct Ngs2Voice {
     std::vector<Ngs2VoiceCustomUserFx> customUserFx;
     std::vector<Ngs2VoiceCustomGain> customGain;
     std::vector<Ngs2PitchShift> customPitchShift;
-    Ngs2PitchShiftTransition pitchShiftTransition = Ngs2PitchShiftTransition::None;
-    bool pitchShiftPlayed = false;
+    Ngs2VoiceTransition outputTransition = Ngs2VoiceTransition::None;
     Ngs2UserFxProcessHandler userFxHandler = nullptr;
     std::array<std::uintptr_t, 3> userFxData{};
     std::uint32_t userFxFlags = 0;
@@ -157,6 +160,7 @@ struct Ngs2Voice {
 
     void SetEvent(std::uint32_t eventId);
     void ResetSetup();
+    bool IsSampler() const;
     const std::uint8_t* WaveformData() const;
     std::uint32_t InputChannels() const { return inputChannels != 0 ? inputChannels : channels; }
 };
@@ -170,6 +174,7 @@ struct Ngs2Rack {
     std::uint32_t maxFilters = 0;
     std::uint32_t maxGrainSamples = 0;
     std::uint32_t maxChannelWorks = 0;
+    std::uint32_t maxWaveformBlocks = 0;
     std::uint32_t maxInputs = 0;
     std::uintptr_t userData = 0;
     Ngs2ContextBufferInfo bufferInfo{};
@@ -242,10 +247,16 @@ void Ngs2SetupAtrac9(Ngs2Voice& voice, const Ngs2WaveformFormat& format);
 void Ngs2SetFilter(Ngs2Voice& voice, const Ngs2SamplerVoiceFilterParam& param);
 std::size_t Ngs2Atrac9BlockBytes(const Ngs2Voice& voice, const Ngs2WaveformBlock& block);
 void Ngs2RestartAtrac9(Ngs2Voice& voice);
-void Ngs2ConsumeAtrac9(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t systemRate);
 bool Ngs2FinishBlock(Ngs2Voice& voice);
 int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option, std::uint32_t maxInputs);
 void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option);
+void Ngs2PrepareSampler(Ngs2Voice& voice);
+void Ngs2RestartSampler(Ngs2Voice& voice);
+void Ngs2ReplaySampler(Ngs2Voice& voice);
+void Ngs2SaveSamplerBlock(Ngs2Voice& voice, const Ngs2Block& block);
+void Ngs2ConsumeSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
+std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);
+std::uint32_t Ngs2ReadSamplerAtrac9(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);
 void Ngs2CleanupUserFx(Ngs2Rack& rack);
 void Ngs2ApplyCustomParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param);
 void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
