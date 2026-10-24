@@ -328,7 +328,7 @@ void ForgetDirectoryStream_nid_no_patch(int descriptor) {
 }
 
 static std::FILE* OpenDirectoryHandle(const std::filesystem::path& path, const std::string& = {}) {
-    if (!g_openDirectoryDescriptor) throw std::runtime_error("fopen: libkernel has not registered its directory descriptors");
+    if (!g_openDirectoryDescriptor) throw std::runtime_error("OpenDirectoryHandle: libkernel has not registered its directory descriptors");
     const auto filename = HostOpenName(path);
     if (!filename) { errno = GuestErrnoFromHost_nid_no_patch(errno); return nullptr; }
     const int descriptor = g_openDirectoryDescriptor(filename->c_str());
