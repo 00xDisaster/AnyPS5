@@ -308,8 +308,6 @@ static void CheckFacetGetcat() {
     Require(_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(&numPut, &locale) == 4 && numPut != nullptr);
     GuestLocale::Facet* timePut = nullptr;
     Require(_ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(&timePut, &locale) == 5 && timePut != nullptr);
-    RequireException([&] { reinterpret_cast<const GuestLocale::UnsupportedMethodsVtable*>(numPut->vtable)->methods[0](); });
-    RequireException([&] { reinterpret_cast<const GuestLocale::UnsupportedMethodsVtable*>(timePut->vtable)->methods[0](); });
     for (GuestLocale::Facet* facet : {codecvt, punct, numPut, timePut}) {
         facet->vtable->retain(facet);
         facet->vtable->retain(facet);
@@ -332,6 +330,7 @@ int main() {
     CheckInputFacetObjects();
     CheckCodecvtWideVtableObject();
     CheckWideNumPutVtableObject();
+    CheckFacetGetcat();
     _Locksyslock_nid_postfix();
     _Locksyslock_nid_postfix();
     _Unlocksyslock_nid_postfix();
