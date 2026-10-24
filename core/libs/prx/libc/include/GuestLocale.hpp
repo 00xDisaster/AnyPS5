@@ -61,10 +61,10 @@ struct CollateVtable {
 struct CodecvtVtable {
     FacetVtable facet;
     bool (APS5_VABI *alwaysNoconv)(const Facet* self);
-    int (APS5_VABI *encoding)(const Facet* self);
     int (APS5_VABI *maxLength)(const Facet* self);
-    int (APS5_VABI *out)(Facet* self, std::uint64_t* state, const char* first1, const char* last1, const char** next1, char* first3, char* last3, char** next3);
+    int (APS5_VABI *encoding)(const Facet* self);
     int (APS5_VABI *in)(Facet* self, std::uint64_t* state, const char* first1, const char* last1, const char** next1, char* first3, char* last3, char** next3);
+    int (APS5_VABI *out)(Facet* self, std::uint64_t* state, const char* first1, const char* last1, const char** next1, char* first3, char* last3, char** next3);
     int (APS5_VABI *unshift)(Facet* self, std::uint64_t* state, char* first3, char* last3, char** next3);
     std::size_t (APS5_VABI *length)(Facet* self, std::uint64_t* state, const char* first1, const char* last1, std::size_t count);
 };
@@ -124,7 +124,7 @@ static_assert(sizeof(CollateFacet) == 0x20);
 static_assert(offsetof(CollateVtable, compare) == 0x20);
 static_assert(offsetof(CollateVtable, hash) == 0x30);
 static_assert(offsetof(CodecvtVtable, alwaysNoconv) == 0x20);
-static_assert(offsetof(CodecvtVtable, out) == 0x38);
+static_assert(offsetof(CodecvtVtable, in) == 0x38);
 static_assert(offsetof(CodecvtVtable, length) == 0x50);
 static_assert(sizeof(NumpunctFacet) == 0x30);
 static_assert(offsetof(NumpunctFacet, grouping) == 0x10);
