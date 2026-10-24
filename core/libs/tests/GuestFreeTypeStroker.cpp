@@ -15,6 +15,7 @@ void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
 int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint32_t*);
 int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std::uint8_t);
 int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
+int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void*);
 }
 
 static void Check(bool value, int line) {
@@ -48,6 +49,18 @@ struct Pair {
         FT_UInt nativeContours = 13;
         Require(FT_Stroker_GetCounts_nid_postfix(guest, &points, &contours) == FT_Stroker_GetCounts(native, &nativePoints, &nativeContours));
         Require(points == nativePoints && contours == nativeContours);
+    }
+
+    void Square(std::uint8_t open, bool finish = true) const {
+        const GuestVector corners[] = {{0, 0}, {640, 0}, {640, 640}, {0, 640}};
+        FT_Vector nativeStart{0, 0};
+        Require(FT_Stroker_BeginSubPath_nid_postfix(guest, &corners[0], open) == FT_Stroker_BeginSubPath(native, &nativeStart, open));
+        for (int index = 1; index < 4; ++index) {
+            FT_Vector nativePoint{static_cast<FT_Pos>(corners[index].x), static_cast<FT_Pos>(corners[index].y)};
+            Require(FT_Stroker_LineTo_nid_postfix(guest, &corners[index]) == FT_Stroker_LineTo(native, &nativePoint));
+        }
+        if (!finish) return;
+        Require(FT_Stroker_EndSubPath_nid_postfix(guest) == FT_Stroker_EndSubPath(native));
     }
 };
 
@@ -118,6 +131,16 @@ static void TestLineTo(GuestLibrary& library, FT_Library native) {
     Require(FT_Stroker_LineTo_nid_postfix(pair.guest, nullptr) == FT_Stroker_LineTo(pair.native, nullptr));
 }
 
+static void TestEndSubPath(GuestLibrary& library, FT_Library native) {
+    for (const std::uint8_t open : {0, 1}) {
+        Pair pair(library, native);
+        pair.Square(open, false);
+        Require(FT_Stroker_EndSubPath_nid_postfix(pair.guest) == FT_Stroker_EndSubPath(pair.native));
+        pair.CountsMatch();
+    }
+    Require(FT_Stroker_EndSubPath_nid_postfix(nullptr) == FT_Stroker_EndSubPath(nullptr));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -127,5 +150,6 @@ int main() {
     TestGetCounts(library, native);
     TestBeginSubPath(library, native);
     TestLineTo(library, native);
+    TestEndSubPath(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
