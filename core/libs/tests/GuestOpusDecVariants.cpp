@@ -1,30 +1,11 @@
+#include "prx/libSceOpusCeltDec/libSceOpusCeltDec.hpp"
+#include "prx/libSceOpusDec/libSceOpusDec.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
-
-extern "C" {
-int APS5_VABI sceOpusDecInitialize(std::uint32_t*);
-int APS5_VABI sceOpusDecTerminate(const std::uint32_t*);
-int APS5_VABI sceOpusDecCreateEx(const std::uint32_t*, void*, int, int);
-int APS5_VABI sceOpusDecDecode(void*, const std::uint8_t*, int, std::int16_t*, int);
-int APS5_VABI sceOpusDecDecodeWithPriority(void*, const std::uint8_t*, int, std::int16_t*, int, int);
-int APS5_VABI sceOpusDecDecodeWithPriorityAndTimeout(void*, const std::uint8_t*, int, std::int16_t*, int, int, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceOpusDecDecodeFloat(void*, const std::uint8_t*, int, float*, int);
-int APS5_VABI sceOpusDecDecodeFloatWithPriority(void*, const std::uint8_t*, int, float*, int, int);
-int APS5_VABI sceOpusDecDecodeFloatWithPriorityAndTimeout(void*, const std::uint8_t*, int, float*, int, int, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceOpusDecDestroy(void*);
-int APS5_VABI sceOpusCeltDecInitialize(std::uint32_t*);
-int APS5_VABI sceOpusCeltDecTerminate(const std::uint32_t*);
-int APS5_VABI sceOpusCeltDecCreateEx(const std::uint32_t*, void*, int, int);
-int APS5_VABI sceOpusCeltDecDecode(void*, const std::uint8_t*, int, std::int16_t*, int);
-int APS5_VABI sceOpusCeltDecDecodeWithPriority(void*, const std::uint8_t*, int, std::int16_t*, int, int);
-int APS5_VABI sceOpusCeltDecDecodeFloat(void*, const std::uint8_t*, int, float*, int);
-int APS5_VABI sceOpusCeltDecDecodeFloatWithPriority(void*, const std::uint8_t*, int, float*, int, int);
-int APS5_VABI sceOpusCeltDecDestroy(void*);
-}
 
 namespace {
 
