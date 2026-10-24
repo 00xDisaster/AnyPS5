@@ -317,6 +317,11 @@ bool Listening(const Socket& socket) {
     bool listening = false;
     return GuestSockets::NativeListening(static_cast<std::uintptr_t>(socket.value), listening) && listening;
 }
+bool PeerConnected(const Socket& socket) {
+    sockaddr_storage peer{};
+    socklen_t size = sizeof(peer);
+    return ::getpeername(socket.value, reinterpret_cast<sockaddr*>(&peer), &size) == 0;
+}
 constexpr std::int64_t NotAnswered = -2;
 std::int64_t ZeroPortSend(const Socket& socket, const sockaddr_storage& destination, std::uint64_t length) {
     if (socket.type != 2 || socket.family != 2 || destination.ss_family != AF_INET) return NotAnswered;
@@ -1420,8 +1425,8 @@ std::int64_t APS5_VABI sendto_nid_postfix(int descriptor, const void* buffer, st
     if (!buffer && length) return Fail(14);
     if (const int waited = WaitForTransfer(*socket, true, flags)) return Fail(waited);
     int result;
-    if (!address) {
-        if (addressLength != 0) return Fail(22);
+    if (!address || (socket->type == 1 && PeerConnected(*socket))) {
+        if (!address && addressLength != 0) return Fail(22);
         result = ::send(socket->value, static_cast<const char*>(buffer), static_cast<int>(length), SocketSendFlags(*socket, flags));
     } else {
         sockaddr_storage native{};
