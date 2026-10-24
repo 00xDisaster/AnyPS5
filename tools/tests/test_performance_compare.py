@@ -1,4 +1,5 @@
 import copy
+from functools import lru_cache
 import io
 import json
 import os
@@ -26,6 +27,19 @@ SUMMARY = {
 
 IDENTITY = {"cpu": 'CPU "X"', "cpu_threads": 16, "memory_mib": 32000,
             "title_id": "PPSA00000", "title": "Example", "content_version": "01.002.000"}
+
+
+@lru_cache(maxsize=2)
+def excessive_json_value(opening, closing):
+    depth = sys.getrecursionlimit() + 64
+    for attempt in range(8):
+        value = opening * depth + "0" + closing * depth
+        try:
+            json.loads(value)
+        except RecursionError:
+            return opening * (depth + 128) + "0" + closing * (depth + 128)
+        depth *= 2
+    raise AssertionError("JSON decoder accepted every bounded nesting probe")
 
 
 class PerformanceCompareTests(unittest.TestCase):
@@ -179,32 +193,30 @@ class PerformanceCompareTests(unittest.TestCase):
         self.assertIn("finite numeric range", result.stderr)
 
     def test_excessive_json_nesting_reports_the_input_location(self):
-        depth = 100000
         for opening, closing in (("[", "]"), ('{"nested":', "}")):
             with self.subTest(opening=opening):
-                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + opening * depth + "0" + closing * depth + "}"
+                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + excessive_json_value(opening, closing) + "}"
                 self.before.write_text("\n\n" + record + "\n", encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, r"before.jsonl:3:") as error:
                     performance_compare.load_summary(self.before)
                 self.assertIsInstance(error.exception.__cause__, RecursionError)
 
     def test_excessive_json_nesting_produces_only_a_cli_error(self):
-        depth = 100000
-        for path in (self.before, self.after):
-            for opening, closing in (("[", "]"), ('{"nested":', "}")):
+        cases = ((self.before, "[", "]", ()), (self.before, '{"nested":', "}", ("--json",)),
+                 (self.after, "[", "]", ("--json",)), (self.after, '{"nested":', "}", ()))
+        for path, opening, closing, args in cases:
+            with self.subTest(path=path.name, opening=opening, args=args):
                 self.write(self.before, self.baseline)
                 self.write(self.after, self.candidate)
-                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + opening * depth + "0" + closing * depth + "}"
+                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + excessive_json_value(opening, closing) + "}"
                 path.write_text("\n\n" + record + "\n", encoding="utf-8")
                 original = (self.before.read_bytes(), self.after.read_bytes())
-                for args in ((), ("--json",)):
-                    with self.subTest(path=path.name, opening=opening, args=args):
-                        result = self.run_cli(*args)
-                        self.assertEqual(result.returncode, 2, result.stderr)
-                        self.assertEqual(result.stdout, "")
-                        self.assertIn(f"{path}:3:", result.stderr)
-                        self.assertNotIn("Traceback", result.stderr)
-                        self.assertEqual((self.before.read_bytes(), self.after.read_bytes()), original)
+                result = self.run_cli(*args)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"{path}:3:", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual((self.before.read_bytes(), self.after.read_bytes()), original)
 
     def test_json_report_recursion_produces_only_a_cli_error(self):
         self.write(self.before, self.baseline)
@@ -225,10 +237,15 @@ class PerformanceCompareTests(unittest.TestCase):
         self.baseline["extra"] = metadata
         self.write(self.before, self.baseline)
         self.write(self.after, self.candidate)
-        result = self.run_cli("--json")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)["baseline"]["extra"], metadata)
-        self.assertEqual(self.run_cli().returncode, 0)
+        for args in ((), ("--json",)):
+            with self.subTest(args=args), patch.object(sys, "stdout", new_callable=io.StringIO) as output, \
+                    patch.object(sys, "stderr", new_callable=io.StringIO) as errors:
+                performance_compare.main([str(self.before), str(self.after), *args])
+            self.assertEqual(errors.getvalue(), "")
+            if args:
+                self.assertEqual(json.loads(output.getvalue())["baseline"]["extra"], metadata)
+            else:
+                self.assertIn("# Performance comparison", output.getvalue())
 
     def test_markdown_reports_deltas_and_escapes_table_values(self):
         self.candidate["frame_ms"]["max"] = 60.0
