@@ -9202,6 +9202,29 @@ void minLodTests(const Device& device, Recorder& recorder) {
     expectRed(sample(0x100, 0.0f, 1), unorm(1), "minimum LOD clamp: MIN_LOD at the view's base level reads its base level");
 }
 
+void failedCheckReportTests(const Device& device, Recorder& recorder) {
+    const auto& context = device.GetContext();
+    Require(Recorder::Active() == &recorder, "the failed check test needs the active recorder");
+    TextureDetiler detiler(context);
+    GuestTextureResource resource{};
+    resource.baseAddress = 0x100000;
+    resource.width = 64;
+    resource.height = 64;
+    resource.mipCount = 1;
+    resource.tileMode = TextureTileMode::kLinear;
+    resource.dimension = TextureDimension::k2D;
+    resource.format = 56;
+    resource.dstSelX = 4;
+    resource.dstSelY = 5;
+    resource.dstSelZ = 6;
+    resource.dstSelW = 7;
+    const std::vector<std::byte> snapshot(static_cast<std::size_t>(DescribeSurface(resource).guestBytes), std::byte{0x40});
+    const VkComponentMapping identity{VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+    Texture texture(context, detiler, resource, identity, snapshot);
+    Require(recorder.Recording(), "a texture upload was not recorded into the open batch");
+    Require(false, "a failed check stopped the test with a texture upload in its open batch");
+}
+
 void singleCubeTests(const Device& device, Recorder& recorder) {
     auto context = device.GetContext();
     TextureDetiler detiler(context);
@@ -10998,6 +11021,10 @@ int main(int argc, char** argv) {
             }
             tiledResolveTests(device, recorder);
             std::cout << "CB resolves into tiled targets tests passed\n";
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--failed-check-only") {
+            failedCheckReportTests(device, recorder);
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--cube-only") {
