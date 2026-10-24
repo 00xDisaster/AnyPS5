@@ -53,12 +53,12 @@ void Open() {
     Check(OpenFails((LongName + "/inside").c_str(), "a", GuestEnametoolong));
     Check(OpenFails("missing.txt", "r", GuestEnoent));
     Check(OpenFails("folder", "w", GuestEisdir));
-    void* plain = fopen_nid_postfix("plain.txt", "r");
+    FileStream* plain = fopen_nid_postfix("plain.txt", "r");
     Check(plain != nullptr && fclose_nid_postfix(plain) == 0);
 }
 
 bool ReopenFails(const char* name, const char* mode, int error) {
-    void* stream = fopen_nid_postfix("plain.txt", "r");
+    FileStream* stream = fopen_nid_postfix("plain.txt", "r");
     Check(stream != nullptr);
     *__error_nid_postfix() = 0;
     const bool failed = freopen_nid_postfix(name, mode, stream) == nullptr && *__error_nid_postfix() == error;
@@ -72,14 +72,14 @@ void Reopen() {
     Check(ReopenFails(LongName.c_str(), "r", GuestEnametoolong));
     Check(ReopenFails(LongName.c_str(), "w", GuestEnametoolong));
     Check(ReopenFails("missing.txt", "r", GuestEnoent));
-    void* stream = fopen_nid_postfix("plain.txt", "r");
+    FileStream* stream = fopen_nid_postfix("plain.txt", "r");
     Check(stream != nullptr);
-    void* reopened = freopen_nid_postfix("plain.txt", "r", stream);
+    FileStream* reopened = freopen_nid_postfix("plain.txt", "r", stream);
     Check(reopened != nullptr && fclose_nid_postfix(reopened) == 0);
 }
 
 void CheckedOpen() {
-    void* stream = reinterpret_cast<void*>(1);
+    FileStream* stream = reinterpret_cast<FileStream*>(1);
     Check(fopen_s_nid_postfix(&stream, "loop", "r") == GuestEloop && stream == nullptr);
     Check(fopen_s_nid_postfix(&stream, LongName.c_str(), "w") == GuestEnametoolong && stream == nullptr);
     Check(fopen_s_nid_postfix(&stream, "folder", "w") == GuestEisdir && stream == nullptr);
