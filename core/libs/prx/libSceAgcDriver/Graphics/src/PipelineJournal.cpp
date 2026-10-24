@@ -21,10 +21,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <cerrno>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <sys/resource.h>
 #include <unistd.h>
 #endif
 
@@ -1217,17 +1215,6 @@ ReplayCounters& replayCounters() {
     return counters;
 }
 
-void lowerReplayThreadPriority() {
-#ifdef _WIN32
-    if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL)) throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "pipeline journal replay thread priority");
-#elif defined(__linux__)
-    errno = 0;
-    const int nice = getpriority(PRIO_PROCESS, static_cast<id_t>(gettid()));
-    if (nice == -1 && errno != 0) throw std::system_error(errno, std::generic_category(), "pipeline journal replay thread priority");
-    if (setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), std::min(nice + 5, 19)) != 0) throw std::system_error(errno, std::generic_category(), "pipeline journal replay thread priority");
-#endif
-}
-
 // Builds the journal's pipelines for one device on a pool: the first thread loads the file, every
 // thread then takes the next entry. A pipeline the store already holds counts as present; an entry
 // whose modules are missing or whose set layouts differ from what its modules describe is rejected.
@@ -1261,11 +1248,9 @@ public:
 
 private:
     void run() {
-        try {
-            lowerReplayThreadPriority();
-        } catch (const std::exception& error) {
-            std::fprintf(stderr, "[pipeline-journal] %s\n", error.what());
-        }
+#ifdef _WIN32
+        if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL)) std::fprintf(stderr, "[pipeline-journal] replay thread priority not lowered (error %lu)\n", GetLastError());
+#endif
         std::call_once(loadOnce, [&] {
             try {
                 auto journal = Journal::Instance().Load();
