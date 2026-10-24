@@ -1,4 +1,5 @@
 import copy
+import io
 import json
 import os
 import subprocess
@@ -176,6 +177,58 @@ class PerformanceCompareTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, "")
         self.assertIn("finite numeric range", result.stderr)
+
+    def test_excessive_json_nesting_reports_the_input_location(self):
+        depth = 100000
+        for opening, closing in (("[", "]"), ('{"nested":', "}")):
+            with self.subTest(opening=opening):
+                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + opening * depth + "0" + closing * depth + "}"
+                self.before.write_text("\n\n" + record + "\n", encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, r"before.jsonl:3:") as error:
+                    performance_compare.load_summary(self.before)
+                self.assertIsInstance(error.exception.__cause__, RecursionError)
+
+    def test_excessive_json_nesting_produces_only_a_cli_error(self):
+        depth = 100000
+        for path in (self.before, self.after):
+            for opening, closing in (("[", "]"), ('{"nested":', "}")):
+                self.write(self.before, self.baseline)
+                self.write(self.after, self.candidate)
+                record = json.dumps(self.baseline)[:-1] + ', "extra": ' + opening * depth + "0" + closing * depth + "}"
+                path.write_text("\n\n" + record + "\n", encoding="utf-8")
+                original = (self.before.read_bytes(), self.after.read_bytes())
+                for args in ((), ("--json",)):
+                    with self.subTest(path=path.name, opening=opening, args=args):
+                        result = self.run_cli(*args)
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        self.assertIn(f"{path}:3:", result.stderr)
+                        self.assertNotIn("Traceback", result.stderr)
+                        self.assertEqual((self.before.read_bytes(), self.after.read_bytes()), original)
+
+    def test_json_report_recursion_produces_only_a_cli_error(self):
+        self.write(self.before, self.baseline)
+        self.write(self.after, self.candidate)
+        with patch.object(performance_compare.json, "dumps", side_effect=RecursionError("report nesting is too deep")), \
+                patch.object(sys, "stdout", new_callable=io.StringIO) as output, \
+                patch.object(sys, "stderr", new_callable=io.StringIO) as errors:
+            with self.assertRaises(SystemExit) as error:
+                performance_compare.main([str(self.before), str(self.after), "--json"])
+        self.assertEqual(error.exception.code, 2)
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("report nesting is too deep", errors.getvalue())
+
+    def test_supported_nested_metadata_is_preserved(self):
+        metadata = {"value": 7}
+        for depth in range(16):
+            metadata = {"nested": [metadata]}
+        self.baseline["extra"] = metadata
+        self.write(self.before, self.baseline)
+        self.write(self.after, self.candidate)
+        result = self.run_cli("--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["baseline"]["extra"], metadata)
+        self.assertEqual(self.run_cli().returncode, 0)
 
     def test_markdown_reports_deltas_and_escapes_table_values(self):
         self.candidate["frame_ms"]["max"] = 60.0
