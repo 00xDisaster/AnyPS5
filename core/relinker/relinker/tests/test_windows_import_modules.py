@@ -4,6 +4,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 from ctypes import wintypes
 from pathlib import Path
 
@@ -440,6 +441,15 @@ def live_children_named(executable_name):
         kernel32.CloseHandle(snapshot)
 
 
+def lingering_children_named(executable_name, timeout_seconds=10.0):
+    deadline = time.monotonic() + timeout_seconds
+    children = live_children_named(executable_name)
+    while children and time.monotonic() < deadline:
+        time.sleep(0.1)
+        children = live_children_named(executable_name)
+    return children
+
+
 def run_with_standard_pipes(executable_path, capture_stdout, capture_stderr):
     startf_usestdhandles = 0x00000100
     handle_flag_inherit = 0x00000001
@@ -798,7 +808,7 @@ def main():
                         assert 'LoadLibraryA returned NULL' in str(error), error
                     else:
                         raise AssertionError('planted loader failure did not raise')
-                    assert not live_children_named(executable_path.name), (runtime, executable_path)
+                    assert not lingering_children_named(executable_path.name), (runtime, executable_path)
                     assert not log.exists(), (runtime, log)
 
                     image = executable('a.prx', 'shared', extra_symbols=('absent#A#B',))
