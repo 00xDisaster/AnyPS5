@@ -32,11 +32,16 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
         translated += value;
         if (value != '%') continue;
         if (*format == '%') { translated += *format++; continue; }
+        const size_t directive = translated.size() - 1;
         const bool suppressed = *format == '*';
         if (suppressed) translated += *format++;
         while (*format >= '0' && *format <= '9') translated += *format++;
+        if (*format == 'q') {
+            translated.resize(directive);
+            break;
+        }
         std::string length;
-        if (*format && std::strchr("hljztLq", *format)) {
+        if (*format && std::strchr("hljztL", *format)) {
             length += *format++;
             if ((length == "h" && *format == 'h') || (length == "l" && *format == 'l')) length += *format++;
         }
@@ -48,7 +53,7 @@ inline int ScanWindowsArguments_nid_no_patch(const char* format, const void* sou
         }
         ++format;
         const bool narrow = !suppressed && std::strchr("diouxX", conversion) && (length.empty() || length == "h" || length == "hh");
-        if (narrow || (std::strchr("diouxXn", conversion) && (length == "l" || length == "j" || length == "z" || length == "t" || length == "q")))
+        if (narrow || (std::strchr("diouxXn", conversion) && (length == "l" || length == "j" || length == "z" || length == "t")))
             translated += "ll";
         else translated += length;
         translated += conversion;

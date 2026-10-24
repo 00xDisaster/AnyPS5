@@ -154,10 +154,21 @@ static void CheckIntegerScanWidths() {
     Require(sscanf_nid_postfix("200", "%hhu", &unsignedChar) == 1 && unsignedChar == 200);
     Require(sscanf_nid_postfix("300", "%hhu", &unsignedChar) == 1 && unsignedChar == 44);
     Require(sscanf_nid_postfix("377", "%hho", &unsignedChar) == 1 && unsignedChar == 255);
-    long long quad = 7;
-    Require(sscanf_nid_postfix("3000000000", "%qd", &quad) == 1 && quad == 3000000000ll);
-    unsigned long long unsignedQuad = 7;
-    Require(sscanf_nid_postfix("ffffffffff", "%qx", &unsignedQuad) == 1 && unsignedQuad == 0xffffffffffull);
+    *__error_nid_postfix() = 0;
+    Require(sscanf_nid_postfix("-2147483649", "%d", &value) == 1 && value == 0x7fffffff && *__error_nid_postfix() == 0);
+    Require(sscanf_nid_postfix("-1", "%u", &unsignedValue) == 1 && unsignedValue == 0xffffffffu && *__error_nid_postfix() == 0);
+    Require(sscanf_nid_postfix("99999999999", "%x", &unsignedValue) == 1 && unsignedValue == 0x99999999u && *__error_nid_postfix() == 0);
+    Require(sscanf_nid_postfix("70000", "%hd", &shortValue) == 1 && shortValue == 0x1170 && *__error_nid_postfix() == 0);
+    long long quad = 0x5555555555555555ll;
+    Require(sscanf_nid_postfix("9223372036854775808", "%lld", &quad) == 1 && quad == 0x7fffffffffffffffll && *__error_nid_postfix() == 34);
+    unsigned long long unsignedQuad = 0x5555555555555555ull;
+    *__error_nid_postfix() = 0;
+    Require(sscanf_nid_postfix("18446744073709551616", "%llu", &unsignedQuad) == 1 && unsignedQuad == 0xffffffffffffffffull && *__error_nid_postfix() == 34);
+#ifdef _WIN32
+    quad = 0x5555555555555555ll;
+    *__error_nid_postfix() = 0;
+    Require(sscanf_nid_postfix("5", "%qd", &quad) == 0 && quad == 0x5555555555555555ll && *__error_nid_postfix() == 0);
+#endif
     int first = 7;
     int second = 7;
     int position = 0;
