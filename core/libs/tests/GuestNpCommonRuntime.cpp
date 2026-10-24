@@ -9,7 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -35,6 +37,8 @@ constexpr int NpTitleIdInvalid = static_cast<int>(0x80559E11);
 constexpr int NpTitleIdBufferTooSmall = static_cast<int>(0x80559E0D);
 constexpr int KernelNotPermitted = static_cast<int>(0x80020001);
 constexpr int KernelNoSuchObject = static_cast<int>(0x80020003);
+constexpr int NpJsonTooDeep = static_cast<int>(0x80550603);
+constexpr int NpServerErrorBadCode = static_cast<int>(0x80559C02);
 constexpr std::uint32_t EventFlagWaitAnd = 1;
 constexpr std::uint32_t EventFlagShared = 0x100;
 
@@ -455,6 +459,210 @@ void TestJsonText() {
     Require(sceNpUtilHttpUrlEncode(url, 3, "@", 1, &length) == NpUtilBufferTooSmall, "encoding needs room for the terminator");
 }
 
+int g_jsonVariant = 0;
+int g_jsonFailAt = 0;
+std::vector<std::string> g_jsonEvents;
+
+int RecordJsonEvent(std::int32_t event, std::uint32_t depth, std::int32_t element, const char* key, const void* value,
+    std::int32_t arrayIndex, const std::string& offset) {
+    std::string text = std::to_string(event) + " " + std::to_string(depth) + " " + std::to_string(element) + " ";
+    text += key != nullptr ? key : "-";
+    text += " ";
+    if (value == nullptr) {
+        text += "-";
+    } else {
+        std::uint32_t type = 0;
+        std::memcpy(&type, value, sizeof(type));
+        const char* valueText = static_cast<const char*>(value) + sizeof(type);
+        if (g_jsonVariant != 0) std::memcpy(&valueText, static_cast<const char*>(value) + 8, sizeof(valueText));
+        text += std::to_string(type) + ":" + valueText;
+        if (g_jsonVariant == 2) {
+            std::uint32_t last = 0;
+            std::memcpy(&last, static_cast<const char*>(value) + 16, sizeof(last));
+            text += ":" + std::to_string(last);
+        }
+    }
+    text += " " + std::to_string(arrayIndex) + offset;
+    g_jsonEvents.push_back(text);
+    return static_cast<int>(g_jsonEvents.size()) == g_jsonFailAt ? static_cast<int>(0x80001234) : 0;
+}
+
+int APS5_VABI OnJsonEvent(void*, std::int32_t event, std::uint32_t depth, std::int32_t element, const char* key,
+    const void* value, std::int32_t arrayIndex, void*) {
+    return RecordJsonEvent(event, depth, element, key, value, arrayIndex, "");
+}
+
+int APS5_VABI OnJsonExEvent(void*, std::int32_t event, std::uint32_t depth, std::int32_t element, const char* key,
+    const void* value, std::int32_t arrayIndex, std::uint32_t offset, void*) {
+    return RecordJsonEvent(event, depth, element, key, value, arrayIndex, " @" + std::to_string(offset));
+}
+
+bool SameEvents(const std::vector<std::string>& expected) {
+    if (g_jsonEvents == expected) return true;
+    for (const std::string& event : g_jsonEvents) std::fprintf(stderr, "  got %s\n", event.c_str());
+    return false;
+}
+
+int ParseJson(const NpJsonRuleSet* rules, const std::string& text, const std::vector<std::size_t>& chunks = {}) {
+    alignas(16) static unsigned char context[0x760];
+    g_jsonVariant = 0;
+    g_jsonEvents.clear();
+    if (sceNpJsonParseInit(context, rules, OnJsonEvent, nullptr) != 0) return -1;
+    if (chunks.empty()) return sceNpJsonParse(context, text.data(), static_cast<int>(text.size()));
+    std::size_t position = 0;
+    for (const std::size_t size : chunks) {
+        const int result = sceNpJsonParse(context, text.data() + position, static_cast<int>(size));
+        if (result != 0) return result;
+        position += size;
+    }
+    return 0;
+}
+
+void TestJsonParser() {
+    const NpJsonRule topA[] = {{1, "a", 1}, {0, "", 0}};
+    const NpJsonRule nestedB[] = {{1, "b", 0}, {0, "", 0}};
+    const NpJsonRule* nestedLevels[] = {topA, nestedB};
+    const NpJsonRuleSet nested{nestedLevels, 2};
+    const std::string nestedText = R"({"a":{"b":"hello","c":1},"x":2})";
+    const std::vector<std::string> nestedEvents = {"5 0 0 a - -1", "1 0 0 - - -1", "5 1 0 b - -1", "6 1 0 b 4:hello -1",
+        "2 0 0 - - -1"};
+    Require(ParseJson(&nested, nestedText) == 0 && SameEvents(nestedEvents), "matched keys report their object and values");
+    Require(ParseJson(&nested, nestedText, std::vector<std::size_t>(nestedText.size(), 1)) == 0 && SameEvents(nestedEvents),
+        "one byte at a time gives the same events");
+
+    const NpJsonRule flatA[] = {{1, "a", 0}, {0, "", 0}};
+    const NpJsonRule* flatLevels[] = {flatA, nestedB};
+    const NpJsonRuleSet flat{flatLevels, 2};
+    Require(ParseJson(&flat, R"({"a":{"b":"hello"},"b":1})") == 0 && SameEvents({"5 0 0 a - -1", "1 0 0 - - -1"}),
+        "an object matched without descend is skipped, close included");
+
+    const NpJsonRule element[] = {{2, nullptr, 0}, {0, "", 0}};
+    const NpJsonRule* arrayLevels[] = {flatA, element};
+    const NpJsonRuleSet array{arrayLevels, 2};
+    Require(ParseJson(&array, R"({"a":[1,"x",true,false,null,-1.5e+3]})") == 0
+            && SameEvents({"5 0 0 a - -1", "3 0 0 - - -1", "6 1 0 - 3:1 0", "6 1 0 - 4:x 1", "6 1 0 - 1: 2", "6 1 0 - 2: 3",
+                "6 1 0 - 0: 4", "6 1 0 - 3:-1.5e+3 5", "4 0 0 - - -1"}),
+        "array elements report their index and value type");
+
+    const NpJsonRule topS[] = {{1, "s", 0}, {0, "", 0}};
+    const NpJsonRule* stringLevels[] = {topS};
+    const NpJsonRuleSet strings{stringLevels, 1};
+    const std::string escaped = "{\"s\":\"\\u00e9\\ud83d\\ude00\\n\xC3\xA9\"}";
+    const std::string decoded = "5 0 0 s - -1|6 0 0 s 4:\xC3\xA9\xF0\x9F\x98\x80\n\xC3\xA9 -1";
+    const auto joined = [] {
+        std::string out;
+        for (const std::string& event : g_jsonEvents) out += (out.empty() ? "" : "|") + event;
+        return out;
+    };
+    Require(ParseJson(&strings, escaped) == 0 && joined() == decoded, "escapes and surrogate pairs decode to UTF-8");
+    const std::size_t cut = escaped.find("\\n") + 1;
+    Require(ParseJson(&strings, escaped, {cut, 2, escaped.size() - cut - 2}) == 0 && joined() == decoded,
+        "an escape and a UTF-8 sequence split between calls still decode");
+
+    const NpJsonRule anyElement[] = {{2, nullptr, 1}, {0, "", 0}};
+    const NpJsonRule* deepLevels[] = {anyElement};
+    const NpJsonRuleSet deep{deepLevels, 1};
+    Require(ParseJson(&deep, std::string(20, '[')) == NpJsonTooDeep && SameEvents({"3 0 0 - - -1"}),
+        "nesting past 16 levels is refused");
+    Require(ParseJson(&strings, "{\"s\":\"" + std::string(0x5FF, 'y') + "\"}") == 0 && g_jsonEvents.size() == 2,
+        "a 0x5ff byte string fits");
+    Require(ParseJson(&strings, "{\"s\":\"" + std::string(0x600, 'y') + "\"}") == NpUtilBufferTooSmall
+            && SameEvents({"5 0 0 s - -1"}),
+        "a 0x600 byte string is refused");
+    Require(ParseJson(&strings, "{\"s\":" + std::string(0x600, '1') + "}") == NpUtilBufferTooSmall, "a 0x600 digit number is refused");
+    const std::string longKey(0x7F, 'k');
+    const NpJsonRule topLong[] = {{1, longKey.c_str(), 0}, {0, "", 0}};
+    const NpJsonRule* longLevels[] = {topLong};
+    const NpJsonRuleSet longRules{longLevels, 1};
+    Require(ParseJson(&longRules, "{\"" + std::string(0x90, 'k') + "\":1}") == 0
+            && SameEvents({"5 0 0 " + longKey + " - -1", "6 0 0 " + longKey + " 3:1 -1"}),
+        "keys are cut to 0x7f bytes");
+    g_jsonFailAt = 2;
+    Require(ParseJson(&nested, R"({"a":{"b":1}})") == static_cast<int>(0x80001234) && SameEvents({"5 0 0 a - -1", "1 0 0 - - -1"}),
+        "a negative callback result stops the parse and is returned");
+    g_jsonFailAt = 0;
+    Require(sceNpJsonParseInit(nullptr, &nested, OnJsonEvent, nullptr) == NpUtilInvalid, "a null context is refused");
+
+    alignas(16) unsigned char bufContext[0x108] = {};
+    char key[0x100] = {};
+    char value[0x100] = {};
+    const NpJsonRule bufTop[] = {{1, "abc", 0}, {1, "t", 0}, {0, "", 0}};
+    const NpJsonRule* bufLevels[] = {bufTop};
+    const NpJsonRuleSet bufRules{bufLevels, 1};
+    Require(sceNpJsonParseBufInit(bufContext, &bufRules, nullptr, 4, value, 0x20, OnJsonEvent, nullptr) == NpUtilInvalid,
+        "the buffered parser needs a key buffer");
+    Require(sceNpJsonParseBufInit(bufContext, &bufRules, key, 0, value, 0x20, OnJsonEvent, nullptr) == NpUtilBufferTooSmall,
+        "the key buffer needs a size");
+    Require(sceNpJsonParseBufInit(bufContext, &bufRules, key, 4, value, 0x1F, OnJsonEvent, nullptr) == NpUtilBufferTooSmall,
+        "the value buffer needs 0x20 bytes");
+    Require(sceNpJsonParseBufInit(bufContext, &bufRules, key, 4, value, 0x20, OnJsonEvent, nullptr) == 0, "buffered init");
+    g_jsonVariant = 1;
+    g_jsonEvents.clear();
+    const std::string bufText = R"({"abcdef":1,"t":true,"abc":"0123456789012345678901234567890"})";
+    Require(sceNpJsonParseBuf(bufContext, bufText.data(), static_cast<int>(bufText.size())) == 0
+            && SameEvents({"5 0 0 abc - -1", "6 0 0 abc 3:1 -1", "5 0 1 t - -1", "6 0 1 t 1: -1", "5 0 0 abc - -1",
+                "6 0 0 abc 4:0123456789012345678901234567890 -1"}),
+        "the caller buffers cut keys and hold values, literals have empty text");
+    Require(sceNpJsonParseBufInit(bufContext, &strings, key, 4, value, 0x20, OnJsonEvent, nullptr) == 0, "buffered init again");
+    g_jsonEvents.clear();
+    const std::string tooLong = "{\"s\":\"" + std::string(0x20, 'y') + "\"}";
+    Require(sceNpJsonParseBuf(bufContext, tooLong.data(), static_cast<int>(tooLong.size())) == NpUtilBufferTooSmall,
+        "a string longer than the value buffer is refused");
+
+    alignas(16) unsigned char exContext[0x110] = {};
+    Require(sceNpJsonParseExInit(exContext, nullptr, key, 0x10, value, 0x20, OnJsonExEvent, nullptr) == 0, "ex init");
+    g_jsonVariant = 2;
+    g_jsonEvents.clear();
+    const std::string everything = R"({"a":[1,{"b":"xy"}],"c":true})";
+    Require(sceNpJsonParseEx(exContext, everything.data(), static_cast<int>(everything.size())) == 0
+            && SameEvents({"1 0 -1 - - -1 @0", "5 1 -1 a - -1 @1", "3 1 -1 - - -1 @5", "6 2 -1 - 3:1:1 0 @6",
+                "1 2 -1 - - 1 @8", "5 3 -1 b - -1 @9", "6 3 -1 b 4:xy:1 -1 @13", "2 2 -1 - - 1 @17", "4 1 -1 - - -1 @18",
+                "5 1 -1 c - -1 @20", "6 1 -1 c 1::1 -1 @24", "2 0 -1 - - -1 @28"}),
+        "without rules the extended parser reports everything with stream offsets");
+    Require(sceNpJsonParseExInit(exContext, &strings, key, 0x10, value, 0x20, OnJsonExEvent, nullptr) == 0, "ex init again");
+    g_jsonEvents.clear();
+    const std::string pieces = "{\"s\":\"" + std::string("0123456789") + "0123456789" + "0123456789" + "0123456789\",\"n\":1}";
+    Require(sceNpJsonParseEx(exContext, pieces.data(), static_cast<int>(pieces.size())) == 0
+            && SameEvents({"5 0 0 s - -1 @1", "6 0 0 s 4:0123456789012345678901234567890:0 -1 @5",
+                "6 0 0 s 4:123456789:1 -1 @5"}),
+        "a long string comes in pieces with the last one marked");
+    Require(sceNpJsonParseExInit(exContext, &strings, key, 0x10, value, 0x20, OnJsonExEvent, nullptr) == 0, "ex init for numbers");
+    g_jsonEvents.clear();
+    const std::string digits = "{\"s\":" + std::string(40, '1') + "}";
+    Require(sceNpJsonParseEx(exContext, digits.data(), static_cast<int>(digits.size())) == 0
+            && SameEvents({"5 0 0 s - -1 @1", "6 0 0 s 3:" + std::string(31, '1') + ":0 -1 @5", "6 0 0 s 3:111111111:1 -1 @5"}),
+        "a long number comes in pieces too");
+
+    const auto code = [](bool multi, std::int32_t http, const std::string& body) {
+        return multi ? sceNpServerErrorJsonMultiGetErrorCode(http, body.data(), body.size())
+                     : sceNpServerErrorJsonGetErrorCode(http, body.data(), body.size());
+    };
+    Require(code(false, 404, R"({"error":{"code":2097152}})") == static_cast<int>(0x82200000), "a server error code is returned");
+    Require(code(false, 404, R"({"error":{"code":12582912}})") == static_cast<int>(0x82FFFFFF), "codes from 0xc00000 are unknown");
+    Require(code(false, 404, R"({"error":{"code":"5"}})") == static_cast<int>(0x82F00194), "a string code falls back to the status");
+    Require(code(false, 600, R"({"error":{"code":"5"}})") == static_cast<int>(0x82FFFFFF), "a status past 599 is unknown");
+    Require(code(false, 404, R"({"code":7})") == static_cast<int>(0x82F00194), "the single form needs error.code");
+    Require(code(true, 404, R"({"code":7})") == static_cast<int>(0x82000007), "the multi form also takes a top level code");
+    Require(code(true, 404, R"({"error":{"code":8}})") == static_cast<int>(0x82000008), "the multi form takes error.code");
+    Require(code(false, 503, R"({"error":{"code":-1}})") == static_cast<int>(0x82F001F7), "a negative code falls back to the status");
+    Require(sceNpServerErrorJsonGetErrorCode(404, nullptr, 5) == static_cast<int>(0x82F00194), "no body falls back to the status");
+    alignas(16) unsigned char serverContext[0x760] = {};
+    NpServerErrorJsonResult result{};
+    Require(sceNpServerErrorJsonParseInit(serverContext, nullptr) == NpUtilInvalid, "the server error parser needs a result");
+    std::memset(&result, 0xEE, sizeof(result));
+    Require(sceNpServerErrorJsonParseInit(serverContext, &result) == 0 && result.found == 0 && result.code == -1,
+        "server error init clears the result");
+    const std::string body = R"({"error":{"code":42}})";
+    Require(sceNpServerErrorJsonParse(serverContext, body.data(), static_cast<int>(body.size())) == 0 && result.found == 1
+            && result.code == 42,
+        "the server error parser stores the code");
+    const std::string badBody = R"({"error":{"code":"x"}})";
+    Require(sceNpServerErrorJsonParseMultiInit(serverContext, &result) == 0, "multi server error init");
+    Require(sceNpServerErrorJsonParse(serverContext, badBody.data(), static_cast<int>(badBody.size())) == NpServerErrorBadCode
+            && result.found == 0,
+        "a code that is not a number stops the parse");
+}
+
 void TestTitleIds() {
     NpTitleIdParts parts {{'A', 'B', 'C', 'D', '1', '2', '3', '4', '5'}, 0, 7};
     char titleId[13] = {};
@@ -592,6 +800,7 @@ int main() {
     TestIds();
     TestLanguagesAndDebugIds();
     TestJsonText();
+    TestJsonParser();
     TestTitleIds();
     std::puts("guest np common runtime: PASS");
 }
