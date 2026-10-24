@@ -20,6 +20,7 @@ void APS5_VABI FT_Stroker_Set_nid_postfix(void*, std::int64_t, std::int32_t, std
 void APS5_VABI FT_Stroker_Rewind_nid_postfix(void*);
 int APS5_VABI FT_Stroker_GetBorderCounts_nid_postfix(void*, std::int32_t, std::uint32_t*, std::uint32_t*);
 int APS5_VABI FT_Stroker_ConicTo_nid_postfix(void*, const GuestVector*, const GuestVector*);
+int APS5_VABI FT_Stroker_CubicTo_nid_postfix(void*, const GuestVector*, const GuestVector*, const GuestVector*);
 }
 
 static void Check(bool value, int line) {
@@ -211,6 +212,26 @@ static void TestConicTo(GuestLibrary& library, FT_Library native) {
     Require(FT_Stroker_ConicTo_nid_postfix(nullptr, &control, &to) == FT_Stroker_ConicTo(nullptr, &nativeControl, &nativeTo));
 }
 
+static void TestCubicTo(GuestLibrary& library, FT_Library native) {
+    Pair pair(library, native);
+    FT_Stroker_Set_nid_postfix(pair.guest, 48, FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
+    FT_Stroker_Set(pair.native, 48, FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
+    const GuestVector start{0, 0};
+    FT_Vector nativeStart{0, 0};
+    Require(FT_Stroker_BeginSubPath_nid_postfix(pair.guest, &start, 1) == FT_Stroker_BeginSubPath(pair.native, &nativeStart, 1));
+    const GuestVector first{0, 640};
+    const GuestVector second{640, 640};
+    const GuestVector to{640, 0};
+    FT_Vector nativeFirst{0, 640};
+    FT_Vector nativeSecond{640, 640};
+    FT_Vector nativeTo{640, 0};
+    Require(FT_Stroker_CubicTo_nid_postfix(pair.guest, &first, &second, &to) == FT_Stroker_CubicTo(pair.native, &nativeFirst, &nativeSecond, &nativeTo));
+    Require(FT_Stroker_EndSubPath_nid_postfix(pair.guest) == FT_Stroker_EndSubPath(pair.native));
+    pair.CountsMatch();
+    Require(FT_Stroker_CubicTo_nid_postfix(pair.guest, &first, nullptr, &to) == FT_Stroker_CubicTo(pair.native, &nativeFirst, nullptr, &nativeTo));
+    Require(FT_Stroker_CubicTo_nid_postfix(nullptr, &first, &second, &to) == FT_Stroker_CubicTo(nullptr, &nativeFirst, &nativeSecond, &nativeTo));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -225,5 +246,6 @@ int main() {
     TestRewind(library, native);
     TestGetBorderCounts(library, native);
     TestConicTo(library, native);
+    TestCubicTo(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
