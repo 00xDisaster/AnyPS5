@@ -2,6 +2,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -205,7 +206,8 @@ class PatchAdvisorTests(unittest.TestCase):
         self.assertIn("Verified catalog entries: 2", output.getvalue())
         self.assertIn(f"Catalog entry 1: {self.catalog / 'patch.toml'}", output.getvalue())
         self.assertIn(f"Catalog entry 2: {second}", output.getvalue())
-        self.assertIn(suggest_patches.command_line(["--patches", str(second), "--module-dir", "Media/Modules"]), output.getvalue())
+        quoted = f'"{second}"' if os.name == "nt" else f"'{second}'"
+        self.assertIn(f"--patches {quoted} --module-dir Media/Modules", output.getvalue())
         self.assertEqual(output.getvalue().count("SHA-256"), 2)
         self.assertNotIn("Recommended:", output.getvalue())
         self.assertEqual(run.call_count, 2)
