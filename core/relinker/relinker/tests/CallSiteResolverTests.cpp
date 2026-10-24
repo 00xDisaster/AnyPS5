@@ -41,7 +41,7 @@ int main() {
         check("BND NOTRACK indirect tail jump", {0xf2, 0x3e, 0xff, 0x25, 0xf8, 0, 0, 0}, true);
         check("BND REX indirect call", {0xf2, 0x48, 0xff, 0x15, 0xf8, 0, 0, 0}, true);
         check("NOTRACK REX indirect tail jump", {0x3e, 0x48, 0xff, 0x25, 0xf8, 0, 0, 0}, true);
-        check("DS-prefixed pointer load", {0x3e, 0x48, 0x8b, 0x05, 0xf8, 0, 0, 0}, true);
+        check("NOTRACK-prefixed pointer load", {0x3e, 0x48, 0x8b, 0x05, 0xf8, 0, 0, 0}, true);
         check("REPNE-prefixed pointer load", {0xf2, 0x48, 0x8b, 0x05, 0xf8, 0, 0, 0}, true);
         check("DS after REX.W leaves a narrow load", {0x48, 0x3e, 0x8b, 0x05, 0xf8, 0, 0, 0}, false);
         check("REPNE after REX.W leaves a narrow load", {0x48, 0xf2, 0x8b, 0x05, 0xf8, 0, 0, 0}, false);
