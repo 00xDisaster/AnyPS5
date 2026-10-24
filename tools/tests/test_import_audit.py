@@ -101,6 +101,21 @@ def build_sectionless_elf(symbols, needed=(), gnu_hash=False, gnu_buckets=(1,)):
     return bytes(image)
 
 
+def gnu_hash_chain_offset(image):
+    header = struct.unpack_from("<16sHHIQQQIHHHHHH", image)
+    segments = [struct.unpack_from("<IIQQQQQQ", image, header[5] + index * header[9])
+                for index in range(header[10])]
+    dynamic = next(segment for segment in segments if segment[0] == 2)
+    tags = dict(struct.unpack_from("<qQ", image, position)
+                for position in range(dynamic[2], dynamic[2] + dynamic[5], 16))
+    address = tags[0x6ffffef5]
+    load = next(segment for segment in segments
+                if segment[0] == 1 and segment[3] <= address < segment[3] + segment[5])
+    hash_offset = address - load[3] + load[2]
+    bucket_count, _, bloom_count, _ = struct.unpack_from("<IIII", image, hash_offset)
+    return hash_offset + struct.calcsize("<IIII") + bloom_count * struct.calcsize("<Q") + bucket_count * struct.calcsize("<I")
+
+
 def exporting(*names):
     return build_elf([(name, 1, GLOBAL_FUNCTION) for name in names])
 
@@ -1047,15 +1062,13 @@ class ImportAuditTests(unittest.TestCase):
         for buckets, terminator in (((1,) * 32, None), (tuple(range(32, 0, -1)), None), ((17, 1, 0, 17), 16)):
             with self.subTest(buckets=buckets, terminator=terminator):
                 image = bytearray(build_sectionless_elf(symbols, ["libSceA.prx"], gnu_hash=True, gnu_buckets=buckets))
-                dynamic = struct.unpack_from("<IIQQQQQQ", image, 120)
-                tags = dict(struct.unpack_from("<qQ", image, position)
-                            for position in range(dynamic[2], dynamic[2] + dynamic[5], 16))
-                chain_offset = tags[0x6ffffef5] - 0x400000 + 24 + len(buckets) * 4
+                chain_offset = gnu_hash_chain_offset(image)
                 if terminator is not None:
                     struct.pack_into("<I", image, chain_offset + (terminator - 1) * 4, 1)
                 with patch.object(import_audit, "unpack", wraps=import_audit.unpack) as unpack:
                     self.assertEqual(import_audit.elf_program_dynamic_symbols(Path("module.prx"), image), expected)
-                chain_reads = [call.args[2] for call in unpack.call_args_list if call.args[4] == "GNU hash chain entry"]
+                chain_reads = [call.args[2] for call in unpack.call_args_list
+                               if call.args[0] == "<I" and chain_offset <= call.args[2] < chain_offset + len(symbols) * 4]
                 self.assertEqual(len(chain_reads), len(symbols))
                 self.assertEqual(set(chain_reads), set(range(chain_offset, chain_offset + len(symbols) * 4, 4)))
 
@@ -1063,19 +1076,18 @@ class ImportAuditTests(unittest.TestCase):
         for buckets in ((), (0,), (0, 0, 0)):
             with self.subTest(buckets=buckets):
                 image = build_sectionless_elf([], gnu_hash=True, gnu_buckets=buckets)
+                chain_offset = gnu_hash_chain_offset(image)
                 with patch.object(import_audit, "unpack", wraps=import_audit.unpack) as unpack:
                     self.assertEqual(import_audit.elf_program_dynamic_symbols(Path("module.prx"), image), ({}, set(), set()))
-                self.assertFalse(any(call.args[4] == "GNU hash chain entry" for call in unpack.call_args_list))
+                self.assertFalse(any(call.args[0] == "<I" and chain_offset <= call.args[2] < len(image)
+                                     for call in unpack.call_args_list))
 
-    def test_sectionless_elf_gnu_hash_overlapping_buckets_require_file_backed_chains(self):
+    def test_sectionless_elf_gnu_hash_requires_file_backed_chains(self):
         symbols = [(f"symbol{index}", 1, GLOBAL_FUNCTION) for index in range(4)]
         for buckets in ((1, 1), (3, 1, 2)):
             for terminated in (False, True):
                 image = bytearray(build_sectionless_elf(symbols, gnu_hash=True, gnu_buckets=buckets))
-                dynamic = struct.unpack_from("<IIQQQQQQ", image, 120)
-                tags = dict(struct.unpack_from("<qQ", image, position)
-                            for position in range(dynamic[2], dynamic[2] + dynamic[5], 16))
-                chain_offset = tags[0x6ffffef5] - 0x400000 + 24 + len(buckets) * 4
+                chain_offset = gnu_hash_chain_offset(image)
                 chain_end = chain_offset + len(symbols) * 4
                 if not terminated:
                     struct.pack_into("<I", image, chain_end - 4, 0)
