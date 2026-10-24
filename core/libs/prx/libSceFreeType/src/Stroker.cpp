@@ -66,4 +66,9 @@ int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void* stroker, const GuestVect
     return FT_Stroker_BeginSubPath(static_cast<FT_Stroker>(stroker), vector.pointer, open);
 }
 
+int APS5_VABI FT_Stroker_LineTo_nid_postfix(void* stroker, const GuestVector* to) {
+    NativeVector vector(to, __func__);
+    return FT_Stroker_LineTo(static_cast<FT_Stroker>(stroker), vector.pointer);
+}
+
 }
