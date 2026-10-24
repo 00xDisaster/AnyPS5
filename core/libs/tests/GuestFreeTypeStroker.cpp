@@ -14,6 +14,7 @@ int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary*, void**);
 void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
 int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint32_t*);
 int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std::uint8_t);
+int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
 }
 
 static void Check(bool value, int line) {
@@ -101,6 +102,22 @@ static void TestBeginSubPath(GuestLibrary& library, FT_Library native) {
     Require(FT_Stroker_BeginSubPath_nid_postfix(pair.guest, nullptr, 0) == FT_Stroker_BeginSubPath(pair.native, nullptr, 0));
 }
 
+static void TestLineTo(GuestLibrary& library, FT_Library native) {
+    Pair pair(library, native);
+    const GuestVector start{0, 0};
+    FT_Vector nativeStart{0, 0};
+    Require(FT_Stroker_BeginSubPath_nid_postfix(pair.guest, &start, 1) == FT_Stroker_BeginSubPath(pair.native, &nativeStart, 1));
+    for (const GuestVector point : {GuestVector{640, 0}, GuestVector{640, 640}, GuestVector{0, 640}}) {
+        FT_Vector nativePoint{static_cast<FT_Pos>(point.x), static_cast<FT_Pos>(point.y)};
+        Require(FT_Stroker_LineTo_nid_postfix(pair.guest, &point) == FT_Stroker_LineTo(pair.native, &nativePoint));
+        pair.CountsMatch();
+    }
+    const GuestVector point{1, 1};
+    FT_Vector nativePoint{1, 1};
+    Require(FT_Stroker_LineTo_nid_postfix(nullptr, &point) == FT_Stroker_LineTo(nullptr, &nativePoint));
+    Require(FT_Stroker_LineTo_nid_postfix(pair.guest, nullptr) == FT_Stroker_LineTo(pair.native, nullptr));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -109,5 +126,6 @@ int main() {
     TestDone(library, native);
     TestGetCounts(library, native);
     TestBeginSubPath(library, native);
+    TestLineTo(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
