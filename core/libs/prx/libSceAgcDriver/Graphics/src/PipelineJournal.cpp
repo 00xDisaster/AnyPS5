@@ -195,6 +195,7 @@ void encodeState(Writer& writer, const State& state) {
         writer.U32(static_cast<std::uint32_t>(color.format));
         writer.U32(color.exportIndex);
         writer.Raw(color.componentMapping);
+        writer.Raw(color.partialWriteMask);
     }
     writer.Raws(std::span<const VkPipelineColorBlendAttachmentState>(state.blends));
     for (const auto value : state.blendConstants) writer.Raw(value);
@@ -261,6 +262,7 @@ void decodeState(Reader& reader, State& state) {
         color.format = static_cast<VkFormat>(reader.U32());
         color.exportIndex = reader.U32();
         color.componentMapping = reader.Raw<std::uint8_t>();
+        color.partialWriteMask = reader.Raw<std::uint16_t>();
         state.colors.push_back(color);
     }
     reader.Raws(state.blends, 8u);
@@ -633,7 +635,7 @@ private:
                     if (decoded) loaded.indexModules.insert(identity);
                 } else if (record.kind == GraphicsRecord || record.kind == ComputeRecord) {
                     if (decode && !loaded.indexRecords.contains(record.payloadHash)) {
-                        LoadedEntry entry;
+                        LoadedEntry entry{};
                         entry.kind = record.kind;
                         bool decoded = false;
                         if (record.kind == GraphicsRecord) {
@@ -1040,6 +1042,7 @@ State CanonicalPipelineState(const State& state) {
         canonicalColor.format = color.format;
         canonicalColor.exportIndex = color.exportIndex;
         canonicalColor.componentMapping = color.componentMapping;
+        canonicalColor.partialWriteMask = color.partialWriteMask;
         canonical.colors.push_back(canonicalColor);
     }
     canonical.blends = state.blends;
