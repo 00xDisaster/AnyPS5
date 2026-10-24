@@ -226,7 +226,7 @@ class WebReleaseTests(unittest.TestCase):
                         with self.assertRaises(SystemExit) as error:
                             build_web.main(["--build", str(self.build), "--release"])
                     self.assertEqual(error.exception.code, 2)
-                    self.assertIn("error: File is not a zip file", errors.getvalue())
+                    self.assertIn(f"error: Invalid release archive {name}: File is not a zip file", errors.getvalue())
                     self.assertNotIn("Traceback", errors.getvalue())
                     self.assertEqual(self.snapshot(), previous)
                     self.assertEqual(list(self.build.glob(".web-release-*")), [])
