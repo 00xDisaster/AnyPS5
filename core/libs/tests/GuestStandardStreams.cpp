@@ -17,6 +17,7 @@
 #include <stdexcept>
 #ifdef _WIN32
 #include <fcntl.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -623,7 +624,7 @@ int main(int argc, char** argv) {
     if (argc > 1 && std::string_view(argv[1]) == "--exclusive-stdout") return CheckExclusiveStandardOutput();
     CheckClosedStreamWrites();
     CheckDescriptorAccessModes();
-    Require(_Getmbcurmax_nid_postfix() == 1 && _Getmbcurmax_nid_postfix() == ___mb_cur_max_nid_postfix());
+    Require(_Getmbcurmax_nid_postfix() == 3 && ___mb_cur_max_nid_postfix() == 1);
     CheckFlushWhileReading();
     Require(fdopen_nid_postfix(-1, "rb") == nullptr && *__error_nid_postfix() == 9);
     Require(fdopen_nid_postfix(0, nullptr) == nullptr && *__error_nid_postfix() == 22);
@@ -920,6 +921,14 @@ int main(int argc, char** argv) {
     CheckStandardStreamDeleteSharing();
     const std::string standardFilename = "anyps5-standard-reopen-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     Require(freopen_nid_postfix(standardFilename.c_str(), "w", __stdoutp_nid_postfix) == __stdoutp_nid_postfix);
+    const HANDLE hostOutput = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    Require(hostOutput != nullptr && hostOutput != INVALID_HANDLE_VALUE);
+    Require(hostOutput != reinterpret_cast<HANDLE>(::_get_osfhandle(::_fileno(stdout))));
+    DWORD handleFlags = 0;
+    Require(::GetHandleInformation(hostOutput, &handleFlags) != 0);
+    constexpr char hostMessage[] = "host stdout preserved\n";
+    DWORD hostWritten = 0;
+    Require(::WriteFile(hostOutput, hostMessage, sizeof(hostMessage) - 1, &hostWritten, nullptr) != 0 && hostWritten == sizeof(hostMessage) - 1);
     Require(printf_nid_postfix("standard output") == 15 && fflush_nid_postfix(__stdoutp_nid_postfix) == 0);
     { std::ifstream input(standardFilename, std::ios::binary); std::string contents; std::getline(input, contents);
       Require(contents == "standard output"); }
