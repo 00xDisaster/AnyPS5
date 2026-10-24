@@ -1,5 +1,8 @@
 #include "prx/libSceMove/include/Api.hpp"
+#include "ProcessParametersFixture.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -20,6 +23,22 @@ constexpr std::int32_t kUserId = 0x10000000;
 constexpr std::int32_t kFirstHandle = 0x30B0100;
 constexpr std::int32_t kHandleStep = 0x100;
 constexpr std::uint8_t kFill = 0x5A;
+constexpr std::uint32_t kLastSdkAllowingNullData = 0x03ffffff;
+constexpr std::uint32_t kFirstSdkRequiringData = 0x04000000;
+
+alignas(16) std::array<std::byte, 0x40> process{};
+
+void InstallProcessParameters() {
+    const std::uint64_t size = process.size();
+    const std::uint32_t magic = 0x4942524f;
+    std::memcpy(process.data(), &size, sizeof(size));
+    std::memcpy(process.data() + 8, &magic, sizeof(magic));
+    if (!ProcessParametersFixture::Install(process.data(), process.size())) std::abort();
+}
+
+void SetCompiledSdkVersion(std::uint32_t version) {
+    std::memcpy(process.data() + 0x10, &version, sizeof(version));
+}
 
 struct Buffer {
     std::uint8_t bytes[128];
@@ -84,6 +103,8 @@ void RequireUnknownHandle(std::int32_t handle) {
 }
 
 int main() {
+    InstallProcessParameters();
+    SetCompiledSdkVersion(kFirstSdkRequiringData);
     RequireNotInit(kFirstHandle);
 
     Require(sceMoveInit() == kOk);
@@ -110,6 +131,15 @@ int main() {
     Require(sceMoveReadStateRecent(first, -1, buffer.bytes, &count) == kInvalidArg);
     Require(sceMoveReadStateRecent(first, 0, nullptr, &count) == kInvalidArg);
     Require(sceMoveReadStateRecent(first, 0, buffer.bytes, nullptr) == kInvalidArg);
+
+    SetCompiledSdkVersion(kLastSdkAllowingNullData);
+    Require(sceMoveReadStateRecent(first, 0, nullptr, &count) == kNoControllerConnected);
+    Require(sceMoveReadStateRecent(first, -1, nullptr, &count) == kInvalidArg);
+    Require(sceMoveReadStateRecent(first, 0, nullptr, nullptr) == kInvalidArg);
+    Require(sceMoveReadStateRecent(first + 1, 0, nullptr, &count) == kInvalidHandle);
+    Require(count == -7);
+    SetCompiledSdkVersion(kFirstSdkRequiringData);
+    Require(sceMoveReadStateRecent(first, 0, nullptr, &count) == kInvalidArg);
 
     Require(sceMoveGetDeviceInfo(first, buffer.bytes) == kNoControllerConnected);
     Require(sceMoveGetExtensionPortInfo(first, buffer.bytes) == kNoControllerConnected);
