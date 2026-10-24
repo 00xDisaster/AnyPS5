@@ -64,6 +64,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -10849,521 +10850,529 @@ void Run(Context context) {
 #endif
 
 int main(int argc, char** argv) {
+    std::set_terminate([] {
+        std::fflush(nullptr);
+        std::cout.flush();
+        if (const auto failure = std::current_exception()) {
+            try {
+                std::rethrow_exception(failure);
+            } catch (const std::exception& error) {
+                std::cerr << error.what() << '\n';
+            } catch (...) {
+            }
+        }
+        std::_Exit(1);
+    });
+    if (argc == 2 && std::string_view(argv[1]) == "--collect-mapping-history-only") {
+        if (!collectMappingHistoryTests()) return 77;
+        std::cout << "collect mapping history tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--hint-mapping-history-only") {
+        if (!hintMappingHistoryTests()) return 77;
+        std::cout << "hint mapping history tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--partial-watch-restoration-only") {
+        if (!partialWatchRestorationTests()) return 77;
+        std::cout << "partial private write-watch restoration tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--device-selection-only") {
+        deviceSelectionTests();
+        std::cout << "recorder device selection tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--queued-write-groups-only") {
+        queuedWriteGroupTests();
+        std::cout << "queued write group tests passed\n";
+        return 0;
+    }
+    std::unique_ptr<Device> created;
     try {
-        if (argc == 2 && std::string_view(argv[1]) == "--collect-mapping-history-only") {
-            if (!collectMappingHistoryTests()) return 77;
-            std::cout << "collect mapping history tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--hint-mapping-history-only") {
-            if (!hintMappingHistoryTests()) return 77;
-            std::cout << "hint mapping history tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--partial-watch-restoration-only") {
-            if (!partialWatchRestorationTests()) return 77;
-            std::cout << "partial private write-watch restoration tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--device-selection-only") {
-            deviceSelectionTests();
-            std::cout << "recorder device selection tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--queued-write-groups-only") {
-            queuedWriteGroupTests();
-            std::cout << "queued write group tests passed\n";
-            return 0;
-        }
-        std::unique_ptr<Device> created;
-        try {
-            created = std::make_unique<Device>(argc == 2 && (std::string_view(argv[1]) == "--import-watch-other-family-only" || std::string_view(argv[1]) == "--deferred-settle-other-family-only" || std::string_view(argv[1]) == "--host-import-lifetime-other-family-only" || std::string_view(argv[1]) == "--settle-write-order-other-family-only"));
-        } catch (const std::exception& error) {
-            if (std::getenv("ANYPS5_REQUIRE_VULKAN") != nullptr) throw;
-            std::cout << "skipped, no usable Vulkan device: " << error.what() << '\n';
+        created = std::make_unique<Device>(argc == 2 && (std::string_view(argv[1]) == "--import-watch-other-family-only" || std::string_view(argv[1]) == "--deferred-settle-other-family-only" || std::string_view(argv[1]) == "--host-import-lifetime-other-family-only" || std::string_view(argv[1]) == "--settle-write-order-other-family-only"));
+    } catch (const std::exception& error) {
+        if (std::getenv("ANYPS5_REQUIRE_VULKAN") != nullptr) throw;
+        std::cout << "skipped, no usable Vulkan device: " << error.what() << '\n';
+        return 77;
+    }
+    Device& device = *created;
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-lifetime-only") return RunHostImportLifetimeTests(device.GetContext());
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-mutation-race-only") return RunHostImportMutationRaceTests(device.GetContext());
+    if (argc == 2 && (std::string_view(argv[1]) == "--gpu-timing-complete-only" || std::string_view(argv[1]) == "--gpu-timing-incomplete-only")) {
+        return gpuTimingCompletionTests(device, std::string_view(argv[1]) == "--gpu-timing-incomplete-only");
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--import-watch-only") {
+        importWatchTests(device);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--import-watch-other-family-only") {
+        if (device.GetContext().settleQueue == VK_NULL_HANDLE) {
+            std::cout << "skipped, no other queue family to settle imports on\n";
             return 77;
         }
-        Device& device = *created;
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-lifetime-only") return RunHostImportLifetimeTests(device.GetContext());
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-mutation-race-only") return RunHostImportMutationRaceTests(device.GetContext());
-        if (argc == 2 && (std::string_view(argv[1]) == "--gpu-timing-complete-only" || std::string_view(argv[1]) == "--gpu-timing-incomplete-only")) {
-            return gpuTimingCompletionTests(device, std::string_view(argv[1]) == "--gpu-timing-incomplete-only");
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--import-watch-only") {
-            importWatchTests(device);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--import-watch-other-family-only") {
-            if (device.GetContext().settleQueue == VK_NULL_HANDLE) {
-                std::cout << "skipped, no other queue family to settle imports on\n";
-                return 77;
-            }
-            importWatchTests(device);
-            return 0;
-        }
+        importWatchTests(device);
+        return 0;
+    }
 #ifdef _WIN32
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-lifetime-other-family-only") {
-            if (device.GetContext().settleFamily == device.GetContext().queueFamily) {
-                std::cout << "skipped, no other queue family to settle imports on\n";
-                return 77;
-            }
-            return RunHostImportLifetimeTests(device.GetContext());
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-lifetime-other-family-only") {
+        if (device.GetContext().settleFamily == device.GetContext().queueFamily) {
+            std::cout << "skipped, no other queue family to settle imports on\n";
+            return 77;
         }
-        if (argc == 2 && (std::string_view(argv[1]) == "--deferred-settle-only" || std::string_view(argv[1]) == "--deferred-settle-other-family-only")) {
-            if (std::string_view(argv[1]) == "--deferred-settle-other-family-only" && device.GetContext().settleFamily == device.GetContext().queueFamily) {
-                std::cout << "skipped, no other queue family to settle imports on\n";
-                return 77;
-            }
-            return deferredSettleTests(device) ? 0 : 77;
+        return RunHostImportLifetimeTests(device.GetContext());
+    }
+    if (argc == 2 && (std::string_view(argv[1]) == "--deferred-settle-only" || std::string_view(argv[1]) == "--deferred-settle-other-family-only")) {
+        if (std::string_view(argv[1]) == "--deferred-settle-other-family-only" && device.GetContext().settleFamily == device.GetContext().queueFamily) {
+            std::cout << "skipped, no other queue family to settle imports on\n";
+            return 77;
         }
-        if (argc == 2 && (std::string_view(argv[1]) == "--settle-write-order-only" || std::string_view(argv[1]) == "--settle-write-order-other-family-only")) {
-            if (std::string_view(argv[1]) == "--settle-write-order-other-family-only" && device.GetContext().settleFamily == device.GetContext().queueFamily) {
-                std::cout << "skipped, no other queue family to settle imports on\n";
-                return 77;
-            }
-            return settleWriteOrderTests(device) ? 0 : 77;
+        return deferredSettleTests(device) ? 0 : 77;
+    }
+    if (argc == 2 && (std::string_view(argv[1]) == "--settle-write-order-only" || std::string_view(argv[1]) == "--settle-write-order-other-family-only")) {
+        if (std::string_view(argv[1]) == "--settle-write-order-other-family-only" && device.GetContext().settleFamily == device.GetContext().queueFamily) {
+            std::cout << "skipped, no other queue family to settle imports on\n";
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--settle-wait-failure-only") return settleWaitFailureTests(device) ? 0 : 77;
-        if (argc == 2 && std::string_view(argv[1]) == "--settle-first-use-only") return settleFirstUseTests(device) ? 0 : 77;
-        if (argc == 2 && std::string_view(argv[1]) == "--settle-earlier-import-only") return settleEarlierImportTests(device) ? 0 : 77;
-        if (argc == 2 && std::string_view(argv[1]) == "--settle-retire-only") return settleRetireTests(device) ? 0 : 77;
-        if (argc == 2 && std::string_view(argv[1]) == "--settle-storage-image-only") return settleStorageImageTests(device) ? 0 : 77;
-        if (argc == 2 && std::string_view(argv[1]) == "--reimport-bench") return reimportBench(device);
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-cut-only") return hostImportCutTests(device);
+        return settleWriteOrderTests(device) ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--settle-wait-failure-only") return settleWaitFailureTests(device) ? 0 : 77;
+    if (argc == 2 && std::string_view(argv[1]) == "--settle-first-use-only") return settleFirstUseTests(device) ? 0 : 77;
+    if (argc == 2 && std::string_view(argv[1]) == "--settle-earlier-import-only") return settleEarlierImportTests(device) ? 0 : 77;
+    if (argc == 2 && std::string_view(argv[1]) == "--settle-retire-only") return settleRetireTests(device) ? 0 : 77;
+    if (argc == 2 && std::string_view(argv[1]) == "--settle-storage-image-only") return settleStorageImageTests(device) ? 0 : 77;
+    if (argc == 2 && std::string_view(argv[1]) == "--reimport-bench") return reimportBench(device);
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-cut-only") return hostImportCutTests(device);
 #endif
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-retirement-only") {
-            const auto alignment = device.GetContext().hostImportAlignment;
-            if (alignment == 0 || alignment > 65536) {
-                std::cout << "skipped, host import retirement requires host imports aligned within 64 KiB; alignment=" << alignment << '\n';
-                return 77;
-            }
-            hostImportRetirementTests(device);
-            return 0;
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-retirement-only") {
+        const auto alignment = device.GetContext().hostImportAlignment;
+        if (alignment == 0 || alignment > 65536) {
+            std::cout << "skipped, host import retirement requires host imports aligned within 64 KiB; alignment=" << alignment << '\n';
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--sparse-run-import-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, sparse run imports require host imports\n";
-                return 77;
-            }
-            return sparseRunImportTests(device, false) ? 0 : 77;
+        hostImportRetirementTests(device);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--sparse-run-import-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, sparse run imports require host imports\n";
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--sparse-run-copied-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, sparse run imports require host imports\n";
-                return 77;
-            }
-            return sparseRunImportTests(device, true) ? 0 : 77;
+        return sparseRunImportTests(device, false) ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--sparse-run-copied-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, sparse run imports require host imports\n";
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--pipeline-library-only") {
-            pipelineLibraryTests(device);
-            return 0;
-        }
-        if (argc == 2 && (std::string_view(argv[1]) == "--benchmark-pipeline-cache" || std::string_view(argv[1]) == "--pipeline-cache-only")) {
-            pipelineCacheTests(device, std::string_view(argv[1]) == "--benchmark-pipeline-cache");
-            return 0;
-        }
+        return sparseRunImportTests(device, true) ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--pipeline-library-only") {
+        pipelineLibraryTests(device);
+        return 0;
+    }
+    if (argc == 2 && (std::string_view(argv[1]) == "--benchmark-pipeline-cache" || std::string_view(argv[1]) == "--pipeline-cache-only")) {
+        pipelineCacheTests(device, std::string_view(argv[1]) == "--benchmark-pipeline-cache");
+        return 0;
+    }
 
-        if (argc == 2 && std::string_view(argv[1]) == "--pipeline-cache-file-only") {
-            return pipelineCacheFileTests(device);
-        }
+    if (argc == 2 && std::string_view(argv[1]) == "--pipeline-cache-file-only") {
+        return pipelineCacheFileTests(device);
+    }
 
-        if (argc == 2 && std::string_view(argv[1]) == "--pipeline-cache-header-only") {
-            pipelineCacheHeaderTests(device);
-            return 0;
-        }
+    if (argc == 2 && std::string_view(argv[1]) == "--pipeline-cache-header-only") {
+        pipelineCacheHeaderTests(device);
+        return 0;
+    }
 
-        if (argc == 2 && std::string_view(argv[1]) == "--descriptor-pool-only") {
-            descriptorPoolTests(device);
-            return 0;
-        }
-        std::unique_lock gpu(GpuMutex());
+    if (argc == 2 && std::string_view(argv[1]) == "--descriptor-pool-only") {
+        descriptorPoolTests(device);
+        return 0;
+    }
+    std::unique_lock gpu(GpuMutex());
 #ifdef _WIN32
-        if (argc == 2 && std::string_view(argv[1]) == "--storage-cpu-snapshot-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                Require(std::getenv("ANYPS5_REQUIRE_VULKAN") == nullptr, "storage snapshot test requires host imports");
-                std::cout << "skipped, host imports unavailable\n";
-                return 77;
-            }
-            StorageCpuSnapshotTest::Run(device.GetContext());
-            std::cout << "Storage CPU snapshot tests passed\n";
-            return 0;
+    if (argc == 2 && std::string_view(argv[1]) == "--storage-cpu-snapshot-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            Require(std::getenv("ANYPS5_REQUIRE_VULKAN") == nullptr, "storage snapshot test requires host imports");
+            std::cout << "skipped, host imports unavailable\n";
+            return 77;
         }
+        StorageCpuSnapshotTest::Run(device.GetContext());
+        std::cout << "Storage CPU snapshot tests passed\n";
+        return 0;
+    }
 #endif
-        std::cout << "host imports " << (PrepareImportWatch(device.GetContext()) == ImportWatch::Unwatch ? "are compared" : "stay watched") << '\n';
-        Recorder recorder(device.GetContext());
-        recorder.Activate();
-        if (argc == 2 && std::string_view(argv[1]) == "--command-reuse-only") {
-            if (device.GetContext().hostImportAlignment == 0) return 77;
-            const auto before = Recorder::StoreCounts().stores;
-            storeRunTests(device, recorder);
-            return Recorder::StoreCounts().stores != before ? 0 : 77;
+    std::cout << "host imports " << (PrepareImportWatch(device.GetContext()) == ImportWatch::Unwatch ? "are compared" : "stay watched") << '\n';
+    Recorder recorder(device.GetContext());
+    recorder.Activate();
+    if (argc == 2 && std::string_view(argv[1]) == "--command-reuse-only") {
+        if (device.GetContext().hostImportAlignment == 0) return 77;
+        const auto before = Recorder::StoreCounts().stores;
+        storeRunTests(device, recorder);
+        return Recorder::StoreCounts().stores != before ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--copied-direct-only") {
+        copiedDirectOrderingTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--pending-write-snapshot-only") {
+        pendingWriteSnapshotTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--benchmark-pending-write-snapshot") {
+        pendingWriteSnapshotBenchmark(recorder);
+        return 0;
+    }
+    if (argc == 2 && (std::string_view(argv[1]) == "--storage-upload-lifetime-only" || std::string_view(argv[1]) == "--storage-upload-failure-only")) {
+        storageUploadLifetimeTests(device, recorder, std::string_view(argv[1]) == "--storage-upload-failure-only");
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--tiled-resolve-only") {
+        if ((device.GetContext().limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_4_BIT) == 0 || !device.Graphics()) {
+            std::cout << "skipped, the device lacks 4x color targets or a graphics queue\n";
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--copied-direct-only") {
-            copiedDirectOrderingTests(device, recorder);
-            return 0;
+        tiledResolveTests(device, recorder);
+        std::cout << "CB resolves into tiled targets tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--failed-check-only") {
+        failedCheckReportTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--cube-only") {
+        singleCubeTests(device, recorder);
+        cubeExtraSliceTests(device, recorder);
+        std::cout << "Single cube snapshot and storage sampling tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--sampled-storage-base-level-usage-only") {
+        sampledStorageBaseLevelUsageTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--unchanged-cpu-stamps-only") {
+        unchangedCpuStampTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--kept-unit-settle-only") {
+        keptUnitSettleTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--clear-hand-over-only") {
+        clearHandOverTests(device, recorder, false);
+        if (!clearHandOverTests(device, recorder, true)) {
+            std::cout << "skipped, the device imports no watched host memory for the clear-key hand-over\n";
+            return 77;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--pending-write-snapshot-only") {
-            pendingWriteSnapshotTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--benchmark-pending-write-snapshot") {
-            pendingWriteSnapshotBenchmark(recorder);
-            return 0;
-        }
-        if (argc == 2 && (std::string_view(argv[1]) == "--storage-upload-lifetime-only" || std::string_view(argv[1]) == "--storage-upload-failure-only")) {
-            storageUploadLifetimeTests(device, recorder, std::string_view(argv[1]) == "--storage-upload-failure-only");
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--tiled-resolve-only") {
-            if ((device.GetContext().limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_4_BIT) == 0 || !device.Graphics()) {
-                std::cout << "skipped, the device lacks 4x color targets or a graphics queue\n";
-                return 77;
-            }
-            tiledResolveTests(device, recorder);
-            std::cout << "CB resolves into tiled targets tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--failed-check-only") {
-            failedCheckReportTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--cube-only") {
-            singleCubeTests(device, recorder);
-            cubeExtraSliceTests(device, recorder);
-            std::cout << "Single cube snapshot and storage sampling tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--sampled-storage-base-level-usage-only") {
-            sampledStorageBaseLevelUsageTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--unchanged-cpu-stamps-only") {
-            unchangedCpuStampTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--kept-unit-settle-only") {
-            keptUnitSettleTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--clear-hand-over-only") {
-            clearHandOverTests(device, recorder, false);
-            if (!clearHandOverTests(device, recorder, true)) {
-                std::cout << "skipped, the device imports no watched host memory for the clear-key hand-over\n";
-                return 77;
-            }
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--integer-clear-only") {
-            integerClearTests(device);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--settled-baseline-only") {
-            settledBaselineTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--completion-labels-only") {
-            completionCountTests(device, recorder);
-            afterRecordedWorkTests(device, recorder);
-            directCompletionLabelTests(recorder);
-            labelTests(recorder);
-            lateLabelTests(recorder);
-            largeLabelTests(recorder);
-            std::cout << "Completion label storage and ordering tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--bda-staging-only") {
-            if (!bdaStagingTests(device, recorder)) return 77;
-            std::cout << "address-based staging tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--read-written-staging-only") {
-            if (!readWrittenStagingTests(device, recorder)) return 77;
-            std::cout << "read and written staging tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--written-buffer-order-only") {
-            if (!writtenBufferOrderTests(device, recorder)) return 77;
-            std::cout << "written buffer order tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--read-list-only") {
-            readListTests(device, recorder);
-            std::cout << "Read list tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--deferred-failure-report-only") {
-            deferredFailureReportTests(recorder);
-            std::cout << "Deferred failure report tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-unmap-only") {
-            gpu.unlock();
-            hostImportUnmapTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--slice-dirty-only") {
-            sliceDirtyTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--resident-present-only") {
-            RunResidentPresentTests(device.GetContext());
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--parked-import-unmap-only") {
-            gpu.unlock();
-            parkedImportUnmapTests(device);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--idle-publish-wait-only") {
-            if (!AgcDriver::Graphics::UnitShadowEnabled() || device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, unit shadows or host imports are unavailable\n";
-                return 77;
-            }
-            idlePublishWaitTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--unit-shadow-only") {
-            if (!AgcDriver::Graphics::UnitShadowEnabled() || device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, unit shadows or host imports are unavailable\n";
-                return 77;
-            }
-            if (!unitShadowTests(device, recorder)) {
-                std::cout << "skipped, the device does not import watched host memory for unit shadows\n";
-                return 77;
-            }
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--bda-shadowed-results-only") {
-            return addressShadowTests(device, recorder) ? 0 : 77;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--completion-store-shadow-only") {
-            return completionStoreShadowTests(device, recorder) ? 0 : 77;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--split-writeback-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, host imports are unavailable\n";
-                return 77;
-            }
-            splitWriteBackTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--storage-write-back-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, host imports are unavailable\n";
-                return 77;
-            }
-            storageRefreshTests(device, recorder, false);
-            storageRefreshTests(device, recorder, true);
-            writeBackPaddingTests(device, recorder, false);
-            writeBackPaddingTests(device, recorder, true);
-            singlePassTests(device, recorder, false);
-            singlePassTests(device, recorder, true);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--cmask-only") {
-            cmaskPassTests(device, recorder);
-            std::cout << "CMASK copied clear, write-back and failure tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--writeback-blocks-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, host imports are unavailable\n";
-                return 77;
-            }
-            writeBackBlockTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--metadata-pass-only") {
-            metadataPassTests(device, recorder);
-            std::cout << "Color metadata pass tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--pending-key-stores-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, host imports are unavailable\n";
-                return 77;
-            }
-            if (!pendingKeyStoreTests(device, recorder)) {
-                std::cout << "skipped, the device does not import the pending key store block\n";
-                return 77;
-            }
-            std::cout << "Pending DCC key store tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--sample-dumps-only") {
-            if (device.GetContext().hostImportAlignment == 0) {
-                std::cout << "skipped, host imports are unavailable\n";
-                return 77;
-            }
-            if (!device.GetContext().bufferDeviceAddress) {
-                std::cout << "skipped, the device lacks buffer device addresses\n";
-                return 77;
-            }
-            sampleDumpTests(device, recorder);
-            std::cout << "Occlusion counter dump tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--uncounted-passes-only") {
-            if (!device.Graphics()) {
-                std::cout << "skipped, the test queue has no graphics\n";
-                return 77;
-            }
-            uncountedPassTests(device);
-            std::cout << "Uncounted pass tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--shadowed-key-stores-only") {
-            if (!shadowedKeyStoreTests(device, recorder)) {
-                std::cout << "skipped, the device imports no watched host memory under a unit shadow\n";
-                return 77;
-            }
-            std::cout << "DCC keys under unit shadows tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--draw-inputs-in-place-only") {
-            drawInputInPlaceTests(device, recorder);
-            std::cout << "In-place draw input tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--draw-inputs-copied-only") {
-            drawInputInPlaceTests(device, recorder, true);
-            std::cout << "Copied draw input tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--multisample-only") {
-            multisampleGuestAccessTests(device, recorder);
-            fmaskDecompressMsaaTests(device, recorder);
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--draw-descriptors-only") {
-            drawDescriptorWriteTests(device, recorder);
-            drawSnapshotTableSetTests(device, recorder);
-            imageTableFirstLayerRevalidateTests(device, recorder);
-            std::cout << "Draw descriptor writes and snapshot overrides passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--space-pending-writes-only") {
-            overlappedRangeTests(recorder);
-            spaceWriteSyncTests(device, recorder);
-            std::cout << "Address space pending write tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--draw-snapshot-cap-only") {
-            drawSnapshotCapTests(device, recorder);
-            containingSnapshotTests(device);
-            unwrittenSnapshotTests(device);
-            drawSnapshotUploadTests(device, recorder);
-            std::cout << "Draw snapshot cap tests passed\n";
-            return 0;
-        }
-        if (argc == 2 && std::string_view(argv[1]) == "--draw-snapshot-epoch-only") {
-            drawSnapshotEpochTests(device);
-            return 0;
-        }
-
-        if (argc == 2 && (std::string_view(argv[1]) == "--vertex-target-range-copied" || std::string_view(argv[1]) == "--vertex-target-range-imported")) {
-            return vertexTargetRangeTests(device, recorder, std::string_view(argv[1]) == "--vertex-target-range-imported") ? 0 : 77;
-        }
-
-#ifdef _WIN32
-        if (argc == 2 && std::string_view(argv[1]) == "--host-import-second-mapping-only") {
-            secondMappingImportTests(device);
-            return 0;
-        }
-#endif
-        readTrackingTests(device, recorder);
-        readListTests(device, recorder);
-        overlappedRangeTests(recorder);
-        spaceWriteSyncTests(device, recorder);
-        writeSettledTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--integer-clear-only") {
+        integerClearTests(device);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--settled-baseline-only") {
+        settledBaselineTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--completion-labels-only") {
         completionCountTests(device, recorder);
         afterRecordedWorkTests(device, recorder);
         directCompletionLabelTests(recorder);
-        batchStampTests(recorder);
         labelTests(recorder);
         lateLabelTests(recorder);
         largeLabelTests(recorder);
-        unchangedSinceTests();
-        closeRaceTests(device, recorder);
-        keyProofTests(device, recorder);
-        targetKeyProofTests(device, recorder);
-        refreshProofTests(device, recorder);
-        resourceReadTests(device, recorder);
-        readWrittenStagingTests(device, recorder);
-        bdaStagingTests(device, recorder);
-        depthSurfaceProofTests(device, recorder);
+        std::cout << "Completion label storage and ordering tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--bda-staging-only") {
+        if (!bdaStagingTests(device, recorder)) return 77;
+        std::cout << "address-based staging tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--read-written-staging-only") {
+        if (!readWrittenStagingTests(device, recorder)) return 77;
+        std::cout << "read and written staging tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--written-buffer-order-only") {
+        if (!writtenBufferOrderTests(device, recorder)) return 77;
+        std::cout << "written buffer order tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--read-list-only") {
+        readListTests(device, recorder);
+        std::cout << "Read list tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--deferred-failure-report-only") {
+        deferredFailureReportTests(recorder);
+        std::cout << "Deferred failure report tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-unmap-only") {
+        gpu.unlock();
+        hostImportUnmapTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--slice-dirty-only") {
+        sliceDirtyTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--resident-present-only") {
+        RunResidentPresentTests(device.GetContext());
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--parked-import-unmap-only") {
+        gpu.unlock();
+        parkedImportUnmapTests(device);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--idle-publish-wait-only") {
+        if (!AgcDriver::Graphics::UnitShadowEnabled() || device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, unit shadows or host imports are unavailable\n";
+            return 77;
+        }
+        idlePublishWaitTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--unit-shadow-only") {
+        if (!AgcDriver::Graphics::UnitShadowEnabled() || device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, unit shadows or host imports are unavailable\n";
+            return 77;
+        }
+        if (!unitShadowTests(device, recorder)) {
+            std::cout << "skipped, the device does not import watched host memory for unit shadows\n";
+            return 77;
+        }
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--bda-shadowed-results-only") {
+        return addressShadowTests(device, recorder) ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--completion-store-shadow-only") {
+        return completionStoreShadowTests(device, recorder) ? 0 : 77;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--split-writeback-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, host imports are unavailable\n";
+            return 77;
+        }
+        splitWriteBackTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--storage-write-back-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, host imports are unavailable\n";
+            return 77;
+        }
+        storageRefreshTests(device, recorder, false);
+        storageRefreshTests(device, recorder, true);
+        writeBackPaddingTests(device, recorder, false);
+        writeBackPaddingTests(device, recorder, true);
+        singlePassTests(device, recorder, false);
+        singlePassTests(device, recorder, true);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--cmask-only") {
+        cmaskPassTests(device, recorder);
+        std::cout << "CMASK copied clear, write-back and failure tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--writeback-blocks-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, host imports are unavailable\n";
+            return 77;
+        }
+        writeBackBlockTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--metadata-pass-only") {
+        metadataPassTests(device, recorder);
+        std::cout << "Color metadata pass tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--pending-key-stores-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, host imports are unavailable\n";
+            return 77;
+        }
+        if (!pendingKeyStoreTests(device, recorder)) {
+            std::cout << "skipped, the device does not import the pending key store block\n";
+            return 77;
+        }
+        std::cout << "Pending DCC key store tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--sample-dumps-only") {
+        if (device.GetContext().hostImportAlignment == 0) {
+            std::cout << "skipped, host imports are unavailable\n";
+            return 77;
+        }
+        if (!device.GetContext().bufferDeviceAddress) {
+            std::cout << "skipped, the device lacks buffer device addresses\n";
+            return 77;
+        }
+        sampleDumpTests(device, recorder);
+        std::cout << "Occlusion counter dump tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--uncounted-passes-only") {
+        if (!device.Graphics()) {
+            std::cout << "skipped, the test queue has no graphics\n";
+            return 77;
+        }
+        uncountedPassTests(device);
+        std::cout << "Uncounted pass tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--shadowed-key-stores-only") {
+        if (!shadowedKeyStoreTests(device, recorder)) {
+            std::cout << "skipped, the device imports no watched host memory under a unit shadow\n";
+            return 77;
+        }
+        std::cout << "DCC keys under unit shadows tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--draw-inputs-in-place-only") {
+        drawInputInPlaceTests(device, recorder);
+        std::cout << "In-place draw input tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--draw-inputs-copied-only") {
+        drawInputInPlaceTests(device, recorder, true);
+        std::cout << "Copied draw input tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--multisample-only") {
         multisampleGuestAccessTests(device, recorder);
-        tiledResolveTests(device, recorder);
         fmaskDecompressMsaaTests(device, recorder);
-        misalignedSnapshotTests(device, recorder);
-        misalignedRegionTests(device, recorder);
-        drawSnapshotReuseTests(device, recorder);
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--draw-descriptors-only") {
         drawDescriptorWriteTests(device, recorder);
         drawSnapshotTableSetTests(device, recorder);
         imageTableFirstLayerRevalidateTests(device, recorder);
+        std::cout << "Draw descriptor writes and snapshot overrides passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--space-pending-writes-only") {
+        overlappedRangeTests(recorder);
+        spaceWriteSyncTests(device, recorder);
+        std::cout << "Address space pending write tests passed\n";
+        return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--draw-snapshot-cap-only") {
         drawSnapshotCapTests(device, recorder);
-        drawSnapshotEvictionTests(device);
         containingSnapshotTests(device);
         unwrittenSnapshotTests(device);
         drawSnapshotUploadTests(device, recorder);
-        drawInputReuseTests(device, recorder);
-        drawInputInPlaceTests(device, recorder);
-        RunResidentPresentTests(device.GetContext());
-        sliceDirtyTests(device, recorder);
-        storeRunTests(device, recorder);
-        queuedWriteGroupTests();
-        remappedImportTests(device);
-#ifdef _WIN32
-        secondMappingImportTests(device);
-#endif
-        movedMetadataTests(device, recorder);
-        viewPastLastMipTests(device, recorder);
-        keysFillTests(device, recorder);
-        clearHandOverTests(device, recorder, false);
-        clearHandOverTests(device, recorder, true);
-        integerClearTests(device);
-        denormalClearTests(device, recorder);
-        unitShadowTests(device, recorder);
-        storageRefreshTests(device, recorder, false);
-        storageRefreshTests(device, recorder, true);
-        static_cast<void>(writtenBufferOrderTests(device, recorder));
-        writeBackPaddingTests(device, recorder, false);
-        writeBackPaddingTests(device, recorder, true);
-        splitWriteBackTests(device, recorder);
-        writeBackBlockTests(device, recorder);
-        singlePassTests(device, recorder, false);
-        singlePassTests(device, recorder, true);
-        unchangedCpuStampTests(device, recorder);
-        keptUnitSettleTests(device, recorder);
-        settledBaselineTests(device, recorder);
-        importWatchTests(device);
-        staleGenerationTests(device, recorder);
-        importWindowTests(device, recorder);
-        dataWordPositionsTests();
-        dataRefreshTests(device, recorder);
-        imageMemoTests(device, recorder);
-        minLodTests(device, recorder);
-        firstLayerViewTests(device, recorder);
-        sampledStorageBaseLevelUsageTests(device, recorder);
-        singleCubeTests(device, recorder);
-        cubeExtraSliceTests(device, recorder);
-        atomicViewTests(device, recorder);
-        metadataPassTests(device, recorder);
-        cmaskPassTests(device, recorder);
-        pendingKeyStoreTests(device, recorder);
-        shadowedKeyStoreTests(device, recorder);
-        sampleDumpTests(device, recorder);
-        copiedDirectOrderingTests(device, recorder);
-        gpu.unlock();
-        hostImportUnmapTests(device, recorder);
-        drawSnapshotPatchTests(device);
-        drawSnapshotEpochTests(device);
-        gpu.lock();
-        recorder.Activate();
-        std::cout << "Recorder read tracking and label tests passed\n";
+        std::cout << "Draw snapshot cap tests passed\n";
         return 0;
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
     }
+    if (argc == 2 && std::string_view(argv[1]) == "--draw-snapshot-epoch-only") {
+        drawSnapshotEpochTests(device);
+        return 0;
+    }
+
+    if (argc == 2 && (std::string_view(argv[1]) == "--vertex-target-range-copied" || std::string_view(argv[1]) == "--vertex-target-range-imported")) {
+        return vertexTargetRangeTests(device, recorder, std::string_view(argv[1]) == "--vertex-target-range-imported") ? 0 : 77;
+    }
+
+#ifdef _WIN32
+    if (argc == 2 && std::string_view(argv[1]) == "--host-import-second-mapping-only") {
+        secondMappingImportTests(device);
+        return 0;
+    }
+#endif
+    readTrackingTests(device, recorder);
+    readListTests(device, recorder);
+    overlappedRangeTests(recorder);
+    spaceWriteSyncTests(device, recorder);
+    writeSettledTests(device, recorder);
+    completionCountTests(device, recorder);
+    afterRecordedWorkTests(device, recorder);
+    directCompletionLabelTests(recorder);
+    batchStampTests(recorder);
+    labelTests(recorder);
+    lateLabelTests(recorder);
+    largeLabelTests(recorder);
+    unchangedSinceTests();
+    closeRaceTests(device, recorder);
+    keyProofTests(device, recorder);
+    targetKeyProofTests(device, recorder);
+    refreshProofTests(device, recorder);
+    resourceReadTests(device, recorder);
+    readWrittenStagingTests(device, recorder);
+    bdaStagingTests(device, recorder);
+    depthSurfaceProofTests(device, recorder);
+    multisampleGuestAccessTests(device, recorder);
+    tiledResolveTests(device, recorder);
+    fmaskDecompressMsaaTests(device, recorder);
+    misalignedSnapshotTests(device, recorder);
+    misalignedRegionTests(device, recorder);
+    drawSnapshotReuseTests(device, recorder);
+    drawDescriptorWriteTests(device, recorder);
+    drawSnapshotTableSetTests(device, recorder);
+    imageTableFirstLayerRevalidateTests(device, recorder);
+    drawSnapshotCapTests(device, recorder);
+    drawSnapshotEvictionTests(device);
+    containingSnapshotTests(device);
+    unwrittenSnapshotTests(device);
+    drawSnapshotUploadTests(device, recorder);
+    drawInputReuseTests(device, recorder);
+    drawInputInPlaceTests(device, recorder);
+    RunResidentPresentTests(device.GetContext());
+    sliceDirtyTests(device, recorder);
+    storeRunTests(device, recorder);
+    queuedWriteGroupTests();
+    remappedImportTests(device);
+#ifdef _WIN32
+    secondMappingImportTests(device);
+#endif
+    movedMetadataTests(device, recorder);
+    viewPastLastMipTests(device, recorder);
+    keysFillTests(device, recorder);
+    clearHandOverTests(device, recorder, false);
+    clearHandOverTests(device, recorder, true);
+    integerClearTests(device);
+    denormalClearTests(device, recorder);
+    unitShadowTests(device, recorder);
+    storageRefreshTests(device, recorder, false);
+    storageRefreshTests(device, recorder, true);
+    static_cast<void>(writtenBufferOrderTests(device, recorder));
+    writeBackPaddingTests(device, recorder, false);
+    writeBackPaddingTests(device, recorder, true);
+    splitWriteBackTests(device, recorder);
+    writeBackBlockTests(device, recorder);
+    singlePassTests(device, recorder, false);
+    singlePassTests(device, recorder, true);
+    unchangedCpuStampTests(device, recorder);
+    keptUnitSettleTests(device, recorder);
+    settledBaselineTests(device, recorder);
+    importWatchTests(device);
+    staleGenerationTests(device, recorder);
+    importWindowTests(device, recorder);
+    dataWordPositionsTests();
+    dataRefreshTests(device, recorder);
+    imageMemoTests(device, recorder);
+    minLodTests(device, recorder);
+    firstLayerViewTests(device, recorder);
+    sampledStorageBaseLevelUsageTests(device, recorder);
+    singleCubeTests(device, recorder);
+    cubeExtraSliceTests(device, recorder);
+    atomicViewTests(device, recorder);
+    metadataPassTests(device, recorder);
+    cmaskPassTests(device, recorder);
+    pendingKeyStoreTests(device, recorder);
+    shadowedKeyStoreTests(device, recorder);
+    sampleDumpTests(device, recorder);
+    copiedDirectOrderingTests(device, recorder);
+    gpu.unlock();
+    hostImportUnmapTests(device, recorder);
+    drawSnapshotPatchTests(device);
+    drawSnapshotEpochTests(device);
+    gpu.lock();
+    recorder.Activate();
+    std::cout << "Recorder read tracking and label tests passed\n";
+    return 0;
 }
