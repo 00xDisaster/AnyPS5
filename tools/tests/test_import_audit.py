@@ -765,7 +765,7 @@ class ImportAuditTests(unittest.TestCase):
                     self.assertEqual((code, err), (0, ""))
                     data = json.loads(report.read_text(encoding="utf-8"))
                     self.assertEqual(data["missing_libraries"], {})
-                    self.assertEqual(data["unique_by_class"], {"implemented": 0, "stub": 0, "absent": 0, "module": 1})
+                    self.assertEqual(data["unique_by_class"], {"implemented": 0, "partial": 0, "stub": 0, "absent": 0, "module": 1})
                     self.assertEqual(data["references"], 1)
                     self.assertEqual(data["imports"][0]["library"], needed)
                 finally:
@@ -784,7 +784,7 @@ class ImportAuditTests(unittest.TestCase):
                 self.assertEqual((code, err), (1, ""))
                 data = json.loads(report.read_text(encoding="utf-8"))
                 self.assertEqual(data["missing_libraries"], {needed: 1})
-                self.assertEqual(data["unique_by_class"], {"implemented": 0, "stub": 0, "absent": 1, "module": 0})
+                self.assertEqual(data["unique_by_class"], {"implemented": 0, "partial": 0, "stub": 0, "absent": 1, "module": 0})
 
     def test_converted_module_matches_imports_of_its_base_name(self):
         work = self.work
