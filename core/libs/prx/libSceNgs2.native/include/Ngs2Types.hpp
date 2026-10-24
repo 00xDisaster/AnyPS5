@@ -104,6 +104,7 @@ static constexpr std::uint32_t SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN = 0x40001500;
 static constexpr std::uint32_t SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX = 0x40001900;
 static constexpr std::uint32_t SCE_NGS2_CUSTOM_VOICE_PARAM_DELAY = 0x40001d00;
 static constexpr std::uint32_t SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 = 0x40001f00;
+static constexpr std::uint32_t SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT = 0x40002000;
 
 static constexpr std::uint32_t SCE_NGS2_CUSTOM_MAX_MODULES = 24;
 static constexpr std::uint32_t SCE_NGS2_CUSTOM_MAX_PORTS = 16;
@@ -597,6 +598,15 @@ struct Ngs2CustomVoiceGainParam {
     float gain[SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS];
 };
 static_assert(sizeof(Ngs2CustomVoiceGainParam) == 156);
+
+struct Ngs2CustomVoicePitchShiftParam {
+    Ngs2VoiceParamHeader header;
+    std::int32_t cents;
+    std::uint32_t reserved;
+    std::uint32_t bypass_mask;
+    std::uint32_t reserved2;
+};
+static_assert(sizeof(Ngs2CustomVoicePitchShiftParam) == 24);
 
 struct Ngs2CustomVoiceFilterParam {
     Ngs2VoiceParamHeader header;

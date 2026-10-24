@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "prx/libSceNgs2.native/include/Ngs2Types.hpp"
+#include "PitchShift.hpp"
 
 static constexpr std::uint32_t NGS2_MAX_CHANNELS = 8;
 static constexpr std::uint32_t MIN_GRAIN_SAMPLES = 64;
@@ -143,6 +144,9 @@ struct Ngs2Voice {
     std::vector<Ngs2UserFx2> userFx;
     std::vector<Ngs2VoiceCustomUserFx> customUserFx;
     std::vector<Ngs2VoiceCustomGain> customGain;
+    std::vector<Ngs2PitchShift> customPitchShift;
+    Ngs2PitchShiftTransition pitchShiftTransition = Ngs2PitchShiftTransition::None;
+    bool pitchShiftPlayed = false;
     Ngs2UserFxProcessHandler userFxHandler = nullptr;
     std::array<std::uintptr_t, 3> userFxData{};
     std::uint32_t userFxFlags = 0;

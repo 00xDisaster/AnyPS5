@@ -34,24 +34,40 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
     switch (eventId) {
         case SCE_NGS2_VOICE_EVENT_PLAY:
             if (state == Ngs2PlayState::Empty || state == Ngs2PlayState::Stopped) {
+                if (Ngs2HasPitchShift(*this)) {
+                    Ngs2RestartPitchShift(*this);
+                    pitchShiftTransition = pitchShiftPlayed ? Ngs2PitchShiftTransition::Resume : Ngs2PitchShiftTransition::None;
+                    pitchShiftPlayed = true;
+                }
                 state = Ngs2PlayState::Playing;
                 stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_INUSE;
                 if (userFxHandler) userFxFlags = 1;
             }
             break;
         case SCE_NGS2_VOICE_EVENT_STOP:
-            if (state == Ngs2PlayState::Playing || state == Ngs2PlayState::Paused) state = Ngs2PlayState::Stopped;
+            if (state == Ngs2PlayState::Playing || state == Ngs2PlayState::Paused) {
+                state = Ngs2PlayState::Stopped;
+                if (Ngs2HasPitchShift(*this)) pitchShiftTransition = Ngs2PitchShiftTransition::Stop;
+            }
             break;
         case SCE_NGS2_VOICE_EVENT_STOP_IMM:
         case SCE_NGS2_VOICE_EVENT_KILL:
             state = Ngs2PlayState::Empty;
             Ngs2ClearReverb(*this);
+            Ngs2RestartPitchShift(*this);
+            pitchShiftTransition = Ngs2PitchShiftTransition::None;
             break;
         case SCE_NGS2_VOICE_EVENT_PAUSE:
-            if (state == Ngs2PlayState::Playing) state = Ngs2PlayState::Paused;
+            if (state == Ngs2PlayState::Playing) {
+                state = Ngs2PlayState::Paused;
+                if (Ngs2HasPitchShift(*this)) pitchShiftTransition = Ngs2PitchShiftTransition::Pause;
+            }
             break;
         case SCE_NGS2_VOICE_EVENT_RESUME:
-            if (state == Ngs2PlayState::Paused) state = Ngs2PlayState::Playing;
+            if (state == Ngs2PlayState::Paused) {
+                state = Ngs2PlayState::Playing;
+                if (Ngs2HasPitchShift(*this)) pitchShiftTransition = Ngs2PitchShiftTransition::Resume;
+            }
             break;
         default: throw std::invalid_argument("NGS2: unknown voice event " + Ngs2Hex(eventId));
     }
@@ -60,6 +76,7 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
 void Ngs2Voice::ResetSetup() {
     ++waveformRevision;
     SetEvent(SCE_NGS2_VOICE_EVENT_STOP_IMM);
+    Ngs2ResetPitchShift(*this);
     std::fill(ports.begin(), ports.end(), Ngs2Port{});
     for (auto& matrix : matrices) matrix.clear();
     filters.clear();

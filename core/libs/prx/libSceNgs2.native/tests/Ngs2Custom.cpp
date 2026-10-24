@@ -474,8 +474,14 @@ static void TestCustomRackChecks() {
     const ModuleOptionWords pitchShift{SCE_NGS2_CUSTOM_PITCH_SHIFT_OPTION_SIZE, {0}};
     const ModuleOptionWords pitchShiftWord{SCE_NGS2_CUSTOM_PITCH_SHIFT_OPTION_SIZE, {1}};
     const auto pitchShiftState = SCE_NGS2_CUSTOM_PITCH_SHIFT_STATE_SIZE;
-    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, pitchShiftState)));
-    Require(CreateThrows<std::runtime_error>(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, 0)));
+    for (const auto stateSize : {pitchShiftState, 0u}) {
+        const auto pitchOption = BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, stateSize);
+        Ngs2ContextBufferInfo pitchQuery{};
+        Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &pitchOption.custom_rack_option.rack_option, &pitchQuery) == SCE_NGS2_OK);
+        Require(pitchQuery.host_buffer_size != 0);
+    }
+    const ModuleOptionWords pitchShiftSize{16, {0}};
+    Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShiftSize, 0)) == SCE_NGS2_ERROR_INVALID_OPTION_SIZE);
     Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShift, 4)) == SCE_NGS2_ERROR_INVALID_STATE_SIZE);
     Require(create(BuiltInRackOption(userFx2, SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT, &pitchShiftWord, pitchShiftState)) == SCE_NGS2_ERROR_INVALID_PITCH_SHIFT_OPTION);
 

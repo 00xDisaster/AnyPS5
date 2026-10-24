@@ -246,7 +246,9 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
     } renderingScope{voice.rendering};
     voice.samples.assign(static_cast<std::size_t>(grain) * voice.InputChannels(), 0.0f);
     voice.hasSamples = false;
-    if (voice.state == Ngs2PlayState::Playing && voice.channels != 0) {
+    const bool pitchShiftActive = Ngs2HasPitchShift(voice) &&
+        (voice.state == Ngs2PlayState::Paused || voice.pitchShiftTransition == Ngs2PitchShiftTransition::Stop);
+    if ((voice.state == Ngs2PlayState::Playing || pitchShiftActive) && voice.channels != 0) {
         if (voice.rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || voice.rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) {
             RenderSampler(voice, grain, systemRate);
         } else {
@@ -255,6 +257,7 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
         if (voice.rack->rackId == SCE_NGS2_RACK_ID_REVERB && voice.reverb) voice.hasSamples = Ngs2ProcessReverb(voice, grain, systemRate);
         Ngs2ProcessLegacyUserFx(voice, grain, systemRate);
         Ngs2ProcessUserFx(voice, grain, systemRate);
+        Ngs2ApplyPitchShiftGain(voice, grain);
     }
     if (voice.samples.size() != static_cast<std::size_t>(grain) * voice.channels) voice.samples.assign(static_cast<std::size_t>(grain) * voice.channels, 0.0f);
     voice.rendered = true;
