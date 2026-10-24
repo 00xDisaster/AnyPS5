@@ -55,7 +55,7 @@ class CheckCompileTests(unittest.TestCase):
         for content, text in cases:
             source.write_text(text, encoding="utf-8")
             response.write_bytes(content.encode("utf-8"))
-            original = subprocess.run(arguments, cwd=self.build, capture_output=True, text=True)
+            original = subprocess.run(arguments, cwd=self.build, capture_output=True, text=True, check=False)
             self.assertEqual(original.returncode, 0, original.stderr)
             preserved = {path: path.read_bytes() for path in (source, response, output_options, *outputs)}
             for field in ("arguments", "command"):
@@ -70,6 +70,37 @@ class CheckCompileTests(unittest.TestCase):
                         self.assertIn("1 translation units compile", result.stdout)
                         for path, data in preserved.items():
                             self.assertEqual(path.read_bytes(), data, path.name)
+
+    def test_ambiguous_response_options_fail_before_the_compiler_runs(self):
+        source = self.source("unit.c")
+        response = self.build / "flags.rsp"
+        invoked = self.root / "invoked"
+        script = self.compiler("import sys\nfrom pathlib import Path\nPath(sys.argv[1]).touch()\n")
+        self.manifest([{"directory": str(self.build), "file": str(source),
+                        "arguments": [sys.executable, str(script), str(invoked), "@flags.rsp"]}])
+        for content in (r"'-DC=C:\includes'", r'"-DC=C:\includes"', r'"-DHOME=\$HOME"',
+                        "-DA=\\\n7", '""', "\ufeff-DA=7", "\v-DA=7", "-DA=\0"):
+            with self.subTest(content=content):
+                response.write_bytes(content.encode("utf-8"))
+                result = self.tool("unit.c")
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("response-file", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse(invoked.exists())
+
+    def test_windows_response_grammars_are_rejected_before_execution(self):
+        source = self.source("unit.c")
+        response = self.build / "flags.rsp"
+        response.write_text("-DA=7", encoding="utf-8")
+        for arguments in (["clang-cl", "@flags.rsp"], ["cl.exe", "@flags.rsp"],
+                          ["clang", "--driver-mode=cl", "@flags.rsp"],
+                          ["clang", "--rsp-quoting=windows", "@flags.rsp"]):
+            with self.subTest(arguments=arguments):
+                self.manifest([{"directory": str(self.build), "file": str(source), "arguments": arguments}])
+                result = self.tool("unit.c")
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("Windows-style compiler response files are unsupported", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_response_files_are_expanded_without_rewriting_build_outputs(self):
         compiler = shutil.which("clang")

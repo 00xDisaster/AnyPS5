@@ -150,6 +150,32 @@ def syntax_only(entry, source):
     return syntax_arguments(arguments, directory, source)
 
 
+def response_arguments(text):
+    quote = None
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if character == "\0" or (quote is None and character in "\v\f"):
+            raise ValueError("unsupported response-file control character")
+        if character == "\\":
+            following = text[index + 1:index + 2]
+            if quote == "'" or following in ("\r", "\n") or (quote == '"' and following not in ('"', "\\", "")):
+                raise ValueError("response-file escape has different GCC and Clang meanings")
+            index += 2
+            continue
+        if character == quote:
+            quote = None
+        elif quote is None and character in ("'", '"'):
+            quote = character
+        index += 1
+    if text.startswith("\ufeff"):
+        raise ValueError("response-file byte order marks have different GCC and Clang meanings")
+    arguments = shlex.split(text)
+    if "" in arguments:
+        raise ValueError("empty response-file options have different GCC and Clang meanings")
+    return arguments
+
+
 def expand_response_files(arguments, directory, seen=frozenset()):
     expanded = []
     for argument in arguments:
@@ -162,7 +188,7 @@ def expand_response_files(arguments, directory, seen=frozenset()):
                 raise ValueError(f"response file cycle at {resolved}")
             if len(seen) >= MAX_RESPONSE_FILE_DEPTH:
                 raise ValueError(f"response file nesting exceeds {MAX_RESPONSE_FILE_DEPTH} levels at {resolved}")
-            nested = command_arguments(response.read_text(encoding="utf-8"))
+            nested = response_arguments(response.read_bytes().decode("utf-8"))
             expanded.extend(expand_response_files(nested, directory, seen | {resolved}))
         else:
             expanded.append(argument)
@@ -171,6 +197,10 @@ def expand_response_files(arguments, directory, seen=frozenset()):
 
 def syntax_arguments(arguments, directory, source):
     validate_arguments(arguments)
+    if any(argument.startswith("@") for argument in arguments[1:]):
+        compiler = Path(arguments[0]).stem.lower()
+        if compiler in ("cl", "clang-cl") or any(argument in ("--driver-mode=cl", "--rsp-quoting=windows") for argument in arguments):
+            raise ValueError("Windows-style compiler response files are unsupported; provide expanded arguments")
     arguments = [arguments[0], *expand_response_files(arguments[1:], directory)]
     wanted = source.resolve()
     trimmed = []
