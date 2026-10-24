@@ -13,6 +13,19 @@
 #include <future>
 #include <regex>
 
+#ifdef _LIBCPP_VERSION
+struct GuestExceptionPointer {
+    void* object {};
+    explicit GuestExceptionPointer(void* primary) noexcept : object(primary) {}
+    GuestExceptionPointer(const GuestExceptionPointer&) = delete;
+    ~GuestExceptionPointer() {}
+};
+using GuestExceptionPointerArgument = GuestExceptionPointer&;
+#else
+using GuestExceptionPointer = std::exception_ptr;
+using GuestExceptionPointerArgument = GuestExceptionPointer;
+#endif
+
 using GuestCompare = int (APS5_VABI *)(const void*, const void*);
 
 using GuestContextCompare = int (APS5_VABI*)(const void*, const void*, void*);
@@ -1092,14 +1105,16 @@ void* APS5_VABI __cxa_vec_new3_nid_postfix(std::size_t n, std::size_t s, std::si
 void APS5_VABI __cxa_vec_delete_nid_postfix(void* array, std::size_t s, std::size_t p, void (APS5_VABI *dtor)(void*));
 void APS5_VABI __cxa_vec_delete2_nid_postfix(void* array, std::size_t s, std::size_t p, void (APS5_VABI *dtor)(void*), void (APS5_VABI *dealloc)(void*));
 void APS5_VABI __cxa_vec_delete3_nid_postfix(void* array, std::size_t s, std::size_t p, void (APS5_VABI *dtor)(void*), void (APS5_VABI *dealloc)(void*, std::size_t));
+#ifndef _LIBCPP_VERSION
 void APS5_VABI _ZNSt13__future_base12_Result_baseD2Ev_nid_postfix(std::__future_base::_Result_base* self) noexcept;
-void APS5_VABI _ZNSt15__exception_ptr13exception_ptr9_M_addrefEv_nid_postfix(std::exception_ptr* self) noexcept;
-void APS5_VABI _ZNSt15__exception_ptr13exception_ptr10_M_releaseEv_nid_postfix(std::exception_ptr* self) noexcept;
-void* APS5_VABI _ZNKSt15__exception_ptr13exception_ptr6_M_getEv_nid_postfix(const std::exception_ptr* self) noexcept;
-void APS5_VABI _ZNSt15__exception_ptr13exception_ptrC1EPv_nid_postfix(std::exception_ptr* self, void* exception) noexcept;
-void APS5_VABI _ZNSt15__exception_ptr13exception_ptrC2EPv_nid_postfix(std::exception_ptr* self, void* exception) noexcept;
-const std::type_info* APS5_VABI _ZNKSt15__exception_ptr13exception_ptr20__cxa_exception_typeEv_nid_postfix(const std::exception_ptr* self) noexcept;
-std::exception_ptr APS5_VABI _ZSt17current_exceptionv_nid_postfix() noexcept;
+#endif
+void APS5_VABI _ZNSt15__exception_ptr13exception_ptr9_M_addrefEv_nid_postfix(GuestExceptionPointer* self) noexcept;
+void APS5_VABI _ZNSt15__exception_ptr13exception_ptr10_M_releaseEv_nid_postfix(GuestExceptionPointer* self) noexcept;
+void* APS5_VABI _ZNKSt15__exception_ptr13exception_ptr6_M_getEv_nid_postfix(const GuestExceptionPointer* self) noexcept;
+void APS5_VABI _ZNSt15__exception_ptr13exception_ptrC1EPv_nid_postfix(GuestExceptionPointer* self, void* exception) noexcept;
+void APS5_VABI _ZNSt15__exception_ptr13exception_ptrC2EPv_nid_postfix(GuestExceptionPointer* self, void* exception) noexcept;
+const std::type_info* APS5_VABI _ZNKSt15__exception_ptr13exception_ptr20__cxa_exception_typeEv_nid_postfix(const GuestExceptionPointer* self) noexcept;
+GuestExceptionPointer APS5_VABI _ZSt17current_exceptionv_nid_postfix() noexcept;
 int APS5_VABI __cxa_guard_acquire_nid_postfix(std::uint64_t* guardObject);
 void APS5_VABI __cxa_guard_release_nid_postfix(std::uint64_t* guardObject);
 void APS5_VABI __cxa_guard_abort_nid_postfix(std::uint64_t* guardObject);
@@ -1269,7 +1284,7 @@ int APS5_VABI dl_iterate_phdr_nid_postfix(int (*callback)(dl_phdr_info*, std::si
 [[noreturn]] void APS5_VABI _Assert_nid_postfix(const char* message, const char* location);
 [[noreturn]] void APS5_VABI _ZSt16_Throw_Cpp_errori_nid_postfix(int code);
 [[noreturn]] void APS5_VABI _Thrd_exit_nid_postfix(int code);
-[[noreturn]] void APS5_VABI _ZSt17rethrow_exceptionNSt15__exception_ptr13exception_ptrE_nid_postfix(std::exception_ptr exception);
+[[noreturn]] void APS5_VABI _ZSt17rethrow_exceptionNSt15__exception_ptr13exception_ptrE_nid_postfix(GuestExceptionPointerArgument exception);
 [[noreturn]] void APS5_VABI _ZSt9terminatev_nid_postfix();
 [[noreturn]] void APS5_VABI __cxa_call_terminate_nid_postfix(void* exception);
 [[noreturn]] void APS5_VABI __cxa_pure_virtual_nid_postfix();

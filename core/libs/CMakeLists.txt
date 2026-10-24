@@ -289,8 +289,17 @@ if(BUILD_TESTING)
 
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        set(public_header_compiler_args)
+        if(APPLE)
+            foreach(architecture IN LISTS CMAKE_OSX_ARCHITECTURES)
+                list(APPEND public_header_compiler_args --compiler-arg=-arch "--compiler-arg=${architecture}")
+            endforeach()
+            if(CMAKE_OSX_SYSROOT)
+                list(APPEND public_header_compiler_args --compiler-arg=-isysroot "--compiler-arg=${CMAKE_OSX_SYSROOT}")
+            endif()
+        endif()
         add_test(NAME public_headers COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_public_headers.py --compiler ${CMAKE_CXX_COMPILER})
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_public_headers.py --compiler ${CMAKE_CXX_COMPILER} ${public_header_compiler_args})
         add_test(NAME nid_gnu_hash COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/nid/tests/test_gnu_hash.py $<TARGET_FILE:nid_patcher>)
         add_test(NAME nid_elf_duplicates COMMAND ${Python3_EXECUTABLE}

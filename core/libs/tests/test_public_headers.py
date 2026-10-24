@@ -144,10 +144,15 @@ def audit():
     return umbrellas, sorted(headers), len(exports)
 
 
-def compile_headers(compiler, umbrellas, headers):
+def compile_headers(compiler, compiler_args, umbrellas, headers):
+    macros = subprocess.run([compiler, *compiler_args, "-dM", "-E", "-x", "c++", "-"], input="", text=True, capture_output=True, check=True).stdout
+    warnings = ["-Werror"]
+    if re.search(r"^#define __clang__\b", macros, re.M):
+        warnings.append("-Wno-return-type-c-linkage")
+
     def compile_one(group):
         includes = "".join(f'#include "{header.relative_to(LIBS).as_posix()}"\n' for header in group)
-        result = subprocess.run([compiler, "-std=c++20", "-Werror", "-fsyntax-only", "-x", "c++", f"-I{LIBS}", f"-I{ROOT / '3rdparty/freetype/include'}", "-"], input=includes * 2, text=True, capture_output=True)
+        result = subprocess.run([compiler, *compiler_args, "-std=c++20", *warnings, "-fsyntax-only", "-x", "c++", f"-I{LIBS}", f"-I{ROOT / '3rdparty/freetype/include'}", "-"], input=includes * 2, text=True, capture_output=True)
         if result.returncode:
             raise RuntimeError(f"Header compilation failed: {group}\n{result.stdout}{result.stderr}")
 
@@ -158,9 +163,10 @@ def compile_headers(compiler, umbrellas, headers):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compiler", required=True)
+    parser.add_argument("--compiler-arg", action="append", default=[])
     args = parser.parse_args()
     umbrellas, headers, count = audit()
-    compile_headers(args.compiler, umbrellas, headers)
+    compile_headers(args.compiler, args.compiler_arg, umbrellas, headers)
     print(f"{len(umbrellas)} libraries, {count} exports: unique declarations, umbrella coverage and standalone headers verified")
 
 

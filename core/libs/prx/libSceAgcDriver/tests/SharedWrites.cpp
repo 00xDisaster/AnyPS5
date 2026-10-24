@@ -247,7 +247,7 @@ void run() {
         require(std::memcmp(replacement.data, across.data() + part, part) == 0, "physical alias did not see the write");
         require(std::all_of(static_cast<std::byte*>(originalAlias), static_cast<std::byte*>(originalAlias) + part, [](auto x) { return x == std::byte{29}; }), "replaced virtual range wrote the old backing");
 #ifndef _WIN32
-        require(sceKernelMunmap(middle, part) == 0, "partial unmap failed");
+        require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(middle), part) == 0, "partial unmap failed");
         const auto saved = bytes[0];
         across[0] = std::byte{99};
         require(!GuestArena::GuestArenaWriteSharedBacking_nid_no_patch(mapping.Address(), across.data(), across.size()), "writer accepted an unmapped gap");

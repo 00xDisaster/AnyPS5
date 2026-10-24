@@ -2,6 +2,7 @@
 #include "prx/libc/include/GuestLocale.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -48,26 +49,26 @@ static void CheckSystemCategory(const LibcException::CategoryObject* generic) {
     const auto* type = static_cast<const TypeRecord*>(static_cast<const void* const*>(system->vtable)[-1]);
     REQUIRE(std::strcmp(type->name, "St22_System_error_category") == 0);
     REQUIRE(type->base && std::strcmp(type->base->name, "St14error_category") == 0);
-    REQUIRE(std::strcmp(reinterpret_cast<Name>(static_cast<const void* const*>(system->vtable)[2])(system), "system") == 0);
-    const auto condition = reinterpret_cast<Condition>(static_cast<const void* const*>(system->vtable)[4]);
+    REQUIRE(std::strcmp(std::bit_cast<Name>(static_cast<const void* const*>(system->vtable)[2])(system), "system") == 0);
+    const auto condition = std::bit_cast<Condition>(static_cast<const void* const*>(system->vtable)[4]);
     const LibcException::ErrorCode known = condition(system, 2);
     std::uint64_t head = 0;
     std::memcpy(&head, &known, sizeof(head));
     REQUIRE(head == std::uint64_t{2} << 32 && known.value == 2 && known.category == generic);
     const LibcException::ErrorCode unknown = condition(system, 44);
     REQUIRE(unknown.reserved == 0 && unknown.value == 44 && unknown.category == system);
-    const auto equivalentCondition = reinterpret_cast<EquivalentCondition>(static_cast<const void* const*>(system->vtable)[5]);
+    const auto equivalentCondition = std::bit_cast<EquivalentCondition>(static_cast<const void* const*>(system->vtable)[5]);
     REQUIRE(equivalentCondition(system, 2, &known));
     const LibcException::ErrorCode sameCategory {0, 2, system};
     REQUIRE(!equivalentCondition(system, 2, &sameCategory));
     REQUIRE(equivalentCondition(system, 44, &unknown));
-    const auto equivalentCode = reinterpret_cast<EquivalentCode>(static_cast<const void* const*>(system->vtable)[6]);
+    const auto equivalentCode = std::bit_cast<EquivalentCode>(static_cast<const void* const*>(system->vtable)[6]);
     REQUIRE(equivalentCode(system, &sameCategory, 2) && !equivalentCode(system, &known, 2));
-    const auto message = reinterpret_cast<Message>(static_cast<const void* const*>(system->vtable)[3]);
+    const auto message = std::bit_cast<Message>(static_cast<const void* const*>(system->vtable)[3]);
     CheckMessage(message, system, 2, "no such file or directory");
     CheckMessage(message, system, 44, "unknown error");
     bool rejected = false;
-    try { reinterpret_cast<Delete>(static_cast<const void* const*>(system->vtable)[1])(system); }
+    try { std::bit_cast<Delete>(static_cast<const void* const*>(system->vtable)[1])(system); }
     catch (const std::invalid_argument&) { rejected = true; }
     REQUIRE(rejected);
 }
@@ -77,11 +78,11 @@ int main() {
     ApplicationHeapRegister_nid_no_patch(api.data());
     const LibcException::CategoryObject* category = _ZSt16generic_categoryv_nid_postfix();
     REQUIRE(category && category == _ZSt16generic_categoryv_nid_postfix());
-    REQUIRE(std::strcmp(reinterpret_cast<Name>(static_cast<const void* const*>(category->vtable)[2])(category), "generic") == 0);
-    const auto message = reinterpret_cast<Message>(static_cast<const void* const*>(category->vtable)[3]);
-    const auto condition = reinterpret_cast<Condition>(static_cast<const void* const*>(category->vtable)[4])(category, 35);
+    REQUIRE(std::strcmp(std::bit_cast<Name>(static_cast<const void* const*>(category->vtable)[2])(category), "generic") == 0);
+    const auto message = std::bit_cast<Message>(static_cast<const void* const*>(category->vtable)[3]);
+    const auto condition = std::bit_cast<Condition>(static_cast<const void* const*>(category->vtable)[4])(category, 35);
     REQUIRE(condition.reserved == 0 && condition.value == 35 && condition.category == category);
-    const auto equivalent = reinterpret_cast<EquivalentCondition>(static_cast<const void* const*>(category->vtable)[5]);
+    const auto equivalent = std::bit_cast<EquivalentCondition>(static_cast<const void* const*>(category->vtable)[5]);
     REQUIRE(equivalent(category, 35, &condition));
     CheckSystemCategory(category);
 

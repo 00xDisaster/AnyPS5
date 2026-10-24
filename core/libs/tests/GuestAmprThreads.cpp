@@ -493,7 +493,7 @@ static void* APS5_VABI DestroyPad(void* arg) {
 static void APS5_VABI ExitWithSystemErrorCode() {
     const auto* type = __cxa_current_exception_type_nid_postfix();
     const auto* error = static_cast<const GuestSystemError*>(__cxa_current_primary_exception_nid_postfix());
-    _exit(type && error && std::strcmp(type->name, "St12system_error") == 0 ? error->code : 1);
+    _exit(type && error && std::strcmp(type->name(), "St12system_error") == 0 ? error->code : 1);
 }
 
 template <typename TCall>
@@ -515,7 +515,7 @@ static const GuestTypeInfo UnexpectedType{_ZTVN10__cxxabiv117__class_type_infoE_
 
 static void APS5_VABI ExitWithCaughtType() {
     const auto* type = __cxa_current_exception_type_nid_postfix();
-    _exit(type == &UnexpectedType ? 42 : type == nullptr ? 43 : 1);
+    _exit(type == reinterpret_cast<const std::type_info*>(&UnexpectedType) ? 42 : type == nullptr ? 43 : 1);
 }
 
 static void TestCallUnexpected() {

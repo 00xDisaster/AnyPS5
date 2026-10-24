@@ -98,15 +98,6 @@ const type_info* exception_ptr::__cxa_exception_type() const noexcept {
 
 #else
 
-namespace {
-struct GuestExceptionPointer {
-    void* object {};
-    explicit GuestExceptionPointer(void* primary) noexcept : object(primary) {}
-    GuestExceptionPointer(const GuestExceptionPointer&) = delete;
-    ~GuestExceptionPointer() {}
-};
-}
-
 extern "C" {
 void APS5_VABI _ZNSt15__exception_ptr13exception_ptr9_M_addrefEv_nid_postfix(GuestExceptionPointer* self) noexcept {
     __cxa_increment_exception_refcount_nid_postfix(self->object);
