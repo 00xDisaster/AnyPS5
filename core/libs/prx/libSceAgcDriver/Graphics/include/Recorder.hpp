@@ -208,12 +208,14 @@ public:
     // it touches only the immutable timeline semaphore (the caller keeps the device alive). Requires
     // HasTimeline(); the debug switch APS5_NO_TIMELINE makes the device create the recorder without one.
     void WaitSerial(std::uint64_t serial);
+    bool WaitSerialFor(std::uint64_t serial, std::uint64_t timeoutNanos);
     // Under the mutex: finishes (completions, release) the in-flight batches up to `serial`, from the
     // front only; tolerates batches another thread finished meanwhile. Later batches stay in flight.
     void FinishUpTo(std::uint64_t serial);
     // Submits and waits for every batch, running completions in order.
     void Sync();
     void CountSamples();
+    bool CountingSamples() const { return countingSamples; }
     bool RecordMeshArguments(VkCommandBuffer commands, VkDeviceAddress record, VkDeviceAddress arguments, std::span<const std::uint32_t, 7> rules);
     std::uint64_t SamplesTotal();
     bool DumpSamples(VkDeviceAddress target, std::uint64_t address = 0);
