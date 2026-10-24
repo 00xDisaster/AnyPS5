@@ -29,11 +29,11 @@ LOADED_NUMBERS = (
     ("low-byte-after-zeroing", bytes.fromhex("31 c0 b0 3b 0f 05 c3"), 0x214, 59),
     ("low-word-after-zeroing", bytes.fromhex("31 c0 66 b8 3b 01 0f 05 c3"), 0x216, 0x13B),
     ("eight-register-moves", bytes.fromhex("b8 3b 00 00 00") + bytes.fromhex("89 db") * 8 + SYSCALL, 0x225, 59),
-    ("xor-eax-r8d", bytes.fromhex("41 33 c0 0f 05 c3"), 0x213, 0),
-    ("xor-eax-extended-source", bytes.fromhex("44 31 c0 0f 05 c3"), 0x213, 0),
     ("rex-w-xor", bytes.fromhex("48 31 c0 0f 05 c3"), 0x213, 0),
+    ("rex-x-xor", bytes.fromhex("42 31 c0 0f 05 c3"), 0x213, 0),
     ("mov-eax-rex-r", bytes.fromhex("44 b8 3b 00 00 00 0f 05 c3"), 0x216, 59),
     ("load-then-mov-r8b", bytes.fromhex("b8 3b 00 00 00 41 b0 05 0f 05 c3"), 0x218, 59),
+    ("load-then-xor-r8d-r8d", bytes.fromhex("b8 3b 00 00 00 47 31 c0 0f 05 c3"), 0x218, 59),
     ("xor-then-mov-r8b", bytes.fromhex("31 c0 41 b0 05 0f 05 c3"), 0x215, 0),
     ("word-load-dead-rex", bytes.fromhex("31 c0 41 66 b8 3b 01 0f 05 c3"), 0x217, 0x13B),
 )
@@ -143,6 +143,14 @@ def main():
             expected_output=SKIPPED % (1, 0x216))
         run(relinker, work, "sce-gap-syscall-number-xor-r8d-eax", executable(bytes.fromhex("41 31 c0 0f 05 c3")), [],
             expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-xor-r8d-eax-register-form", executable(bytes.fromhex("44 33 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-xor-eax-r8d", executable(bytes.fromhex("41 33 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-xor-eax-r8d-swapped", executable(bytes.fromhex("44 31 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-load-then-xor-eax-r8d", executable(bytes.fromhex("b8 3b 00 00 00 41 33 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x218))
         run(relinker, work, "sce-gap-syscall-number-word-zeroed", executable(bytes.fromhex("66 31 c0 0f 05 c3")), [],
             expected_output=SKIPPED % (1, 0x213))
         run(relinker, work, "sce-gap-syscall-number-word-zeroed-register-form", executable(bytes.fromhex("66 33 c0 0f 05 c3")), [],

@@ -224,8 +224,8 @@ static std::optional<std::uint64_t> ConstantRaxSetEndingAt(const std::vector<std
     if (end >= 2 && (code[end - 2] == 0x31 || code[end - 2] == 0x33) && code[end - 1] == 0xC0) {
         const ActivePrefixes prefixes = ActivePrefixesBefore(code, end - 2);
         const bool wordSized = prefixes.OperandSize && (prefixes.Rex & 0x08) == 0;
-        const bool extendedDestination = code[end - 2] == 0x31 ? (prefixes.Rex & 0x01) != 0 : (prefixes.Rex & 0x04) != 0;
-        if (!wordSized && !extendedDestination)
+        const bool extendedOperand = (prefixes.Rex & 0x05) != 0;
+        if (!wordSized && !extendedOperand)
             return 0;
     }
     return std::nullopt;
