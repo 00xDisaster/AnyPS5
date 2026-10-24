@@ -322,13 +322,13 @@ static void CheckPosixFormZoneOffsets() {
         Require(localtime_s_nid_postfix(&expected.timer, &local) == &local, "Local conversion in a POSIX-form zone failed");
         if (local.tm_gmtoff != expected.offset || local.tm_isdst != expected.isdst) {
             long hostTimezone = -1;
-            int hostDstBias = -1;
+            long hostDstBias = -1;
             _get_timezone(&hostTimezone);
             _get_dstbias(&hostDstBias);
             std::tm hostLocal{};
             const __time64_t hostTimer = expected.timer;
             _localtime64_s(&hostLocal, &hostTimer);
-            std::fprintf(stderr, "%s at %lld: offset %ld daylight %d, expected %ld daylight %d (host timezone %ld dstbias %d daylight %d)\n", expected.zone, static_cast<long long>(expected.timer), static_cast<long>(local.tm_gmtoff), local.tm_isdst, expected.offset, expected.isdst, hostTimezone, hostDstBias, hostLocal.tm_isdst);
+            std::fprintf(stderr, "%s at %lld: offset %ld daylight %d, expected %ld daylight %d (host timezone %ld dstbias %ld daylight %d)\n", expected.zone, static_cast<long long>(expected.timer), static_cast<long>(local.tm_gmtoff), local.tm_isdst, expected.offset, expected.isdst, hostTimezone, hostDstBias, hostLocal.tm_isdst);
             std::abort();
         }
     }
