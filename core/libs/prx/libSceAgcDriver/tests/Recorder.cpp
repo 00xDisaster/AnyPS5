@@ -27,6 +27,7 @@
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
+#include "prx/libc/include/Shutdown.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "ResidentPresent.hpp"
 #include "ImageTableAbi.hpp"
@@ -77,6 +78,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+extern "C" std::terminate_handler APS5_VABI _ZSt13set_terminatePFvvE_nid_postfix(std::terminate_handler handler);
 
 namespace {
 
@@ -10850,7 +10853,7 @@ void Run(Context context) {
 #endif
 
 int main(int argc, char** argv) {
-    std::set_terminate([] {
+    _ZSt13set_terminatePFvvE_nid_postfix([] {
         std::fflush(nullptr);
         std::cout.flush();
         if (const auto failure = std::current_exception()) {
@@ -10859,9 +10862,12 @@ int main(int argc, char** argv) {
             } catch (const std::exception& error) {
                 std::cerr << error.what() << '\n';
             } catch (...) {
+                std::cerr << "terminated by an exception that is not a std::exception\n";
             }
+        } else {
+            std::cerr << "terminated without an active exception\n";
         }
-        std::_Exit(1);
+        LibcTerminate_nid_no_patch(1);
     });
     if (argc == 2 && std::string_view(argv[1]) == "--collect-mapping-history-only") {
         if (!collectMappingHistoryTests()) return 77;
