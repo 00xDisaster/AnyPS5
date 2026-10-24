@@ -705,7 +705,12 @@ static void CheckNextafterEnvironment(T (APS5_VABI *next)(T, T), UInt sign, UInt
             const auto expectedFlags = daz ? item.dazFlags : item.normalFlags;
             Require(result == (daz ? item.dazResult : item.normalResult));
             Require(flags == expectedFlags);
-            Require(exceptions == static_cast<int>(expectedFlags & FE_ALL_EXCEPT));
+            const int expectedExceptions = ((expectedFlags & 0x01u) ? FE_INVALID : 0) |
+                                           ((expectedFlags & 0x04u) ? FE_DIVBYZERO : 0) |
+                                           ((expectedFlags & 0x08u) ? FE_OVERFLOW : 0) |
+                                           ((expectedFlags & 0x10u) ? FE_UNDERFLOW : 0) |
+                                           ((expectedFlags & 0x20u) ? FE_INEXACT : 0);
+            Require(exceptions == expectedExceptions);
             Require(error == (daz ? item.dazError : item.normalError));
         }
     }
