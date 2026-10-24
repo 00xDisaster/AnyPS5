@@ -1136,15 +1136,11 @@ static void VnodeOneshotWatchStops() {
     Require(write_nid_postfix(file, "abc", 3) == 3);
     Require(Wait(kq, events, 4) == 1);
     Require(events[0].ident == ident && events[0].filter == EvfiltVnode && (events[0].flags & EvOneshot) != 0 && events[0].udata == &marker);
-    // The retired note stopped its watch: further writes produce nothing and the note is gone.
     Require(write_nid_postfix(file, "def", 3) == 3);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     Require(Poll(kq, events, 4) == 0);
     RequireFailure(Apply(kq, Change(ident, EvfiltVnode, EvDelete)), GuestEnoent);
 #ifdef __linux__
-    // The retired oneshot releases its host watch rather than leaving it running: the inotify
-    // descriptor count returns to what it was before the watch (each retired oneshot used to
-    // leak its detached watch thread).
     for (int attempt = 0; attempt < 100 && InotifyWatchCount() != watchesBefore; ++attempt) std::this_thread::sleep_for(std::chrono::milliseconds(20));
     Require(InotifyWatchCount() == watchesBefore);
 #endif
@@ -1183,8 +1179,6 @@ static void PeriodicTimerFiresTwice() {
 
 #ifdef _WIN32
 static void RecycleBinDeleteWatchedFile() {
-    // Windows deletes surface as a rename into the POSIX recycle bin; a path under
-    // \\$Extend\\$Deleted\\ is a delete for the watch.
     const auto directory = TemporaryName("deleted");
     std::filesystem::create_directories(directory + "\\$Extend\\$Deleted");
     const auto path = directory + "\\watched";
