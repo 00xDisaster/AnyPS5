@@ -243,7 +243,8 @@ void Ngs2ProcessPitchShift(Ngs2Voice& voice, std::size_t module, std::uint32_t g
 void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain) {
     if (!Ngs2HasPitchShift(voice) && !voice.IsSampler()) return;
     const auto transition = voice.outputTransition;
-    if (transition == Ngs2VoiceTransition::None && voice.state != Ngs2PlayState::Paused) return;
+    const bool paused = voice.state == Ngs2PlayState::Paused || (voice.stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
+    if (transition == Ngs2VoiceTransition::None && !paused) return;
     if (transition != Ngs2VoiceTransition::None && grain < 64) throw std::runtime_error("NGS2: voice transitions require at least 64 samples");
     for (std::uint32_t c = 0; c < voice.channels; ++c) {
         auto* samples = voice.samples.data() + static_cast<std::size_t>(c) * grain;
@@ -255,7 +256,7 @@ void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain) {
                 if (i < 64) gain = static_cast<float>(i) / 64.0f;
             } else if (transition == Ngs2VoiceTransition::Stop) {
                 gain = i < 64 ? 1.0f - static_cast<float>(i) / 64.0f : 0.0f;
-            } else if (voice.state == Ngs2PlayState::Paused) {
+            } else if (paused) {
                 gain = 0.0f;
             }
             samples[i] *= gain;

@@ -28,22 +28,13 @@ enum class Ngs2PlayState : std::uint32_t {
     Stopped = SCE_NGS2_VOICE_STATE_FLAG_INUSE | SCE_NGS2_VOICE_STATE_FLAG_PLAYING | SCE_NGS2_VOICE_STATE_FLAG_STOPPED,
 };
 
-struct Ngs2Piece {
-    const std::uint8_t* data;
-    std::uint64_t firstFrame;
-    std::uint64_t frames;
-};
-
 struct Ngs2Block {
     const std::uint8_t* data;
     Ngs2WaveformBlock info;
-    std::uint32_t cursor = 0;
     std::uint32_t numRepeated = 0;
     std::size_t dataCursor = 0;
-    bool streaming = false;
-    std::uint64_t availableFrames = 0;
-    std::vector<Ngs2Piece> pieces;
     bool started = false;
+    std::uint32_t submittedRepeats = 0;
 };
 
 struct Ngs2Atrac9DecoderDeleter {
@@ -61,7 +52,9 @@ struct Ngs2Atrac9 {
     std::vector<std::uint8_t> input;
     std::uint32_t remainingSamples = 0;
     std::uint32_t skipSamples = 0;
-    bool finishOnDrain = false;
+    std::uint32_t inputCursor = 0;
+    std::uint32_t frameIndex = 0;
+    bool restartOnDrain = false;
 };
 
 struct Ngs2ReverbState;
@@ -127,15 +120,23 @@ struct Ngs2Voice {
     float pitch = 1.0f;
     std::uint64_t phase = 0;
     std::array<std::array<float, 4>, NGS2_MAX_CHANNELS> samplerHistory{};
+    std::uint32_t samplerCachedFrames = 4;
+    bool samplerStarved = false;
+    bool samplerEnded = false;
+    std::uint32_t pcmRemaining = 0;
+    std::uint32_t pcmSkipRemaining = 0;
+    std::vector<Ngs2VoiceCallbackInfo> pendingBlockCallbacks;
+    std::vector<Ngs2VoiceCallbackInfo> dispatchBlockCallbacks;
     std::vector<float> samplerScratch;
     std::vector<Ngs2Block> samplerReplayBlocks;
-    bool samplerReplayKnown = true;
+    std::uint32_t samplerWritePosition = 0;
     std::deque<Ngs2Block> blocks;
     bool acceptsBlocks = true;
     std::uint64_t decodedSamples = 0;
     std::uint64_t decodedBytes = 0;
     std::uint64_t waveformRevision = 0;
-    const std::uint8_t* waveformEnd = nullptr;
+    const std::uint8_t* waveformData = nullptr;
+    std::uintptr_t waveformUserData = 0;
     Ngs2VoiceCallbackHandler callback = nullptr;
     std::uintptr_t callbackData = 0;
     std::uint32_t callbackFlags = 0;
@@ -202,7 +203,6 @@ struct Ngs2System {
 std::string Ngs2Hex(std::uint32_t value);
 std::size_t Ngs2PcmSampleBytes(std::uint32_t waveformType);
 void Ngs2ReadPcmFrame(std::uint32_t waveformType, std::uint32_t channels, const std::uint8_t* frame, float* output);
-const std::uint8_t* Ngs2StreamEnd(const Ngs2Voice& voice, const Ngs2Block& block);
 std::recursive_mutex& Ngs2Mutex();
 
 class Ngs2Lock {
@@ -248,12 +248,13 @@ void Ngs2SetFilter(Ngs2Voice& voice, const Ngs2SamplerVoiceFilterParam& param);
 std::size_t Ngs2Atrac9BlockBytes(const Ngs2Voice& voice, const Ngs2WaveformBlock& block);
 void Ngs2RestartAtrac9(Ngs2Voice& voice);
 bool Ngs2FinishBlock(Ngs2Voice& voice);
+void Ngs2BindSamplerBlock(Ngs2Voice& voice, bool restartDecoder);
 int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option, std::uint32_t maxInputs);
 void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option);
 void Ngs2PrepareSampler(Ngs2Voice& voice);
 void Ngs2RestartSampler(Ngs2Voice& voice);
 void Ngs2ReplaySampler(Ngs2Voice& voice);
-void Ngs2SaveSamplerBlock(Ngs2Voice& voice, const Ngs2Block& block);
+void Ngs2SaveSamplerBlock(Ngs2Voice& voice, Ngs2Block& block);
 void Ngs2ConsumeSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
 std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);
 std::uint32_t Ngs2ReadSamplerAtrac9(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);

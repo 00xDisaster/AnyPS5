@@ -11,33 +11,40 @@
 #include "prx/libc/include/General.hpp"
 #include "Ngs2Internal.hpp"
 
-static const std::uint8_t* FrameAt(const Ngs2Voice& voice, const Ngs2Block& block, std::uint32_t frame) {
-    const std::size_t frameBytes = voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
-    if (block.data == nullptr) return nullptr;
-    if (block.streaming) {
-        for (const auto& piece : block.pieces) {
-            if (frame >= piece.firstFrame && frame - piece.firstFrame < piece.frames) return piece.data + (frame - piece.firstFrame) * frameBytes;
-        }
-        return nullptr;
-    }
-    return block.data + (static_cast<std::size_t>(block.info.num_skip_samples) + frame) * frameBytes;
-}
 
 static void ReadPcm(const Ngs2Voice& voice, const std::uint8_t* frame, float* out) {
     Ngs2ReadPcmFrame(voice.waveformType, voice.channels, frame, out);
 }
 
+void Ngs2BindSamplerBlock(Ngs2Voice& voice, bool restartDecoder) {
+    if (voice.blocks.empty()) return;
+    auto& block = voice.blocks.front();
+    if (block.started || block.info.num_samples == 0) return;
+    voice.waveformUserData = block.info.user_data;
+    if (voice.waveformType == SCE_NGS2_WAVEFORM_TYPE_ATRAC9) {
+        voice.atrac9.remainingSamples = block.info.num_samples;
+        voice.atrac9.skipSamples = block.info.num_skip_samples;
+        if (restartDecoder) voice.atrac9.restartOnDrain = true;
+    } else {
+        voice.pcmRemaining = block.info.num_samples;
+        voice.pcmSkipRemaining = block.info.num_skip_samples;
+    }
+    block.started = true;
+}
+
 bool Ngs2FinishBlock(Ngs2Voice& voice) {
     auto& block = voice.blocks.front();
+    if (block.data != nullptr) {
+        voice.decodedBytes += block.info.data_size > block.dataCursor ? block.info.data_size - block.dataCursor : 0;
+    }
     const bool repeat = block.info.num_repeats != 0;
     if (repeat) {
         if (block.info.num_repeats != UINT32_MAX) block.info.num_repeats--;
         block.numRepeated++;
-        block.cursor = 0;
         block.started = false;
+        block.dataCursor = 0;
         if (voice.waveformType == SCE_NGS2_WAVEFORM_TYPE_ATRAC9) {
-            block.dataCursor = 0;
-            Ngs2RestartAtrac9(voice);
+            voice.atrac9.restartOnDrain = true;
         }
     }
     const Ngs2VoiceCallbackInfo info{
@@ -53,39 +60,55 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
         0,
     };
     if (!repeat) {
-        voice.waveformEnd = voice.waveformType == SCE_NGS2_WAVEFORM_TYPE_ATRAC9 ? block.data + block.dataCursor : block.streaming ? Ngs2StreamEnd(voice, block) : FrameAt(voice, block, block.info.num_samples);
         voice.blocks.pop_front();
+        Ngs2BindSamplerBlock(voice, true);
     }
     const auto revision = voice.waveformRevision;
     if (voice.callback != nullptr && (voice.callbackFlags & info.flag) != 0) {
-        const Ngs2Unlocked unlocked;
-        voice.callback(&info);
+        voice.pendingBlockCallbacks.push_back(info);
     }
     return voice.waveformRevision == revision && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop);
 }
 
 std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count) {
-    const auto revision = voice.waveformRevision;
     std::uint32_t written = 0;
-    while (written < count && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop) && voice.waveformRevision == revision) {
-        if (voice.blocks.empty()) break;
+    const auto frameBytes = voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
+    while (written < count && !voice.blocks.empty()) {
         auto& block = voice.blocks.front();
-        const auto limit = block.streaming ? std::min<std::uint64_t>(block.info.num_samples, block.availableFrames) : block.info.num_samples;
-        if (block.cursor >= limit) {
-            if (block.cursor < block.info.num_samples && !(block.streaming && !voice.acceptsBlocks)) break;
-            if (!Ngs2FinishBlock(voice)) break;
+        if (!block.started) {
+            Ngs2BindSamplerBlock(voice, false);
+            if (block.info.num_samples == 0) block.started = true;
+        }
+        if (voice.pcmRemaining == 0) {
+            Ngs2FinishBlock(voice);
+            continue;
+        }
+        if (block.data != nullptr && block.dataCursor >= block.info.data_size) {
+            if (voice.blocks.size() == 1 && voice.acceptsBlocks) break;
+            Ngs2FinishBlock(voice);
+            continue;
+        }
+        if (block.data != nullptr && block.info.data_size - block.dataCursor < frameBytes) throw std::runtime_error("NGS2: a partial PCM frame is not implemented");
+        if (voice.pcmSkipRemaining != 0) {
+            const auto available = block.data == nullptr ? voice.pcmSkipRemaining : (block.info.data_size - block.dataCursor) / frameBytes;
+            const auto skipped = std::min<std::uint64_t>(voice.pcmSkipRemaining, available);
+            block.dataCursor += skipped * frameBytes;
+            voice.decodedBytes += skipped * frameBytes;
+            voice.pcmSkipRemaining -= static_cast<std::uint32_t>(skipped);
             continue;
         }
         float frame[NGS2_MAX_CHANNELS];
-        ReadPcm(voice, FrameAt(voice, block, block.cursor), frame);
+        ReadPcm(voice, block.data == nullptr ? nullptr : block.data + block.dataCursor, frame);
         for (std::uint32_t channel = 0; channel < voice.channels; ++channel) dest[static_cast<std::size_t>(channel) * stride + written] = frame[channel];
         ++written;
-        ++block.cursor;
+        --voice.pcmRemaining;
         ++voice.decodedSamples;
-        voice.decodedBytes += voice.channels * Ngs2PcmSampleBytes(voice.waveformType);
-        if (block.streaming) {
-            while (block.pieces.size() > 1 && block.cursor >= block.pieces.front().firstFrame + block.pieces.front().frames) block.pieces.erase(block.pieces.begin());
+        voice.decodedBytes += frameBytes;
+        block.dataCursor += frameBytes;
+        if (voice.pcmRemaining != 0 && (written == count || block.dataCursor == block.info.data_size)) {
+            voice.waveformData = block.data == nullptr ? nullptr : block.data + block.dataCursor;
         }
+        if (voice.pcmRemaining == 0) Ngs2FinishBlock(voice);
     }
     return written;
 }
@@ -132,7 +155,7 @@ static void RenderSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t s
         voice.hasSamples = true;
     }
     const bool buffered = voice.waveformType == SCE_NGS2_WAVEFORM_TYPE_ATRAC9 && voice.atrac9.windowCursor * voice.channels < voice.atrac9.window.size();
-    if (voice.state == Ngs2PlayState::Playing && voice.blocks.empty() && !buffered && !voice.acceptsBlocks && std::none_of(voice.filters.begin(), voice.filters.end(), HasHistory)) {
+    if ((voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused) && voice.samplerEnded && !buffered && std::none_of(voice.filters.begin(), voice.filters.end(), HasHistory)) {
         voice.state = Ngs2PlayState::Empty;
     }
 }
@@ -325,7 +348,21 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
         const bool wasPaused = (voice->stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
         voice->stateFlags = static_cast<std::uint32_t>(voice->state);
         if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
-        if (voice->state == Ngs2PlayState::Playing && voice->rack->rackId == SCE_NGS2_RACK_ID_SAMPLER && voice->blocks.empty() && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
+        if (voice->state == Ngs2PlayState::Playing && voice->IsSampler() && voice->samplerStarved && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
+    }
+    for (auto* voice : voices) {
+        voice->dispatchBlockCallbacks.swap(voice->pendingBlockCallbacks);
+        struct CallbackScope {
+            std::vector<Ngs2VoiceCallbackInfo>& events;
+            ~CallbackScope() { events.clear(); }
+        } callbackScope{voice->dispatchBlockCallbacks};
+        for (auto info : voice->dispatchBlockCallbacks) {
+            if (voice->callback == nullptr) break;
+            if ((voice->callbackFlags & info.flag) == 0) continue;
+            info.callback_data = voice->callbackData;
+            const Ngs2Unlocked unlocked;
+            voice->callback(&info);
+        }
     }
     system.renderCount++;
 }

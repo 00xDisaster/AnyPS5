@@ -122,7 +122,110 @@ static void TestSampler(const Case& test) {
     usedBuffers = firstBuffer;
 }
 
+struct Stream {
+    std::uintptr_t voice;
+    std::vector<std::int16_t> pcm;
+    std::uint32_t mode;
+    std::uint32_t callbacks = 0;
+};
+
+static int SubmitStream(Stream& stream, std::uint32_t block, std::uint32_t flags) {
+    const auto offset = block * (stream.mode == 2 ? 256u : 128u);
+    const Ngs2WaveformBlock info{0, 256, 0, 0, stream.mode == 1 || stream.mode == 2 || stream.mode == 5 ? 320u : 64u, 0, stream.mode == 1 ? 0u : block};
+    const Ngs2SamplerVoiceWaveformBlocksParam param{{sizeof(param), 0, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS},
+                                                   stream.pcm.data() + offset, flags, 1, &info};
+    return sceNgs2VoiceControl(stream.voice, &param.header);
+}
+
+static void APS5_VABI RefillStream(const Ngs2VoiceCallbackInfo* info) {
+    auto& stream = *reinterpret_cast<Stream*>(info->callback_data);
+    Require(info->flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END);
+    Require(info->block_size == (stream.mode == 1 ? 1280u : 256u));
+    ++stream.callbacks;
+    if (stream.mode < 3 || stream.mode == 5 || stream.callbacks >= 5) return;
+    const auto flags = (stream.mode == 4 ? SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET : 0) |
+                       (stream.callbacks < 4 ? SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE : 0);
+    Require(SubmitStream(stream, stream.callbacks, flags) == SCE_NGS2_OK);
+}
+
+static void TestStreaming(std::uint32_t mode, std::uint32_t capacity = 2) {
+    const auto firstBuffer = usedBuffers;
+    const auto system = CreateSystem();
+    Require(sceNgs2SystemSetGrainSamples(system, 64) == SCE_NGS2_OK);
+    const auto master = Mastering(system, 2);
+    Ngs2CustomSamplerRackOption option{};
+    auto& custom = option.custom_rack_option;
+    auto& common = custom.rack_option;
+    common.size = sizeof(option);
+    common.max_grain_samples = 512;
+    common.max_voices = 1;
+    common.max_matrices = 1;
+    common.max_ports = 1;
+    custom.num_modules = 1;
+    custom.num_buffers = 1;
+    custom.state_size = 48;
+    custom.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT;
+    option.max_channel_works = 2;
+    option.max_waveform_blocks = capacity;
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == SCE_NGS2_OK);
+    const auto storage = Buffer(query);
+    std::uintptr_t rack = 0;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &storage, &rack) == SCE_NGS2_OK);
+    Stream stream{Voice(rack), std::vector<std::int16_t>(1280), mode};
+    for (std::uint32_t i = 0; i < stream.pcm.size(); ++i) stream.pcm[i] = static_cast<std::int16_t>((i / 128 + 1) * 1000);
+    Control(stream.voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP,
+            Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 2, 48000, 0, 0, 0}});
+    Patch(stream.voice, master);
+    Require(SubmitStream(stream, 0, SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE) == SCE_NGS2_OK);
+    if (mode == 0) {
+        const std::array<Ngs2WaveformBlock, 3> blocks{{{0, 256, 0, 0, 64, 0, 0}, {256, 256, 0, 0, 64, 0, 0}, {512, 256, 0, 0, 64, 0, 0}}};
+        const Ngs2SamplerVoiceWaveformBlocksParam invalid{{sizeof(invalid), 0, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS},
+                                                       stream.pcm.data(), SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE, blocks.size(), blocks.data()};
+        Require(sceNgs2VoiceControl(stream.voice, &invalid.header) == static_cast<int>(0x804A8054u));
+    }
+    Control(stream.voice, SCE_NGS2_VOICE_PARAM_CALLBACK,
+            Ngs2VoiceCallbackParam{{}, RefillStream, reinterpret_cast<std::uintptr_t>(&stream), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+    Event(stream.voice, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::array<float, 128> samples{};
+    const Ngs2RenderBufferInfo output{samples.data(), sizeof(samples), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 2};
+    for (std::uint32_t grain = 0; grain < 15; ++grain) {
+        if ((mode < 3 || mode == 5) && grain >= 1 && grain <= 4) {
+            const auto flags = (mode == 1 || mode == 2 || mode == 5 ? SCE_NGS2_WAVEFORM_BLOCKS_FLAG_APPEND : 0) |
+                               (grain < 4 ? SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE : 0);
+            Require(SubmitStream(stream, grain, flags) == SCE_NGS2_OK);
+        }
+        if (grain == 8) {
+            Event(stream.voice, SCE_NGS2_VOICE_EVENT_STOP_IMM);
+            Event(stream.voice, SCE_NGS2_VOICE_EVENT_PLAY);
+        }
+        Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+        for (std::uint32_t i = 0; i < samples.size(); ++i) {
+            const auto frame = (grain < 8 ? grain : grain - 8) * 64 + i / 2;
+            float expected = 0.0f;
+            if (grain < 8 || mode == 1) {
+                if (frame >= 3 && frame < 323) expected = static_cast<float>(((frame - 3) / 64 * (mode == 2 ? 2 : 1) + 1) * 1000) / 32768.0f;
+            } else if (mode != 2 && mode != 5 && frame >= 3 && frame < (capacity == 3 ? 131u : 67u)) {
+                expected = static_cast<float>(capacity == 3 ? ((frame - 3) / 64 + 4) * 1000 : 5000) / 32768.0f;
+            }
+            Require(samples[i] == expected);
+        }
+        auto expectedCallbacks = mode == 1 ? (grain < 4 ? 0u : grain < 12 ? 1u : 2u)
+            : mode == 2 || mode == 5 ? (grain == 0 ? 0u : grain < 4 ? grain : grain < 8 ? 5u : 6u)
+            : grain < 5 ? grain + 1 : grain < 8 ? 5u : 6u;
+        if (capacity == 3 && grain >= 9) expectedCallbacks = 7;
+        Require(stream.callbacks == expectedCallbacks);
+    }
+    Require(SubmitStream(stream, 0, 0) == static_cast<int>(0x804A8054u));
+    option.max_waveform_blocks = 0;
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == static_cast<int>(0x804A8053u));
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    usedBuffers = firstBuffer;
+}
+
 int main() {
     for (const auto& test : Cases) TestSampler(test);
+    for (std::uint32_t mode = 0; mode < 6; ++mode) TestStreaming(mode);
+    TestStreaming(0, 3);
     return 0;
 }

@@ -278,6 +278,7 @@ static void TestCustomSampler() {
         option.custom_rack_option.module[m].state_size = 16;
     }
     option.max_channel_works = 4;
+    option.max_waveform_blocks = 1;
 
     Ngs2ContextBufferInfo query{};
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &option.custom_rack_option.rack_option, &query) == SCE_NGS2_OK);
@@ -328,6 +329,7 @@ static void TestCustomFilter() {
     option.custom_rack_option.num_modules = 1;
     option.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_FILTER;
     option.max_channel_works = 1;
+    option.max_waveform_blocks = 1;
 
     auto invalid = option;
     invalid.custom_rack_option.module[0].state_size = 4;
@@ -520,6 +522,7 @@ static void TestCustomRackChecks() {
     sampler.custom_rack_option.num_modules = 1;
     sampler.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_FILTER;
     sampler.max_channel_works = 1;
+    sampler.max_waveform_blocks = 1;
     Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &sampler.custom_rack_option.rack_option, &info, &rack) == SCE_NGS2_ERROR_INVALID_NUM_BUFFERS);
     sampler.custom_rack_option.num_buffers = 1;
     sampler.custom_rack_option.module[0].extra_buffer_id = 1;
@@ -739,6 +742,7 @@ static void TestCustomDelay(std::uint32_t count, const DelayOption& delay) {
     samplerOption.custom_rack_option = DelayRackOption(delay, count).custom_rack_option;
     samplerOption.custom_rack_option.rack_option.size = sizeof(samplerOption);
     samplerOption.max_channel_works = 1;
+    samplerOption.max_waveform_blocks = 1;
     Require(CreateSamplerThrows<std::runtime_error>(samplerOption));
     for (const auto invalid : {DelayOption{19}, DelayOption{24}, DelayOption{20, 2}, DelayOption{20, 0, 0},
                                DelayOption{20, 0, 9}, DelayOption{20, 0, 4, 0.0f}, DelayOption{20, 0, 4, 20001.0f},
