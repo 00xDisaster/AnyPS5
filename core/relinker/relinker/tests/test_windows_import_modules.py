@@ -377,15 +377,20 @@ def exit_code_with_preloaded_runtime(executable_path, runtime_library):
             raise OSError(ctypes.get_last_error(), 'GetExitCodeProcess failed')
         return exit_code.value
     finally:
-        if not child_exited:
-            kernel32.TerminateProcess(process.hProcess, 0xffffffff)
-            kernel32.WaitForSingleObject(process.hProcess, 10_000)
-        kernel32.CloseHandle(process.hThread)
-        kernel32.CloseHandle(process.hProcess)
+        try:
+            if not child_exited:
+                terminated = kernel32.TerminateProcess(process.hProcess, 0xffffffff)
+                if kernel32.WaitForSingleObject(process.hProcess, 10_000) != wait_object_0:
+                    raise OSError(ctypes.get_last_error(),
+                                  f'child {process.dwProcessId} survived cleanup'
+                                  f' (TerminateProcess returned {terminated})')
+        finally:
+            kernel32.CloseHandle(process.hThread)
+            kernel32.CloseHandle(process.hProcess)
 
 
-def live_children_named(executable_name):
-    th32cs_snapprocess = 0x00000002
+def snapshot_children_named(snapshot, executable_name):
+    error_no_more_files = 18
 
     class ProcessEntry(ctypes.Structure):
         _fields_ = [
@@ -402,26 +407,35 @@ def live_children_named(executable_name):
         ]
 
     kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
     kernel32.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry)]
     kernel32.Process32FirstW.restype = wintypes.BOOL
     kernel32.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry)]
     kernel32.Process32NextW.restype = wintypes.BOOL
+    children = []
+    entry = ProcessEntry()
+    entry.dwSize = ctypes.sizeof(entry)
+    found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+    while found:
+        if entry.th32ParentProcessID == os.getpid() and entry.szExeFile.lower() == executable_name.lower():
+            children.append(entry.th32ProcessID)
+        found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    error = ctypes.get_last_error()
+    if error != error_no_more_files:
+        raise OSError(error, 'process snapshot enumeration failed')
+    return children
+
+
+def live_children_named(executable_name):
+    th32cs_snapprocess = 0x00000002
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
     kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     kernel32.CloseHandle.restype = wintypes.BOOL
     snapshot = kernel32.CreateToolhelp32Snapshot(th32cs_snapprocess, 0)
     assert snapshot not in (None, ctypes.c_void_p(-1).value), ctypes.get_last_error()
     try:
-        children = []
-        entry = ProcessEntry()
-        entry.dwSize = ctypes.sizeof(entry)
-        found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
-        while found:
-            if entry.th32ParentProcessID == os.getpid() and entry.szExeFile.lower() == executable_name.lower():
-                children.append(entry.th32ProcessID)
-            found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
-        return children
+        return snapshot_children_named(snapshot, executable_name)
     finally:
         kernel32.CloseHandle(snapshot)
 
@@ -700,6 +714,13 @@ def main():
         assert not output.exists()
 
         if os.name == 'nt':
+            try:
+                snapshot_children_named(ctypes.c_void_p(-1).value, 'output.exe')
+            except OSError as error:
+                assert error.errno, error
+            else:
+                raise AssertionError('planted enumeration failure did not raise')
+
             for host_library in sys.argv[2:]:
                 library = Path(host_library).resolve()
                 runtime = library.stem.removeprefix('windows_stdio_host_')
