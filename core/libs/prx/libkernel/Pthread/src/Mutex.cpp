@@ -152,6 +152,8 @@ int APS5_VABI scePthreadMutexattrSettype(PthreadMutexattr* attr, int type) {
 int APS5_VABI scePthreadMutexInit(PthreadMutex* mutex, const PthreadMutexattr* attr, const char*) {
     if (!mutex)
         throw std::invalid_argument("Mutex pointer is null");
+    if (attr && *attr && ((*attr)->type < MutexType::ErrorCheck || (*attr)->type > MutexType::Adaptive))
+        return SCE_KERNEL_ERROR_EINVAL;
     auto replacement = std::make_unique<PthreadMutexPrivate>();
     if (attr && *attr)
         replacement->SetType((*attr)->type);
