@@ -20,14 +20,21 @@ constexpr std::uint32_t Threads = 64;
 constexpr std::uint32_t Inputs = 4;
 constexpr std::uint32_t Results = 16;
 constexpr std::uint32_t Columns = 12;
+constexpr std::uint32_t Float64Low = 5;
+constexpr std::uint32_t Float64High = 6;
 alignas(256) std::array<std::uint32_t, Threads * Inputs> Input{};
 alignas(256) std::array<std::uint32_t, Threads * Results> Output{};
 
-alignas(256) constexpr std::array<std::uint32_t, 26> Code{
+alignas(256) constexpr std::array<std::uint32_t, 25> Code{
     0x34020084u, 0x34040086u, 0xe0381000u, 0x80000401u, 0xbf8c3f70u, 0x7e141104u, 0x7e160f04u, 0x7e181904u,
-    0x7e1a1b04u, 0x7e1c7f04u, 0x7e1e2104u, 0xd7680011u, 0x00020b04u, 0xd7690012u, 0x00020b04u, 0xd55e0013u,
-    0x02010104u, 0x5e280b04u, 0x7e2a1504u, 0xe0781000u, 0x80010a02u, 0xe0781010u, 0x80010e02u, 0xe0781020u,
-    0x80011202u, 0xbf810000u,
+    0x7e1a1b04u, 0x7e1c7f04u, 0xd7680011u, 0x00020b04u, 0xd7690012u, 0x00020b04u, 0xd55e0013u, 0x02010104u,
+    0x5e280b04u, 0x7e2a1504u, 0xe0781000u, 0x80010a02u, 0xe0781010u, 0x80010e02u, 0xe0781020u, 0x80011202u,
+    0xbf810000u,
+};
+
+alignas(256) constexpr std::array<std::uint32_t, 13> Float64Code{
+    0x34020084u, 0x34040086u, 0xe0381000u, 0x80000401u, 0xbf8c3f70u, 0x7e1e2104u, 0xe0781000u, 0x80010a02u,
+    0xe0781010u, 0x80010e02u, 0xe0781020u, 0x80011202u, 0xbf810000u,
 };
 
 constexpr const char* Names[Columns] = {
@@ -97,7 +104,11 @@ std::string Hex(std::uint32_t value) {
     return text;
 }
 
-std::vector<std::uint32_t> Run(AgcDriver::VulkanDevice& device, ShaderRecompiler::ShaderFloatMode floatMode) {
+bool InPass(std::uint32_t column, bool float64) {
+    return (column == Float64Low || column == Float64High) == float64;
+}
+
+std::vector<std::uint32_t> Run(AgcDriver::VulkanDevice& device, bool float64, ShaderRecompiler::ShaderFloatMode floatMode) {
     Input.fill(0u);
     for (std::uint32_t lane = 0; lane < Vectors.size(); ++lane) {
         Input[lane * Inputs] = Vectors[lane].operands[0];
@@ -109,7 +120,7 @@ std::vector<std::uint32_t> Run(AgcDriver::VulkanDevice& device, ShaderRecompiler
     const auto output = BufferDescriptor(Output.data(), static_cast<std::uint32_t>(Output.size() * 4u));
     std::copy(input.begin(), input.end(), userData.begin());
     std::copy(output.begin(), output.end(), userData.begin() + 4);
-    const std::span<const std::uint32_t> code(Code);
+    const auto code = float64 ? std::span<const std::uint32_t>(Float64Code) : std::span<const std::uint32_t>(Code);
     const std::array<ShaderRecompiler::MemoryRegion, 1> memory{{{reinterpret_cast<std::uintptr_t>(code.data()), std::as_bytes(code)}}};
     const ShaderRecompiler::ShaderComputeStageInfo compute{{Threads, 1, 1}, 0, {false, false, false}, false, 1};
     ShaderRecompiler::RecompileRequest request{
@@ -131,9 +142,10 @@ std::string Where(std::uint32_t lane, std::uint32_t column, std::uint32_t denorm
            std::to_string(denormals) + (ieee ? ", IEEE=1" : ", IEEE=0");
 }
 
-void CheckFlushed(const std::vector<std::uint32_t>& output, std::uint32_t denormals, bool ieee) {
+void CheckFlushed(const std::vector<std::uint32_t>& output, bool float64, std::uint32_t denormals, bool ieee) {
     for (std::uint32_t lane = 0; lane < Vectors.size(); ++lane) {
         for (std::uint32_t column = 0; column < Columns; ++column) {
+            if (!InPass(column, float64)) continue;
             const auto value = output[lane * Results + column];
             const auto expected = Vectors[lane].denormalsFlushed[column];
             Require(value == expected, Where(lane, column, denormals, ieee) + " is " + Hex(value) + ", expected " + Hex(expected));
@@ -141,9 +153,10 @@ void CheckFlushed(const std::vector<std::uint32_t>& output, std::uint32_t denorm
     }
 }
 
-void CheckKept(const std::vector<std::uint32_t>& output, bool ieee) {
+void CheckKept(const std::vector<std::uint32_t>& output, bool float64, bool ieee) {
     for (std::uint32_t lane = 0; lane < Vectors.size(); ++lane) {
         for (std::uint32_t column = 0; column < Columns; ++column) {
+            if (!InPass(column, float64)) continue;
             const auto value = output[lane * Results + column];
             const auto& vector = Vectors[lane];
             Require(value == vector.denormalsKept[column] || value == vector.denormalsFlushed[column],
@@ -153,9 +166,10 @@ void CheckKept(const std::vector<std::uint32_t>& output, bool ieee) {
     }
 }
 
-void CheckSame(const std::vector<std::uint32_t>& output, const std::vector<std::uint32_t>& reference, std::uint32_t denormals, std::uint32_t like, bool ieee) {
+void CheckSame(const std::vector<std::uint32_t>& output, const std::vector<std::uint32_t>& reference, bool float64, std::uint32_t denormals, std::uint32_t like, bool ieee) {
     for (std::uint32_t lane = 0; lane < Vectors.size(); ++lane) {
         for (std::uint32_t column = 0; column < Columns; ++column) {
+            if (!InPass(column, float64)) continue;
             const auto value = output[lane * Results + column];
             const auto expected = reference[lane * Results + column];
             Require(value == expected, Where(lane, column, denormals, ieee) + " is " + Hex(value) + ", but mode " + std::to_string(like) + " gave " + Hex(expected));
@@ -173,16 +187,21 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        for (const bool ieee : {false, true}) {
-            const auto flushed = Run(*device, Mode(0u, ieee));
-            CheckFlushed(flushed, 0u, ieee);
-            const auto inputsFlushed = Run(*device, Mode(2u, ieee));
-            CheckFlushed(inputsFlushed, 2u, ieee);
-            CheckSame(inputsFlushed, flushed, 2u, 0u, ieee);
-            const auto kept = Run(*device, Mode(3u, ieee));
-            CheckKept(kept, ieee);
-            const auto outputsFlushed = Run(*device, Mode(1u, ieee));
-            CheckSame(outputsFlushed, kept, 1u, 3u, ieee);
+        const bool hasFloat64 = TargetHasCapability(device->Target(), spv::CapabilityFloat64);
+        if (!hasFloat64) std::puts("v_cvt_f64_f32 skipped, the device has no shaderFloat64");
+        for (const bool float64 : {false, true}) {
+            if (float64 && !hasFloat64) continue;
+            for (const bool ieee : {false, true}) {
+                const auto flushed = Run(*device, float64, Mode(0u, ieee));
+                CheckFlushed(flushed, float64, 0u, ieee);
+                const auto inputsFlushed = Run(*device, float64, Mode(2u, ieee));
+                CheckFlushed(inputsFlushed, float64, 2u, ieee);
+                CheckSame(inputsFlushed, flushed, float64, 2u, 0u, ieee);
+                const auto kept = Run(*device, float64, Mode(3u, ieee));
+                CheckKept(kept, float64, ieee);
+                const auto outputsFlushed = Run(*device, float64, Mode(1u, ieee));
+                CheckSame(outputsFlushed, kept, float64, 1u, 3u, ieee);
+            }
         }
         std::puts("f32 conversion denormal mode tests passed");
         return 0;
