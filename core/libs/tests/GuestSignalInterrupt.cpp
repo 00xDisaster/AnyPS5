@@ -1,4 +1,6 @@
 #include "SceTypes.hpp"
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -9,25 +11,11 @@
 
 using Handler = void (APS5_VABI *)(int);
 
-struct GuestSignalSet {
-    std::uint32_t bits[4];
-};
-
-struct GuestSigaction {
-    std::uintptr_t handler;
-    int flags;
-    GuestSignalSet mask;
-};
-
 static_assert(sizeof(GuestSignalSet) == 16 && alignof(GuestSignalSet) == 4);
 static_assert(sizeof(GuestSigaction) == 32 && offsetof(GuestSigaction, flags) == 8 && offsetof(GuestSigaction, mask) == 12);
 
 extern "C" {
 extern GuestSignalSet _sigintr_nid_postfix;
-int* APS5_VABI __error_nid_postfix();
-int APS5_VABI siginterrupt_nid_postfix(int, int);
-int APS5_VABI sigaction_nid_postfix(int, const GuestSigaction*, GuestSigaction*);
-Handler APS5_VABI signal_nid_postfix(int, Handler);
 }
 
 namespace {
