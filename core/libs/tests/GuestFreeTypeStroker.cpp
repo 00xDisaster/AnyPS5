@@ -16,6 +16,7 @@ int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint3
 int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std::uint8_t);
 int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
 int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void*);
+void APS5_VABI FT_Stroker_Set_nid_postfix(void*, std::int64_t, std::int32_t, std::int32_t, std::int64_t);
 }
 
 static void Check(bool value, int line) {
@@ -141,6 +142,21 @@ static void TestEndSubPath(GuestLibrary& library, FT_Library native) {
     Require(FT_Stroker_EndSubPath_nid_postfix(nullptr) == FT_Stroker_EndSubPath(nullptr));
 }
 
+static void TestSet(GuestLibrary& library, FT_Library native) {
+    for (const std::int64_t radius : {0, 16, 64, 200}) {
+        for (const std::int32_t cap : {0, 1, 2}) {
+            for (const std::int32_t join : {0, 1, 2, 3}) {
+                Pair pair(library, native);
+                FT_Stroker_Set_nid_postfix(pair.guest, radius, cap, join, 0x20000);
+                FT_Stroker_Set(pair.native, static_cast<FT_Fixed>(radius), static_cast<FT_Stroker_LineCap>(cap), static_cast<FT_Stroker_LineJoin>(join), 0x20000);
+                pair.Square(0);
+                pair.Square(1);
+                pair.CountsMatch();
+            }
+        }
+    }
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -151,5 +167,6 @@ int main() {
     TestBeginSubPath(library, native);
     TestLineTo(library, native);
     TestEndSubPath(library, native);
+    TestSet(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
