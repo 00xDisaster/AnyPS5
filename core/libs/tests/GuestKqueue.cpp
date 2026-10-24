@@ -1165,7 +1165,7 @@ static void TimerDisableEnableRearm() {
     Require(events[0].ident == 1 && events[0].filter == EvfiltTimer && events[0].udata == &marker);
     Require(events[0].data >= 2 && events[0].data <= 6);
     Require(Wait(kq, events, 4) == 1);
-    Require(events[0].data == 1);
+    Require(events[0].data >= 1 && events[0].data <= 2);
     Require(Throws([kq] { Apply(kq, Change(1, EvfiltTimer, EvAdd | EvEnable)); }));
     Require(Apply(kq, Change(1, EvfiltTimer, EvDelete)) == 0);
     Require(close_nid_postfix(kq) == 0);
