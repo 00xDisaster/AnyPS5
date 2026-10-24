@@ -27,6 +27,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -55,9 +56,16 @@ constexpr std::uint32_t Untouched = 0x5a5a5a5au;
 constexpr std::uint32_t Filled = 0x9abcdef0u;
 constexpr std::uint32_t Drawn = 0xff0000ffu;
 constexpr std::uint32_t LabelValue = 0x600dcafeu;
+constexpr std::uint32_t CpuStored = 0x0badf00du;
 constexpr std::uint32_t Rgba8UnormInfo = 0x28028u;
 constexpr std::uint32_t LinearAttrib3 = 0x09000000u;
+constexpr std::uint32_t WaitEqual = 3;
+constexpr std::uint32_t WaitAtLeast = 5;
 constexpr std::array<std::array<std::uint32_t, 4>, 2> Scissors{{{16, 8, 128, 96}, {128, 32, 240, 120}}};
+constexpr std::array<std::uint32_t, 4> BlockZeroScissor{24, 8, 232, 56};
+constexpr std::size_t CpuStoreOffset = BlockBytes + 32 * Pitch + 64 * 4;
+static_assert(BlockZeroScissor[3] * Pitch <= BlockBytes);
+static_assert(CpuStoreOffset >= BlockBytes && CpuStoreOffset < TargetBytes);
 
 alignas(256) constexpr std::array<std::uint32_t, 20> VertexCode{
     0x7e000d05u, 0x080200f4u, 0x10020300u, 0x100202f4u, 0x060202f3u, 0x060400f3u, 0x10040500u, 0x060404f3u,
@@ -149,18 +157,22 @@ void AppendDispatch(std::vector<std::uint32_t>& commands, const std::uint32_t* p
     commands.insert(commands.end(), {0xc0031500u, groups, 1, 1, 0x41u});
 }
 
-void AppendFill(std::vector<std::uint32_t>& commands, std::uint64_t target, const std::uint32_t* copied) {
-    const auto direct = BufferDescriptor(target, TargetBytes);
-    const auto other = BufferDescriptor(reinterpret_cast<std::uintptr_t>(copied), TargetBytes);
+void AppendFill(std::vector<std::uint32_t>& commands, std::uint64_t target, const std::uint32_t* copied, std::size_t bytes) {
+    const auto direct = BufferDescriptor(target, bytes);
+    const auto other = BufferDescriptor(reinterpret_cast<std::uintptr_t>(copied), bytes);
     std::vector<std::uint32_t> userData(direct.begin(), direct.end());
     userData.insert(userData.end(), {Filled, Filled, Filled, Filled});
     userData.insert(userData.end(), other.begin(), other.end());
-    AppendDispatch(commands, PairFillCode.data(), userData, static_cast<std::uint32_t>(TargetBytes / 1024u));
+    AppendDispatch(commands, PairFillCode.data(), userData, static_cast<std::uint32_t>(bytes / 1024u));
 }
 
-void AppendGate(std::vector<std::uint32_t>& commands) {
+void AppendLabel(std::vector<std::uint32_t>& commands, std::uint64_t label) {
+    commands.insert(commands.end(), {0xc0064900u, 0x514u, 1u << 29u, static_cast<std::uint32_t>(label), static_cast<std::uint32_t>(label >> 32u), LabelValue, 0, 0});
+}
+
+void AppendGate(std::vector<std::uint32_t>& commands, std::uint32_t function, std::uint32_t reference) {
     const auto gate = reinterpret_cast<std::uintptr_t>(&Gate);
-    commands.insert(commands.end(), {0xc0053c00u, 0x13u, static_cast<std::uint32_t>(gate), static_cast<std::uint32_t>(gate >> 32u), 1u, 0xffffffffu, 0x19u});
+    commands.insert(commands.end(), {0xc0053c00u, 0x10u | function, static_cast<std::uint32_t>(gate), static_cast<std::uint32_t>(gate >> 32u), reference, 0xffffffffu, 0x19u});
 }
 
 void Submit(std::vector<std::uint32_t>& commands) {
@@ -219,6 +231,7 @@ public:
     Region& operator=(const Region&) = delete;
     std::uint64_t Address() const { return reinterpret_cast<std::uintptr_t>(data); }
     std::uint32_t Word(std::size_t offset) const { return std::atomic_ref<std::uint32_t>(*reinterpret_cast<std::uint32_t*>(data + offset)).load(std::memory_order_acquire); }
+    void Put(std::size_t offset, std::uint32_t value) const { std::atomic_ref<std::uint32_t>(*reinterpret_cast<std::uint32_t*>(data + offset)).store(value, std::memory_order_release); }
     std::size_t bytes;
 
 private:
@@ -261,6 +274,38 @@ std::string Mismatches(const Region& region, bool drawsLast) {
     return std::to_string(wrongCovered) + " of the " + std::to_string(covered) + " pixels the draws covered do not hold their color (" + std::to_string(filledCovered) + " hold the fill's pattern) and " + std::to_string(wrongElsewhere) + " of the " + elsewhere + " pixels outside them do not hold the fill's pattern";
 }
 
+std::string Hex(std::uint32_t value) {
+    char text[16];
+    std::snprintf(text, sizeof(text), "0x%08x", value);
+    return text;
+}
+
+std::string CpuStoreMismatches(const Region& region) {
+    std::size_t covered = 0, wrongCovered = 0, filledCovered = 0, others = 0, wrongOthers = 0;
+    for (std::uint32_t y = 0; y < Height; ++y) {
+        for (std::uint32_t x = 0; x < Width; ++x) {
+            const auto offset = y * Pitch + x * 4u;
+            if (offset == CpuStoreOffset) continue;
+            const auto value = region.Word(offset);
+            if (x >= BlockZeroScissor[0] && x < BlockZeroScissor[2] && y >= BlockZeroScissor[1] && y < BlockZeroScissor[3]) {
+                ++covered;
+                wrongCovered += value == Drawn ? 0u : 1u;
+                filledCovered += value == Filled ? 1u : 0u;
+            } else {
+                ++others;
+                wrongOthers += value == (offset < BlockBytes ? Filled : Untouched) ? 0u : 1u;
+            }
+        }
+    }
+    std::vector<std::string> parts;
+    if (wrongCovered != 0) parts.push_back(std::to_string(wrongCovered) + " of the " + std::to_string(covered) + " pixels the draw covered in block 0 do not hold its color (" + std::to_string(filledCovered) + " hold the fill's pattern)");
+    if (const auto stored = region.Word(CpuStoreOffset); stored != CpuStored) parts.push_back("the CPU store in block 1 holds " + Hex(stored) + ", not " + Hex(CpuStored));
+    if (wrongOthers != 0) parts.push_back(std::to_string(wrongOthers) + " of the " + std::to_string(others) + " other pixels do not hold the fill's pattern in block 0 or the untouched pattern in block 1");
+    std::string text;
+    for (const auto& part : parts) text += (text.empty() ? "" : "; ") + part;
+    return text;
+}
+
 bool Await(const std::function<bool()>& done) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!done()) {
@@ -286,12 +331,11 @@ bool Run(Order order, const Region& region, std::vector<std::string>& failures) 
     } unregister{copied.data()};
     Gate.store(0, std::memory_order_release);
     std::vector<std::uint32_t> commands;
-    if (fillFirst) AppendFill(commands, target, copied.data());
+    if (fillFirst) AppendFill(commands, target, copied.data(), TargetBytes);
     for (const auto& scissor : Scissors) AppendDraw(commands, target, scissor);
-    if (!fillFirst) AppendFill(commands, target, copied.data());
-    const auto label = target + LabelOffset;
-    commands.insert(commands.end(), {0xc0064900u, 0x514u, 1u << 29u, static_cast<std::uint32_t>(label), static_cast<std::uint32_t>(label >> 32u), LabelValue, 0, 0});
-    if (fillFirst) AppendGate(commands);
+    if (!fillFirst) AppendFill(commands, target, copied.data(), TargetBytes);
+    AppendLabel(commands, target + LabelOffset);
+    if (fillFirst) AppendGate(commands, WaitEqual, 1);
     Submit(commands);
     std::string failure;
     if (fillFirst) {
@@ -307,6 +351,58 @@ bool Run(Order order, const Region& region, std::vector<std::string>& failures) 
     AgcDriver::Graphics::StorageTexture::FlushPending(target, region.bytes, nullptr, "test release");
     std::printf("linear target direct write completion, %s: %s\n", name, failure.empty() ? "the later writer's values" : failure.c_str());
     if (!failure.empty()) failures.push_back(std::string(name) + ": " + failure);
+    return true;
+}
+
+bool RunCpuStore(bool watched, const Region& region, std::vector<std::string>& failures) {
+    const std::string name = std::string("fill, draw in block 0, CPU store in block 1, ") + (watched ? "write-watched" : "unwatched") + " memory";
+    const auto target = region.Address();
+    Import(region);
+    if (watched && !AgcDriver::GuestMemory::Watched(target, TargetBytes)) return false;
+    if (!watched) {
+        AgcDriver::GuestMemory::Unwatch(target, region.bytes);
+        Require(!AgcDriver::GuestMemory::Watched(target, region.bytes), "linear target direct write completion: the region is still write-watched");
+    }
+    std::vector<std::uint32_t> copied(TargetBytes / 4u + 4u, Untouched);
+    GuestAllocations::Mutation().Add(copied.data(), TargetBytes + 16u, true, true, true);
+    struct Unregister {
+        void* data;
+        ~Unregister() { GuestAllocations::Mutation().Remove(data); }
+    } unregister{copied.data()};
+    Gate.store(0, std::memory_order_release);
+    std::vector<std::uint32_t> commands;
+    AppendFill(commands, target, copied.data(), BlockBytes);
+    AppendDraw(commands, target, BlockZeroScissor);
+    AppendGate(commands, WaitAtLeast, 1);
+    AppendLabel(commands, target + LabelOffset);
+    AppendGate(commands, WaitAtLeast, 2);
+    Submit(commands);
+    const auto completed = [&] { return std::atomic_ref<std::uint32_t>(copied[0]).load(std::memory_order_acquire) == Filled; };
+    bool pendingAtStore = false;
+    const bool recorded = Await([&] {
+        std::unique_lock hold(AgcDriver::GuestMemory::GpuMutex());
+        if (AgcDriver::Graphics::StorageTexture::FindLive(target, TargetBytes) == nullptr) return false;
+        pendingAtStore = !completed();
+        region.Put(CpuStoreOffset, CpuStored);
+        return true;
+    });
+    Gate.store(1, std::memory_order_release);
+    std::string failure;
+    bool completedAtLabel = false;
+    if (!recorded) failure = "the draw into block 0 never made the target's image";
+    else if (!Await([&] { return region.Word(LabelOffset) == LabelValue; })) failure = "the label after the draw never landed";
+    else {
+        completedAtLabel = completed();
+        failure = CpuStoreMismatches(region);
+        if (!failure.empty()) failure = "when the label after the draw landed: " + failure;
+        if (watched && (!pendingAtStore || !completedAtLabel)) failure += std::string(failure.empty() ? "" : "; ") + (pendingAtStore ? "the fill's completion had not run when the label landed" : "the fill's completion had run before the CPU store") + ", so the ordering under test did not occur";
+    }
+    const bool watchedAtLabel = AgcDriver::GuestMemory::Watched(target, TargetBytes);
+    Gate.store(2, std::memory_order_release);
+    AgcDriverWaitIdle_nid_postfix();
+    AgcDriver::Graphics::StorageTexture::FlushPending(target, region.bytes, nullptr, "test release");
+    std::printf("linear target direct write completion, %s (watched at the label: %d, completion pending at the CPU store: %d, run by the label: %d): %s\n", name.c_str(), watchedAtLabel ? 1 : 0, pendingAtStore ? 1 : 0, completedAtLabel ? 1 : 0, failure.empty() ? "the draw's color and the CPU store" : failure.c_str());
+    if (!failure.empty()) failures.push_back(name + ": " + failure);
     return true;
 }
 
@@ -328,16 +424,21 @@ int main() {
         } shutdown;
         Registered(VertexHeader, VertexCode.data(), sizeof(VertexCode), 2);
         Registered(PixelHeader, PixelCode.data(), sizeof(PixelCode), 1);
+        const auto unwatchedImports = [] {
+            std::puts("linear target direct write completion tests skipped, the device does not keep host imports write-watched, so no completion stamp over the target is tracked");
+            return VulkanTestSkipped;
+        };
         std::vector<std::string> failures;
         for (const auto order : {Order::FillFirst, Order::DrawsFirst}) {
             regions.push_back(std::make_unique<Region>(RegionBytes));
-            if (!Run(order, *regions.back(), failures)) {
-                std::puts("linear target direct write completion tests skipped, the device does not keep host imports write-watched, so no completion stamp over the target is tracked");
-                return VulkanTestSkipped;
-            }
+            if (!Run(order, *regions.back(), failures)) return unwatchedImports();
+        }
+        for (const bool watched : {true, false}) {
+            regions.push_back(std::make_unique<Region>(RegionBytes));
+            if (!RunCpuStore(watched, *regions.back(), failures)) return unwatchedImports();
         }
         if (!failures.empty()) {
-            std::string message = "linear target direct write completion: at a completion point, the memory of a resident linear target did not hold the later of a direct buffer write with completion work and draws into it:";
+            std::string message = "linear target direct write completion: at a completion point, the memory of a resident linear target did not hold the later of a direct buffer write with completion work and draws into it, or lost a CPU store made outside the draws:";
             for (const auto& failure : failures) message += "\n  " + failure;
             Require(false, message);
         }

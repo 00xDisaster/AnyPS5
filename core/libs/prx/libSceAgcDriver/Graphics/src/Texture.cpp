@@ -3840,7 +3840,13 @@ void StorageTexture::markLayersPending(std::uint32_t first, std::uint32_t count)
         }
     }
     if (anyUnsaved && !GuestMemory::Watched(descriptor.baseAddress, static_cast<std::size_t>(guestBytes))) captureGuestBytes(&unsaved);
-    for (std::uint32_t layer = first; layer < first + count; ++layer) layerPending[layer] = true;
+    for (std::uint32_t layer = first; layer < first + count; ++layer) {
+        if (!layerPending[layer] && !completionKept.empty()) {
+            const auto end = layerBegin(layer) + layerBytes(layer);
+            for (auto at = layerBegin(layer) & ~std::uint64_t{65535}; at < end; at += 65536) completionKept[static_cast<std::size_t>(at / 65536 - descriptor.baseAddress / 65536)] = 0;
+        }
+        layerPending[layer] = true;
+    }
     // Results of this image now cover the alias's results borrowed into these units: this image
     // stores them, the alias no longer has to (its results, unchanged since the borrow, are in
     // this image's content). An alias written since keeps its own newer results pending.
@@ -4354,7 +4360,8 @@ void StorageTexture::saveBeforeUnwatch() {
         const auto end = begin + layerBytes(unit);
         const auto spanBegin = begin & ~(block - 1);
         const auto spanBlocks = static_cast<std::size_t>((end - spanBegin + block - 1) / block);
-        const std::vector<std::uint64_t> generations(spanBlocks, layerGeneration[unit]);
+        std::vector<std::uint64_t> generations(spanBlocks);
+        for (std::size_t k = 0; k < spanBlocks; ++k) generations[k] = unitBlockGeneration(unit, spanBegin + k * block);
         std::vector<std::uint8_t> changedBlocks(spanBlocks);
         if (!GuestMemory::ChangedBlocks(begin, static_cast<std::size_t>(end - begin), generations, changedBlocks)) continue;
         forgetKeptAtUnwatch(unit);
@@ -4362,7 +4369,7 @@ void StorageTexture::saveBeforeUnwatch() {
             const auto from = std::max(at, begin);
             const auto to = std::min(at + block, end);
             const bool edge = from != at || to != at + block;
-            if (changedBlocks[static_cast<std::size_t>((at - spanBegin) / block)] == GuestMemory::BlockWritten && (!edge || GuestMemory::StoredOver(from, static_cast<std::size_t>(to - from), layerGeneration[unit])) && !unchangedSinceBaseline(from, to)) keptAtUnwatch.emplace(from, layerGeneration[unit]);
+            if (changedBlocks[static_cast<std::size_t>((at - spanBegin) / block)] == GuestMemory::BlockWritten && (!edge || GuestMemory::StoredOver(from, static_cast<std::size_t>(to - from), unitBlockGeneration(unit, at))) && !unchangedSinceBaseline(from, to)) keptAtUnwatch.emplace(from, layerGeneration[unit]);
         }
         layerOriginal[unit] = true;
         cancelStoredSave(unit);
@@ -4635,7 +4642,21 @@ bool PendingStorageOverlaps(std::uint64_t address, std::size_t bytes, const Stor
 }
 
 std::uint64_t StorageTexture::StampKeepingNewerResults(std::uint64_t address, std::size_t bytes, std::uint64_t recorded, const std::function<std::uint64_t()>& stamp) {
-    std::vector<std::pair<std::shared_ptr<StorageTexture>, std::uint32_t>> kept;
+    struct Candidate {
+        std::shared_ptr<StorageTexture> texture;
+        std::uint32_t unit;
+        bool drawn;
+    };
+    struct Kept {
+        std::shared_ptr<StorageTexture> texture;
+        std::uint32_t unit;
+        std::uint64_t from;
+        std::uint64_t to;
+        std::uint64_t since;
+        bool whole;
+        bool drawn;
+    };
+    std::vector<Candidate> candidates;
     if (recorded != 0 && bytes != 0) {
         auto& pending = Pending();
         std::lock_guard lock(pending.mutex);
@@ -4647,27 +4668,70 @@ std::uint64_t StorageTexture::StampKeepingNewerResults(std::uint64_t address, st
                 const auto begin = texture->layerBegin(unit);
                 const auto unitBytes = texture->layerBytes(unit);
                 if (!texture->layerPending[unit] || begin >= address + bytes || address >= begin + unitBytes) continue;
-                if (texture->layerGeneration[unit] >= recorded) kept.emplace_back(alive, unit);
+                if (texture->layerGeneration[unit] >= recorded) candidates.push_back({alive, unit, texture->drawnListed});
             }
         };
         for (auto* texture : pending.textures) consider(texture);
         for (auto* texture : pending.flushing) consider(texture);
     }
-    std::erase_if(kept, [](const auto& entry) {
-        const auto& [texture, unit] = entry;
+    constexpr std::uint64_t block = 65536;
+    std::vector<Kept> kept;
+    for (const auto& [texture, unit, drawn] : candidates) {
         const auto begin = texture->layerBegin(unit);
-        const auto unitBytes = static_cast<std::size_t>(texture->layerBytes(unit));
-        GuestMemory::CollectWritesUncached(begin, unitBytes);
-        return !GuestMemory::UnchangedSince(begin, unitBytes, texture->layerGeneration[unit]);
-    });
+        const auto end = begin + texture->layerBytes(unit);
+        GuestMemory::CollectWritesUncached(begin, static_cast<std::size_t>(end - begin));
+        if (GuestMemory::UnchangedSince(begin, static_cast<std::size_t>(end - begin), texture->layerGeneration[unit])) {
+            kept.push_back({texture, unit, begin, end, texture->layerGeneration[unit], true, drawn});
+            continue;
+        }
+        if (!drawn) continue;
+        const auto first = std::max(begin, address) / block;
+        const auto last = (std::min(end, address + bytes) - 1) / block;
+        const auto from = std::max(begin, first * block);
+        const auto to = std::min(end, (last + 1) * block);
+        std::vector<std::uint64_t> generations(static_cast<std::size_t>(last - first + 1));
+        for (std::size_t k = 0; k < generations.size(); ++k) generations[k] = texture->unitBlockGeneration(unit, (first + k) * block);
+        std::vector<std::uint8_t> changed(generations.size());
+        if (!GuestMemory::ChangedBlocks(from, static_cast<std::size_t>(to - from), generations, changed)) continue;
+        for (std::size_t k = 0; k < generations.size(); ++k) {
+            const auto at = (first + k) * block;
+            const auto blockFrom = std::max(at, begin);
+            const auto blockTo = std::min(at + block, end);
+            const bool edge = blockFrom != at || blockTo != at + block;
+            if (changed[k] == GuestMemory::BlockWritten && (!edge || !GuestMemory::UnchangedSince(blockFrom, static_cast<std::size_t>(blockTo - blockFrom), generations[k]))) continue;
+            if (!kept.empty() && !kept.back().whole && kept.back().texture == texture && kept.back().unit == unit && kept.back().since == generations[k] && kept.back().to == blockFrom) kept.back().to = blockTo;
+            else kept.push_back({texture, unit, blockFrom, blockTo, generations[k], false, true});
+        }
+    }
     const auto generation = stamp();
     if (generation == 0 || kept.empty()) return generation;
+    std::vector<Kept> confirmed;
+    for (const auto& entry : kept) {
+        if ((entry.whole && !entry.drawn) || GuestMemory::UnchangedSinceCollected(entry.from, static_cast<std::size_t>(entry.to - entry.from), entry.since)) {
+            confirmed.push_back(entry);
+            continue;
+        }
+        if (entry.from / block == (entry.to - 1) / block) continue;
+        const auto last = (std::min(entry.to, address + bytes) - 1) / block;
+        for (auto at = std::max(entry.from, address) / block * block; at <= last * block; at += block) {
+            const auto from = std::max(at, entry.from);
+            const auto to = std::min(at + block, entry.to);
+            if (GuestMemory::UnchangedSinceCollected(from, static_cast<std::size_t>(to - from), entry.since)) confirmed.push_back({entry.texture, entry.unit, from, to, entry.since, false, true});
+        }
+    }
     auto& pending = Pending();
     std::lock_guard lock(pending.mutex);
-    for (const auto& [texture, unit] : kept) {
-        if (!texture->layerPending[unit]) continue;
-        texture->layerGeneration[unit] = generation;
-        texture->refreshGeneration();
+    for (const auto& entry : confirmed) {
+        auto& texture = *entry.texture;
+        if (!texture.layerPending[entry.unit]) continue;
+        if (entry.whole) {
+            texture.layerGeneration[entry.unit] = generation;
+            texture.refreshGeneration();
+            continue;
+        }
+        const auto spanBegin = texture.descriptor.baseAddress / block;
+        if (texture.completionKept.empty()) texture.completionKept.assign(static_cast<std::size_t>((texture.descriptor.baseAddress + texture.guestBytes - 1) / block - spanBegin + 1), 0);
+        for (auto at = entry.from / block; at <= (entry.to - 1) / block; ++at) texture.completionKept[static_cast<std::size_t>(at - spanBegin)] = generation;
     }
     return generation;
 }
@@ -5525,6 +5589,12 @@ void StorageTexture::blockGenerations(std::vector<std::uint64_t>& generations) c
     }
 }
 
+std::uint64_t StorageTexture::unitBlockGeneration(std::uint32_t unit, std::uint64_t at) const {
+    const auto unitGeneration = layerGeneration[unit];
+    if (unitGeneration == 0 || !layerPending[unit] || completionKept.empty()) return unitGeneration;
+    return std::max(unitGeneration, completionKept[static_cast<std::size_t>(at / 65536 - descriptor.baseAddress / 65536)]);
+}
+
 namespace {
 
 std::atomic<bool>& ClearHandOverOn() {
@@ -5821,7 +5891,7 @@ void StorageTexture::writeBackLayers(const std::vector<bool>& layers) {
     for (std::uint32_t layer = 0; layer < trackedLayers; ++layer) {
         if (!layers[layer]) continue;
         const auto end = layerBegin(layer) + layerBytes(layer);
-        for (auto at = layerBegin(layer) & ~(block - 1); at < end; at += block) generations[static_cast<std::size_t>((at - spanBegin) / block)] = layerGeneration[layer];
+        for (auto at = layerBegin(layer) & ~(block - 1); at < end; at += block) generations[static_cast<std::size_t>((at - spanBegin) / block)] = unitBlockGeneration(layer, at);
     }
     const auto drawn = drawnArea();
     std::vector<std::uint8_t> changedBlocks(spanBlocks);
@@ -5864,7 +5934,7 @@ void StorageTexture::writeBackLayers(const std::vector<bool>& layers) {
             const bool edge = from != at || to != at + block;
             const auto index = static_cast<std::size_t>((at - spanBegin) / block);
             const bool kept = keptAtUnwatchHolds(from, layer);
-            const bool written = kept || unknown || (changedBlocks[index] == GuestMemory::BlockWritten && (compared[layer] || !edge || GuestMemory::StoredOver(from, static_cast<std::size_t>(to - from), layerGeneration[layer])) && !unchangedSinceBaseline(from, to));
+            const bool written = kept || unknown || (changedBlocks[index] == GuestMemory::BlockWritten && (compared[layer] || !edge || GuestMemory::StoredOver(from, static_cast<std::size_t>(to - from), unitBlockGeneration(layer, at))) && !unchangedSinceBaseline(from, to));
             if (written && (!drawn.rect || (tracked && !kept && !unknown && cpuBlocks[index] == 0))) {
                 skippedAny = true;
                 skippedLayer[layer] = true;

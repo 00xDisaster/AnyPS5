@@ -543,6 +543,7 @@ private:
     // Per 64 KiB tracker block of the surface (block 0 holds the base address): the generation of
     // the tracked layer it belongs to, for GuestMemory::ChangedBlocks.
     void blockGenerations(std::vector<std::uint64_t>& generations) const;
+    std::uint64_t unitBlockGeneration(std::uint32_t unit, std::uint64_t at) const;
     // Another image of exactly this surface under another storage format with results pending
     // (block units, uncompressed, still cached), if any: Refresh takes its pending units from its
     // image on the device (borrowUnits) instead of having them stored and re-read, and the alias
@@ -627,6 +628,7 @@ private:
     std::uint32_t trackedLayers = 1;
     std::uint64_t trackedLayerBytes = 0;
     std::vector<std::uint64_t> layerGeneration;
+    std::vector<std::uint64_t> completionKept;
     std::vector<bool> layerPending;
     std::vector<bool> layerBehind;
     bool blockUnits = false;
