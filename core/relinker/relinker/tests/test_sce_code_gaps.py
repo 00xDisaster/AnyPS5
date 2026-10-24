@@ -29,6 +29,13 @@ LOADED_NUMBERS = (
     ("low-byte-after-zeroing", bytes.fromhex("31 c0 b0 3b 0f 05 c3"), 0x214, 59),
     ("low-word-after-zeroing", bytes.fromhex("31 c0 66 b8 3b 01 0f 05 c3"), 0x216, 0x13B),
     ("eight-register-moves", bytes.fromhex("b8 3b 00 00 00") + bytes.fromhex("89 db") * 8 + SYSCALL, 0x225, 59),
+    ("xor-eax-r8d", bytes.fromhex("41 33 c0 0f 05 c3"), 0x213, 0),
+    ("xor-eax-extended-source", bytes.fromhex("44 31 c0 0f 05 c3"), 0x213, 0),
+    ("rex-w-xor", bytes.fromhex("48 31 c0 0f 05 c3"), 0x213, 0),
+    ("mov-eax-rex-r", bytes.fromhex("44 b8 3b 00 00 00 0f 05 c3"), 0x216, 59),
+    ("load-then-mov-r8b", bytes.fromhex("b8 3b 00 00 00 41 b0 05 0f 05 c3"), 0x218, 59),
+    ("xor-then-mov-r8b", bytes.fromhex("31 c0 41 b0 05 0f 05 c3"), 0x215, 0),
+    ("word-load-dead-rex", bytes.fromhex("31 c0 41 66 b8 3b 01 0f 05 c3"), 0x217, 0x13B),
 )
 JUMP_TABLE_DISPATCH = bytes.fromhex("48 8d 0d 09 00 00 00 48 63 04 b9 48 01 c8 ff e0")
 
@@ -132,6 +139,14 @@ def main():
             expected_output=SKIPPED % (1, 0x218))
         run(relinker, work, "sce-gap-syscall-low-byte-only", executable(bytes.fromhex("b0 3b 0f 05 c3")), [],
             expected_output=SKIPPED % (1, 0x212))
+        run(relinker, work, "sce-gap-syscall-number-mov-r8d", executable(bytes.fromhex("41 b8 05 00 00 00 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x216))
+        run(relinker, work, "sce-gap-syscall-number-xor-r8d-eax", executable(bytes.fromhex("41 31 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-word-zeroed", executable(bytes.fromhex("66 31 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
+        run(relinker, work, "sce-gap-syscall-number-word-zeroed-register-form", executable(bytes.fromhex("66 33 c0 0f 05 c3")), [],
+            expected_output=SKIPPED % (1, 0x213))
         run(relinker, work, "sce-gap-syscall-after-overlong-instruction", executable(SYSCALL_NUMBER + b"\x41" * 15 + SYSCALL), [],
             expected_output=SKIPPED % (1, 0x217))
         run_module(relinker, work, "ps5-module-gap-syscall-bytes", ps5_module(), [],
