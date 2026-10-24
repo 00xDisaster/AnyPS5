@@ -2292,7 +2292,6 @@ int APS5_VABI sceNetShowIfconfigWithMemory(std::int32_t poolId) {
 }
 
 int APS5_VABI sceNetShowPolicy(void) {
-    NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
@@ -2306,7 +2305,8 @@ int APS5_VABI sceNetShowRoute(void) {
 }
 
 int APS5_VABI sceNetShowRouteWithMemory(std::int32_t poolId) {
-    NotImplemented_nid_no_patch(__func__);
+    std::lock_guard lk(g_mutex);
+    if (g_pools.find(poolId) == g_pools.end()) return fail(NET_EBADF);
     return 0;
 }
 
@@ -2638,7 +2638,7 @@ int APS5_VABI sceNetShowNetstatForBuffer(char* buffer, std::int32_t bufferSize, 
 }
 
 int APS5_VABI sceNetShowNetstatEx(std::uint32_t flags) {
-    NotImplemented_nid_no_patch(__func__);
+    (void)flags;
     return 0;
 }
 

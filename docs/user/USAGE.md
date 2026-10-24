@@ -69,7 +69,7 @@ All switches are disabled by default. `unused-filter` defaults to `0`; `--rpath`
 | `--linux-fixed-base <address>` | Load the Linux executable at this fixed address instead of the default `0x400000`, given in decimal or hexadecimal (`0x`): every virtual address of the image is offset by it, so virtual address 0 is placed at the address, as the console places an executable. Requires a 64 KiB-aligned address from `0x10000` through `0x7fffffff0000` that is a multiple of every `PT_LOAD` alignment, and an image that ends in the user address space. The executable is written as `ET_EXEC`, without ASLR, as it is at the default address. Bundled modules keep their normal placement. Conflicts with `--windows`, `--macos` and `--lazy-binding`. |
 | `--macos-fixed-base <address>` | Map the lowest ELF load page of the macOS executable at this fixed address, given in decimal or hexadecimal (`0x`). Requires `--macos`, a 64 KiB-aligned address from `0x20000` through `0x7fffffff0000`, and an image that ends in the macOS user address space. `__PAGEZERO` ends 64 KiB below the address and the Mach-O header occupies those 64 KiB. The executable has no ASLR; an address the process cannot map fails to load. Bundled modules keep their normal placement. |
 | `--to-intel`                  | Convert supported AMD-only instructions in the executable and bundled modules. Unsupported instructions or unreachable conversion stubs cause an error.                                                                                                                                                                                                                                                                                                                     |
-| `--to-rosetta`                | Convert as `--to-intel` does and also lower what Rosetta lacks: ANDN becomes scalar NOT/AND, RDSEED becomes RDRAND, CLWB a NOP, and RDPID and the ECX of RDTSCP return processor 0. Implies `--to-intel`. Independent of `--macos`: `--macos` alone leaves these instructions as they are. Conflicts with `--windows`.                                                    |
+| `--to-rosetta`                | Convert as `--to-intel` does and also lower what Rosetta lacks: ANDN becomes scalar NOT/AND, RDSEED becomes RDRAND, CLWB a NOP, XSAVEOPT becomes XSAVE, and RDPID and the ECX of RDTSCP return processor 0. Implies `--to-intel`. Independent of `--macos`: `--macos` alone leaves these instructions as they are. Conflicts with `--windows`.                                                    |
 | `unused-filter=0`             | Keep all imported NID references.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `unused-filter=1`             | Filter unused non-PLT imports using control-flow and GOT access analysis, treating address-taken code as reachable; preserve PLT imports.                                                                                                                                                                                                                                                                                                                                   |
 | `unused-filter=2`             | Apply strict unused-import analysis and compact the PLT. Unsupported analysis cases cause an error.                                                                                                                                                                                                                                                                                                                                                                         |
@@ -98,6 +98,32 @@ The `--skip-sce-module`, `--exclude-sce-module <file>`, `--skip-syscall-check`, 
 ## Game patches
 
 A patch file changes bytes of the input executable or of a bundled module before conversion, for a title that hard-codes a value the host cannot meet. The relinker checks the bytes it replaces, so a patch for another version of the title fails instead of corrupting it. With no patch file the output is unchanged.
+
+The advisor requires Python 3.11 or newer. To check a local patch catalog, run:
+
+```sh
+python3 tools/suggest_patches.py --catalog <directory> --param-json <sce_sys/param.json> --input <input.elf> --relinker <relinker> [--sce-module-path <directory>] [--module-dir <directory>]... [--executable <path>]... [--skip-sce-module] [--timeout-seconds <seconds>]
+```
+
+The advisor reads `titleId` and `contentVersion` from the specified `param.json`, checks the SHA-256 of every file targeted by a candidate patch, then calls the relinker specified by `--relinker` to run `--verify-patches`. A relative path such as `--relinker ./relinker` resolves to that local file. The explicit metadata path also works when `param.json` and the unwrapped ELF files are stored separately. The catalog directory must contain an `index.json` with `format: 1` and an `entries` array. Each entry has `titleId`, `contentVersion`, a relative `patch` path, and `targets` mapping every patch target to its SHA-256. Hexadecimal digests are case-insensitive. For example:
+
+```json
+{
+  "format": 1,
+  "entries": [{
+    "titleId": "TEST00001",
+    "contentVersion": "01.000.000",
+    "patch": "patch.toml",
+    "targets": {"Media/Modules/module.prx": "<SHA-256 in hexadecimal>"}
+  }]
+}
+```
+
+The advisor validates patch files only for entries matching the requested title and version. It reports and skips a malformed matching entry or a relinker verification error, so another valid entry can still be recommended. Verification times out after 120 seconds per entry by default; use `--timeout-seconds <positive integer>` to change the limit. For synthetic inputs without system modules, use `--skip-sce-module` if conversion also uses it; this option conflicts with `--sce-module-path`. No matching entry or no verified patch exits `1`; invalid input or no verified patch after a relinker error exits `2`. If multiple entries verify, the advisor recommends none because it cannot choose or combine them. The tool does not fetch or apply patches. A recommendation prints `--patches` and the module and executable options to use when converting. Keep catalog patch files outside the input executable's directory to avoid automatic `relinker-patches.toml` discovery.
+
+The target hashes identify the exact unwrapped files changed by a patch, which might not include the main executable. Different dump tools could produce different bytes for the same title version; the advisor then rejects a patch even if it would work. It has not been confirmed that all dump tools produce identical files. The hashes do not authenticate a catalog or establish that a patch is safe or that the title is fully playable. Use catalogs from sources you trust and review the patch before applying it.
+
+If the patch targets another title executable, pass `--executable <path>` to the advisor for each additional executable, using paths relative to the module parent directory, such as `picker/picker.bin`. The advisor hashes those target files and forwards the same options to `relinker --verify-patches`. Use the same `--executable` options when converting with `--patches`.
 
 `relinker-patches.toml` in the directory of the input executable is loaded automatically and announced as `Patches: <path>`. `--patches <file>` names another file, and `--no-patches` loads none. Each applied patch is reported:
 

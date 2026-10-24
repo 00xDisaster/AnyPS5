@@ -1,4 +1,5 @@
 #include <mutex>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -905,7 +906,21 @@ float APS5_VABI sinhf_nid_postfix(float x) {
 double APS5_VABI asinh_nid_postfix(double x) { return std::asinh(x); }
 float APS5_VABI asinhf_nid_postfix(float x) { return std::asinh(x); }
 double APS5_VABI acosh_nid_postfix(double x) { return std::acosh(x); }
-float APS5_VABI acoshf_nid_postfix(float x) { return std::acosh(x); }
+float APS5_VABI acoshf_nid_postfix(float x) {
+    constexpr float ln2 = 6.9314718246e-01f;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(x);
+    const std::uint32_t magnitude = bits & 0x7fffffffu;
+    if ((bits & 0x80000000u) != 0 || magnitude < 0x3f800000u) return (x - x) / (x - x);
+    if (magnitude >= 0x7f800000u) return x + x;
+    if (magnitude == 0x3f800000u) return 0.0f;
+    if (magnitude >= 0x4d800000u) return std::log(x) + ln2;
+    if (magnitude > 0x40000000u) {
+        const float square = x * x;
+        return std::log(2.0f * x - 1.0f / (x + std::sqrt(square - 1.0f)));
+    }
+    const float t = x - 1.0f;
+    return AtanhfLog1p(t + std::sqrt(2.0f * t + t * t));
+}
 double APS5_VABI atanh_nid_postfix(double x) { return std::atanh(x); }
 
 float APS5_VABI atanhf_nid_postfix(float x) {
@@ -1299,6 +1314,28 @@ struct GuestFloatingPointEnvironment {
     std::uint32_t mxcsr;
 };
 static_assert(sizeof(GuestFloatingPointEnvironment) == 32 && offsetof(GuestFloatingPointEnvironment, mxcsr) == 28);
+
+int APS5_VABI feupdateenv_nid_postfix(const GuestFloatingPointEnvironment* environment) {
+    if (environment == nullptr) throw std::invalid_argument("feupdateenv: null environment");
+    const auto saved = *environment;
+    alignas(16) std::array<std::uint32_t, 128> state;
+    asm volatile("fxsave %0" : "=m"(state));
+    const auto supported = state[7] != 0 ? state[7] : 0xffbfu;
+    if ((saved.mxcsr & ~supported) != 0) throw std::invalid_argument("feupdateenv: unsupported MXCSR bits");
+    std::uint16_t status;
+    asm volatile("fnstsw %0" : "=am"(status));
+    const auto pending = (status | _mm_getcsr()) & 0x3f;
+    asm volatile("fldenv %0" : : "m"(saved) : "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)");
+    _mm_setcsr(saved.mxcsr);
+    GuestFloatingPointEnvironment raised;
+    asm volatile("fnstenv %0" : "=m"(raised));
+    raised.status |= pending;
+    const auto mxcsr = _mm_getcsr() | pending;
+    asm volatile("fldenv %0" : : "m"(raised) : "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)");
+    _mm_setcsr(mxcsr);
+    asm volatile("fwait");
+    return 0;
+}
 
 int APS5_VABI fegetenv_nid_postfix(GuestFloatingPointEnvironment* environment) {
     if (environment == nullptr) throw std::invalid_argument("fegetenv: null environment");
