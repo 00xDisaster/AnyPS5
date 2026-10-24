@@ -152,12 +152,16 @@ def syntax_only(entry, source):
 
 
 def response_arguments(text):
+    if "\0" in text or "\x1a" in text:
+        raise ValueError("unsupported response-file control character")
     quote = None
     index = 0
     while index < len(text):
         character = text[index]
-        if character == "\0" or (quote is None and character in "\v\f"):
+        if quote is None and character in "\v\f":
             raise ValueError("unsupported response-file control character")
+        if quote is not None and character == "\r" and text[index + 1:index + 2] == "\n":
+            raise ValueError("quoted response-file CRLF has compiler-specific meanings")
         if character == "\\":
             following = text[index + 1:index + 2]
             if quote == "'" or following in ("\r", "\n") or (quote == '"' and following not in ('"', "\\", "")):

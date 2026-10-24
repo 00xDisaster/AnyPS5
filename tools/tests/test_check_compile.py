@@ -627,6 +627,41 @@ class CheckCompileOutputTests(CheckCompileFixture):
 
 
 class CheckCompileResponseTests(CheckCompileFixture):
+    @unittest.skipUnless(os.name == "nt", "Windows GCC response-file text mode")
+    def test_windows_gcc_response_text_mode_is_not_reinterpreted(self):
+        compiler = shutil.which("gcc")
+        if compiler is None:
+            self.skipTest("needs GCC's driver wrapper")
+        source = self.source("unit.c")
+        response = self.build / "flags.rsp"
+        recorder = self.compiler("import json, sys\nprint(json.dumps(sys.argv[1:]))\n")
+        arguments = [compiler, "-wrapper", sys.executable + "," + str(recorder),
+                     "-c", str(source), "-o", str(self.build / "unit.o"), "@flags.rsp"]
+        cases = (
+            ('"-DVALUE=A\nB"', ["VALUE=A\nB"], False),
+            ('"-DVALUE=A\rB"', ["VALUE=A\rB"], False),
+            ('"-DVALUE=A\r\nB"', ["VALUE=A\nB"], True),
+            ("'-DVALUE=A\r\nB'", ["VALUE=A\nB"], True),
+            ("-DVALUE=first\x1a -DAFTER=second", ["VALUE=first"], True),
+            ("-DVALUE=first\\\x1a -DAFTER=second", ["VALUE=first"], True),
+        )
+        for content, expected, rejected in cases:
+            with self.subTest(content=content):
+                response.write_bytes(content.encode("utf-8"))
+                original = subprocess.run(arguments, cwd=self.build, capture_output=True,
+                                          text=True, encoding="utf-8", check=False)
+                self.assertEqual(original.returncode, 0, original.stderr)
+                commands = [json.loads(line) for line in original.stdout.splitlines() if line.startswith("[")]
+                definitions = [command[index + 1] for command in commands
+                               for index, argument in enumerate(command[:-1]) if argument == "-D"]
+                self.assertEqual(definitions, expected)
+                if rejected:
+                    with self.assertRaisesRegex(ValueError, "response-file"):
+                        check_compile.expand_response_files(["@flags.rsp"], self.build)
+                else:
+                    self.assertEqual(check_compile.expand_response_files(["@flags.rsp"], self.build),
+                                     ["-D" + value for value in expected])
+
     def test_response_files_contain_options_without_an_executable_name(self):
         response = self.build / "flags.rsp"
         cases = (
@@ -690,7 +725,8 @@ class CheckCompileResponseTests(CheckCompileFixture):
         self.manifest([{"directory": str(self.build), "file": str(source),
                         "arguments": [sys.executable, str(script), str(invoked), "@flags.rsp"]}])
         for content in (r"'-DC=C:\includes'", r'"-DC=C:\includes"', r'"-DHOME=\$HOME"',
-                        "-DA=\\\n7", '""', "\ufeff-DA=7", "\v-DA=7", "-DA=\0"):
+                        "-DA=\\\n7", '""', "\ufeff-DA=7", "\v-DA=7", "-DA=\0",
+                        '"-DA=A\r\nB"', "'-DA=A\r\nB'", "-DA=7\x1a -DB=11", "-DA=7\\\x1a -DB=11"):
             with self.subTest(content=content):
                 response.write_bytes(content.encode("utf-8"))
                 result = self.tool("unit.c")
