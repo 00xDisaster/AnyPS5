@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <bit>
 #include <cerrno>
@@ -6,10 +7,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
-
-extern "C" {
-double APS5_VABI strtod_nid_postfix(const char*, char**);
-}
 
 static void Require(bool value, const char* message) {
     if (!value) {
