@@ -1,3 +1,7 @@
+#include "prx/libkernel/Pthread/include/ThreadLifecycle.hpp"
+#include "prx/libkernel/Pthread/include/Cancel.hpp"
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "../include/Pthread.hpp"
 #include "../include/ThreadLifecycle.hpp"
 #include "../include/WindowsThreadLocal.hpp"
@@ -917,8 +921,6 @@ static void* StartNativeThread(void* opaque) {
 
 extern "C" {
 
-int* APS5_VABI __error_nid_postfix();
-
 int APS5_VABI scePthreadCreate(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name) {
     if (!thread || !entry) throw std::runtime_error("scePthreadCreate: null arg");
     if (name && std::strlen(name) >= GUEST_THREAD_NAME_CAPACITY) return SCE_KERNEL_ERROR_ENAMETOOLONG;
@@ -1189,6 +1191,7 @@ int APS5_VABI scePthreadCancel(Pthread thread) {
             thread->cancelWait->NotifyAll();
         }
         scePthreadYield();
+
     }
 }
 
@@ -1216,6 +1219,7 @@ void APS5_VABI pthread_cleanup_push_nid_postfix(void (APS5_VABI* routine)(void*)
 
 void APS5_VABI pthread_cleanup_pop_nid_postfix(int execute) {
     __pthread_cleanup_pop_imp_nid_postfix(execute);
+
 }
 
 int APS5_VABI scePthreadEqual(Pthread thread1, Pthread thread2) {
@@ -1322,6 +1326,7 @@ int APS5_VABI scePthreadOnce(int32_t* once, void (APS5_VABI* init)(void)) {
     CleanupHandler reset{};
     void* const mark = ThreadCancel::CleanupMark();
     __pthread_cleanup_push_imp_nid_postfix(ResetOnce, once, &reset);
+
     try {
         init();
     } catch (...) {
