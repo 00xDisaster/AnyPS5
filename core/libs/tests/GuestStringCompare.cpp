@@ -1,12 +1,7 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdlib>
-
-extern "C" {
-int APS5_VABI strcmp_nid_postfix(const char*, const char*);
-int APS5_VABI strncmp_nid_postfix(const char*, const char*, std::size_t);
-int APS5_VABI memcmp_nid_postfix(const void*, const void*, std::size_t);
-}
 
 namespace {
 
