@@ -16,6 +16,61 @@ TOOL = Path(__file__).resolve().parents[1] / "check_compile.py"
 
 
 class CheckCompileTests(unittest.TestCase):
+    def test_response_files_contain_options_without_an_executable_name(self):
+        response = self.build / "flags.rsp"
+        cases = (
+            ("", []),
+            (" \t\r\n", []),
+            ("  -DA=7 -DB=11", ["-DA=7", "-DB=11"]),
+            ("-DA=7\n-DB=11\n", ["-DA=7", "-DB=11"]),
+            ("-DA=7\r\n-DB=11\r\n", ["-DA=7", "-DB=11"]),
+            (r'-DNAME=\"hello\" -DB=11', ['-DNAME="hello"', "-DB=11"]),
+            ('"-DNAME=hello world" -DB=11', ["-DNAME=hello world", "-DB=11"]),
+        )
+        for content, expected in cases:
+            with self.subTest(content=content):
+                response.write_bytes(content.encode("utf-8"))
+                self.assertEqual(check_compile.expand_response_files(["@flags.rsp"], self.build), expected)
+
+    def test_response_options_compile_without_changing_build_outputs(self):
+        compiler = shutil.which("clang") or shutil.which("gcc")
+        if compiler is None:
+            self.skipTest("needs a GNU-compatible C compiler")
+        source = self.source("unit.c")
+        response = self.build / "flags.rsp"
+        output_options = self.build / "output flags.rsp"
+        outputs = [self.build / name for name in ("unit.o", "unit.d")]
+        output_options.write_text(" ".join('"' + value + '"' for value in
+                                          ("-c", source.as_posix(), "-MMD", "-MF",
+                                           outputs[1].as_posix(), "-o", outputs[0].as_posix())), encoding="utf-8")
+        arguments = [compiler, "@" + str(response), "@" + str(output_options)]
+        cases = (
+            ("", "int x;\n"),
+            (" \t\r\n", "int x;\n"),
+            ("  -DA=7 -DB=11", "_Static_assert(A == 7 && B == 11, \"definitions\");\n"),
+            ("-DA=7\n-DB=11\n", "_Static_assert(A == 7 && B == 11, \"definitions\");\n"),
+            ("-DA=7\r\n-DB=11\r\n", "_Static_assert(A == 7 && B == 11, \"definitions\");\n"),
+            (r'-DNAME=\"hello\" -DB=11', '_Static_assert(sizeof(NAME) == 6 && B == 11, "quoted definition");\n'),
+        )
+        for content, text in cases:
+            source.write_text(text, encoding="utf-8")
+            response.write_bytes(content.encode("utf-8"))
+            original = subprocess.run(arguments, cwd=self.build, capture_output=True, text=True)
+            self.assertEqual(original.returncode, 0, original.stderr)
+            preserved = {path: path.read_bytes() for path in (source, response, output_options, *outputs)}
+            for field in ("arguments", "command"):
+                for jobs in ("1", "2"):
+                    with self.subTest(content=content, field=field, jobs=jobs):
+                        command = (subprocess.list2cmdline(arguments) if os.name == "nt" else
+                                   " ".join(shlex.quote(argument) for argument in arguments))
+                        self.manifest([{"directory": str(self.build), "file": str(source),
+                                        field: arguments if field == "arguments" else command}])
+                        result = self.tool("--jobs", jobs, "unit.c")
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn("1 translation units compile", result.stdout)
+                        for path, data in preserved.items():
+                            self.assertEqual(path.read_bytes(), data, path.name)
+
     def test_response_files_are_expanded_without_rewriting_build_outputs(self):
         compiler = shutil.which("clang")
         if compiler is None:
@@ -55,7 +110,7 @@ class CheckCompileTests(unittest.TestCase):
                                   ("-MMD", "-MF", outputs[1].as_posix(),
                                    "-MJ", outputs[2].as_posix(), "-o", outputs[0].as_posix())), encoding="utf-8")
         outer = self.build / "outer.rsp"
-        outer.write_text(f'"-c" "{source.as_posix()}" "@{inner}"', encoding="utf-8")
+        outer.write_text(f'"-c" "{source.as_posix()}" "@{inner.as_posix()}"', encoding="utf-8")
         arguments = [compiler, "@" + str(outer)]
         original = subprocess.run(arguments, cwd=self.build, capture_output=True, text=True)
         self.assertEqual(original.returncode, 0, original.stderr)
@@ -72,8 +127,8 @@ class CheckCompileTests(unittest.TestCase):
         source = self.source("unit.c")
         first = self.build / "first.rsp"
         second = self.build / "second.rsp"
-        first.write_text(f'"@{second}"', encoding="utf-8")
-        second.write_text(f'"@{first}"', encoding="utf-8")
+        first.write_text(f'"@{second.as_posix()}"', encoding="utf-8")
+        second.write_text(f'"@{first.as_posix()}"', encoding="utf-8")
         self.manifest([{"directory": str(self.build), "file": str(source),
                         "arguments": ["clang", "@" + str(first)]}])
         result = self.tool("unit.c")
