@@ -301,6 +301,14 @@ static void CheckLocalRange() {
 }
 
 #ifdef _WIN32
+extern "C" long* __cdecl __dstbias(void);
+
+struct DaylightBiasFixture {
+    long saved = *__dstbias();
+    ~DaylightBiasFixture() { *__dstbias() = saved; }
+    void Apply() const { *__dstbias() = -3600; }
+};
+
 struct ZoneOffset {
     const char* zone;
     std::int64_t timer;
@@ -309,6 +317,7 @@ struct ZoneOffset {
 };
 
 static void CheckPosixFormZoneOffsets() {
+    DaylightBiasFixture bias;
     constexpr std::array<ZoneOffset, 4> expectations{{
         {"PST8PDT", 979560000, -28800, 0},
         {"PST8PDT", 995198400, -25200, 1},
@@ -318,6 +327,7 @@ static void CheckPosixFormZoneOffsets() {
     for (const ZoneOffset& expected : expectations) {
         Require(setenv_nid_postfix("TZ", expected.zone, 1) == 0, "Could not set the POSIX-form time zone");
         tzset_nid_postfix();
+        bias.Apply();
         GuestTm local{};
         Require(localtime_s_nid_postfix(&expected.timer, &local) == &local, "Local conversion in a POSIX-form zone failed");
         if (local.tm_gmtoff != expected.offset || local.tm_isdst != expected.isdst) {
@@ -345,9 +355,15 @@ static void CheckRegionZones() {
     constexpr std::array<const char*, 4> zones{"America/Los_Angeles", "Europe/Berlin", "Asia/Kolkata", "America/Argentina/Buenos_Aires"};
     constexpr std::array<std::int64_t, 9> timers{-62135553600, -12609691200, -5016340800, -5000011200, -2732356800, -2209032000, -2208988800, -2208945600, -631108800};
 #endif
+#ifdef _WIN32
+    DaylightBiasFixture bias;
+#endif
     for (const char* zone : zones) {
         Require(setenv_nid_postfix("TZ", zone, 1) == 0, "Could not set the region time zone");
         tzset_nid_postfix();
+#ifdef _WIN32
+        bias.Apply();
+#endif
         for (const std::int64_t timer : timers) {
             GuestTm local{};
             Require(localtime_s_nid_postfix(&timer, &local) == &local, "Local conversion in a region zone failed");
