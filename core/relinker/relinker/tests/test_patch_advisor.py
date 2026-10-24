@@ -41,9 +41,10 @@ def main():
         second = catalog / "second patch.toml"
         second.write_text(patch_text(address, expected, "flip_bit"))
         result = advise(digest, ("patch.toml", second.name))
-        assert result.returncode == 1 and "multiple verified catalog entries" in result.stdout, (result.stdout, result.stderr)
+        assert result.returncode == 1 and "multiple verified catalog entries match; use --list-verified to see them" in result.stdout, (result.stdout, result.stderr)
         result = advise(digest, ("patch.toml", second.name), "--list-verified")
         assert result.returncode == 0 and "Verified catalog entries: 2" in result.stdout, (result.stdout, result.stderr)
+        assert "Choose one patch file; listed entries are not combined." in result.stdout, (result.stdout, result.stderr)
         assert f"Catalog entry 1: {patch}" in result.stdout and f"Catalog entry 2: {second}" in result.stdout, (result.stdout, result.stderr)
         assert "Recommended:" not in result.stdout, (result.stdout, result.stderr)
         assert source.read_bytes() == image

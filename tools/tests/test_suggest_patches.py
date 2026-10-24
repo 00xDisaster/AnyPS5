@@ -190,7 +190,7 @@ class PatchAdvisorTests(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(self.advise(), 1)
-        self.assertIn("multiple verified catalog entries", output.getvalue())
+        self.assertIn("multiple verified catalog entries match; use --list-verified to see them.", output.getvalue())
         self.assertEqual(run.call_count, 2)
 
     @patch.object(suggest_patches.subprocess, "run")
@@ -204,6 +204,7 @@ class PatchAdvisorTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             self.assertEqual(self.advise("--list-verified"), 0)
         self.assertIn("Verified catalog entries: 2", output.getvalue())
+        self.assertIn("Choose one patch file; listed entries are not combined.", output.getvalue())
         self.assertIn(f"Catalog entry 1: {self.catalog / 'patch.toml'}", output.getvalue())
         self.assertIn(f"Catalog entry 2: {second}", output.getvalue())
         quoted = f'"{second}"' if os.name == "nt" else f"'{second}'"
@@ -226,6 +227,7 @@ class PatchAdvisorTests(unittest.TestCase):
                                                   "Media/Modules", "--executable", "picker/picker.bin"])
         self.assertIn(expected, output.getvalue())
         self.assertIn("Verified catalog entries: 1", output.getvalue())
+        self.assertIn("Choose one patch file; listed entries are not combined.", output.getvalue())
         self.assertNotIn("Recommended:", output.getvalue())
 
     @patch.object(suggest_patches.subprocess, "run")
