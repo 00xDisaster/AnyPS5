@@ -21,7 +21,7 @@ def previous_sequence(path):
     try:
         with path.open("rb") as command:
             line = command.readline(129)
-    except (FileNotFoundError, IsADirectoryError, PermissionError):
+    except FileNotFoundError:
         return 0
     if os.name == "nt" and line.endswith(b"\r\n"):
         line = line[:-2] + b"\n"

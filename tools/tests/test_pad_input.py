@@ -140,6 +140,15 @@ class PadInputTests(unittest.TestCase):
         self.assertFalse(content.endswith(b"\r\n"))
         self.assertEqual(content.decode("utf-8"), "1000 16384 300\n")
 
+    def test_unreadable_command_file_is_not_replaced(self):
+        original = "7 16384 300\n"
+        self.path.write_text(original, encoding="utf-8")
+        with mock.patch.object(Path, "open", side_effect=PermissionError("denied")), \
+                self.assertRaises(PermissionError):
+            self.queue(1000, "cross")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), original)
+        self.assertEqual(list(self.root.iterdir()), [self.path])
+
     def test_missing_parent_directory_reports_error(self):
         missing = self.root / "nonexistent" / "command"
         errors = io.StringIO()
