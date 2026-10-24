@@ -603,11 +603,15 @@ int Font::ComputeFontStyleInformation(FontHandle handle, FontStyleInformation* i
 
 int Font::ComputeFontGlyphsOutlineProfile(FontHandle handle, FontOutlineProfile* profile) {
     auto* font = GetNativeFont(handle);
+    if (!font || font->magic != HANDLE_MAGIC) {
+        if (profile) *profile = {};
+        return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
+    }
     if (!profile) return SCE_FONT_ERROR_INVALID_PARAMETER;
+    *profile = {};
     auto* library = static_cast<FontLibNative*>(font->library);
     auto* context = library ? FontContext(library, font) : nullptr;
     if (!context) return SCE_FONT_ERROR_INVALID_FONT_HANDLE;
-    *profile = {};
     const std::uint32_t fontId = font->open_info.ctx_entry_index;
     if (static_cast<std::int32_t>(fontId) < 0) return SCE_FONT_OK;
     const SysDriver* driver = library->sys_driver;

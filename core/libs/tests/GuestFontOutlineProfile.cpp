@@ -119,6 +119,16 @@ int main() {
     Require(sceFontGetFontGlyphsOutlineProfile(reinterpret_cast<FontHandle>(notAFont), &profile) == SCE_FONT_ERROR_INVALID_FONT_HANDLE && Zero(profile));
     Require(sceFontGetFontGlyphsOutlineProfile(plain, nullptr) == SCE_FONT_ERROR_INVALID_PARAMETER);
     Require(sceFontGetFontGlyphsOutlineProfile(nullptr, nullptr) == SCE_FONT_ERROR_INVALID_FONT_HANDLE);
+    Require(sceFontGetFontGlyphsOutlineProfile(reinterpret_cast<FontHandle>(notAFont), nullptr) == SCE_FONT_ERROR_INVALID_FONT_HANDLE);
+    auto* plainFont = reinterpret_cast<Font::FontHandleNative*>(plain);
+    const FontLibrary owner = plainFont->library;
+    plainFont->library = nullptr;
+    Fill(profile);
+    Require(sceFontGetFontGlyphsOutlineProfile(plain, &profile) == SCE_FONT_ERROR_INVALID_FONT_HANDLE && Zero(profile));
+    Require(sceFontGetFontGlyphsOutlineProfile(plain, nullptr) == SCE_FONT_ERROR_INVALID_PARAMETER);
+    plainFont->library = owner;
+    Fill(profile);
+    Require(sceFontGetFontGlyphsOutlineProfile(plain, &profile) == SCE_FONT_OK && Zero(profile));
 
     for (FontHandle font : {profiled, plain, shortMaxp}) Require(sceFontCloseFont(font) == SCE_FONT_OK);
     Require(sceFontDestroyLibrary(&library) == SCE_FONT_OK);
