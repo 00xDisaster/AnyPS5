@@ -190,7 +190,7 @@ int RunNativeClear(AgcDriver::VulkanDevice& device, ClearConsumer consumer) {
     const bool depthWatched = Memory::Watched(depth.Address(), BlockBytes);
     const bool metadataWatched = Memory::Watched(metadata.Address(), BlockBytes);
     if (!depthWatched || !metadataWatched) {
-        std::printf("skipped, native clear imports lost guest write watching after warm-up (depth watched=%u, metadata watched=%u", static_cast<unsigned>(depthWatched), static_cast<unsigned>(metadataWatched));
+        std::printf("skipped, the device does not retain guest write watching for native clear imports after warm-up (depth watched=%u, metadata watched=%u", static_cast<unsigned>(depthWatched), static_cast<unsigned>(metadataWatched));
 #ifdef __linux__
         std::printf(", Linux shared backing present, resolver fd returns: depth=%zu metadata=%zu", depth.SharedBackingResolverReturns(), metadata.SharedBackingResolverReturns());
 #endif
