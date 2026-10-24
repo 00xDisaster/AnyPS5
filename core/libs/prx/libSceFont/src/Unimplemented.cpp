@@ -1,3 +1,4 @@
+#include "prx/libSceFont/include/Api.hpp"
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -5,32 +6,40 @@
 #include "prx/libSceFont/include/FontGraphics.hpp"
 #include "prx/libSceFont/include/FontTypes.hpp"
 
-struct FontGraphicsDevice;
-struct FontGraphicsDeviceParam;
-struct FontGraphicsService;
-struct FontGraphicsServiceParam;
-struct FontWords;
-struct FontGlyphSupport;
-struct FontOutlineProfile;
-struct FontMetrics;
-struct FontStyleInformation;
-struct FontGlyphExpandBufferState;
-struct FontGraphicsResource;
-struct FontGraphicsFrame;
-struct FontGraphicsDesignResource;
-struct FontGraphicsDesign;
-struct FontGraphicsCanvas;
-struct FontGraphicsCanvasSequence;
-struct FontGraphicsSurface;
-struct FontGraphicsSurfaceTexture;
+static_assert(sizeof(FontGraphicsRegion) == 32);
+static_assert(offsetof(FontGraphicsRegion, x) == 0);
+static_assert(offsetof(FontGraphicsRegion, y) == 4);
+static_assert(offsetof(FontGraphicsRegion, width) == 8);
+static_assert(offsetof(FontGraphicsRegion, height) == 12);
+static_assert(offsetof(FontGraphicsRegion, flags) == 16);
+static_assert(offsetof(FontGraphicsRegion, tag) == 20);
+static_assert(offsetof(FontGraphicsRegion, outerRadius) == 24);
+static_assert(offsetof(FontGraphicsRegion, innerRadius) == 28);
 
-struct FontGraphicsPoolUsage {
-    std::uint32_t capacity;
-    std::uint32_t used;
-    std::uint32_t available;
-    std::uint32_t peak;
-    std::int32_t change;
-};
+static_assert(sizeof(FontGraphicsFillMethod) == 32);
+static_assert(offsetof(FontGraphicsFillMethod, mode) == 0);
+static_assert(offsetof(FontGraphicsFillMethod, type) == 4);
+static_assert(offsetof(FontGraphicsFillMethod, flags) == 8);
+static_assert(offsetof(FontGraphicsFillMethod, tag) == 12);
+static_assert(offsetof(FontGraphicsFillMethod, reserved) == 16);
+
+static_assert(sizeof(FontGraphicsFillPlot) == 64);
+static_assert(offsetof(FontGraphicsFillPlot, mapping) == 0);
+static_assert(offsetof(FontGraphicsFillPlot, region) == 16);
+static_assert(offsetof(FontGraphicsFillPlot, tag) == 24);
+static_assert(offsetof(FontGraphicsFillPlot, reserved26) == 26);
+static_assert(offsetof(FontGraphicsFillPlot, layout) == 28);
+static_assert(offsetof(FontGraphicsFillPlot, flags) == 30);
+static_assert(offsetof(FontGraphicsFillPlot, reserved) == 31);
+
+static_assert(sizeof(FontGraphicsFillRates) == 64);
+static_assert(offsetof(FontGraphicsFillRates, mapping) == 0);
+static_assert(offsetof(FontGraphicsFillRates, fill) == 16);
+static_assert(offsetof(FontGraphicsFillRates, tag) == 24);
+static_assert(offsetof(FontGraphicsFillRates, effect) == 26);
+static_assert(offsetof(FontGraphicsFillRates, layout) == 28);
+static_assert(offsetof(FontGraphicsFillRates, flags) == 30);
+static_assert(offsetof(FontGraphicsFillRates, reserved) == 31);
 
 static_assert(sizeof(FontGraphicsPoolUsage) == 20);
 static_assert(offsetof(FontGraphicsPoolUsage, capacity) == 0);
@@ -39,26 +48,14 @@ static_assert(offsetof(FontGraphicsPoolUsage, available) == 8);
 static_assert(offsetof(FontGraphicsPoolUsage, peak) == 12);
 static_assert(offsetof(FontGraphicsPoolUsage, change) == 16);
 
-struct FontGraphicsMemoryUsage {
-    FontGraphicsPoolUsage storage;
-    FontGraphicsPoolUsage allocations;
-    void* address;
-};
-
 static_assert(sizeof(FontGraphicsMemoryUsage) == 48);
 static_assert(offsetof(FontGraphicsMemoryUsage, storage) == 0);
 static_assert(offsetof(FontGraphicsMemoryUsage, allocations) == 20);
 static_assert(offsetof(FontGraphicsMemoryUsage, address) == 40);
 
-struct FontGraphicsDeviceUsage {
-    FontGraphicsMemoryUsage first;
-    FontGraphicsMemoryUsage second;
-};
-
 static_assert(sizeof(FontGraphicsDeviceUsage) == 96);
 static_assert(offsetof(FontGraphicsDeviceUsage, first) == 0);
 static_assert(offsetof(FontGraphicsDeviceUsage, second) == 48);
-
 
 #pragma GCC visibility push(default)
 
@@ -103,7 +100,6 @@ int APS5_VABI sceFontDestroyWords(FontWords** words) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-
 
 int APS5_VABI sceFontGetFontGlyphsOutlineProfile(FontHandle font, FontOutlineProfile* profile) {
     NotImplemented_nid_no_patch(__func__);
