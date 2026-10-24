@@ -13,6 +13,7 @@ extern "C" {
 int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary*, void**);
 void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
 int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint32_t*);
+int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std::uint8_t);
 }
 
 static void Check(bool value, int line) {
@@ -85,6 +86,21 @@ static void TestGetCounts(GuestLibrary& library, FT_Library native) {
     Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, nullptr, nullptr) == FT_Stroker_GetCounts(pair.native, nullptr, nullptr));
 }
 
+static void TestBeginSubPath(GuestLibrary& library, FT_Library native) {
+    for (const std::uint8_t open : {0, 1}) {
+        Pair pair(library, native);
+        const GuestVector start{64, 128};
+        FT_Vector nativeStart{64, 128};
+        Require(FT_Stroker_BeginSubPath_nid_postfix(pair.guest, &start, open) == FT_Stroker_BeginSubPath(pair.native, &nativeStart, open));
+        pair.CountsMatch();
+    }
+    Pair pair(library, native);
+    const GuestVector start{0, 0};
+    FT_Vector nativeStart{0, 0};
+    Require(FT_Stroker_BeginSubPath_nid_postfix(nullptr, &start, 0) == FT_Stroker_BeginSubPath(nullptr, &nativeStart, 0));
+    Require(FT_Stroker_BeginSubPath_nid_postfix(pair.guest, nullptr, 0) == FT_Stroker_BeginSubPath(pair.native, nullptr, 0));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -92,5 +108,6 @@ int main() {
     TestNew(library, native);
     TestDone(library, native);
     TestGetCounts(library, native);
+    TestBeginSubPath(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
