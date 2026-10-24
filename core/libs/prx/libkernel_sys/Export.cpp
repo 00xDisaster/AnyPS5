@@ -337,6 +337,14 @@ std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
     return File::ExchangeCreationMask_nid_no_patch(mask);
 }
 
+int APS5_VABI sceKernelIsCEX(void) {
+    return 1;
+}
+
+int APS5_VABI sceKernelIsDevKit(void) {
+    return 0;
+}
+
 int APS5_VABI fstatfs_nid_postfix(int d, KernelStatfs* buf) {
     return _fstatfs_nid_postfix(d, buf);
 }

@@ -1417,17 +1417,7 @@ int APS5_VABI sceKernelIsAuthenticNeo(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelIsCEX(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelIsDebuggerAttached(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelIsDevKit(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
