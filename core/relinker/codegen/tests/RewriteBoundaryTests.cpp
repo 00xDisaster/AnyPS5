@@ -1,4 +1,3 @@
-
 #include <codegen/x86/X64InstructionRewriter.hpp>
 #include <iostream>
 #include <stdexcept>
