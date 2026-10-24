@@ -306,7 +306,7 @@ int SetIpLevelOption(std::uintptr_t native, SocketOptionState& state, bool ipv4,
             std::memcpy(&number, value, sizeof(number));
             if (option == GuestIpMulticastTimeToLive && number > 255) return ErrorInvalid;
         }
-        const int host = option == GuestIpMulticastLoop ? (number != 0 ? 1 : 0) : static_cast<int>(number);
+        const int host = option == GuestIpMulticastLoop ? ((number & 0xff) != 0 ? 1 : 0) : static_cast<int>(number);
         const int nativeOption = option == GuestIpMulticastLoop ? IP_MULTICAST_LOOP : IP_MULTICAST_TTL;
         if (::setsockopt(handle, IPPROTO_IP, nativeOption, reinterpret_cast<NativeOptionValue>(&host), sizeof(host))) return HostError();
         if (option == GuestIpMulticastLoop) state.multicastLoop = host != 0;
