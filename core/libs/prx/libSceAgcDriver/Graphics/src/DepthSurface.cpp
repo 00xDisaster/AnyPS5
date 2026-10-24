@@ -2411,13 +2411,12 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
     const auto imageFormat = integer ? VK_FORMAT_R16_UINT : d16 ? VK_FORMAT_D16_UNORM : VK_FORMAT_D32_SFLOAT;
     auto& copies = planeCopies();
     const std::tuple<VkDevice, std::uint64_t, std::uint32_t, std::uint32_t, VkFormat, std::uint32_t> copyKey{context.device, base.address, base.extent.width, base.extent.height, imageFormat, layers};
-    if (auto& copy = copies[copyKey]; copy == nullptr) {
-        copy = std::make_unique<DepthPlaneCopy>(context, base.extent, imageFormat, layers);
-        evictPlaneCopies(copyKey);
-    }
     auto& copy = copies[copyKey];
+    if (copy == nullptr) copy = std::make_unique<DepthPlaneCopy>(context, base.extent, imageFormat, layers);
     copy->lastUse = ++planeCopyClock();
-    return copy->Refresh(slices, resource, components, cube || resource.dimension == TextureDimension::k2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D, layered && !cube ? resource.baseArray : 0u);
+    auto texture = copy->Refresh(slices, resource, components, cube || resource.dimension == TextureDimension::k2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D, layered && !cube ? resource.baseArray : 0u);
+    evictPlaneCopies(copyKey);
+    return texture;
 }
 
 bool DepthSurfaceHolds(const Context& context, const GuestTextureResource& resource, const Texture* texture) {
