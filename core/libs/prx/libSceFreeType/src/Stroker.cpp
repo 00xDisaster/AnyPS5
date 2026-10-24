@@ -94,4 +94,10 @@ int APS5_VABI FT_Stroker_GetBorderCounts_nid_postfix(void* stroker, std::int32_t
     return error;
 }
 
+int APS5_VABI FT_Stroker_ConicTo_nid_postfix(void* stroker, const GuestVector* control, const GuestVector* to) {
+    NativeVector nativeControl(control, __func__);
+    NativeVector nativeTo(to, __func__);
+    return FT_Stroker_ConicTo(static_cast<FT_Stroker>(stroker), nativeControl.pointer, nativeTo.pointer);
+}
+
 }
