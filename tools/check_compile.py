@@ -13,6 +13,7 @@ from pathlib import Path
 CPP = (".cpp", ".cc", ".cxx", ".c")
 DROP = ("-c", "-MD", "-MMD", "-MP")
 DROP_WITH_VALUE = ("-o", "-MT", "-MF", "-MQ", "-MJ")
+MAX_RESPONSE_FILE_DEPTH = 20
 
 
 def capture(command, cwd=None, encoding="utf-8"):
@@ -149,14 +150,20 @@ def syntax_only(entry, source):
     return syntax_arguments(arguments, directory, source)
 
 
-def expand_response_files(arguments, directory):
+def expand_response_files(arguments, directory, seen=frozenset()):
     expanded = []
     for argument in arguments:
         if argument.startswith("@") and len(argument) > 1:
             response = Path(argument[1:])
             if not response.is_absolute():
                 response = directory / response
-            expanded.extend(command_arguments(response.read_text(encoding="utf-8")))
+            resolved = response.resolve()
+            if resolved in seen:
+                raise ValueError(f"response file cycle at {resolved}")
+            if len(seen) >= MAX_RESPONSE_FILE_DEPTH:
+                raise ValueError(f"response file nesting exceeds {MAX_RESPONSE_FILE_DEPTH} levels at {resolved}")
+            nested = command_arguments(response.read_text(encoding="utf-8"))
+            expanded.extend(expand_response_files(nested, directory, seen | {resolved}))
         else:
             expanded.append(argument)
     return expanded
