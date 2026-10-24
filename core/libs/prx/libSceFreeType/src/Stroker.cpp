@@ -80,4 +80,8 @@ void APS5_VABI FT_Stroker_Set_nid_postfix(void* stroker, std::int64_t radius, st
                    static_cast<FT_Stroker_LineJoin>(lineJoin), HostCoordinate(miterLimit, __func__));
 }
 
+void APS5_VABI FT_Stroker_Rewind_nid_postfix(void* stroker) {
+    FT_Stroker_Rewind(static_cast<FT_Stroker>(stroker));
+}
+
 }
