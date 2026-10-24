@@ -42,13 +42,37 @@ public:
     }
 
     std::vector<std::pair<std::uintptr_t, std::size_t>> Commit(void* address, std::size_t bytes, DWORD protection, std::size_t granule, bool watched) {
+        if (granule == 0) throw std::invalid_argument("guest memory commit granule is zero");
         std::vector<std::pair<std::uintptr_t, std::size_t>> created;
         std::lock_guard lock(mutex);
         collectableRanges.clear();
+        const DWORD flags = MEM_RESERVE | MEM_COMMIT | MEM_REPLACE_PLACEHOLDER | (watched ? MEM_WRITE_WATCH : 0);
+        const auto cut = [](std::uintptr_t at, std::size_t size, const char* operation) {
+            if (!VirtualFree(reinterpret_cast<void*>(at), size, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER)) fail(operation);
+        };
+        const auto replace = [&](std::uintptr_t at, std::size_t size) {
+            if (!allocate(GetCurrentProcess(), reinterpret_cast<void*>(at), size, flags, protection, nullptr, 0)) fail("replace guest placeholder with private memory");
+            if (!created.empty() && created.back().first + created.back().second == at) created.back().second += size;
+            else created.emplace_back(at, size);
+        };
         const auto end = reinterpret_cast<std::uintptr_t>(address) + bytes;
         for (auto cursor = reinterpret_cast<std::uintptr_t>(address); cursor < end;) {
             const auto memory = query(cursor);
-            const auto stop = std::min(end, reinterpret_cast<std::uintptr_t>(memory.BaseAddress) + memory.RegionSize);
+            const auto regionEnd = reinterpret_cast<std::uintptr_t>(memory.BaseAddress) + memory.RegionSize;
+            const auto stop = std::min(end, regionEnd);
+            if (memory.State == MEM_RESERVE && std::min(end, cursor + granule) <= regionEnd) {
+                forgetClean(cursor, stop);
+                const auto holder = reinterpret_cast<std::uintptr_t>(memory.AllocationBase);
+                if (holder != cursor) cut(holder, cursor - holder, "split guest placeholder prefix");
+                if (stop != regionEnd) cut(cursor, stop - cursor, "split guest placeholder suffix");
+                while (cursor < stop && std::min(end, cursor + granule) <= stop) {
+                    const auto size = std::min(end, cursor + granule) - cursor;
+                    if (cursor + size != stop) cut(cursor, size, "split guest placeholder suffix");
+                    replace(cursor, size);
+                    cursor += size;
+                }
+                continue;
+            }
             if (memory.State == MEM_RESERVE) {
                 const auto limit = std::min(end, cursor + granule);
                 auto placeholderEnd = stop;
@@ -59,10 +83,7 @@ public:
                 }
                 const auto size = std::min(limit, placeholderEnd) - cursor;
                 reset(cursor, size);
-                const DWORD flags = MEM_RESERVE | MEM_COMMIT | MEM_REPLACE_PLACEHOLDER | (watched ? MEM_WRITE_WATCH : 0);
-                if (!allocate(GetCurrentProcess(), reinterpret_cast<void*>(cursor), size, flags, protection, nullptr, 0)) fail("replace guest placeholder with private memory");
-                if (!created.empty() && created.back().first + created.back().second == cursor) created.back().second += size;
-                else created.emplace_back(cursor, size);
+                replace(cursor, size);
                 cursor += size;
             } else {
                 if (memory.State != MEM_COMMIT) throw std::runtime_error("guest memory is not committed");
