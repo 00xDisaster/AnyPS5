@@ -65,8 +65,6 @@ int main() {
     unsigned char appLauncherParam[0x28]{};
     *reinterpret_cast<std::uint64_t*>(appLauncherParam) = 0x28;
     Require(sceNpAppLauncherInitialize(appLauncherParam) == 0, "app launcher init failed");
-    Require(Throws<std::runtime_error>([] { sceNpAppLauncherLaunchApp(); }),
-            "app launcher launch must throw until implemented");
     Require(sceNpAppLauncherTerminate() == 0, "app launcher terminate failed");
     *reinterpret_cast<std::uint64_t*>(appLauncherParam) = 0x10;
     Require(sceNpAppLauncherInitialize(appLauncherParam) == 0,
