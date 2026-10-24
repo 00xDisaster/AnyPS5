@@ -229,17 +229,21 @@ class PatchAdvisorTests(unittest.TestCase):
     @patch.object(suggest_patches.subprocess, "run")
     def test_list_verified_skips_individual_errors(self, run):
         bad = dict(self.entry, patch="missing.toml")
-        self.write_index([bad, self.entry, self.entry])
+        wrong_hash = dict(self.entry, targets={"Media/Modules/module.prx": "0" * 64})
+        self.write_index([bad, wrong_hash, self.entry, self.entry, self.entry])
         run.side_effect = [subprocess.CompletedProcess([], 2, "", "FAIL: invalid patch"),
+                           subprocess.CompletedProcess([], 1, "Verified 1 patches: 0 ok, 0 not-checked, 1 mismatch\n", ""),
                            subprocess.CompletedProcess([], 0, VERIFIED, "")]
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(self.advise("--list-verified"), 0)
         self.assertIn("Catalog entry 1 ('missing.toml'): rejected", output.getvalue())
-        self.assertIn("Catalog entry 2 ('patch.toml'): relinker error (exit 2)", output.getvalue())
+        self.assertIn("Catalog entry 2 ('patch.toml'): rejected: Media/Modules/module.prx: SHA-256 mismatch", output.getvalue())
+        self.assertIn("Catalog entry 3 ('patch.toml'): relinker error (exit 2)", output.getvalue())
+        self.assertIn("Catalog entry 4 ('patch.toml'): rejected by relinker", output.getvalue())
         self.assertIn("Verified catalog entries: 1", output.getvalue())
-        self.assertIn(f"Catalog entry 3: {self.catalog / 'patch.toml'}", output.getvalue())
-        self.assertEqual(run.call_count, 2)
+        self.assertIn(f"Catalog entry 5: {self.catalog / 'patch.toml'}", output.getvalue())
+        self.assertEqual(run.call_count, 3)
 
     @patch.object(suggest_patches.subprocess, "run")
     def test_list_verified_no_match_keeps_exit_statuses(self, run):

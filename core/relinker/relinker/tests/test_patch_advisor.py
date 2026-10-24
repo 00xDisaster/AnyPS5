@@ -46,6 +46,7 @@ def main():
         assert result.returncode == 0 and "Verified catalog entries: 2" in result.stdout, (result.stdout, result.stderr)
         assert f"Catalog entry 1: {patch}" in result.stdout and f"Catalog entry 2: {second}" in result.stdout, (result.stdout, result.stderr)
         assert "Recommended:" not in result.stdout, (result.stdout, result.stderr)
+        assert source.read_bytes() == image
         broken = catalog / "broken.toml"
         broken.write_text(patch_text(address, expected, "broken").replace('description = "flip one bit"',
                                                                      r'description = "flip \"one\" bit"'))
@@ -58,6 +59,8 @@ def main():
         patch.write_text(patch_text(address, expected ^ 1, "wrong_byte"))
         result = advise(digest)
         assert result.returncode == 1 and "rejected by relinker" in result.stdout, (result.stdout, result.stderr)
+        result = advise(digest, ("patch.toml",), "--list-verified")
+        assert result.returncode == 1 and "rejected by relinker" in result.stdout and "Catalog entry 1:" not in result.stdout, (result.stdout, result.stderr)
         patch.write_text(patch_text(address, expected, "flip_bit"))
         result = advise(hashlib.sha256(b"other build").hexdigest())
         assert result.returncode == 1 and "SHA-256 mismatch" in result.stdout, (result.stdout, result.stderr)
