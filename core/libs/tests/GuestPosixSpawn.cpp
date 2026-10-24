@@ -253,6 +253,32 @@ static void CheckSpawnedChild(const char* role, int expectedCode) {
     CleanupChild();
 }
 
+static void CheckConcurrentWaiters() {
+    const std::int32_t processId = SpawnChild("child-sleep");
+    int statusA = -1;
+    int statusB = -1;
+    int errorA = 0;
+    int errorB = 0;
+    int resultA = 0;
+    int resultB = 0;
+    const auto waiter = [processId](int* status, int* error) {
+        const int result = waitpid_nid_postfix(processId, status, 0);
+        *error = *__error_nid_postfix();
+        return result;
+    };
+    std::thread threadA([&] { resultA = waiter(&statusA, &errorA); });
+    std::thread threadB([&] { resultB = waiter(&statusB, &errorB); });
+    threadA.join();
+    threadB.join();
+    const bool reapedA = resultA == processId;
+    const bool reapedB = resultB == processId;
+    Check(reapedA != reapedB);
+    const int reapedStatus = reapedA ? statusA : statusB;
+    Check((reapedStatus & 0x7f) == 0 && ((reapedStatus >> 8) & 0xff) == 43);
+    Check((reapedA ? errorB : errorA) == 10);
+    CleanupChild();
+}
+
 #ifndef _WIN32
 static void CheckStoppedChild() {
     const std::int32_t processId = SpawnChild("child-stop");
@@ -319,6 +345,7 @@ int main() {
     CheckSpawnedChild("child-exit-42", 42);
     CheckSpawnedChild("child-sleep", 43);
     CheckSpawnedChild("child-exit-neg", 255);
+    CheckConcurrentWaiters();
 #ifndef _WIN32
     CheckStoppedChild();
     CheckKilledChild("child-kill-bus", 10);

@@ -346,13 +346,16 @@ extern "C" std::int64_t WaitChildProcess_nid_no_patch(std::int32_t processId, un
             if (status != nullptr) *status = encoded;
             return reaped;
         }
-        if (noWait) return 0;
         std::vector<HANDLE> handles;
         {
             const std::lock_guard lock(childProcessMutex);
-            if (childProcesses.empty()) continue;
-            for (const auto& child : childProcesses) handles.push_back(reinterpret_cast<HANDLE>(child.processHandle));
+            for (const auto& child : childProcesses) {
+                if (!matches(child)) continue;
+                handles.push_back(reinterpret_cast<HANDLE>(child.processHandle));
+            }
         }
+        if (handles.empty()) return -2;
+        if (noWait) return 0;
         constexpr std::size_t groupSize = MAXIMUM_WAIT_OBJECTS;
         bool timedOut = true;
         for (std::size_t start = 0; start < handles.size() && timedOut; start += groupSize) {
