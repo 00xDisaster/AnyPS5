@@ -149,11 +149,22 @@ def syntax_only(entry, source):
     return syntax_arguments(arguments, directory, source)
 
 
+def expand_response_files(arguments, directory):
+    expanded = []
+    for argument in arguments:
+        if argument.startswith("@") and len(argument) > 1:
+            response = Path(argument[1:])
+            if not response.is_absolute():
+                response = directory / response
+            expanded.extend(command_arguments(response.read_text(encoding="utf-8")))
+        else:
+            expanded.append(argument)
+    return expanded
+
+
 def syntax_arguments(arguments, directory, source):
     validate_arguments(arguments)
-    for argument in arguments[1:]:
-        if argument.startswith("@"):
-            raise ValueError(f"unexpanded response file {argument[1:]}; provide expanded compile arguments before checking syntax")
+    arguments = [arguments[0], *expand_response_files(arguments[1:], directory)]
     wanted = source.resolve()
     trimmed = []
     index = 0

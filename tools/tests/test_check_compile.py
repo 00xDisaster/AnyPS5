@@ -16,7 +16,7 @@ TOOL = Path(__file__).resolve().parents[1] / "check_compile.py"
 
 
 class CheckCompileTests(unittest.TestCase):
-    def test_unexpanded_response_files_cannot_rewrite_build_outputs(self):
+    def test_response_files_are_expanded_without_rewriting_build_outputs(self):
         compiler = shutil.which("clang")
         if compiler is None:
             self.skipTest("Clang is required to check compilation-fragment side effects")
@@ -38,12 +38,32 @@ class CheckCompileTests(unittest.TestCase):
                     self.manifest([{"directory": str(self.build), "file": str(source),
                                     field: arguments if field == "arguments" else command}])
                     result = self.tool("--jobs", jobs, "unit.c")
-                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-                    self.assertIn("unexpanded response file", result.stderr)
-                    self.assertIn(str(response), result.stderr)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("1 translation units compile", result.stdout)
                     self.assertNotIn("Traceback", result.stderr)
                     for path, content in preserved.items():
                         self.assertEqual(path.read_bytes(), content)
+
+    def test_a_response_file_relative_to_the_build_directory_is_found(self):
+        compiler = shutil.which("clang")
+        if compiler is None:
+            self.skipTest("Clang is required to check response file resolution")
+        source = self.source("unit.c")
+        response = self.build / "flags.rsp"
+        response.write_text(f'"-c" "{source.as_posix()}"', encoding="utf-8")
+        self.manifest([{"directory": str(self.build), "file": str(source),
+                        "arguments": [compiler, "@flags.rsp"]}])
+        result = self.tool("unit.c")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 translation units compile", result.stdout)
+
+    def test_a_missing_response_file_is_reported_without_a_traceback(self):
+        source = self.source("unit.c")
+        self.manifest([{"directory": str(self.build), "file": str(source),
+                        "arguments": ["clang", "@" + str(self.build / "missing.rsp")]}])
+        result = self.tool("unit.c")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_dependency_options_do_not_make_syntax_checks_fail_or_rewrite_outputs(self):
         compiler = shutil.which("clang")
