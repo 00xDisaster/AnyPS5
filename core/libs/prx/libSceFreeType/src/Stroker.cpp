@@ -71,4 +71,8 @@ int APS5_VABI FT_Stroker_LineTo_nid_postfix(void* stroker, const GuestVector* to
     return FT_Stroker_LineTo(static_cast<FT_Stroker>(stroker), vector.pointer);
 }
 
+int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void* stroker) {
+    return FT_Stroker_EndSubPath(static_cast<FT_Stroker>(stroker));
+}
+
 }
