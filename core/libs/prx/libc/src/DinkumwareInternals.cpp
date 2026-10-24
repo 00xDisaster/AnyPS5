@@ -65,10 +65,10 @@ TFloat ScaledFloat(const char* text, char** end, std::int64_t pten, int* error, 
         guestErrno = 0;
         value = parse(number.c_str(), nullptr);
     }
-    if (guestErrno == 0) {
+    if (guestErrno == RangeError && (value == 0 || std::isinf(value))) {
+        if (error != nullptr) *error = 1;
+    } else if (guestErrno == 0 || guestErrno == RangeError) {
         guestErrno = saved;
-    } else if (error != nullptr && guestErrno == RangeError && (value == 0 || std::isinf(value))) {
-        *error = 1;
     }
     return value;
 }
