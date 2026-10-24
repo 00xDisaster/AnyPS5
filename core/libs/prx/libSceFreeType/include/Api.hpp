@@ -17,6 +17,9 @@ std::uint32_t APS5_VABI FT_Get_Char_Index_nid_postfix(FreeType::GuestFaceRec* fa
 int APS5_VABI FT_Get_Kerning_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t leftGlyph, std::uint32_t rightGlyph, std::uint32_t kernMode, FreeType::GuestVector* kerning);
 int APS5_VABI FT_Load_Glyph_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t glyphIndex, std::int32_t loadFlags);
 int APS5_VABI FT_Get_Gasp_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t ppem);
+int APS5_VABI FT_Get_CID_Registry_Ordering_Supplement_nid_postfix(FreeType::GuestFaceRec* face, const char** registry, const char** ordering, std::int32_t* supplement);
+int APS5_VABI FT_Get_CID_Is_Internally_CID_Keyed_nid_postfix(FreeType::GuestFaceRec* face, std::uint8_t* isCid);
+int APS5_VABI FT_Get_CID_From_Glyph_Index_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t glyphIndex, std::uint32_t* cid);
 int APS5_VABI FT_Load_Char_nid_postfix(FreeType::GuestFaceRec* face, std::uint64_t charCode, std::int32_t loadFlags);
 int APS5_VABI FT_Outline_Get_Orientation_nid_postfix(FreeType::GuestOutline* outline);
 int APS5_VABI FT_Render_Glyph_nid_postfix(FreeType::GuestGlyphSlotRec* slot, std::int32_t renderMode);

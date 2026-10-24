@@ -470,12 +470,6 @@ struct Finalizers {
     std::vector<int> calls;
 };
 
-extern "C" {
-int APS5_VABI FT_Get_CID_Registry_Ordering_Supplement_nid_postfix(GuestFaceRec*, const char**, const char**, std::int32_t*);
-int APS5_VABI FT_Get_CID_Is_Internally_CID_Keyed_nid_postfix(GuestFaceRec*, std::uint8_t*);
-int APS5_VABI FT_Get_CID_From_Glyph_Index_nid_postfix(GuestFaceRec*, std::uint32_t, std::uint32_t*);
-}
-
 static std::vector<unsigned char> CidMetadataFont(bool keyed, const std::string& registry, const std::string& ordering,
                                                 int supplement, unsigned cid) {
     const auto index = [](const std::vector<std::vector<unsigned char>>& objects) {
@@ -600,7 +594,7 @@ static void CheckCidMetadata() {
         {CidMetadataFont(false, "Adobe", "Identity", 0, 41), 0, 0, 0, nullptr, nullptr, 1},
         {SquareGlyphFont('A', 700), -1, 0, 0, nullptr, nullptr, 1}}};
     for (const auto& fixture : fixtures) {
-        void* library = nullptr;
+        FreeType::GuestLibrary* library = nullptr;
         GuestFaceRec* face = nullptr;
         FT_Library nativeLibrary = nullptr;
         FT_Face native = nullptr;
