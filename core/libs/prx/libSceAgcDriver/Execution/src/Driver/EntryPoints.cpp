@@ -1,11 +1,14 @@
+#include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Execution/include/ThreadPriority.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Screenshot.hpp"
+#include "prx/libkernel/Time/include/SleepWake.hpp"
 #include <mutex>
 
 namespace AgcDriver {
 
 void Submit(const Packet* packet, std::uint32_t queue) try {
+    KernelNoteGpuSubmit_nid_no_patch();
     DriverDetail::Driver::Get().Submit(packet, queue);
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
@@ -157,4 +160,9 @@ extern "C" void AgcDriverResolveGraphicsStagesAbi_nid_postfix(std::span<const Sh
     AgcDriver::DriverDetail::Driver::Get().ResolveGraphicsStagesAbi(stages, context, primitive);
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
+}
+
+extern "C" void AgcDriverPrepareCommandWrite_nid_no_patch(std::uint64_t address, std::size_t bytes) {
+    if (AgcDriver::Graphics::Recorder::SnapshotWriteOverlaps(address, bytes))
+        AgcDriver::GuestMemory::FlushGpuWrites(address, bytes);
 }
