@@ -4,10 +4,10 @@
 
 extern "C" {
 
-int APS5_VABI sceGnmBeginWorkload(void);
+int APS5_VABI sceGnmBeginWorkload(std::uint32_t stream, std::uint64_t* workload);
 int APS5_VABI sceGnmComputeWaitOnAddress(std::uint32_t* cmdbuf, std::uint32_t size, std::uint64_t address, std::uint32_t mask, std::uint32_t compare, std::uint32_t reference);
 int APS5_VABI sceGnmComputeWaitSemaphore(std::uint32_t* cmdbuf, std::uint32_t size, std::uint64_t semaphoreAddress, std::uint32_t flags);
-int APS5_VABI sceGnmCreateWorkloadStream(void);
+int APS5_VABI sceGnmCreateWorkloadStream(std::uint64_t name, std::uint32_t* stream);
 int APS5_VABI sceGnmDebugModuleReset(void);
 int APS5_VABI sceGnmDebugReset(void);
 int APS5_VABI sceGnmDestroyWorkloadStream(void);
@@ -40,7 +40,7 @@ int APS5_VABI sceGnmDriverInternalRetrieveGnmInterfaceForResourceRegistration(vo
 int APS5_VABI sceGnmDriverInternalRetrieveGnmInterfaceForValidation(void);
 int APS5_VABI sceGnmDriverInternalVirtualQuery(void);
 int APS5_VABI sceGnmDriverTraceInProgress(void);
-int APS5_VABI sceGnmEndWorkload(void);
+int APS5_VABI sceGnmEndWorkload(std::uint64_t workload);
 int APS5_VABI sceGnmFindResources(void);
 int APS5_VABI sceGnmFindResourcesPublic(void);
 int APS5_VABI sceGnmGetCoredumpAddress(void);
@@ -91,10 +91,10 @@ int APS5_VABI sceGnmSdmaCopyWindow(void);
 int APS5_VABI sceGnmSdmaFlush(void);
 int APS5_VABI sceGnmSdmaGetMinCmdSize(void);
 int APS5_VABI sceGnmSdmaOpen(void);
-int APS5_VABI sceGnmSetCsShaderWithModifier(void);
-int APS5_VABI sceGnmSetEmbeddedPsShader(void);
-int APS5_VABI sceGnmSetEmbeddedVsShader(void);
-int APS5_VABI sceGnmSetPsShader350(void);
+int APS5_VABI sceGnmSetCsShaderWithModifier(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs, std::uint32_t modifier);
+int APS5_VABI sceGnmSetEmbeddedPsShader(std::uint32_t* cmdbuf, std::uint32_t, std::uint32_t shaderId, std::uint32_t);
+int APS5_VABI sceGnmSetEmbeddedVsShader(std::uint32_t* cmdbuf, std::uint32_t, std::uint32_t shaderId, std::uint32_t);
+int APS5_VABI sceGnmSetPsShader350(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs);
 int APS5_VABI sceGnmSetResourceRegistrationUserMemory(void);
 int APS5_VABI sceGnmSetResourceUserData(void);
 int APS5_VABI sceGnmSetSpiEnableSqCounters(void);
@@ -107,11 +107,11 @@ int APS5_VABI sceGnmSubmitCommandBuffersForWorkload(void);
 int APS5_VABI sceGnmUnregisterAllResourcesForOwner(void);
 int APS5_VABI sceGnmUnregisterOwnerAndResources(void);
 int APS5_VABI sceGnmUnregisterResource(void);
-int APS5_VABI sceGnmUpdateGsShader(void);
-int APS5_VABI sceGnmUpdateHsShader(void);
-int APS5_VABI sceGnmUpdatePsShader(void);
-int APS5_VABI sceGnmUpdatePsShader350(void);
-int APS5_VABI sceGnmUpdateVsShader(void);
+int APS5_VABI sceGnmUpdateGsShader(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs);
+int APS5_VABI sceGnmUpdateHsShader(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs, std::uint32_t lsHsConfig);
+int APS5_VABI sceGnmUpdatePsShader(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs);
+int APS5_VABI sceGnmUpdatePsShader350(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs);
+int APS5_VABI sceGnmUpdateVsShader(std::uint32_t* cmdbuf, std::uint32_t size, const std::uint32_t* regs, std::uint32_t modifier);
 int APS5_VABI sceGnmValidateDisableDiagnostics(void);
 int APS5_VABI sceGnmValidateDisableDiagnostics2(void);
 int APS5_VABI sceGnmValidateDispatchCommandBuffers(void);

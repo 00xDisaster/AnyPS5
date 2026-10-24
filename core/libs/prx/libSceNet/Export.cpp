@@ -363,9 +363,6 @@ int fail(int err) {
     return NET_ERROR_BASE | err;
 }
 
-extern "C" int APS5_VABI scePthreadCreate(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name);
-extern "C" int APS5_VABI scePthreadJoin(Pthread thread, void** retval);
-
 void* APS5_VABI RunNetThread(void* param) {
     const auto* thread = static_cast<const NetThreadParameter*>(param);
     thread->entry(thread->arg);
@@ -1567,39 +1564,6 @@ struct NetSockInfo {
 static_assert(sizeof(NetSockInfo) == 0xA0 && offsetof(NetSockInfo, s) == 0x24 && offsetof(NetSockInfo, local_adr) == 0x34 &&
     offsetof(NetSockInfo, local_port) == 0x3C && offsetof(NetSockInfo, recv_buffer_size) == 0x64);
 
-struct NetSockInfo6 {
-    char name[32];
-    std::int32_t pid;
-    std::int32_t s;
-    std::int8_t socket_type;
-    std::int8_t policy;
-    std::int8_t priority;
-    std::int8_t reserved8;
-    std::int32_t recv_queue_length;
-    std::int32_t send_queue_length;
-    std::uint32_t local_adr;
-    std::uint32_t remote_adr;
-    std::uint16_t local_port;
-    std::uint16_t remote_port;
-    std::uint16_t local_vport;
-    std::uint16_t remote_vport;
-    std::int32_t state;
-    std::int32_t flags;
-    std::int32_t tx_bps;
-    std::int32_t rx_bps;
-    std::int32_t max_tx_bps;
-    std::int32_t max_rx_bps;
-    std::int32_t tx_vbps;
-    std::int32_t rx_vbps;
-    std::int32_t recv_buffer_size;
-    std::int32_t send_buffer_size;
-    std::uint8_t local_adr6[16];
-    std::uint8_t remote_adr6[16];
-    std::int32_t tx_drops;
-    std::int32_t rx_drops;
-    std::int32_t tx_wait;
-    std::int32_t reserved[2];
-};
 static_assert(sizeof(NetSockInfo6) == sizeof(NetSockInfo) && offsetof(NetSockInfo6, s) == offsetof(NetSockInfo, s) &&
     offsetof(NetSockInfo6, local_port) == offsetof(NetSockInfo, local_port) && offsetof(NetSockInfo6, flags) == offsetof(NetSockInfo, flags) &&
     offsetof(NetSockInfo6, recv_buffer_size) == offsetof(NetSockInfo, recv_buffer_size) && offsetof(NetSockInfo6, local_adr6) == 0x6C &&

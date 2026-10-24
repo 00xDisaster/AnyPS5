@@ -1,4 +1,3 @@
-#include "prx/libSceUsbStorage/include/Api.hpp"
 #include "prx/libSceSystemService/include/SystemService.hpp"
 #include <cstdint>
 #include <cstddef>

@@ -1,3 +1,4 @@
+#include "prx/libSceAgc/include/Agc.hpp"
 #include "prx/libSceAgcDriver/Resource/include/Registration.hpp"
 #include "prx/libSceAgc/Patch/include/WaitRegMem.hpp"
 #include "prx/libSceAgc/Patch/include/Nop.hpp"

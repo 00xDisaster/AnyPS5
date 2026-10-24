@@ -1,5 +1,7 @@
 #pragma once
 
+#include "prx/libSceUsbStorage/UsbStorage.hpp"
+
 #include "SceTypes.hpp"
 
 struct SystemServiceTournamentOccurrenceParam {
@@ -139,11 +141,6 @@ struct AppMessagingMessage {
     std::uint32_t payloadSize;
     std::uint64_t timestamp;
 };
-
-struct UsbStorageEvent;
-struct UsbStorageDeviceInfo;
-
-using UsbStorageCallback = void (APS5_VABI *)(const UsbStorageEvent* event, void* userData);
 
 extern "C" {
 

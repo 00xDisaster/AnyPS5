@@ -103,4 +103,22 @@ int APS5_VABI sceBgftServiceIntUploadStopTaskAll(void);
 int APS5_VABI sceBgftServiceIntUploadUnregisterTask(void);
 int APS5_VABI sceBgftServiceIntUploadUnregisterTaskAll(void);
 
+int APS5_VABI sceBgftServiceIntDebugPlayGoClearSetFreeZone();
+int APS5_VABI sceBgftServiceIntDebugPlayGoIsSetFreeZone();
+int APS5_VABI sceBgftServiceIntDownloadCheckPatchUpdateState();
+int APS5_VABI sceBgftServiceIntDownloadClearStats();
+int APS5_VABI sceBgftServiceIntDownloadGetApplicationDataSize();
+int APS5_VABI sceBgftServiceIntDownloadGetPatchGoProgress();
+int APS5_VABI sceBgftServiceIntDownloadHideTask();
+int APS5_VABI sceBgftServiceIntDownloadSetResumeState();
+int APS5_VABI sceBgftServiceIntDownloadSetStartState();
+int APS5_VABI sceBgftServiceIntPlayGoCheckDiscIniChunksInstall();
+int APS5_VABI sceBgftServiceIntPlayGoStartDataDiscInstall();
+int APS5_VABI sceBgftServiceIntSetTaskVisible();
+int APS5_VABI sceBgftServiceIntUploadGetAvailableTaskCount();
+int APS5_VABI sceBgftServiceIntUploadGetTaskInfo();
+int APS5_VABI sceBgftServiceIntUploadHideTask();
+int APS5_VABI sceBgftServiceIntUploadSetStartState();
+int APS5_VABI sceBgftServiceIntUploadSetUploadError();
+
 }

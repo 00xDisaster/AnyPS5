@@ -20,12 +20,8 @@ static void Require(bool value) { if (!value) std::abort(); }
 
 static bool Equal(const char* left, const char* right) { return std::strcmp(left, right) == 0; }
 
-struct HttpPoolStats {
-    std::size_t poolSize;
-    std::size_t maxInuseSize;
-    std::size_t currentInuseSize;
-};
-static_assert(sizeof(HttpPoolStats) == 24);
+
+static_assert(sizeof(HttpMemoryPoolStats) == 24);
 
 template <typename TCall>
 static bool Throws(TCall call) {
@@ -38,20 +34,20 @@ static bool Throws(TCall call) {
 }
 
 static void CheckPoolStatsRejected(int id, int expected) {
-    unsigned char buffer[sizeof(HttpPoolStats) + 16];
+    alignas(HttpMemoryPoolStats) unsigned char buffer[sizeof(HttpMemoryPoolStats) + 16];
     std::memset(buffer, 0x5a, sizeof(buffer));
-    Require(sceHttpGetMemoryPoolStats(id, buffer) == expected);
+    Require(sceHttpGetMemoryPoolStats(id, reinterpret_cast<HttpMemoryPoolStats*>(buffer)) == expected);
     for (unsigned char byte : buffer) Require(byte == 0x5a);
 }
 
 static void CheckPoolStats(int id, std::size_t poolSize) {
-    unsigned char buffer[sizeof(HttpPoolStats) + 16];
+    alignas(HttpMemoryPoolStats) unsigned char buffer[sizeof(HttpMemoryPoolStats) + 16];
     std::memset(buffer, 0x5a, sizeof(buffer));
-    Require(sceHttpGetMemoryPoolStats(id, buffer) == 0);
-    HttpPoolStats stats;
+    Require(sceHttpGetMemoryPoolStats(id, reinterpret_cast<HttpMemoryPoolStats*>(buffer)) == 0);
+    HttpMemoryPoolStats stats;
     std::memcpy(&stats, buffer, sizeof(stats));
     Require(stats.poolSize == poolSize);
-    Require(stats.maxInuseSize == 0 && stats.currentInuseSize == 0);
+    Require(stats.peakUsedSize == 0 && stats.usedSize == 0);
     for (std::size_t i = sizeof(stats); i < sizeof(buffer); ++i) Require(buffer[i] == 0x5a);
 }
 

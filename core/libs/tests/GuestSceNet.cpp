@@ -1473,7 +1473,7 @@ static std::vector<int> RequireSockInfoList(int flags) {
         int socket = 0;
         std::memcpy(&socket, &listed[0x24], sizeof(socket));
         Require(sockets.empty() || socket > sockets.back());
-        std::array<std::uint8_t, 0xa0> single;
+        alignas(NetSockInfo6) std::array<std::uint8_t, 0xa0> single;
         Require(sceNetGetSockInfo(socket, single.data(), 1, 0) == 1 && std::equal(single.begin(), single.end(), listed));
         sockets.push_back(socket);
     }
@@ -1520,7 +1520,7 @@ static void CheckSockInfo() {
     Require(sceNetSetsockopt(datagram, 0xffff, 0x1001, &buffers[1], sizeof(buffers[1])) == 0);
     const auto configured = RequireSockInfo(datagram, 2, 0x200001, datagramAddress, listening);
     Require(std::memcmp(configured.data() + 0x64, buffers.data(), sizeof(buffers)) == 0);
-    std::array<std::uint8_t, 0xa0> record;
+    alignas(NetSockInfo6) std::array<std::uint8_t, 0xa0> record;
     record.fill(0xa5);
     Require(Failed(sceNetGetSockInfo(datagram, nullptr, 1, 0), 22));
     Require(Failed(sceNetGetSockInfo(datagram, record.data(), 0, 0), 22));
@@ -1547,7 +1547,7 @@ static std::array<std::uint8_t, 0xa0> RequireSockInfo6(int socket, int type, boo
     const std::array<std::uint8_t, 28>& remote, int requestFlags) {
     std::array<std::uint8_t, 0x140> records;
     records.fill(0xa5);
-    Require(sceNetGetSockInfo6(socket, records.data(), 2, requestFlags) == 1);
+    Require(sceNetGetSockInfo6(socket, reinterpret_cast<NetSockInfo6*>(records.data()), 2, requestFlags) == 1);
     std::array<std::uint8_t, 0xa0> expected{};
     std::memcpy(expected.data() + 0x24, &socket, sizeof(socket));
     expected[0x28] = static_cast<std::uint8_t>(type);
@@ -1577,10 +1577,10 @@ static std::vector<int> RequireSockInfo6List(int flags) {
     const int count = sceNetGetSockInfo6(-1, nullptr, 0, flags);
     Require(count >= 0);
     std::vector<std::uint8_t> records(static_cast<std::size_t>(count + 1) * 0xa0, 0xa5);
-    Require(sceNetGetSockInfo6(-1, records.data(), count + 1, flags) == count);
+    Require(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(records.data()), count + 1, flags) == count);
     Require(std::all_of(records.end() - 0xa0, records.end(), [](auto byte) { return byte == 0xa5; }));
     std::vector<std::uint8_t> unbounded(records.size(), 0xa5);
-    Require(sceNetGetSockInfo6(-1, unbounded.data(), INT32_MAX, flags) == count && unbounded == records);
+    Require(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(unbounded.data()), INT32_MAX, flags) == count && unbounded == records);
     std::vector<int> sockets;
     for (int index = 0; index < count; ++index) {
         const auto listed = records.begin() + index * 0xa0;
@@ -1590,14 +1590,14 @@ static std::vector<int> RequireSockInfo6List(int flags) {
         std::memcpy(&status, &listed[0x48], sizeof(status));
         Require(sockets.empty() || socket > sockets.back());
         Require((flags & 0x1000) != 0 || (status & 0x400000) != 0);
-        std::array<std::uint8_t, 0xa0> single;
-        Require(sceNetGetSockInfo6(socket, single.data(), 1, flags) == 1 && std::equal(single.begin(), single.end(), listed));
+        alignas(NetSockInfo6) std::array<std::uint8_t, 0xa0> single;
+        Require(sceNetGetSockInfo6(socket, reinterpret_cast<NetSockInfo6*>(single.data()), 1, flags) == 1 && std::equal(single.begin(), single.end(), listed));
         sockets.push_back(socket);
     }
     for (const int limit : {1, 2}) {
         const int written = std::min(count, limit);
         std::vector<std::uint8_t> limited(records.size(), 0xa5);
-        Require(sceNetGetSockInfo6(-1, limited.data(), limit, flags) == written);
+        Require(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(limited.data()), limit, flags) == written);
         Require(std::equal(limited.begin(), limited.begin() + written * 0xa0, records.begin()));
         Require(std::all_of(limited.begin() + written * 0xa0, limited.end(), [](auto byte) { return byte == 0xa5; }));
     }
@@ -1628,27 +1628,27 @@ static void CheckSockInfo6() {
     RequireSockInfo6(datagram, 2, false, true, inetAddress, unnamed, 0x1000);
     RequireSockInfo6(datagram, 2, false, true, inetAddress, unnamed, 0x1040);
 
-    std::array<std::uint8_t, 0xa0> record;
+    alignas(NetSockInfo6) std::array<std::uint8_t, 0xa0> record;
     record.fill(0xa5);
     const auto untouched = [&record] { return std::all_of(record.begin(), record.end(), [](auto byte) { return byte == 0xa5; }); };
     Require(Failed(sceNetGetSockInfo6(datagram, nullptr, 1, 0x1000), 22));
-    Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 0, 0x1000), 22));
-    Require(Failed(sceNetGetSockInfo6(datagram, record.data(), -1, 0x1000), 22));
-    Require(Failed(sceNetGetSockInfo6(-1, record.data(), 0, 0), 22));
-    Require(Failed(sceNetGetSockInfo6(-1, record.data(), -5, 0x1000), 22));
+    Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 0, 0x1000), 22));
+    Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), -1, 0x1000), 22));
+    Require(Failed(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(record.data()), 0, 0), 22));
+    Require(Failed(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(record.data()), -5, 0x1000), 22));
     for (const int flags : {1, 0x41, 0x80, 0x1001, 0x2000, 0x400000, 0x1048}) {
-        Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 1, flags), 22));
+        Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 1, flags), 22));
         Require(Failed(sceNetGetSockInfo6(-1, nullptr, 0, flags), 22));
-        Require(Failed(sceNetGetSockInfo6(-1, record.data(), 1, flags), 22));
+        Require(Failed(sceNetGetSockInfo6(-1, reinterpret_cast<NetSockInfo6*>(record.data()), 1, flags), 22));
     }
-    Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 1, 0), 47));
-    Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 1, 0x40), 47));
+    Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0), 47));
+    Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0x40), 47));
     Require(untouched());
     const int closed = sceNetSocket("sockinfo6-closed", 2, 2, 17);
     Require(closed >= 0 && sceNetSocketClose(closed) == 0);
     for (const int flags : {0, 0x40, 0x1000, 0x1040}) {
-        Require(Failed(sceNetGetSockInfo6(closed, record.data(), 1, flags), 9));
-        Require(Failed(sceNetGetSockInfo6(INT32_MAX, record.data(), 1, flags), 9));
+        Require(Failed(sceNetGetSockInfo6(closed, reinterpret_cast<NetSockInfo6*>(record.data()), 1, flags), 9));
+        Require(Failed(sceNetGetSockInfo6(INT32_MAX, reinterpret_cast<NetSockInfo6*>(record.data()), 1, flags), 9));
     }
     Require(untouched());
     Require(RequireSockInfo6List(0) == earlier);
@@ -1656,7 +1656,7 @@ static void CheckSockInfo6() {
 
     if (ipv6Unavailable) {
         Require(sceNetSocketClose(datagram) == 0);
-        Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 1, 0x1000), 9));
+        Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0x1000), 9));
         Require(RequireSockInfo6List(0x1000) == earlierAll);
         return;
     }
@@ -1708,15 +1708,15 @@ static void CheckSockInfo6() {
     const auto configured = RequireSockInfo6(peer, 2, true, true, peerAddress, udpAddress, 0);
     Require(std::memcmp(configured.data() + 0x64, buffers.data(), sizeof(buffers)) == 0);
     Require(std::all_of(configured.begin() + 0x34, configured.begin() + 0x3c, [](auto byte) { return byte == 0; }));
-    Require(sceNetGetSockInfo6(peer, record.data(), 1, 0x1040) == 1 && std::equal(configured.begin(), configured.end(), record.begin()));
+    Require(sceNetGetSockInfo6(peer, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0x1040) == 1 && std::equal(configured.begin(), configured.end(), record.begin()));
 
     Require(RequireSockInfo6List(0) == WithSockets(earlier, {udp, listener, client, accepted, peer}));
     Require(RequireSockInfo6List(0x40) == WithSockets(earlier, {udp, listener, client, accepted, peer}));
     Require(RequireSockInfo6List(0x1000) == WithSockets(earlierAll, {datagram, udp, listener, client, accepted, peer}));
-    Require(Failed(sceNetGetSockInfo6(datagram, record.data(), 1, 0), 47));
+    Require(Failed(sceNetGetSockInfo6(datagram, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0), 47));
 
     for (const int descriptor : {peer, accepted, client, listener, udp}) Require(sceNetSocketClose(descriptor) == 0);
-    Require(Failed(sceNetGetSockInfo6(udp, record.data(), 1, 0), 9));
+    Require(Failed(sceNetGetSockInfo6(udp, reinterpret_cast<NetSockInfo6*>(record.data()), 1, 0), 9));
     Require(RequireSockInfo6List(0) == earlier);
     Require(sceNetSocketClose(datagram) == 0);
     Require(RequireSockInfo6List(0x1000) == earlierAll);

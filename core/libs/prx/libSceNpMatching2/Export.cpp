@@ -21,13 +21,6 @@ namespace {
 static_assert(offsetof(NpMatching2InitializeParameter, size) == 0x20);
 static_assert(sizeof(NpMatching2InitializeParameter) == 0x30);
 
-struct NpMatching2CreateContextParameter {
-    const void* npId;
-    const void* npCommunicationId;
-    const void* npPassphrase;
-    std::uint32_t serviceLabel;
-    std::uint64_t size;
-};
 static_assert(sizeof(NpMatching2CreateContextParameter) == CREATE_CONTEXT_PARAMETER_SIZE);
 
 std::mutex matching2Mutex;

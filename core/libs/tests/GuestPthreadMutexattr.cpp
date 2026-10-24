@@ -1,3 +1,5 @@
+#include "prx/libkernel/Pthread/include/Mutex.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include <cstdint>

@@ -433,7 +433,7 @@ static void Trigonometry() {
         }
     }
     const auto font = SquareGlyphFont('A', 700);
-    void* library = nullptr;
+    GuestLibrary* library = nullptr;
     FT_Library oracle = nullptr;
     GuestFaceRec* face = nullptr;
     FT_Face native = nullptr;

@@ -1,3 +1,4 @@
+#include "prx/libSceAudioOut/include/AudioOut.hpp"
 #include "prx/libSceAudioOut/include/AudioOut2.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
@@ -143,19 +144,19 @@ void TestLegacyMasteringSetParam() {
     alignas(16) std::uint32_t params[16];
     std::fill(params, params + 16, 0xA5A5A5A5u);
     params[0] = 1u;
-    Require(sceAudioOutMasteringSetParam(params, 0) == 0, "legacy mastering parameters must be accepted");
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 1); }), "legacy parameters with SwapEqCompressor must throw");
+    Require(sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 0) == 0, "legacy mastering parameters must be accepted");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 1); }), "legacy parameters with SwapEqCompressor must throw");
     Require(params[0] == 1u && params[1] == 0xA5A5A5A5u && params[15] == 0xA5A5A5A5u, "legacy mastering parameters are not modified");
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 2); }), "legacy parameters with flags bit 1 must throw");
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 0xFFFFFFFFu); }), "legacy parameters with unknown flags must throw");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 2); }), "legacy parameters with flags bit 1 must throw");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 0xFFFFFFFFu); }), "legacy parameters with unknown flags must throw");
     Require(ThrowsException([] { sceAudioOutMasteringSetParam(nullptr, 0); }), "null legacy parameters must throw");
     Require(ThrowsException([] { sceAudioOutMasteringSetParam(nullptr, 2); }), "null legacy parameters with unknown flags must throw");
     params[0] = 0u;
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 0); }), "legacy params id 0 must throw");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 0); }), "legacy params id 0 must throw");
     params[0] = 2u;
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 0); }), "legacy params id 2 must throw");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 0); }), "legacy params id 2 must throw");
     params[0] = 0x01010001u;
-    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(params, 0); }), "an unknown legacy params id must throw");
+    Require(ThrowsException([&] { sceAudioOutMasteringSetParam(reinterpret_cast<const AudioOut2MasteringParamsHeader*>(params), 0); }), "an unknown legacy params id must throw");
 }
 
 void TestLegacyMasteringGetState() {
@@ -165,7 +166,7 @@ void TestLegacyMasteringGetState() {
     auto* header = reinterpret_cast<std::uint32_t*>(storage);
     std::fill(storage, storage + size, 0xA5);
     *header = 1u;
-    Require(sceAudioOutMasteringGetState(storage) == 0, "legacy states id 1 must be accepted");
+    Require(sceAudioOutMasteringGetState(reinterpret_cast<AudioOut2MasteringStatesHeader*>(storage)) == 0, "legacy states id 1 must be accepted");
     Require(*header == 1u, "legacy states id 1 is kept");
     const std::pair<std::size_t, std::size_t> meters[] = {{32, 128}, {128, 224}, {240, 272}, {272, 304}, {304, 336}};
     for (const auto& meter : meters) {
@@ -174,12 +175,12 @@ void TestLegacyMasteringGetState() {
     Require(std::all_of(storage + 4, storage + 32, [](std::uint8_t byte) { return byte == 0xA5; }), "the bytes before the compressor meters are not modified");
     Require(std::all_of(storage + 224, storage + 240, [](std::uint8_t byte) { return byte == 0xA5; }), "the limiter descriptor bytes are not modified");
     Require(std::all_of(storage + statesSize, storage + size, [](std::uint8_t byte) { return byte == 0xA5; }), "the bytes after the states are not modified");
-    Require(sceAudioOutMasteringGetState(storage) == 0, "legacy states id 1 must be accepted again");
+    Require(sceAudioOutMasteringGetState(reinterpret_cast<AudioOut2MasteringStatesHeader*>(storage)) == 0, "legacy states id 1 must be accepted again");
 
     for (std::uint32_t id : {0u, 2u, 3u, 0x01010001u, 0xFFFFFFFFu}) {
         std::fill(storage, storage + size, 0xA5);
         *header = id;
-        Require(ThrowsException([&] { sceAudioOutMasteringGetState(storage); }), "an unknown legacy states id must throw");
+        Require(ThrowsException([&] { sceAudioOutMasteringGetState(reinterpret_cast<AudioOut2MasteringStatesHeader*>(storage)); }), "an unknown legacy states id must throw");
         Require(*header == id && std::all_of(storage + 4, storage + size, [](std::uint8_t byte) { return byte == 0xA5; }), "a refused legacy states id leaves the buffer unmodified");
     }
     Require(ThrowsException([] { sceAudioOutMasteringGetState(nullptr); }), "a null legacy state must throw");

@@ -397,11 +397,7 @@ struct BootTimeval {
     std::int64_t tv_usec;
 };
 static_assert(sizeof(BootTimeval) == 16);
-struct BootTimespec {
-    std::int64_t tv_sec;
-    std::int64_t tv_nsec;
-};
-extern "C" int APS5_VABI clock_gettime_nid_postfix(int, BootTimespec*);
+
 static void CheckBootTimeSysctl() {
     const int mib[] = {1, 21};
     *__error_nid_postfix() = 13;
@@ -414,8 +410,8 @@ static void CheckBootTimeSysctl() {
     Require(sysctl_nid_postfix(mib, 2, &first, &length, nullptr, 0) == 0 && length == sizeof(first));
     Require(first.tv_sec > 0 && first.tv_sec <= static_cast<std::int64_t>(std::time(nullptr)));
     Require(first.tv_usec >= 0 && first.tv_usec < 1000000);
-    BootTimespec now{};
-    BootTimespec uptime{};
+    KernelTimespec now{};
+    KernelTimespec uptime{};
     Require(clock_gettime_nid_postfix(5, &uptime) == 0 && clock_gettime_nid_postfix(0, &now) == 0);
     const std::int64_t drift = (first.tv_sec + uptime.tv_sec - now.tv_sec) * 1000000 + first.tv_usec + uptime.tv_nsec / 1000 - now.tv_nsec / 1000;
     Require(drift > -1000000 && drift < 1000000);

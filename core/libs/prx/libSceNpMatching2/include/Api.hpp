@@ -12,13 +12,21 @@ struct NpMatching2InitializeParameter {
     std::uint64_t sslPoolSize;
 };
 
+struct NpMatching2CreateContextParameter {
+    const void* npId;
+    const void* npCommunicationId;
+    const void* npPassphrase;
+    std::uint32_t serviceLabel;
+    std::uint64_t size;
+};
+
 extern "C" {
 
-int APS5_VABI sceNpMatching2ContextStart();
-int APS5_VABI sceNpMatching2ContextStop();
-int APS5_VABI sceNpMatching2CreateContext();
+int APS5_VABI sceNpMatching2ContextStart(std::uint16_t ctxId, std::uint64_t timeout);
+int APS5_VABI sceNpMatching2ContextStop(std::uint16_t ctxId);
+int APS5_VABI sceNpMatching2CreateContext(const NpMatching2CreateContextParameter* param, std::uint16_t* ctxId);
 int APS5_VABI sceNpMatching2CreateJoinRoom();
-int APS5_VABI sceNpMatching2DestroyContext();
+int APS5_VABI sceNpMatching2DestroyContext(std::uint16_t ctxId);
 int APS5_VABI sceNpMatching2GetRoomDataExternalList();
 int APS5_VABI sceNpMatching2GetRoomDataInternal();
 int APS5_VABI sceNpMatching2GetRoomMemberDataInternal();
@@ -29,14 +37,14 @@ int APS5_VABI sceNpMatching2Initialize(const NpMatching2InitializeParameter* par
 int APS5_VABI sceNpMatching2JoinRoom();
 int APS5_VABI sceNpMatching2KickoutRoomMember();
 int APS5_VABI sceNpMatching2LeaveRoom();
-int APS5_VABI sceNpMatching2RegisterContextCallback();
-int APS5_VABI sceNpMatching2RegisterRoomEventCallback();
-int APS5_VABI sceNpMatching2RegisterRoomMessageCallback();
-int APS5_VABI sceNpMatching2RegisterSignalingCallback();
+int APS5_VABI sceNpMatching2RegisterContextCallback(void* callback, void* userdata);
+int APS5_VABI sceNpMatching2RegisterRoomEventCallback(std::uint16_t ctxId, void* callback, void* userdata);
+int APS5_VABI sceNpMatching2RegisterRoomMessageCallback(std::uint16_t ctxId, void* callback, void* userdata);
+int APS5_VABI sceNpMatching2RegisterSignalingCallback(std::uint16_t ctxId, void* callback, void* userdata);
 int APS5_VABI sceNpMatching2SearchRoom();
 int APS5_VABI sceNpMatching2SendRoomChatMessage();
 int APS5_VABI sceNpMatching2SendRoomMessage();
-int APS5_VABI sceNpMatching2SetDefaultRequestOptParam();
+int APS5_VABI sceNpMatching2SetDefaultRequestOptParam(std::uint16_t ctxId, const void* requestOpt);
 int APS5_VABI sceNpMatching2SetRoomDataExternal();
 int APS5_VABI sceNpMatching2SetRoomDataInternal();
 int APS5_VABI sceNpMatching2SetRoomMemberDataInternal();

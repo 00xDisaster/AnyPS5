@@ -1,3 +1,4 @@
+#include "prx/libSceAgc/include/Agc.hpp"
 #include "prx/libSceAgc/Misc/include/Semaphore.hpp"
 #include "prx/libSceAgc/DcbFlow/include/Sync.hpp"
 #include "prx/libSceAgc/Cb/include/Sync.hpp"

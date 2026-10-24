@@ -294,11 +294,9 @@ int APS5_VABI sceKernelGetSocClock(void);
 int APS5_VABI sceKernelGetSpecialIForRcmgr(void);
 int APS5_VABI sceKernelGetSubsysId(void);
 int APS5_VABI sceKernelGetSubsysSubId(void);
-int APS5_VABI sceKernelGetSystemExVersion(void);
 int APS5_VABI sceKernelGetSystemLevelDebuggerModeForRcmgr(void);
 int APS5_VABI sceKernelGetSystemSwBeta(void);
 int APS5_VABI sceKernelGetThreadName(void);
-int APS5_VABI sceKernelGetTraceMemoryStats(void);
 int APS5_VABI sceKernelGetUniversalMode(void);
 int APS5_VABI sceKernelGetUpdVersion(void);
 int APS5_VABI sceKernelGetUtokenDataExecutionForRcmgr(void);
@@ -545,8 +543,6 @@ int APS5_VABI swapon_nid_postfix(void);
 int APS5_VABI symlinkat_nid_postfix(void);
 int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(void);
 int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(void);
-int APS5_VABI sysKernelGetLowerLimitSysexVersion_nid_postfix(void);
-int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(void);
 int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(void);
 int APS5_VABI sysKernelGetUpdVersion_nid_postfix(void);
 int APS5_VABI sysc_e00_nid_postfix(void);
@@ -560,5 +556,7 @@ int APS5_VABI uuidgen_nid_postfix(void);
 int APS5_VABI vfork_nid_postfix(void);
 int APS5_VABI wait3_nid_postfix(void);
 int APS5_VABI wait4_nid_postfix(void);
+
+int APS5_VABI _openat_nid_postfix(int fd, const char* path, int flags, ...);
 
 }

@@ -1,3 +1,3 @@
 #pragma once
 
-#include "prx/libSceUsbStorage/include/Api.hpp"
+#include "prx/libSceUsbStorage/UsbStorage.hpp"
