@@ -20,7 +20,6 @@
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
-#include <unwind.h>
 
 thread_local int destroyed = 0;
 struct Guard {
@@ -79,7 +78,7 @@ void CheckForeign() {
         assert(reason == _URC_FOREIGN_EXCEPTION_CAUGHT); ++foreignDeleted; delete p;
     };
     try {
-        try { _Unwind_RaiseException(exception); assert(false); }
+        try { _Unwind_RaiseException_nid_postfix(exception); assert(false); }
         catch (...) { assert(__cxa_current_primary_exception_nid_postfix() == nullptr); throw; }
     } catch (...) {}
     assert(foreignDeleted == 1);
@@ -252,12 +251,17 @@ int main() {
     catch (const std::bad_optional_access& value) { if (std::strcmp(value.what(), "bad_optional_access") != 0) std::abort(); }
     try { _ZNKSt9exception6_RaiseEv_nid_postfix(nullptr); assert(false); }
     catch (const std::invalid_argument&) {}
-    try { _ZNKSt9exception6_RaiseEv_nid_postfix(&object); assert(false); }
+    LibcException::ExceptionObject exceptionObject {};
+    _ZNSt9exceptionC1Ev_nid_postfix(&exceptionObject);
+    try { _ZNKSt9exception6_RaiseEv_nid_postfix(&exceptionObject); assert(false); }
     catch (const std::exception& value) { assert(std::strcmp(value.what(), "std::exception") == 0); }
+    _ZNSt9exceptionD1Ev_nid_postfix(&exceptionObject);
     try { _ZNKSt8bad_cast8_DoraiseEv_nid_postfix(nullptr); assert(false); }
     catch (const std::invalid_argument&) {}
-    try { _ZNKSt8bad_cast8_DoraiseEv_nid_postfix(&object); assert(false); }
+    _ZNSt8bad_castC1Ev_nid_postfix(&exceptionObject);
+    try { _ZNKSt8bad_cast8_DoraiseEv_nid_postfix(&exceptionObject); assert(false); }
     catch (const std::bad_cast&) {}
+    _ZNSt8bad_castD1Ev_nid_postfix(&exceptionObject);
     CheckRtti();
     CheckForeign();
     CheckStaticInitialization();
