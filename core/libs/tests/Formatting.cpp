@@ -370,7 +370,7 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
     Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "%qd|%qu|%qx|%qo") == 15 &&
         std::strcmp(freebsd, "%qd|%qu|%qx|%qo") == 0);
     Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "%qd|%d", 7) == 5 && std::strcmp(freebsd, "%qd|7") == 0);
-    Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "%D|%hD|%O|%U|%jD") == 19 &&
+    Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "%D|%hD|%O|%U|%jD") == 14 &&
         std::strcmp(freebsd, "%D|%D|%O|%U|%D") == 0);
     Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "[%5%][%-5%][%y][%5y][%-3y][%hhz]") == 34 &&
         std::strcmp(freebsd, "[    %][%    ][%y][   %y][%y ][%z]") == 0);
