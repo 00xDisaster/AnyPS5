@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 extern "C" {
 std::size_t APS5_VABI strftime_nid_postfix(char*, std::size_t, const char*, const GuestTm*);
@@ -38,6 +39,17 @@ void Check(const char* name, const GuestTm& time, const char* format, const char
         std::fprintf(stderr, "strftime %s (\"%s\"): expected \"%s\", received \"%s\" (%zu)\n", name, format, expected, length == 0 ? "" : text, length);
         correct = false;
     }
+}
+
+void CheckThrows(const char* name, const GuestTm& time, const char* format) {
+    char text[64];
+    try {
+        strftime_nid_postfix(text, sizeof(text), format, &time);
+    } catch (const std::runtime_error& error) {
+        if (std::string(error.what()).find("not implemented") != std::string::npos) return;
+    }
+    std::fprintf(stderr, "strftime %s (\"%s\") does not throw\n", name, format);
+    correct = false;
 }
 
 void CheckAsctime(const char* name, const GuestTm& time, const char* expected) {
@@ -154,8 +166,7 @@ int main() {
         {126, 0, 1, 4, 0, "2026|26|01|00|00"}, {126, 0, 4, 0, 3, "2026|26|01|01|00"}, {126, 0, 5, 1, 4, "2026|26|02|01|01"},
         {120, 11, 31, 4, 365, "2020|20|53|52|52"}, {121, 0, 3, 0, 2, "2020|20|53|01|00"}, {121, 0, 4, 1, 3, "2021|21|01|01|01"},
         {124, 11, 30, 1, 364, "2025|25|01|52|53"}, {104, 11, 31, 5, 365, "2004|04|53|52|52"}, {105, 0, 2, 0, 1, "2004|04|53|01|00"},
-        {126, 0, 1, 4, 400, "2027|27|01|57|57"}, {126, 0, 1, 9, 10, "2026|26|02|02|02"},
-        {126, 0, 1, -2, 10, "2026|26|02|01|01"}, {-1901, 0, 1, 4, 0, "0000|99|01|00|00"}, {-1899, 11, 31, 4, 365, "0002|02|01|52|52"},
+        {126, 0, 1, 9, 10, "2026|26|02|02|02"}, {126, 0, 1, -2, 10, "2026|26|02|01|01"}, {-1901, 0, 1, 4, 0, "0000|99|01|00|00"},
     };
     for (const auto& week : weeks) {
         GuestTm time = base;
@@ -167,6 +178,41 @@ int main() {
         char name[48];
         std::snprintf(name, sizeof(name), "week %d/%d wday %d yday %d", week.year, week.mon, week.wday, week.yday);
         Check(name, time, "%G|%g|%V|%U|%W", week.expected);
+    }
+
+    constexpr Iso unknownWeeks[] = {
+        {126, 0, 1, 4, 400, ""}, {97, 0, 1, 6, 415, ""}, {113, 11, 31, 1, 365, ""}, {-1899, 11, 31, 4, 365, ""},
+        {126, 0, 19, -12, 18, ""}, {126, 3, 11, -19, 100, ""}, {126, 0, 1, -7, 10, ""}, {126, 0, 1, 4, -1, ""},
+    };
+    for (const auto& week : unknownWeeks) {
+        GuestTm time = base;
+        time.tm_year = week.year;
+        time.tm_mon = week.mon;
+        time.tm_mday = week.mday;
+        time.tm_wday = week.wday;
+        time.tm_yday = week.yday;
+        char name[48];
+        std::snprintf(name, sizeof(name), "week %d/%d wday %d yday %d", week.year, week.mon, week.wday, week.yday);
+        CheckThrows(name, time, "%V");
+        CheckThrows(name, time, "%G");
+        CheckThrows(name, time, "%g");
+    }
+
+    constexpr Iso outOfRangeWeeks[] = {
+        {126, 0, 11, -2, 10, "01|01"}, {126, 1, 5, 4, 400, "57|57"}, {126, 3, 11, -19, 100, "16|16"}, {126, 9, 5, -16, 277, "40|41"},
+        {126, 0, 19, -12, 18, "04|04"}, {126, 0, 1, 6, 1365, "95|95"}, {97, 0, 1, 6, 415, "59|59"}, {113, 11, 31, 1, 365, "53|53"},
+        {7, 11, 31, 1, 365, "53|53"}, {126, 9, 24, 6, 296, "42|42"},
+    };
+    for (const auto& week : outOfRangeWeeks) {
+        GuestTm time = base;
+        time.tm_year = week.year;
+        time.tm_mon = week.mon;
+        time.tm_mday = week.mday;
+        time.tm_wday = week.wday;
+        time.tm_yday = week.yday;
+        char name[48];
+        std::snprintf(name, sizeof(name), "week number wday %d yday %d", week.wday, week.yday);
+        Check(name, time, "%U|%W", week.expected);
     }
 
     char text[8];
@@ -183,6 +229,16 @@ int main() {
     std::memset(text, '#', sizeof(text));
     if (strftime_nid_postfix(text, 5, "ab%Ycd", &base) != 0 || std::memcmp(text, "ab####", 6) != 0) {
         std::fprintf(stderr, "strftime writes part of a conversion that does not fit\n");
+        correct = false;
+    }
+    std::memset(text, '#', sizeof(text));
+    if (strftime_nid_postfix(text, 8, "%t%D", &base) != 0 || std::memcmp(text, "\t10/02/#", 8) != 0) {
+        std::fprintf(stderr, "strftime does not write the parts of a composite conversion that fit\n");
+        correct = false;
+    }
+    std::memset(text, '#', sizeof(text));
+    if (strftime_nid_postfix(text, 2, "%X%#H", &base) != 0 || std::memcmp(text, "13#", 3) != 0) {
+        std::fprintf(stderr, "strftime does not stop a composite conversion at the first part that does not fit\n");
         correct = false;
     }
     std::memset(text, '#', sizeof(text));

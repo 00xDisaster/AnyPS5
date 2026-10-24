@@ -284,8 +284,8 @@ int twoDigitYear(std::int64_t year) {
     return static_cast<int>((year % 100 + 100) % 100);
 }
 
-int weekdayFromSunday(int wday) {
-    return (wday % 7 + 7) % 7;
+std::int64_t weekOfYear(const GuestTm& time, int shift) {
+    return (static_cast<std::int64_t>(time.tm_yday) + 7 - (static_cast<std::int64_t>(time.tm_wday) + shift) % 7) / 7;
 }
 
 struct IsoWeek {
@@ -295,6 +295,8 @@ struct IsoWeek {
 
 IsoWeek isoWeek(const GuestTm& time) {
     if (time.tm_yday < 0) NotImplemented_nid_no_patch("strftime: ISO week of a negative tm_yday");
+    if (time.tm_yday >= (isLeapYearSum(time.tm_year, YEAR_BASE) ? 366 : 365)) NotImplemented_nid_no_patch("strftime: ISO week of a tm_yday past the year");
+    if (time.tm_wday < -6) NotImplemented_nid_no_patch("strftime: ISO week of a tm_wday below -6");
     int base = YEAR_BASE;
     std::int64_t yday = time.tm_yday;
     for (;;) {
@@ -311,13 +313,6 @@ IsoWeek isoWeek(const GuestTm& time) {
 }
 
 void formatTime(FormatBuffer& buffer, const char* format, const GuestTm& time);
-
-void addExpansion(FormatBuffer& buffer, const char* format, const GuestTm& time) {
-    char text[64];
-    FormatBuffer inner{text, text + sizeof(text), false};
-    formatTime(inner, format, time);
-    addPiece(buffer, text, static_cast<std::size_t>(inner.cursor - text));
-}
 
 void addZoneOffset(FormatBuffer& buffer, const GuestTm& time) {
     std::int64_t east = -timezone_nid_postfix + (time.tm_isdst > 0 ? 3600 : 0);
@@ -336,13 +331,13 @@ bool addConversion(FormatBuffer& buffer, char conversion, const GuestTm& time) {
     case 'b':
     case 'h': addText(buffer, tableName(time.tm_mon, MONTH_NAMES, MONTH_NAMES, 12)); return true;
     case 'B': addText(buffer, tableName(time.tm_mon, MONTH_FULL_NAMES, MONTH_NAMES, 12)); return true;
-    case 'c': addExpansion(buffer, "%a %b %e %H:%M:%S %Y", time); return true;
+    case 'c': formatTime(buffer, "%a %b %e %H:%M:%S %Y", time); return true;
     case 'C': addNumber(buffer, time.tm_year / 100 + YEAR_BASE / 100, 100, "%02d"); return true;
     case 'd': addNumber(buffer, time.tm_mday, 100, "%02d"); return true;
     case 'D':
-    case 'x': addExpansion(buffer, "%m/%d/%y", time); return true;
+    case 'x': formatTime(buffer, "%m/%d/%y", time); return true;
     case 'e': addNumber(buffer, time.tm_mday, 100, "%2d"); return true;
-    case 'F': addExpansion(buffer, "%Y-%m-%d", time); return true;
+    case 'F': formatTime(buffer, "%Y-%m-%d", time); return true;
     case 'g': addNumber(buffer, twoDigitYear(isoWeek(time).year), 100, "%02d"); return true;
     case 'G': addNumber(buffer, isoWeek(time).year, 10000, "%04d"); return true;
     case 'H': addNumber(buffer, time.tm_hour, 100, "%02d"); return true;
@@ -352,17 +347,17 @@ bool addConversion(FormatBuffer& buffer, char conversion, const GuestTm& time) {
     case 'M': addNumber(buffer, time.tm_min, 100, "%02d"); return true;
     case 'n': addText(buffer, "\n"); return true;
     case 'p': addText(buffer, time.tm_hour < 12 ? "AM" : "PM"); return true;
-    case 'r': addExpansion(buffer, "%I:%M:%S %p", time); return true;
-    case 'R': addExpansion(buffer, "%H:%M", time); return true;
+    case 'r': formatTime(buffer, "%I:%M:%S %p", time); return true;
+    case 'R': formatTime(buffer, "%H:%M", time); return true;
     case 'S': addNumber(buffer, time.tm_sec, 100, "%02d"); return true;
     case 't': addText(buffer, "\t"); return true;
     case 'T':
-    case 'X': addExpansion(buffer, "%H:%M:%S", time); return true;
+    case 'X': formatTime(buffer, "%H:%M:%S", time); return true;
     case 'u': addNumber(buffer, time.tm_wday == 0 ? 7 : time.tm_wday, 10, "%d"); return true;
-    case 'U': addNumber(buffer, (static_cast<std::int64_t>(time.tm_yday) + 7 - weekdayFromSunday(time.tm_wday)) / 7, 100, "%02d"); return true;
+    case 'U': addNumber(buffer, weekOfYear(time, 7), 100, "%02d"); return true;
     case 'V': addNumber(buffer, isoWeek(time).week, 100, "%02d"); return true;
     case 'w': addNumber(buffer, time.tm_wday, 10, "%d"); return true;
-    case 'W': addNumber(buffer, (static_cast<std::int64_t>(time.tm_yday) + 7 - (weekdayFromSunday(time.tm_wday) + 6) % 7) / 7, 100, "%02d"); return true;
+    case 'W': addNumber(buffer, weekOfYear(time, 6), 100, "%02d"); return true;
     case 'y': addNumber(buffer, twoDigitYear(year), 100, "%02d"); return true;
     case 'Y': addNumber(buffer, year, 10000, "%04d"); return true;
     case 'z': addZoneOffset(buffer, time); return true;
