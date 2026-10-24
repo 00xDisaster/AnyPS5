@@ -567,6 +567,9 @@ void converterSha256() {
         0x90,
         0xC3};
     std::copy(text.begin(), text.end(), file.begin() + 0x200);
+    auto locked = file;
+    locked.insert(locked.begin() + 0x200, 0xF0);
+    require(failureOffset([&] { (void)converter->Convert(locked, {segmentHeader(text.size() + 1)}); }, "LOCK SHA-256 was accepted") == 0x200, "LOCK SHA-256 failure does not carry the file offset");
     const auto result = converter->Convert(file, {segmentHeader(text.size())});
     require(result.Trampolines.size() == 2 && result.Reports.size() == 2 && result.Bytes == file, "SHA-256 sites were not lowered through stubs");
     const auto& rounds = result.Trampolines[0];
@@ -602,6 +605,9 @@ void converterSha1() {
         0x90,
         0xC3};
     std::copy(text.begin(), text.end(), file.begin() + 0x200);
+    auto locked = file;
+    locked.insert(locked.begin() + 0x200, 0xF0);
+    require(failureOffset([&] { (void)converter->Convert(locked, {segmentHeader(text.size() + 1)}); }, "LOCK SHA-1 was accepted") == 0x200, "LOCK SHA-1 failure does not carry the file offset");
     const auto result = converter->Convert(file, {segmentHeader(text.size())});
     require(result.Trampolines.size() == 3 && result.Reports.size() == 3 && result.Bytes == file, "SHA-1 sites were not lowered through stubs");
     require(result.Trampolines[0].Offset == 0x200 && result.Trampolines[0].Length == 5 && result.Reports[0].InstructionName == "SHA1RNDS4", "SHA1RNDS4 was not lowered as one site");
