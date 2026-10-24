@@ -1,4 +1,6 @@
 #include "prx/libSceFont/include/FontDriver.hpp"
+#include "prx/libSceFont/libSceFont.hpp"
+#include "prx/libSceFontFt/libSceFontFt.hpp"
 #include "tests/FontFixture.hpp"
 #include <cstdint>
 #include <cstdio>
@@ -7,21 +9,6 @@
 #include <map>
 #include <string>
 #include <vector>
-
-extern "C" {
-int APS5_VABI sceFontMemoryInit(FontMemory*, void*, std::uint32_t, const FontMemoryInterface*, void*, FontMemoryDestroyFunction, void*);
-int APS5_VABI sceFontMemoryTerm(FontMemory*);
-int APS5_VABI sceFontCreateLibrary(const FontMemory*, const void*, FontLibrary*);
-int APS5_VABI sceFontDestroyLibrary(FontLibrary*);
-int APS5_VABI sceFontSupportExternalFonts(FontLibrary, std::uint32_t, std::uint32_t);
-int APS5_VABI sceFontOpenFontMemory(FontLibrary, const void*, std::uint32_t, const FontOpenDetail*, FontHandle*);
-int APS5_VABI sceFontCloseFont(FontHandle);
-int APS5_VABI sceFontSetScalePixel(FontHandle, float, float);
-int APS5_VABI sceFontSetEffectWeight(FontHandle, float, float, std::uint32_t);
-int APS5_VABI sceFontSetEffectSlant(FontHandle, float);
-int APS5_VABI sceFontGetFontMetrics(FontHandle, std::uint32_t, FontMetrics*);
-const void* APS5_VABI sceFontSelectLibraryFt(int);
-}
 
 static void Check(bool value, int line) {
     if (!value) {
