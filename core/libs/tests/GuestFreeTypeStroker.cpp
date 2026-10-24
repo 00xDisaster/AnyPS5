@@ -17,6 +17,7 @@ int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std
 int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
 int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void*);
 void APS5_VABI FT_Stroker_Set_nid_postfix(void*, std::int64_t, std::int32_t, std::int32_t, std::int64_t);
+void APS5_VABI FT_Stroker_Rewind_nid_postfix(void*);
 }
 
 static void Check(bool value, int line) {
@@ -157,6 +158,22 @@ static void TestSet(GuestLibrary& library, FT_Library native) {
     }
 }
 
+static void TestRewind(GuestLibrary& library, FT_Library native) {
+    Pair pair(library, native);
+    FT_Stroker_Set_nid_postfix(pair.guest, 64, FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
+    FT_Stroker_Set(pair.native, 64, FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
+    pair.Square(0);
+    pair.CountsMatch();
+    std::uint32_t points = 0;
+    std::uint32_t contours = 0;
+    Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, &points, &contours) == 0 && points != 0 && contours != 0);
+    FT_Stroker_Rewind_nid_postfix(pair.guest);
+    FT_Stroker_Rewind(pair.native);
+    Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, &points, &contours) == 0 && points == 0 && contours == 0);
+    pair.CountsMatch();
+    FT_Stroker_Rewind_nid_postfix(nullptr);
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
@@ -168,5 +185,6 @@ int main() {
     TestLineTo(library, native);
     TestEndSubPath(library, native);
     TestSet(library, native);
+    TestRewind(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
