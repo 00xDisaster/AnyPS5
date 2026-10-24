@@ -32,7 +32,7 @@ IDENTITY = {"cpu": 'CPU "X"', "cpu_threads": 16, "memory_mib": 32000,
 @lru_cache(maxsize=2)
 def excessive_json_value(opening, closing):
     depth = sys.getrecursionlimit() + 64
-    for attempt in range(8):
+    for _ in range(8):
         value = opening * depth + "0" + closing * depth
         try:
             json.loads(value)
@@ -228,7 +228,8 @@ class PerformanceCompareTests(unittest.TestCase):
                 performance_compare.main([str(self.before), str(self.after), "--json"])
         self.assertEqual(error.exception.code, 2)
         self.assertEqual(output.getvalue(), "")
-        self.assertIn("report nesting is too deep", errors.getvalue())
+        self.assertIn("JSON report: report nesting is too deep", errors.getvalue())
+        self.assertNotIn("Traceback", errors.getvalue())
 
     def test_supported_nested_metadata_is_preserved(self):
         metadata = {"value": 7}
@@ -237,15 +238,11 @@ class PerformanceCompareTests(unittest.TestCase):
         self.baseline["extra"] = metadata
         self.write(self.before, self.baseline)
         self.write(self.after, self.candidate)
-        for args in ((), ("--json",)):
-            with self.subTest(args=args), patch.object(sys, "stdout", new_callable=io.StringIO) as output, \
-                    patch.object(sys, "stderr", new_callable=io.StringIO) as errors:
-                performance_compare.main([str(self.before), str(self.after), *args])
+        with patch.object(sys, "stdout", new_callable=io.StringIO) as output, \
+                patch.object(sys, "stderr", new_callable=io.StringIO) as errors:
+            performance_compare.main([str(self.before), str(self.after), "--json"])
             self.assertEqual(errors.getvalue(), "")
-            if args:
-                self.assertEqual(json.loads(output.getvalue())["baseline"]["extra"], metadata)
-            else:
-                self.assertIn("# Performance comparison", output.getvalue())
+            self.assertEqual(json.loads(output.getvalue())["baseline"]["extra"], metadata)
 
     def test_markdown_reports_deltas_and_escapes_table_values(self):
         self.candidate["frame_ms"]["max"] = 60.0

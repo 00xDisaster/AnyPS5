@@ -181,7 +181,13 @@ def main(argv=None):
         report = compare(load_summary(args.baseline, args.baseline_trace), load_summary(args.candidate, args.candidate_trace))
         if args.require_matching_context and report["configuration_differences"]:
             raise ValueError("recorded configuration differs: " + ", ".join(report["configuration_differences"]))
-        output = json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n" if args.json else markdown(report)
+        if args.json:
+            try:
+                output = json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+            except RecursionError as error:
+                raise ValueError(f"JSON report: {error}") from error
+        else:
+            output = markdown(report)
     except (OSError, ValueError, OverflowError, RecursionError) as error:
         parser.exit(2, f"{parser.prog}: {error}\n")
     sys.stdout.write(output)
