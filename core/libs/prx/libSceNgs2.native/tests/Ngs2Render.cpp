@@ -239,10 +239,13 @@ static void TestPan() {
     }
 
     const Ngs2PanParam front{0.0f, 1.0f, 1.0f, 0.0f};
-    float out[2] = {};
+    float out[2] = {-1.0f, -1.0f};
     Require(sceNgs2PanInit(&work, nullptr, 360.0f, 2) == SCE_NGS2_OK);
     Require(sceNgs2PanGetVolumeMatrix(&work, &front, 1, 2, nullptr) == SCE_NGS2_ERROR_INVALID_OUT_ADDRESS);
-    Require(sceNgs2PanGetVolumeMatrix(&work, &front, 0, 2, out) == SCE_NGS2_OK);
+    Require(sceNgs2PanGetVolumeMatrix(&work, &front, 0, 2, out) == SCE_NGS2_OK && out[0] == -1.0f && out[1] == -1.0f);
+    Require(SCE_NGS2_ERROR_INVALID_PAN_UNIT_ANGLE == static_cast<int>(0x804A8450) && SCE_NGS2_ERROR_INVALID_PAN_SPEAKER == static_cast<int>(0x804A8451));
+    Require(SCE_NGS2_ERROR_INVALID_PAN_MATRIX_FORMAT == static_cast<int>(0x804A8452) && SCE_NGS2_ERROR_INVALID_PAN_WORK == static_cast<int>(0x804A8453));
+    Require(SCE_NGS2_ERROR_INVALID_PAN_PARAM == static_cast<int>(0x804A8454));
     float guard[32];
     const auto panResult = [&](Ngs2PanWork* panWork, const Ngs2PanParam* params, std::uint32_t numParams, std::uint32_t format) {
         std::fill(std::begin(guard), std::end(guard), -1.0f);
@@ -273,6 +276,21 @@ static void TestPan() {
     const Ngs2PanParam laterNan[2] = {front, nanAngle};
     Require(panResult(&work, laterNan, 2, 2) == SCE_NGS2_OK);
     Require(std::fabs(guard[0] - 0.707106769f) < 1e-6f && guard[1] == 0.0f && std::fabs(guard[2] - 0.707106769f) < 1e-6f && guard[3] == 0.0f);
+    Ngs2PanWork sevenWork{};
+    Require(sceNgs2PanInit(&sevenWork, nullptr, 360.0f, 7) == SCE_NGS2_OK);
+    const Ngs2PanParam nanEach[4] = {{NAN, 1.0f, 1.0f, 0.5f}, {30.0f, NAN, 1.0f, 0.5f}, {30.0f, 1.0f, NAN, 0.5f}, {30.0f, 1.0f, 1.0f, NAN}};
+    Require(panResult(&sevenWork, nanEach, 4, 8) == SCE_NGS2_OK);
+    for (std::uint32_t channel = 0; channel < 8; channel++) {
+        Require(guard[channel * 4] == (channel == 3 ? 0.5f : 0.0f));
+        for (std::uint32_t p = 1; p < 4; p++) Require(std::isnan(guard[channel * 4 + p]));
+    }
+    Ngs2PanWork radianWork{};
+    const float radianPair[] = {-0.52359879f, 0.52359879f};
+    Require(sceNgs2PanInit(&radianWork, radianPair, 2.0f * pi, 2) == SCE_NGS2_OK && radianWork.speaker_angles[0] == 0.52359879f);
+    const Ngs2PanParam belowFirst{0.523598731f, 1.0f, 1.0f, 0.0f};
+    const Ngs2PanParam aboveFirst{0.52359885f, 1.0f, 1.0f, 0.0f};
+    Require(std::nextafter(0.52359879f, 0.0f) == belowFirst.angle && PanThrows(&radianWork, &belowFirst, 1, 1));
+    Require(panResult(&radianWork, &aboveFirst, 1, 1) == SCE_NGS2_OK && std::fabs(guard[0] - 0.707106769f) < 1e-6f);
     const Ngs2PanParam huge{1e30f, 1.0f, 1.0f, 0.0f};
     Require(PanThrows(&work, &huge, 1, 2));
     const float hugeSpeaker[] = {1e30f, 30.0f};

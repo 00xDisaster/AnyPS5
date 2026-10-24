@@ -77,12 +77,12 @@ int Ngs2PanInit(Ngs2PanWork* work, const float* speaker_angles, float unit_angle
     for (std::uint32_t i = 0; i < num_speakers; i++) {
         float angle = speaker_angles[layout->inputOrder[i]];
         while (angle < 0.0f) {
-            if (angle + unit_angle == angle) throw std::runtime_error("NGS2: pan speaker angles too large to wrap are not implemented (the PS5 library never returns for them)");
+            if (angle + unit_angle == angle) throw std::runtime_error("NGS2: pan speaker angles too large to wrap are not implemented (the PS5 library did not return for them within 60 s)");
             angle += unit_angle;
         }
         while (angle >= unit_angle) {
-            if (!(unit_angle < angle)) throw std::runtime_error("NGS2: a pan speaker angle that wraps to the unit angle is not implemented (the PS5 library never returns for it)");
-            if (angle - unit_angle == angle) throw std::runtime_error("NGS2: pan speaker angles too large to wrap are not implemented (the PS5 library never returns for them)");
+            if (!(unit_angle < angle)) throw std::runtime_error("NGS2: a pan speaker angle that wraps to the unit angle is not implemented (the PS5 library did not return for it within 60 s)");
+            if (angle - unit_angle == angle) throw std::runtime_error("NGS2: pan speaker angles too large to wrap are not implemented (the PS5 library did not return for them within 60 s)");
             angle -= unit_angle;
         }
         work->speaker_angles[i] = angle;
@@ -116,7 +116,7 @@ int Ngs2PanGetVolumeMatrix(Ngs2PanWork* work, const Ngs2PanParam* params, uint32
             const float before = angle;
             if (angle >= first + unit) angle -= unit;
             if (angle < first) angle += unit;
-            if (angle == before) throw std::runtime_error("NGS2: pan angles that do not wrap into one turn are not implemented (the PS5 library never returns for them)");
+            if (angle == before) throw std::runtime_error("NGS2: pan angles that do not wrap into one turn are not implemented (the PS5 library did not return for them within 60 s)");
         }
         float opposite = angle + unit * 0.5f;
         if (!(opposite < first + unit)) opposite -= unit;
