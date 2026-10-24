@@ -255,7 +255,7 @@ if(BUILD_TESTING)
         foreach(test_case IN LISTS env_reference_cases)
             string(REGEX REPLACE "^    def (test_[A-Za-z0-9_]+).*" "\\1" test_case "${test_case}")
             add_test(NAME conventions_env_reference_${test_case} COMMAND ${Python3_EXECUTABLE}
-                "${env_reference_test_source}" "EnvReferenceDiffTests.${test_case}")
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_conventions_env_reference.py" "EnvReferenceDiffTests.${test_case}")
             set_tests_properties(conventions_env_reference_${test_case} PROPERTIES TIMEOUT 30)
         endforeach()
         add_test(NAME conventions_body_bom COMMAND ${Python3_EXECUTABLE}
