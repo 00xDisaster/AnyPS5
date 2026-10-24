@@ -240,7 +240,7 @@ ConservativeZExport readConservativeZExport(Reader& reader) {
 
 ColorExportPacking readColorExportPacking(Reader& reader) {
     const auto value = reader.ReadU8();
-    if (value > static_cast<std::uint8_t>(ColorExportPacking::Float11_11_10)) {
+    if (value > static_cast<std::uint8_t>(ColorExportPacking::Unorm4_4_4_4)) {
         throw std::runtime_error("RequestSerializer: invalid ColorExportPacking value");
     }
     return static_cast<ColorExportPacking>(value);
@@ -357,6 +357,12 @@ void writePixelInfo(Writer& writer, const ShaderPixelStageInfo& info) {
     for (const std::uint8_t location : info.sampleLocations) writer.WriteU8(location);
     writer.WriteBool(info.stencilOperationValueExport);
     for (const std::uint32_t order : info.sampleOrder) writer.WriteU32(order);
+    writer.WriteU8(info.targetMerge.target);
+    writer.WriteU32(info.targetMerge.mask);
+    writer.WriteU8(info.targetMerge.samples);
+    for (const std::uint32_t word : info.targetMerge.descriptor) writer.WriteU32(word);
+    writer.WriteBool(info.targetMerge.depthStencilWrites);
+    writer.WriteBool(info.targetMerge.depthStencilTests);
     if (info.depthExportEnable) {
         writer.WriteU32(std::bit_cast<std::uint32_t>(info.depthExportMin));
         writer.WriteU32(std::bit_cast<std::uint32_t>(info.depthExportMax));
@@ -431,6 +437,16 @@ ShaderPixelStageInfo readPixelInfo(Reader& reader, std::uint32_t version) {
     if (version >= 37u) info.stencilOperationValueExport = reader.ReadBool();
     if (version >= 42u) {
         for (std::uint32_t& order : info.sampleOrder) order = reader.ReadU32();
+    }
+    if (version >= 46u) {
+        info.targetMerge.target = reader.ReadU8();
+        const auto mask = reader.ReadU32();
+        if (mask > 0xffffu) throw std::runtime_error("invalid recompile request target merge mask");
+        info.targetMerge.mask = static_cast<std::uint16_t>(mask);
+        info.targetMerge.samples = reader.ReadU8();
+        for (std::uint32_t& word : info.targetMerge.descriptor) word = reader.ReadU32();
+        info.targetMerge.depthStencilWrites = reader.ReadBool();
+        info.targetMerge.depthStencilTests = reader.ReadBool();
     }
     if (version >= 47u && info.depthExportEnable) {
         info.depthExportMin = std::bit_cast<float>(reader.ReadU32());
