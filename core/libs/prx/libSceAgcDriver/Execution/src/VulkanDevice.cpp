@@ -2294,6 +2294,13 @@ bool VulkanDevice::ReplayComputePipeline(const ShaderRecompiler::RecompileResult
     return state->computePipelines.try_emplace(key, std::move(objects)).second;
 }
 
+bool VulkanDevice::HasComputePipeline(const ShaderRecompiler::RecompileResult& shader) const {
+    const std::array<Graphics::CompiledShader, 1> shaders{{{ShaderRecompiler::ShaderStage::Compute, &shader, 0}}};
+    const auto key = ComputePipelineKey::Of(shader, Graphics::PushConstantStages(shaders) != 0);
+    std::lock_guard pipelines(state->computePipelinesMutex);
+    return !key.identity.Empty() && (state->computePipelines.contains(key) || state->computePipelinesBuilding.contains(key));
+}
+
 void VulkanDevice::PrebuildComputePipeline(const ShaderRecompiler::RecompileResult& shader, std::uint64_t programAddress) {
     if (shader.spirv.size() < 5 || shader.spirv[0] != 0x07230203u) return;
     ShaderRecompiler::RuntimeAbi::RequireVersion(shader.runtimeAbiVersion);
@@ -2302,11 +2309,7 @@ void VulkanDevice::PrebuildComputePipeline(const ShaderRecompiler::RecompileResu
     const std::array<Graphics::CompiledShader, 1> shaders{{{ShaderRecompiler::ShaderStage::Compute, &shader, 0}}};
     const auto pushStages = Graphics::PushConstantStages(shaders);
     if (pushStages != 0 && state->properties.limits.maxPushConstantsSize < Graphics::ComputePushConstantBytes) return;
-    const auto key = ComputePipelineKey::Of(shader, pushStages != 0);
-    if (!key.identity.Empty()) {
-        std::lock_guard pipelines(state->computePipelinesMutex);
-        if (state->computePipelines.contains(key) || state->computePipelinesBuilding.contains(key)) return;
-    }
+    if (HasComputePipeline(shader)) return;
     const auto layouts = Graphics::DescribeSetLayouts(context, shaders);
     static_cast<void>(computePipeline(context, shader, layouts.layouts.main, layouts.mainKey, pushStages, programAddress));
 }

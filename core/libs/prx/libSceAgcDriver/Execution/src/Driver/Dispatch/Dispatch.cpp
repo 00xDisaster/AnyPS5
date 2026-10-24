@@ -414,7 +414,7 @@ void Driver::dispatch(QueueState& queue, std::span<const std::uint32_t> packet, 
         parked.resolvedAt = std::chrono::steady_clock::now();
         ++groupStats.resolved;
         if (cached) ++groupStats.resolvedHits;
-        if (!cached && compiledResult != nullptr) {
+        if (!cached && compiledResult != nullptr && !localDevice->HasComputePipeline(*compiledResult)) {
             SubmitLibraryPrebuild([localDevice, compiledResult, address] {
                 try { localDevice->PrebuildComputePipeline(*compiledResult, address); } catch (const std::exception&) {}
             });
