@@ -62,6 +62,7 @@ constexpr int GuestIpMulticastLoop = 11;
 constexpr int GuestIpMulticastInterface = 9;
 constexpr int GuestIpAddMembership = 12;
 constexpr int GuestIpDropMembership = 13;
+constexpr std::uint32_t MulticastRequestWithIndex = 12;
 constexpr int ErrorNotSupported = 45;
 constexpr int ErrorAddressInUse = 48;
 constexpr int ErrorAddressNotAvailable = 49;
@@ -362,10 +363,16 @@ int SetIpLevelOption(std::uintptr_t native, SocketOptionState& state, bool ipv4,
         std::memcpy(&groupBits, &request.imr_multiaddr, sizeof(groupBits));
         std::memcpy(&interfaceBits, &request.imr_interface, sizeof(interfaceBits));
         const std::uint64_t key = (std::uint64_t{groupBits} << 32) | interfaceBits;
-        const auto found = std::find(state.memberships.begin(), state.memberships.end(), key);
         const bool join = option == GuestIpAddMembership;
+        const auto found = join || interfaceBits != 0
+            ? std::find(state.memberships.begin(), state.memberships.end(), key)
+            : std::find_if(state.memberships.begin(), state.memberships.end(), [groupBits](std::uint64_t joined) { return joined >> 32 == groupBits; });
         if (join && found != state.memberships.end()) return ErrorAddressInUse;
         if (!join && found == state.memberships.end()) return ErrorAddressNotAvailable;
+        if (!join) {
+            const auto joinedInterface = static_cast<std::uint32_t>(*found);
+            std::memcpy(&request.imr_interface, &joinedInterface, sizeof(joinedInterface));
+        }
         if (::setsockopt(handle, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, reinterpret_cast<NativeOptionValue>(&request), sizeof(request)))
             return HostError();
         if (join) state.memberships.push_back(key);
@@ -373,10 +380,9 @@ int SetIpLevelOption(std::uintptr_t native, SocketOptionState& state, bool ipv4,
         return 0;
     }
     if (option == GuestIpMulticastInterface) {
-        constexpr std::uint32_t RequestWithIndex = 12;
         if (length < sizeof(in_addr)) return ErrorInvalid;
         in_addr address{};
-        if (length == RequestWithIndex) {
+        if (length == MulticastRequestWithIndex) {
             std::int32_t index;
             std::memcpy(&index, static_cast<const unsigned char*>(value) + 8, sizeof(index));
             if (index != 0) throw std::runtime_error("IP_MULTICAST_IF: an interface index is not supported");
@@ -427,7 +433,10 @@ int SetIpLevelOption(std::uintptr_t native, SocketOptionState& state, bool ipv4,
 int GetIpLevelOption(SocketOptionState& state, bool ipv4, bool datagram, int option, void* value, std::uint32_t* length) {
     if (!ipv4) return ErrorInvalid;
     if (MulticastOption(option) && option != GuestIpAddMembership && option != GuestIpDropMembership && !datagram) return ErrorNotSupported;
-    if (option == GuestIpMulticastInterface) return Copy(value, length, &state.multicastInterface, sizeof(state.multicastInterface));
+    if (option == GuestIpMulticastInterface) {
+        if (*length == MulticastRequestWithIndex) throw std::runtime_error("IP_MULTICAST_IF: reading an ip_mreqn is not supported");
+        return Copy(value, length, &state.multicastInterface, sizeof(state.multicastInterface));
+    }
     int number;
     if (option == GuestIpTimeToLive) number = state.ipTimeToLive;
     else if (option == GuestIpTypeOfService) number = state.ipTypeOfService;

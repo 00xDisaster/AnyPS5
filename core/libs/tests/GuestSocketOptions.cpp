@@ -381,6 +381,11 @@ void MulticastOnTheHost() {
     Require(SetFails(datagram, 0, IpAddMembership, group.data(), group.size(), ErrorAddressInUse), "joining twice must fail with EADDRINUSE (48)");
     Require(setsockopt_nid_postfix(datagram, 0, IpDropMembership, group.data(), group.size()) == 0, "drop failed");
     Require(SetFails(datagram, 0, IpDropMembership, group.data(), group.size(), ErrorAddressNotAvailable), "dropping twice must fail with EADDRNOTAVAIL (49)");
+    const std::array<std::uint8_t, 8> throughLoopback{224, 0, 0, 252, 127, 0, 0, 1};
+    const std::array<std::uint8_t, 8> anyInterface{224, 0, 0, 252, 0, 0, 0, 0};
+    Require(setsockopt_nid_postfix(datagram, 0, IpAddMembership, throughLoopback.data(), throughLoopback.size()) == 0, "joining 224.0.0.252 through 127.0.0.1 failed");
+    Require(setsockopt_nid_postfix(datagram, 0, IpDropMembership, anyInterface.data(), anyInterface.size()) == 0, "a drop through INADDR_ANY leaves the group on any interface");
+    Require(SetFails(datagram, 0, IpDropMembership, anyInterface.data(), anyInterface.size(), ErrorAddressNotAvailable), "dropping it again must fail with EADDRNOTAVAIL (49)");
     const std::array<std::uint8_t, 4> loopback{127, 0, 0, 1};
     Require(setsockopt_nid_postfix(datagram, 0, IpMulticastInterface, loopback.data(), loopback.size()) == 0, "selecting the loopback interface for IP_MULTICAST_IF failed");
     std::array<std::uint8_t, 4> address{0xaa, 0xaa, 0xaa, 0xaa};
