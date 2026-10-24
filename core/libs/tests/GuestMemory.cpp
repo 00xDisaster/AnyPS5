@@ -1381,13 +1381,13 @@ static void CheckUnmappedArenaRangeStaysReserved() {
     void* address = nullptr;
     Require(sceKernelMapNamedFlexibleMemory(&address, page, 3, 0, "reserved-after-unmap") == 0);
     Require(address != nullptr);
-    Require(sceKernelMunmap(address, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(address), page) == 0);
     void* hostile = mmap(address, page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
     Require(hostile == MAP_FAILED && errno == EEXIST);
     void* again = nullptr;
     Require(sceKernelMapNamedFlexibleMemory(&again, page, 3, 0, "reserved-after-unmap-2") == 0);
     Require(again != nullptr);
-    Require(sceKernelMunmap(again, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(again), page) == 0);
 }
 #endif
 
@@ -2537,7 +2537,7 @@ static void CheckWriteWatchArmedCollect() {
     Require(CollectArmedRuns(mapping, 0, length, runs) && runs == PageRuns{{5, 6}});
     Require(Written(mapping, length, {{length / small / 2, length / small}}));
     Require(Written(mapping, length, {}));
-    Require(sceKernelMunmap(mapping, length) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapping), length) == 0);
 }
 
 static bool CollectFreshRuns(const void* base, std::size_t offset, std::size_t bytes, PageRuns& runs) {
@@ -2565,7 +2565,7 @@ static void CheckWriteWatchFreshCollect() {
     Require(CollectFreshRuns(mapping, 0, length, runs) && runs.empty());
     bytes[200 * small] = 1;
     Require(Written(mapping, length, {{5, 6}, {200, 201}}));
-    Require(sceKernelMunmap(mapping, length) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapping), length) == 0);
 }
 
 static void CheckWriteWatch() {
@@ -2615,7 +2615,7 @@ static void CheckWriteWatch() {
     Require(Written(mapping, length, {{50, 51}}));
     constexpr std::size_t guestPage = 0x4000;
     auto* middle = const_cast<unsigned char*>(bytes + 4 * guestPage);
-    Require(sceKernelMunmap(middle, guestPage) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(middle), guestPage) == 0);
     Require(!GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(address, length));
     Require(!CollectRuns(mapping, 0, length, runs) && runs.empty());
     void* fixed = middle;
@@ -2625,7 +2625,7 @@ static void CheckWriteWatch() {
     Require(Written(mapping, length, {}));
     middle[1] = 1;
     Require(Written(mapping, length, {{16, 17}}));
-    Require(sceKernelMunmap(mapping, length) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapping), length) == 0);
     Require(!GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(address, small));
     constexpr std::size_t tableSpan = 0x200000;
     constexpr std::size_t spanned = 2 * tableSpan;
@@ -2665,7 +2665,7 @@ static void CheckDirectMemoryBackingNeedsNoFilesystem() {
     const auto backing = BackingOf(mapped);
     if (backing.rfind("/memfd:", 0) != 0) std::fprintf(stderr, "direct memory backing: %s\n", backing.c_str());
     Require(backing.rfind("/memfd:", 0) == 0);
-    Require(sceKernelMunmap(mapped, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapped), page) == 0);
     Require(sceKernelReleaseDirectMemory(phys, page) == 0);
 }
 
@@ -2708,10 +2708,10 @@ static void CheckDirectMemorySharedBacking() {
     Require(!GuestArena::GuestArenaSharedBacking_nid_postfix(flexibleAddress, page * 2, &file, &offset));
     Require(GuestArena::GuestArenaSharedBacking_nid_postfix(flexibleAddress + page, page, &file, &offset) && offset == base + page * 2);
     close(file);
-    Require(sceKernelMunmap(high, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(high), page) == 0);
     Require(!GuestArena::GuestArenaSharedBacking_nid_postfix(flexibleAddress + page, page, &file, &offset));
-    Require(sceKernelMunmap(flexible, page) == 0);
-    Require(sceKernelMunmap(first, page * 2) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(flexible), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(first), page * 2) == 0);
     Require(!GuestArena::GuestArenaSharedBacking_nid_postfix(address, page, &file, &offset));
     Require(sceKernelReleaseDirectMemory(phys, page * 3) == 0);
 
@@ -2735,15 +2735,15 @@ static void CheckDirectMemorySharedBacking() {
     close(leftFile);
     close(rightFile);
     std::memset(leftView, 0x77, page);
-    Require(sceKernelMunmap(leftView, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(leftView), page) == 0);
     Require(sceKernelReleaseDirectMemory(left, page) == 0);
     std::int64_t again = 0;
     Require(sceKernelAllocateDirectMemory(left, left + static_cast<std::int64_t>(page), page, 0, 0, &again) == 0 && again == left);
     void* againView = nullptr;
     Require(sceKernelMapDirectMemory(&againView, page, 3, 0, again, 0) == 0);
     for (std::size_t i = 0; i < page; ++i) Require(static_cast<const unsigned char*>(againView)[i] == 0);
-    Require(sceKernelMunmap(againView, page) == 0);
-    Require(sceKernelMunmap(rightView, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(againView), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(rightView), page) == 0);
     Require(sceKernelReleaseDirectMemory(again, page) == 0);
     Require(sceKernelReleaseDirectMemory(right, page) == 0);
 }
@@ -2779,8 +2779,8 @@ static void CheckDirectMemoryWriteWatch() {
     Require(bytes[page + 7] == 3);
     Require(CollectRuns(first, 0, page, runs) && runs == PageRuns{{0, 1}});
     Require(CollectRuns(first, page * 2, page, runs) && runs.empty());
-    Require(sceKernelMunmap(alias, page) == 0);
-    Require(sceKernelMunmap(first, page * 3) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(alias), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(first), page * 3) == 0);
     Require(!GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(address, page));
     void* flexible = nullptr;
     Require(sceKernelMapFlexibleMemory(&flexible, page * 3, 3, 0) == 0);
@@ -2794,7 +2794,7 @@ static void CheckDirectMemoryWriteWatch() {
     Require(Written(flexible, page * 3, {}));
     static_cast<volatile unsigned char*>(fixed)[9] = 4;
     Require(Written(flexible, page * 3, {{page / small, page / small + 1}}));
-    Require(sceKernelMunmap(flexible, page * 3) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(flexible), page * 3) == 0);
     Require(sceKernelReleaseDirectMemory(phys, page * 3) == 0);
 }
 
@@ -2814,12 +2814,12 @@ static void CheckDirectMemoryWriteWatchFollowsRemovedMappings() {
     Require(sceKernelMapDirectMemory(&pair, page * 2, 3, 0, phys + page, 0) == 0);
     Require(watched(whole, 0) && !watched(whole, page) && !watched(whole, page * 2) && watched(whole, page * 3));
     Require(!watched(pair, 0) && !watched(pair, page));
-    Require(sceKernelMunmap(pair, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(pair), page) == 0);
     void* single = nullptr;
     Require(sceKernelMapDirectMemory(&single, page, 3, 0, phys + page, 0) == 0);
     Require(!watched(single, 0) && watched(whole, 0) && watched(whole, page * 3));
-    Require(sceKernelMunmap(single, page) == 0);
-    Require(sceKernelMunmap(static_cast<unsigned char*>(pair) + page, page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(single), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(static_cast<unsigned char*>(pair) + page), page) == 0);
     void* replaced = whole;
     Require(sceKernelMapDirectMemory(&replaced, page, 3, 0x10, phys + page * 3, 0) == 0 && replaced == whole);
     Require(!watched(whole, 0) && !watched(whole, page * 3));
@@ -2834,9 +2834,9 @@ static void CheckDirectMemoryWriteWatchFollowsRemovedMappings() {
     void* again = nullptr;
     Require(sceKernelMapDirectMemory(&again, page, 3, 0, phys, 0) == 0);
     Require(!watched(alone, 0) && !watched(again, 0));
-    Require(sceKernelMunmap(again, page) == 0);
-    Require(sceKernelMunmap(alone, page) == 0);
-    Require(sceKernelMunmap(whole, page * 4) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(again), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(alone), page) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(whole), page * 4) == 0);
     Require(sceKernelReleaseDirectMemory(phys, page * 4) == 0);
 }
 
@@ -2859,7 +2859,7 @@ static double MapAcrossBackingsSeconds(std::int64_t phys, std::size_t backings) 
         std::uint64_t offset = 0;
         int type = 0;
         Require(QueryDirectMapping(last, &start, &end, &offset, &type) && start == last && end == last + page);
-        Require(sceKernelMunmap(mapped, page * backings) == 0);
+        Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapped), page * backings) == 0);
     }
     return best;
 }
@@ -3174,7 +3174,7 @@ static void CheckPosixFixedFileReleasesFlexibleAccounting() {
     Require(mmap_nid_postfix(bytes + page, page, 1, fixedShared, fd, 0) == bytes + page);
     Require(bytes[0] == 0x31 && bytes[page] == 0x6d && bytes[page * 2] == 0x51);
     Require(sceKernelAvailableFlexibleMemorySize(&available) == 0 && available == before - page * 2);
-    Require(sceKernelMunmap(base, page * 3) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(base), page * 3) == 0);
     Require(sceKernelAvailableFlexibleMemorySize(&available) == 0 && available == before);
     Require(sceKernelClose(fd) == 0);
     std::filesystem::remove(path);
