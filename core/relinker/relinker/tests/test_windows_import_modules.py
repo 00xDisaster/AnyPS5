@@ -731,16 +731,19 @@ def main():
                     assert {'__iob_func', 'fputs'} <= imports.get('msvcrt.dll', set()), (library, imports)
                     assert not any(name.startswith('api-ms-win-crt-') for name in imports), (library, imports)
 
-                def convert_stdio_case(case_name):
+                def convert_stdio_case(case_name, image=None, lazy_binding=False):
                     case = work / case_name
                     (case / 'prx').mkdir(parents=True)
                     libs = case / 'libs'
                     libs.mkdir()
                     source = case / 'input.elf'
-                    source.write_bytes(executable('a.prx', 'shared'))
+                    source.write_bytes(image if image is not None else executable('a.prx', 'shared'))
                     executable_path = case / 'output.exe'
-                    result = subprocess.run([str(relinker), '--windows', '--windows-gui', str(source), str(executable_path)],
-                                            capture_output=True, text=True, timeout=30)
+                    arguments = [str(relinker), '--windows', '--windows-gui']
+                    if lazy_binding:
+                        arguments.append('--lazy-binding')
+                    arguments.extend([str(source), str(executable_path)])
+                    result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
                     assert result.returncode == 0, result.stderr
                     (libs / 'a.prx').write_bytes(library.read_bytes())
                     return executable_path, executable_path.parent / 'anyps5.log'
@@ -797,6 +800,20 @@ def main():
                         raise AssertionError('planted loader failure did not raise')
                     assert not live_children_named(executable_path.name), (runtime, executable_path)
                     assert not log.exists(), (runtime, log)
+
+                    image = executable('a.prx', 'shared', extra_symbols=('absent#A#B',))
+                    image[0x4000:0x400d] = (b'\xff\x15' + struct.pack('<i', 0x4a20 - 0x4006)
+                                            + b'\xff\x15' + struct.pack('<i', 0x4a28 - 0x400c) + b'\xc3')
+                    executable_path, log = convert_stdio_case(f'gui-dll-{runtime}-preloaded-runtime-stub-after-crt',
+                                                              image=image, lazy_binding=True)
+                    run_status = exit_code_with_preloaded_runtime(executable_path, preloaded_runtime)
+                    assert run_status == 0xc0000139, (runtime, hex(run_status))
+                    assert log.is_file(), (runtime, log)
+                    content = log.read_text(errors='replace')
+                    assert 'Transferring control to ELF entry point' in content, (runtime, content)
+                    assert 'Windows DLL stdout probe' in content, (runtime, content)
+                    assert 'Windows DLL stderr probe' in content, (runtime, content)
+                    assert 'unresolved ELF import absent' in content, (runtime, content)
 
             for name, owner, symbol, expected, message in [
                     ('missing-symbol-gui', 'a.prx', 'absent#A#B', 0xc0000139, 'unresolved ELF import absent'),
