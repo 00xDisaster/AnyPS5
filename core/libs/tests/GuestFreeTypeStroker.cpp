@@ -12,6 +12,7 @@ using namespace FreeType;
 extern "C" {
 int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary*, void**);
 void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
+int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint32_t*);
 }
 
 static void Check(bool value, int line) {
@@ -21,6 +22,32 @@ static void Check(bool value, int line) {
     }
 }
 #define Require(value) Check((value), __LINE__)
+
+struct Pair {
+    void* guest = nullptr;
+    FT_Stroker native = nullptr;
+
+    Pair(GuestLibrary& library, FT_Library nativeLibrary) {
+        Require(FT_Stroker_New_nid_postfix(&library, &guest) == 0);
+        Require(FT_Stroker_New(nativeLibrary, &native) == 0);
+        FT_Stroker_Set(static_cast<FT_Stroker>(guest), 64, FT_STROKER_LINECAP_BUTT, FT_STROKER_LINEJOIN_ROUND, 0);
+        FT_Stroker_Set(native, 64, FT_STROKER_LINECAP_BUTT, FT_STROKER_LINEJOIN_ROUND, 0);
+    }
+
+    ~Pair() {
+        FT_Stroker_Done_nid_postfix(guest);
+        FT_Stroker_Done(native);
+    }
+
+    void CountsMatch() const {
+        std::uint32_t points = 11;
+        std::uint32_t contours = 13;
+        FT_UInt nativePoints = 11;
+        FT_UInt nativeContours = 13;
+        Require(FT_Stroker_GetCounts_nid_postfix(guest, &points, &contours) == FT_Stroker_GetCounts(native, &nativePoints, &nativeContours));
+        Require(points == nativePoints && contours == nativeContours);
+    }
+};
 
 static void TestNew(GuestLibrary& library, FT_Library native) {
     void* guest = reinterpret_cast<void*>(1);
@@ -46,11 +73,24 @@ static void TestDone(GuestLibrary& library, FT_Library native) {
     FT_Stroker_Done(nullptr);
 }
 
+static void TestGetCounts(GuestLibrary& library, FT_Library native) {
+    Pair pair(library, native);
+    pair.CountsMatch();
+    std::uint32_t points = 7;
+    std::uint32_t contours = 9;
+    FT_UInt nativePoints = 7;
+    FT_UInt nativeContours = 9;
+    Require(FT_Stroker_GetCounts_nid_postfix(nullptr, &points, &contours) == FT_Stroker_GetCounts(nullptr, &nativePoints, &nativeContours));
+    Require(points == nativePoints && contours == nativeContours);
+    Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, nullptr, nullptr) == FT_Stroker_GetCounts(pair.native, nullptr, nullptr));
+}
+
 int main() {
     GuestLibrary library{};
     FT_Library native = nullptr;
     Require(FT_Init_FreeType(&library.host) == 0 && FT_Init_FreeType(&native) == 0);
     TestNew(library, native);
     TestDone(library, native);
+    TestGetCounts(library, native);
     Require(FT_Done_FreeType(library.host) == 0 && FT_Done_FreeType(native) == 0);
 }
