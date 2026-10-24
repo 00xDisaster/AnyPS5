@@ -81,11 +81,13 @@ std::string Text(const std::array<std::uint32_t, 4>& value) {
     return std::to_string(value[0]) + "x" + std::to_string(value[1]) + "x" + std::to_string(value[2]) + " levels " + std::to_string(value[3]);
 }
 
-void Check(AgcDriver::VulkanDevice& device, std::span<const std::uint32_t> native, const std::array<std::uint32_t, 8>& texture, const char* what) {
-    const auto expected = Query(device, native, texture);
-    Require(expected[0] == Size && expected[1] == Size && expected[3] == 1u, std::string("image_get_resinfo: the ") + what + " query returned " + Text(expected));
-    const auto oneDimensional = Query(device, Query1D, texture);
-    Require(oneDimensional == expected, std::string("image_get_resinfo: DIM 1D on a ") + what + " T# returned " + Text(oneDimensional) + ", its own DIM returns " + Text(expected));
+using Result = std::array<std::uint32_t, 4>;
+
+void Check(AgcDriver::VulkanDevice& device, std::span<const std::uint32_t> native, const std::array<std::uint32_t, 8>& texture, const char* what, const Result& own, const Result& oneDimensional) {
+    const auto nativeResult = Query(device, native, texture);
+    Require(nativeResult == own, std::string("image_get_resinfo: the ") + what + " query returned " + Text(nativeResult) + ", RDNA 2 returns " + Text(own));
+    const auto lineResult = Query(device, Query1D, texture);
+    Require(lineResult == oneDimensional, std::string("image_get_resinfo: DIM 1D on a ") + what + " T# returned " + Text(lineResult) + ", RDNA 2 returns " + Text(oneDimensional));
 }
 
 }
@@ -94,9 +96,9 @@ int main() {
     try {
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        Check(*device, QueryCube, Descriptor(TypeCube, 6u), "cube");
-        Check(*device, Query3D, Descriptor(Type3D, 4u), "3D");
-        Check(*device, Query2DArray, Descriptor(Type2DArray, 3u), "2D array");
+        Check(*device, QueryCube, Descriptor(TypeCube, 6u), "cube", {Size, Size, 6u, 1u}, {Size, Size, 0u, 1u});
+        Check(*device, Query3D, Descriptor(Type3D, 4u), "3D", {Size, Size, 4u, 1u}, {Size, Size, 4u, 1u});
+        Check(*device, Query2DArray, Descriptor(Type2DArray, 3u), "2D array", {Size, Size, 3u, 1u}, {Size, Size, 0u, 1u});
         std::puts("image resinfo dimension tests passed");
         return 0;
     } catch (const std::exception& error) {

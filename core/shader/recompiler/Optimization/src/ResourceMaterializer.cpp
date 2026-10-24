@@ -207,7 +207,8 @@ ImageDecode inspectImageDescriptor(const DescriptorValue& descriptor, const Imag
     if (!validImageDescriptor(descriptor, base.r128)) {
         return rejectImage(invalidImageReason(descriptor), "image descriptor is invalid");
     }
-    decoded.dimension = descriptorDimension(descriptor, base.dimension == RdnaImageDimension::Dim1D && base.dimensionQueryOnly ? RdnaImageDimension::Dim2DArray : base.dimension);
+    const bool queryLayers = base.dimension == RdnaImageDimension::Dim1D && base.dimensionQueryOnly && rawImageType(descriptor) == ImageType::Color2DArray;
+    decoded.dimension = descriptorDimension(descriptor, queryLayers ? RdnaImageDimension::Dim2DArray : base.dimension);
     if (base.depthCompare) {
         if (decoded.dimension == RdnaImageDimension::Dim1D) {
             decoded.dimension = RdnaImageDimension::Dim2D;
@@ -1947,7 +1948,7 @@ std::vector<ImageResource> ResourceMaterializer::RuntimeImageModes(const ImageRe
             modes.push_back(plane);
         }
         if (image.dimension == RdnaImageDimension::Dim1D && image.dimensionQueryOnly && !storage) {
-            for (const auto dimension : {RdnaImageDimension::Dim2D, RdnaImageDimension::Dim1DArray, RdnaImageDimension::Dim2DArray, RdnaImageDimension::Dim3D}) {
+            for (const auto dimension : {RdnaImageDimension::Dim2D, RdnaImageDimension::Dim2DArray, RdnaImageDimension::Dim3D}) {
                 if (dimension == RdnaImageDimension::Dim2D && planeAdded) continue;
                 auto view = mode;
                 view.dimension = dimension;
