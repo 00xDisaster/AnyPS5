@@ -1,14 +1,10 @@
 #include "SceTypes.hpp"
+#include "prx/libScePosixForWebKit/include/Api.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #include <array>
 #include <cstdlib>
 #include <cstring>
 #include <string>
-
-extern "C" {
-Pthread APS5_VABI pthread_self_nid_postfix(void);
-int APS5_VABI pthread_getname_np_nid_postfix(Pthread thread, char* name);
-int APS5_VABI pthread_setname_np_nid_postfix(Pthread thread, const char* name);
-}
 
 static constexpr int GUEST_EINVAL = 22;
 static constexpr int GUEST_ENAMETOOLONG = 63;
