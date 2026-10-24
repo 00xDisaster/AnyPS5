@@ -620,6 +620,19 @@ static void LowWaterMarks() {
     Require(close_nid_postfix(kq) == 0);
 }
 
+static void SocketShutReadReportsNothingQueued() {
+    const int kq = kqueue_nid_postfix();
+    int pair[2];
+    Require(socketpair_nid_postfix(Unix, Stream, 0, pair) == 0);
+    KernelEvent events[4]{};
+    Require(send_nid_postfix(pair[1], "abc", 3, 0) == 3);
+    Require(Apply(kq, Change(static_cast<std::uintptr_t>(pair[0]), EvfiltRead, EvAdd)) == 0);
+    Require(Wait(kq, events, 4) == 1 && events[0].data == 3);
+    Require(shutdown_nid_postfix(pair[0], 0) == 0);
+    Require(Poll(kq, events, 4) == 1 && events[0].data == 0);
+    Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0 && close_nid_postfix(kq) == 0);
+}
+
 #ifdef __linux__
 static void EdgeTriggeredSocketRead() {
     const int kq = kqueue_nid_postfix();
@@ -1379,6 +1392,7 @@ int main() {
     UserEvents();
     WatchKqueue();
     SocketPair();
+    SocketShutReadReportsNothingQueued();
 #ifdef __linux__
     EdgeTriggeredSocketRead();
     EdgeTriggeredSocketWrite();
