@@ -1,28 +1,6 @@
 #include "SceTypes.hpp"
+#include "prx/libkernel_sys/libkernel_sys.hpp"
 #include <cstdlib>
-
-extern "C" {
-int APS5_VABI pthread_switch_add_np_nid_postfix(void);
-int APS5_VABI pthread_switch_delete_np_nid_postfix(void);
-int APS5_VABI sceKernelAddResource(void);
-int APS5_VABI sceKernelEventLogInit(void);
-int APS5_VABI sceKernelIsGenuineKratosCex(void);
-int APS5_VABI sceKernelReleaseTraceDirectMemory(void);
-int APS5_VABI sceKernelHasNeoMode(void);
-int APS5_VABI sceKernelIsAuthenticNeo(void);
-int APS5_VABI sceKernelIsGenuineN(void);
-int APS5_VABI sceKernelCreateEport(void);
-int APS5_VABI sceKernelDeleteEport(void);
-int APS5_VABI sceKernelOpenEport(void);
-int APS5_VABI sceKernelCloseEport(void);
-int APS5_VABI sceKernelTriggerEport(void);
-int APS5_VABI sceKernelQueryTraceMemory(void);
-int APS5_VABI sceKernelIccGetCPMode(void);
-int APS5_VABI sceKernelIccSetCPMode(void);
-int APS5_VABI sceKernelClearGameDirectMemory(void);
-int APS5_VABI sceKernelMapTraceMemory(void);
-int APS5_VABI sceKernelTraceMemoryTypeProtect(void);
-}
 
 namespace {
 
