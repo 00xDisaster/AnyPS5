@@ -64,6 +64,8 @@ EXTENSION = re.compile(r"__attribute__|__declspec|#\s*pragma\s+(?!once\b)")
 INTEGER = r"(0[xX][0-9a-fA-F']+|0[bB][01']+|[0-9][0-9']*)[uUlLzZ]*"
 ALIGNAS = re.compile(rf"\balignas\s*\(\s*(?:{INTEGER}|([A-Za-z_][A-Za-z0-9_]*))\s*\)")
 CONSTANT = re.compile(rf"\bconstexpr\b[^;=]*?\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*|\{{\s*){INTEGER}\s*[;}}]")
+NAMESPACE = re.compile(r"\bnamespace\s+((?:[A-Za-z_][A-Za-z0-9_]*\s*::\s*(?:inline\s+)?)*[A-Za-z_][A-Za-z0-9_]*)\s*$|\bnamespace\s*$")
+LINKAGE = re.compile(r'\bextern\s*""\s*$')
 ALIGNMENT_LIMIT = 8192
 LINK = re.compile(r"\[[^\]]+\]\(([^)\s]+)")
 FENCE = re.compile(r"^ {0,3}(```|~~~).*?^ {0,3}\1[ \t]*\r?$|^ {0,3}(?:```|~~~).*\Z", re.S | re.M)
@@ -601,26 +603,54 @@ def integer_literal(text):
     return int(digits, 8 if len(digits) > 1 and digits[0] == "0" else 10)
 
 
-def named_constants(text):
-    open_braces, scopes = [], []
+def brace_scopes(text):
+    stack, scopes, boundary = [], [], -1
     for index, character in enumerate(text):
+        if character not in "{};":
+            continue
         if character == "{":
-            open_braces.append(index)
-        elif character == "}" and open_braces:
-            scopes.append((open_braces.pop(), index))
-    constants = []
-    for match in CONSTANT.finditer(text):
-        scope = min((pair for pair in scopes if pair[0] < match.start() < pair[1]), key=lambda pair: pair[1] - pair[0], default=(-1, len(text)))
-        constants.append((match.group(1), integer_literal(match.group(2)), match.start(), scope))
-    return constants
+            head = text[boundary + 1:index]
+            outer = next((key[1] for _, key in reversed(stack) if key and key[0] == "namespace"), "")
+            match = NAMESPACE.search(head)
+            if match and re.search(r"\binline\s+namespace\b", head):
+                key = ("namespace", outer)
+            elif match:
+                key = ("namespace", outer + "::" + re.sub(r"\binline\b|\s+", "", match.group(1) or "{anonymous}"))
+            else:
+                key = None if LINKAGE.search(head) else ("block", index)
+            stack.append((index, key))
+        elif character == "}" and stack:
+            start, key = stack.pop()
+            scopes.append((start, index, key))
+        boundary = index
+    return scopes
+
+
+def scope_chain(scopes, position):
+    chain = []
+    for _, _, key in sorted((scope for scope in scopes if scope[0] < position < scope[1]), reverse=True):
+        if key and key[0] == "namespace":
+            parts = key[1].split("::")
+            chain.extend(prefix for prefix in (("namespace", "::".join(parts[:count])) for count in range(len(parts), 1, -1)) if prefix not in chain)
+        elif key:
+            chain.append(key)
+    return chain + [("namespace", "")]
+
+
+def named_constants(text):
+    scopes = brace_scopes(text)
+    definitions = [(match.group(1), integer_literal(match.group(2)), match.start(), scope_chain(scopes, match.start())[0]) for match in CONSTANT.finditer(text)]
+    return definitions, scopes
 
 
 def constant_value(constants, name, position):
-    visible = [(scope[0], start, value) for found, value, start, scope in constants if found == name and start < position and scope[0] < position < scope[1]]
+    definitions, scopes = constants
+    chain = scope_chain(scopes, position)
+    visible = [(-chain.index(scope), start, value) for found, value, start, scope in definitions if found == name and start < position and scope in chain]
     return max(visible)[2] if visible else 0
 
 
-def over_aligned(text, constants=(), offset=0):
+def over_aligned(text, constants=((), ()), offset=0):
     for match in ALIGNAS.finditer(text):
         value = integer_literal(match.group(1)) if match.group(1) else constant_value(constants, match.group(2), offset + match.start())
         if value > ALIGNMENT_LIMIT:

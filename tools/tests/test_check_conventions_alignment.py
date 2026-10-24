@@ -82,6 +82,23 @@ class OverAlignedTests(unittest.TestCase):
             with self.subTest(outer=outer, inner=inner):
                 self.assertEqual(reported(text), expected)
 
+    def test_constants_in_reopened_namespaces(self):
+        large = "constexpr std::size_t Alignment = 16384;"
+        use = "alignas(Alignment) static char data[4];"
+        for text, expected in (
+            (f"namespace N {{ {large} }}\nnamespace N {{ {use} }}\n", [2]),
+            (f"namespace N {{ {large} }}\nnamespace M {{ {use} }}\n", []),
+            (f"namespace {{ {large} }}\nnamespace {{ {use} }}\n", [2]),
+            (f"namespace A::B {{ {large} }}\nnamespace A {{ namespace B {{ {use} }} }}\n", [2]),
+            (f"namespace A {{ {large} }}\nnamespace A::B {{ {use} }}\n", [2]),
+            (f"namespace A {{ inline namespace V1 {{ {large} }} }}\nnamespace A {{ {use} }}\n", [2]),
+            (f"namespace A {{ inline namespace V1 {{ {large} }} }}\nnamespace B {{ {use} }}\n", []),
+            (f"namespace N {{ {large} }}\nnamespace N {{ void F() {{ constexpr std::size_t Alignment = 64; {use} }} }}\n", []),
+            (f'extern "C" {{ {large} }}\n{use}\n', [2]),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(reported(text), expected)
+
 
 class AlignmentRuleTests(unittest.TestCase):
     def findings(self, after):
@@ -121,6 +138,15 @@ class AlignmentRuleTests(unittest.TestCase):
     def test_constants_are_resolved_in_their_scope(self):
         self.assertEqual(self.findings("namespace First {\n" + SMALL + LARGE + "}\nnamespace Second {\n" + LARGE + SMALL + "}\n"),
                          [("alignment", SOURCE, 9, "alignas(Alignment)"), ("alignment", SOURCE, 15, "alignas(Alignment)")])
+
+    def test_reopened_namespace_keeps_its_constants(self):
+        self.assertEqual(self.findings("namespace N {\n"
+                                       "    constexpr std::size_t Alignment = 16384;\n"
+                                       "}\n"
+                                       "namespace N {\n"
+                                       "    alignas(Alignment) static char data[4];\n"
+                                       "}\n"),
+                         [("alignment", SOURCE, 6, "alignas(Alignment)")])
 
 
 if __name__ == "__main__":
