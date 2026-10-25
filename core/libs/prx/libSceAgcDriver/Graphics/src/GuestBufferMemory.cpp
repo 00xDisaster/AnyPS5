@@ -1289,7 +1289,6 @@ ImportWatching importWatching(const Context& context, HostImports& state, bool a
 struct ImportPages {
     bool committed = true;
     bool writable = true;
-    bool opened = true;
     bool readOnly = true;
     bool shared = true;
     MEMORY_BASIC_INFORMATION refused{};
@@ -1311,14 +1310,11 @@ ImportPages importPages(std::uint64_t base, std::uint64_t bytes, bool opening = 
         const auto protection = info.Protect & 0xffu;
         const bool pageWritable = (info.Type == MEM_PRIVATE || info.Type == MEM_IMAGE) && writableProtection(protection);
         const bool pageReadOnly = info.Type != MEM_MAPPED && (protection == PAGE_READONLY || protection == PAGE_EXECUTE_READ);
-        std::uint32_t guestProtection = 0;
-        const bool armed = opening && info.Type == MEM_PRIVATE && pageReadOnly && GuestArena::GuestArenaProtection_nid_postfix(static_cast<std::uintptr_t>(cursor), &guestProtection) && writableProtection(guestProtection);
         if (!pageReadOnly) pages.readOnly = false;
         if (info.Type != MEM_MAPPED) pages.shared = false;
         if (info.Type != MEM_MAPPED && !pageWritable && !pageReadOnly && pages.refused.BaseAddress == nullptr) pages.refused = info;
         if (!pageWritable) pages.writable = false;
-        if (!pageWritable && !armed) pages.opened = false;
-        if (opening && !pages.opened && !pages.shared) return pages;
+        if (opening && !pages.writable && !pages.shared) return pages;
         cursor = reinterpret_cast<std::uint64_t>(info.BaseAddress) + info.RegionSize;
     }
     return pages;
@@ -1350,8 +1346,8 @@ bool importStaysWatched(const Context& context, HostImports& state, const Import
     MEMORY_BASIC_INFORMATION first{};
     if (!importWatching(context, state, false, true, run.bytes).hostPointer && (VirtualQuery(reinterpret_cast<const void*>(run.base), &first, sizeof(first)) == 0 || first.Type != MEM_MAPPED)) return false;
     const auto pages = importPages(run.base, run.bytes, true);
-    if (!pages.committed || (!pages.opened && !pages.shared)) return false;
-    return importWatching(context, state, !pages.opened, pages.opened, run.bytes).hostPointer;
+    if (!pages.committed || (!pages.writable && !pages.shared)) return false;
+    return importWatching(context, state, !pages.writable, pages.writable, run.bytes).hostPointer;
 #else
     const auto watching = importWatching(context, state, false, true, run.bytes);
     BackingFile backing;

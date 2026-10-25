@@ -309,65 +309,44 @@ bool Reused(AgcDriver::VulkanDevice& device) {
 }
 
 #ifdef _WIN32
-bool ArmedReadOnly(const Block& block) {
-    MEMORY_BASIC_INFORMATION memory{};
-    return VirtualQuery(block.data, &memory, sizeof(memory)) == sizeof(memory) && memory.Type == MEM_PRIVATE && (memory.Protect & 0xffu) == PAGE_READONLY;
-}
-
-bool Arm(const Block& block) {
-    for (int collect = 0; collect < 3; ++collect) static_cast<void>(AgcDriver::GuestMemory::CollectWritesUncached(block.Address(), block.bytes));
-    return ArmedReadOnly(block);
-}
-
 AgcDriver::Graphics::HostImportRequesterCounts ColorTargetCounts() {
     return AgcDriver::Graphics::HostImportCounters().requesters[static_cast<std::size_t>(AgcDriver::Graphics::ImportRequester::ColorTarget)];
 }
 
-bool Armed(AgcDriver::VulkanDevice& device) {
+void Direct(AgcDriver::VulkanDevice& device) {
     const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(device);
     constexpr std::array<float, 4> seed{1300.0f, 1400.0f, 1500.0f, 1600.0f};
     Block block(ResidentBytes, 0, true);
     Seed(block, seed);
-    if (!Arm(block)) {
-        std::puts("linear target import of armed direct memory skipped: the collects did not arm the resident run read-only");
-        return false;
-    }
-    Require(block.Watched(), "armed direct memory: the color target is not write-watched");
-    Require(AgcDriver::Graphics::ExistingHostImportFor(context, block.Address(), TargetBytes) == nullptr, "armed direct memory: the color target has a host import before the draw");
+    Require(block.Watched(), "direct memory: the color target is not write-watched");
+    Require(AgcDriver::Graphics::ExistingHostImportFor(context, block.Address(), TargetBytes) == nullptr, "direct memory: the color target has a host import before the draw");
     Draw(device, block);
-    ExpectRecorded(context, block, "armed direct memory");
+    ExpectRecorded(context, block, "direct memory");
     device.WaitIdle();
-    Require(block.Watched(), "armed direct memory: the color target left the write watch after its store");
-    Check(block, seed, "armed direct memory, after the device wait");
-    return true;
+    Require(block.Watched(), "direct memory: the color target left the write watch after its store");
+    Check(block, seed, "direct memory, after the device wait");
 }
 
-bool ArmedGate(AgcDriver::VulkanDevice& device) {
+void PrivateGate(AgcDriver::VulkanDevice& device) {
     using AgcDriver::Graphics::ImportRequester;
     using AgcDriver::Graphics::ImportWatch;
     const auto context = AgcDriver::VulkanDeviceTestAccess::ContextOf(device);
-    Block armed(ResidentBytes / 4, 0, true);
-    if (!Arm(armed)) {
-        std::puts("linear target import gate over armed direct memory skipped: the collects did not arm the resident run read-only");
-        return false;
-    }
+    Block direct(ResidentBytes / 4, 0, true);
     Block flexible(2 * BlockBytes, 0);
     GuestArena::GuestArenaCommit_nid_postfix(flexible.data + BlockBytes, BlockBytes, PAGE_READONLY, BlockBytes);
     const auto decided = AgcDriver::Graphics::PrepareImportWatch(context);
     const auto before = ColorTargetCounts();
     AgcDriver::Graphics::SetImportWatch(context, ImportWatch::Unwatch);
-    const auto* compared = AgcDriver::Graphics::HostImportFor(context, armed.Address(), TargetBytes, ImportRequester::ColorTarget);
-    const bool stillArmed = ArmedReadOnly(armed);
+    const auto* compared = AgcDriver::Graphics::HostImportFor(context, direct.Address(), TargetBytes, ImportRequester::ColorTarget);
     AgcDriver::Graphics::SetImportWatch(context, ImportWatch::Watch);
-    const auto* unopened = AgcDriver::Graphics::HostImportFor(context, flexible.Address(), TargetBytes, ImportRequester::ColorTarget);
+    const auto* readOnly = AgcDriver::Graphics::HostImportFor(context, flexible.Address(), TargetBytes, ImportRequester::ColorTarget);
     const auto refused = ColorTargetCounts();
-    const auto* watched = AgcDriver::Graphics::HostImportFor(context, armed.Address(), TargetBytes, ImportRequester::ColorTarget);
+    const auto* watched = AgcDriver::Graphics::HostImportFor(context, direct.Address(), TargetBytes, ImportRequester::ColorTarget);
     const auto made = ColorTargetCounts();
     AgcDriver::Graphics::SetImportWatch(context, decided);
-    Require(compared == nullptr && stillArmed, "armed gate: a color target's import of armed direct memory under the settle floor was made where it would be compared, or deciding it opened the armed run");
-    Require(unopened == nullptr && refused.made == before.made && refused.refused == before.refused && refused.failed == before.failed, "armed gate: a color target's import was made of read-only private memory that its import does not open, or a refused color target import was counted");
-    Require(watched != nullptr && made.made == before.made + 1 && made.failed == before.failed, "armed gate: a color target's import of armed direct memory registered writable was not made where imports stay watched");
-    return true;
+    Require(compared == nullptr, "private gate: a color target's import of direct memory under the settle floor was made where it would be compared");
+    Require(readOnly == nullptr && refused.made == before.made && refused.refused == before.refused && refused.failed == before.failed, "private gate: a color target's import was made of private memory committed read-only while registered writable, or a refused color target import was counted");
+    Require(watched != nullptr && made.made == before.made + 1 && made.failed == before.failed, "private gate: a color target's import of direct memory registered writable was not made where imports stay watched");
 }
 #endif
 
@@ -477,8 +456,8 @@ int main(int argc, char** argv) {
         if (watched && (only.empty() || only == "--created")) Created(*device);
         if (watched && (only.empty() || only == "--reused") && Reused(*device)) std::puts("linear target import reuse passed");
 #ifdef _WIN32
-        if (watched && (only.empty() || only == "--armed") && Armed(*device)) std::puts("linear target import of armed direct memory passed");
-        if ((only.empty() || only == "--armed-gate") && ArmedGate(*device)) std::puts("linear target import gate over armed and read-only private memory passed");
+        if (watched && (only.empty() || only == "--direct")) Direct(*device);
+        if (only.empty() || only == "--private-gate") PrivateGate(*device);
 #endif
         if (watched && (only.empty() || only == "--outside-watch")) OutsideWatch(*device);
         if (watched && (only.empty() || only == "--read-only-registry")) ReadOnlyRegistry(*device);
