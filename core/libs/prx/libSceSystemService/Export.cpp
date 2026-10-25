@@ -532,6 +532,10 @@ int APS5_VABI sceSystemServiceIsAppSuspended(std::int32_t appId, bool* suspended
  return AnswerForRunningApp("sceSystemServiceIsAppSuspended", appId, suspended, false);
 }
 
+int APS5_VABI sceLncUtilLoadExec(const char* path, const char* const* argv) {
+ return sceSystemServiceLoadExec(path, argv);
+}
+
 int APS5_VABI sceSystemServiceKillApp(int appId, int how, int reason, int coreDump) {
  if (appId != SYSTEM_SERVICE_RUNNING_APP_ID) {
   NotImplemented_nid_no_patch("sceSystemServiceKillApp: application other than the running title");

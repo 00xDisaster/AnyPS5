@@ -371,11 +371,6 @@ int APS5_VABI sceLncUtilLaunchApp(const char* titleId, const char* const* argv, 
     return 0;
 }
 
-int APS5_VABI sceLncUtilLoadExec(const char* path, const char* const* argv) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceLncUtilNotifyCoredumpRequestEnd(std::int32_t appId, std::int32_t processId, std::int32_t result) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
