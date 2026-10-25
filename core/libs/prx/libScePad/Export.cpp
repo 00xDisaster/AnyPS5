@@ -964,8 +964,11 @@ int APS5_VABI scePadGetSphereRadius(std::int32_t handle, float* radius) {
 }
 
 bool APS5_VABI scePadIsValidHandle(std::int32_t handle, std::int32_t portType) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    if (portType == PAD_PORT_TYPE_SPECIAL) return SpecialHandle(handle);
+    if (portType == PAD_PORT_TYPE_REMOTE) return RemoteHandle(handle);
+    if (portType != PAD_PORT_TYPE_STANDARD) return false;
+    const int port = PortOf(handle);
+    return port >= 0 && g_opened[port];
 }
 
 bool APS5_VABI scePadIsDS4Connected(std::int32_t handle) {
