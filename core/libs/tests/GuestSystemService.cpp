@@ -2,6 +2,7 @@
 #include "SceTypes.hpp"
 #include "prx/libSceSystemService/SystemService.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -36,6 +37,31 @@ bool LaunchAppThrows(const char* titleId, const char* const* arguments, const vo
 }
 
 namespace {
+
+template<typename TList>
+void TestBigAppList(TList list) {
+    const int runningAppId = sceSystemServiceGetAppIdOfRunningBigApp();
+    constexpr std::int32_t Sentinel = 0x5a5a5a5a;
+    for (const std::uint32_t capacity : {1u, 4u}) {
+        std::int32_t appIds[4] = {Sentinel, Sentinel, Sentinel, Sentinel};
+        std::uint32_t count = 0xdeadbeefu;
+        Require(list(appIds, capacity, &count) == SYSTEM_SERVICE_OK);
+        Require(count == 1 && appIds[0] == runningAppId);
+        for (std::size_t index = 1; index < 4; ++index) Require(appIds[index] == Sentinel);
+    }
+    std::int32_t appIds[2] = {Sentinel, Sentinel};
+    std::uint32_t count = 0xdeadbeefu;
+    Require(Throws([&] { return list(appIds, 0, &count); }));
+    Require(Throws([&] { return list(nullptr, 2, &count); }));
+    Require(Throws([&] { return list(appIds, 2, nullptr); }));
+    Require(appIds[0] == Sentinel && appIds[1] == Sentinel && count == 0xdeadbeefu);
+}
+
+void TestRunningBigApp() {
+    Require(sceLncUtilGetAppIdOfRunningBigApp() == sceSystemServiceGetAppIdOfRunningBigApp());
+    TestBigAppList(sceLncUtilGetAppIdListOfBigApp);
+    TestBigAppList(sceSystemServiceGetAppIdListOfBigApp);
+}
 
 void TestPlayerDialogParam() {
     alignas(8) unsigned char buffer[0x100];
@@ -150,5 +176,6 @@ int main() {
     SystemServiceEvent event;
     event.event_type = 7;
     Require(sceSystemServiceReceiveEvent(&event) == SYSTEM_SERVICE_ERROR_NO_EVENT);
+    TestRunningBigApp();
     TestPlayerDialogParam();
 }

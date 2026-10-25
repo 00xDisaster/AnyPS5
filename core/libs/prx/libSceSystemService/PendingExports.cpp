@@ -234,21 +234,6 @@ int APS5_VABI sceLncUtilGetAppFocusedAppStatus(LncAppStatus* status) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppId(const char* titleId) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceLncUtilGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceLncUtilGetAppIdOfRunningBigApp() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceLncUtilGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -340,11 +325,6 @@ int APS5_VABI sceLncUtilInitialize() {
 }
 
 int APS5_VABI sceLncUtilIsActiveCdlg(bool* active) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceLncUtilIsAppLaunched(const char* titleId, bool* launched) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1831,11 +1811,6 @@ int APS5_VABI sceSystemServiceGetAppCategoryType(std::int32_t appId, std::uint32
 }
 
 int APS5_VABI sceSystemServiceGetAppFocusedAppStatus(SystemServiceAppStatus* status) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceSystemServiceGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

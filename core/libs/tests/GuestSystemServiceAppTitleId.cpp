@@ -42,7 +42,19 @@ bool Throws(TCall call) {
 }
 
 bool GetAppIdThrows(const char* titleId) {
-    return Throws([&] { static_cast<void>(sceSystemServiceGetAppId(titleId)); });
+    return Throws([&] { static_cast<void>(sceSystemServiceGetAppId(titleId)); }) && Throws([&] { static_cast<void>(sceLncUtilGetAppId(titleId)); });
+}
+
+bool IsAppLaunchedThrows(const char* titleId) {
+    bool launched = false;
+    return Throws([&] { static_cast<void>(sceLncUtilIsAppLaunched(titleId, &launched)); }) && !launched;
+}
+
+void CheckRunningTitleLookups(const char* titleId, int runningAppId) {
+    Require(sceLncUtilGetAppId(titleId) == runningAppId);
+    bool launched = false;
+    Require(sceLncUtilIsAppLaunched(titleId, &launched) == 0 && launched);
+    Require(Throws([&] { static_cast<void>(sceLncUtilIsAppLaunched(titleId, nullptr)); }));
 }
 
 bool GetAppTitleIdThrows(int appId, GuardedBuffer& buffer) {
@@ -70,6 +82,7 @@ void CheckNullBuffers(int runningAppId) {
     Require(Throws([&] { static_cast<void>(sceLncUtilGetAppTitleId(runningAppId, nullptr)); }));
     Require(Throws([&] { static_cast<void>(sceSystemServiceGetAppTitleId(runningAppId + 1, nullptr)); }));
     Require(GetAppIdThrows(nullptr));
+    Require(IsAppLaunchedThrows(nullptr));
 }
 
 void CheckKnownTitle(int runningAppId) {
@@ -80,13 +93,16 @@ void CheckKnownTitle(int runningAppId) {
     const char* const otherTitles[] = {"PPSA00001", "PPSA00010", "ppsa00000", "PPSA0000", "PPSA000000", "PPSA00000 ", " PPSA00000", "CUSA00000", ""};
     for (const char* other : otherTitles) {
         Require(GetAppIdThrows(other));
+        Require(IsAppLaunchedThrows(other));
     }
+    CheckRunningTitleLookups("PPSA00000", runningAppId);
 
     GuardedBuffer buffer;
     Require(sceSystemServiceGetAppTitleId(runningAppId, buffer.bytes) == 0);
     Require(std::memcmp(buffer.bytes, "PPSA00000", titleId.size() + 1) == 0);
     Require(buffer.GuardIntact());
     Require(sceSystemServiceGetAppId(buffer.bytes) == runningAppId);
+    Require(sceLncUtilGetAppId(buffer.bytes) == runningAppId);
 
     GuardedBuffer lncBuffer;
     Require(sceLncUtilGetAppTitleId(runningAppId, lncBuffer.bytes) == 0);
@@ -104,8 +120,10 @@ void CheckKnownTitle(int runningAppId) {
 
 void CheckLongTitle(int runningAppId) {
     Require(sceSystemServiceGetAppId("PPSA000000") == runningAppId);
+    CheckRunningTitleLookups("PPSA000000", runningAppId);
     Require(GetAppIdThrows("PPSA00000"));
     Require(GetAppIdThrows("PPSA0000000"));
+    Require(IsAppLaunchedThrows("PPSA00000"));
     GuardedBuffer buffer;
     Require(GetAppTitleIdThrows(runningAppId, buffer));
     Require(LncGetAppTitleIdThrows(static_cast<std::uint32_t>(runningAppId), buffer));
@@ -114,6 +132,7 @@ void CheckLongTitle(int runningAppId) {
 void CheckMissingMetadata(int runningAppId) {
     Require(GetAppIdThrows("PPSA00000"));
     Require(GetAppIdThrows(nullptr));
+    Require(IsAppLaunchedThrows("PPSA00000"));
     GuardedBuffer buffer;
     Require(GetAppTitleIdThrows(runningAppId, buffer));
     Require(LncGetAppTitleIdThrows(static_cast<std::uint32_t>(runningAppId), buffer));

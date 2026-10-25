@@ -260,6 +260,28 @@ void CopyRunningTitleId(const std::string& caller, bool running, char* destinati
     std::memcpy(destination, titleId.c_str(), titleId.size() + 1);
 }
 
+int RunningAppId(const std::string& caller, const char* titleId) {
+    if (titleId == nullptr) NotImplemented_nid_no_patch((caller + ": null title ID").c_str());
+    if (RunningTitleId() != titleId) NotImplemented_nid_no_patch((caller + ": title other than the running title").c_str());
+    return SYSTEM_SERVICE_RUNNING_APP_ID;
+}
+
+template<typename TValue>
+int AnswerForRunningApp(const std::string& caller, std::int32_t appId, TValue* destination, TValue value) {
+    if (appId != SYSTEM_SERVICE_RUNNING_APP_ID) NotImplemented_nid_no_patch((caller + ": application other than the running title").c_str());
+    if (destination == nullptr) NotImplemented_nid_no_patch((caller + ": null output").c_str());
+    *destination = value;
+    return SYSTEM_SERVICE_OK;
+}
+
+int ListRunningBigApp(const std::string& caller, std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
+    if (appIds == nullptr || count == nullptr) NotImplemented_nid_no_patch((caller + ": null list or count").c_str());
+    if (capacity == 0) NotImplemented_nid_no_patch((caller + ": a list with no room for the running title").c_str());
+    appIds[0] = SYSTEM_SERVICE_RUNNING_APP_ID;
+    *count = 1;
+    return SYSTEM_SERVICE_OK;
+}
+
 }
 
 extern "C" {
@@ -455,13 +477,7 @@ int APS5_VABI sceSystemServiceGetAppIdOfRunningBigApp(void) {
 }
 
 int APS5_VABI sceSystemServiceGetAppId(const char* titleId) {
- if (titleId == nullptr) {
-  NotImplemented_nid_no_patch("sceSystemServiceGetAppId: null title ID");
- }
- if (RunningTitleId() != titleId) {
-  NotImplemented_nid_no_patch("sceSystemServiceGetAppId: title other than the running title");
- }
- return SYSTEM_SERVICE_RUNNING_APP_ID;
+ return RunningAppId("sceSystemServiceGetAppId", titleId);
 }
 
 int APS5_VABI sceSystemServiceGetAppTitleId(int appId, char* titleId) {
@@ -472,6 +488,26 @@ int APS5_VABI sceSystemServiceGetAppTitleId(int appId, char* titleId) {
 int APS5_VABI sceLncUtilGetAppTitleId(std::int32_t appId, char* titleId) {
  CopyRunningTitleId("sceLncUtilGetAppTitleId", appId == SYSTEM_SERVICE_RUNNING_APP_ID, titleId);
  return SYSTEM_SERVICE_OK;
+}
+
+int APS5_VABI sceLncUtilGetAppId(const char* titleId) {
+ return RunningAppId("sceLncUtilGetAppId", titleId);
+}
+
+int APS5_VABI sceLncUtilIsAppLaunched(const char* titleId, bool* launched) {
+ return AnswerForRunningApp("sceLncUtilIsAppLaunched", RunningAppId("sceLncUtilIsAppLaunched", titleId), launched, true);
+}
+
+int APS5_VABI sceLncUtilGetAppIdOfRunningBigApp() {
+ return sceSystemServiceGetAppIdOfRunningBigApp();
+}
+
+int APS5_VABI sceLncUtilGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
+ return ListRunningBigApp("sceLncUtilGetAppIdListOfBigApp", appIds, capacity, count);
+}
+
+int APS5_VABI sceSystemServiceGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
+ return ListRunningBigApp("sceSystemServiceGetAppIdListOfBigApp", appIds, capacity, count);
 }
 
 int APS5_VABI sceSystemServiceKillApp(int appId, int how, int reason, int coreDump) {
