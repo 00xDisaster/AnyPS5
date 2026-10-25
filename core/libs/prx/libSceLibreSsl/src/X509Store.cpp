@@ -224,15 +224,14 @@ LibreSslX509Lookup* APS5_VABI X509_STORE_add_lookup_nid_postfix(LibreSslX509Stor
             if (lookup->method == method) return lookup;
         }
     }
+    if (!method) NotImplemented_nid_no_patch(__func__);
+    if (method->newItem) NotImplemented_nid_no_patch("X509_LOOKUP new_item callback");
     auto* lookup = static_cast<LibreSslX509Lookup*>(malloc_nid_postfix(sizeof(LibreSslX509Lookup)));
     if (!lookup) return nullptr;
     lookup->init = 0;
     lookup->skip = 0;
     lookup->method = method;
     lookup->methodData = nullptr;
-    lookup->storeContext = nullptr;
-    if (!method) NotImplemented_nid_no_patch(__func__);
-    if (method->newItem) NotImplemented_nid_no_patch("X509_LOOKUP new_item callback");
     lookup->storeContext = store;
     if (Push(lookupMethods, lookup, __func__)) return lookup;
     FreeLookup(lookup, false, __func__);

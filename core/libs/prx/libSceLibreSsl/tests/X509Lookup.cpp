@@ -156,6 +156,15 @@ void Allocator() {
     X509_STORE_free_nid_postfix(store);
 
     store = X509_STORE_new_nid_postfix();
+    LibreSslX509LookupMethod withNewItem{};
+    withNewItem.newItem = reinterpret_cast<void*>(&Require);
+    allocations = frees = 0;
+    RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, nullptr); }, "null method");
+    RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, &withNewItem); }, "a guest new_item callback");
+    Require(allocations == 0 && frees == 0 && Lookups(store)->num == 0, "a refused method allocates nothing");
+    X509_STORE_free_nid_postfix(store);
+
+    store = X509_STORE_new_nid_postfix();
     auto* lookupMethods = Lookups(store);
     store->lookupMethods = nullptr;
     allocations = frees = 0;
