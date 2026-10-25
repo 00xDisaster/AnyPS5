@@ -121,7 +121,7 @@ void CheckWordFilter() {
 
 }
 
-int WaitInThread(const char* name, int (*wait)(int, int*), int reqId, int* result, void (*finish)(int)) {
+int WaitInThread(const char* name, int (APS5_VABI *wait)(int, int*), int reqId, int* result, void (*finish)(int)) {
     int status = 7;
     std::atomic<bool> entered{false};
     std::atomic<bool> returned{false};
