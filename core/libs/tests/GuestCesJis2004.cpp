@@ -1,23 +1,10 @@
+#include "prx/libSceCesCs/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
-
-extern "C" {
-void* APS5_VABI sceCesUcsProfileInitEucJis2004(void*);
-void* APS5_VABI sceCesUcsProfileInitSJis2004X0213(void*);
-void* APS5_VABI sceCesUcsProfileInitEucJpCp51932(void*);
-void* APS5_VABI sceCesUcsProfileInitSJis1997Cp932(void*);
-int APS5_VABI sceCesMbcsUcsContextInit(void*, const void*);
-int APS5_VABI sceCesMbcsStrToUtf8Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf8StrToMbcsStr(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf32StrToMbcsStr(void*, const std::uint32_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesMbcsStrToUtf32Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesMbcToUtf8(const void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesEucJpToUcs2(const void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint16_t*);
-}
 
 namespace {
 
