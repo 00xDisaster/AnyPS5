@@ -13,6 +13,7 @@
 #endif
 #endif
 #include "prx/libkernel/Socket/include/SocketError.hpp"
+#include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/Socket/include/SocketOptions.hpp"
 #include <algorithm>
 #include <cstring>
@@ -73,6 +74,7 @@ constexpr int ErrorNotSupported = 45;
 constexpr int ErrorAddressInUse = 48;
 constexpr int ErrorAddressNotAvailable = 49;
 
+constexpr int ErrorFault = 14;
 constexpr int ErrorInvalid = 22;
 constexpr int ErrorDomain = 33;
 constexpr int ErrorNoProtocolOption = 42;
@@ -156,6 +158,10 @@ int IpReceiveBit(int option) {
 
 int Copy(void* output, std::uint32_t* length, const void* value, std::uint32_t size) {
     const std::uint32_t count = output ? std::min(*length, size) : 0;
+    const GuestArena::HostWrite destination(count == 0 ? nullptr : output, count);
+    if (!destination.Open()) return ErrorFault;
+    const GuestArena::HostWrite lengthOutput(length, sizeof(*length));
+    if (!lengthOutput.Open()) return ErrorFault;
     if (count != 0) std::memcpy(output, value, count);
     *length = count;
     return 0;

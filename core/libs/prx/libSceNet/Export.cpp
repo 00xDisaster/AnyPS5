@@ -1538,8 +1538,17 @@ int APS5_VABI sceNetGetsockopt(int s, int level, int optname, void* optval, uint
         return 0;
     }
     if (level == NET_IPPROTO_IPV6) {
-        const int error = GuestSockets::GetIpv6LevelOption(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, optval, optlen);
-        return error == 0 ? 0 : fail(error);
+        int value = 0;
+        std::uint32_t length = *optlen;
+        const int error = GuestSockets::GetIpv6LevelOption(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, &value, &length);
+        if (error != 0) return fail(error);
+        const GuestArena::HostWrite destination(length == 0 ? nullptr : optval, length);
+        if (!destination.Open()) return fail(NET_EFAULT);
+        const GuestArena::HostWrite lengthOutput(optlen, sizeof(*optlen));
+        if (!lengthOutput.Open()) return fail(NET_EFAULT);
+        if (length != 0) std::memcpy(optval, &value, length);
+        *optlen = length;
+        return 0;
     }
     if (level == NET_SOL_SOCKET && (optname == NET_SO_RCVTIMEO || optname == NET_SO_SNDTIMEO)) {
         const int microseconds = optname == NET_SO_RCVTIMEO ? socket.native->receiveTimeout.load() : socket.native->sendTimeout.load();

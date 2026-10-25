@@ -1,6 +1,7 @@
 #include "prx/libkernel/libkernel.hpp"
 #include "prx/libSceNet/libSceNet.hpp"
 #include "SceTypes.hpp"
+#include "prx/libc/include/GuestArena.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -91,6 +92,98 @@ static void DualStack(int receiver, int type) {
     Require(sceNetSocketClose(sender) == 0);
 }
 
+static void ExerciseGuestOutputs() {
+    constexpr std::size_t page = 0x4000;
+    constexpr std::size_t bytes = page * 4;
+    std::int64_t physical = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, bytes, 0, 0, &physical) == 0);
+    void* view = nullptr;
+    void* twin = nullptr;
+    Require(sceKernelMapDirectMemory(&view, bytes, 3, 0, physical, 0) == 0);
+    Require(sceKernelMapDirectMemory(&twin, bytes, 3, 0, physical, 0) == 0);
+    Require(GuestArena::GuestArenaContains_nid_postfix(view, bytes));
+    auto* data = static_cast<unsigned char*>(view);
+    auto* output = data + page - sizeof(int);
+    auto* length = reinterpret_cast<std::uint32_t*>(data + page * 3 - sizeof(std::uint32_t));
+    auto* mirror = static_cast<unsigned char*>(twin) + page - sizeof(int);
+    auto* mirrorLength = reinterpret_cast<std::uint32_t*>(static_cast<unsigned char*>(twin) + page * 3 - sizeof(std::uint32_t));
+    {
+        const GuestArena::HostWrite access(view, bytes);
+        Require(access.Open());
+        std::memset(view, 0xa5, bytes);
+    }
+    Require(sceKernelMprotect(data + page, page, 1) == 0);
+    Require(sceKernelMprotect(data + page * 3, page, 1) == 0);
+    for (const bool net : {true, false}) {
+        const int descriptor = net ? sceNetSocket("guest-options", 28, 2, 0) : socket_nid_postfix(28, 2, 0);
+        Require(descriptor >= 0);
+        int* error = net ? sceNetErrnoLoc() : __error_nid_postfix();
+        const auto get = [&](void* value, std::uint32_t* count) {
+            return net ? sceNetGetsockopt(descriptor, 41, 27, value, count) :
+                getsockopt_nid_postfix(descriptor, 41, 27, value, count);
+        };
+        const auto reset = [&](std::uint32_t capacity) {
+            const GuestArena::HostWrite destination(output, sizeof(int));
+            const GuestArena::HostWrite lengthOutput(length, sizeof(*length));
+            Require(destination.Open() && lengthOutput.Open());
+            std::memset(output, 0xa5, sizeof(int));
+            *length = capacity;
+        };
+        for (const std::uint32_t capacity : {0u, 1u, 2u, 3u, 4u, 5u, 8u, UINT32_MAX}) {
+            reset(capacity);
+#ifdef _WIN32
+            std::array<void*, 32> written{};
+            std::size_t count = written.size();
+            Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(view), bytes,
+                written.data(), &count, true));
+#endif
+            *error = 1234;
+            Require(get(output, length) == 0 && *error == 1234);
+            const auto expected = std::min<std::uint32_t>(capacity, sizeof(int));
+            const int enabled = 1;
+            Require(*length == expected && *mirrorLength == expected);
+            Require(std::memcmp(output, &enabled, expected) == 0 && std::memcmp(mirror, output, sizeof(int)) == 0);
+            Require(std::all_of(output + expected, output + sizeof(int), [](unsigned char value) { return value == 0xa5; }));
+            Require(output[-1] == 0xa5 && output[sizeof(int)] == 0xa5);
+            Require(reinterpret_cast<unsigned char*>(length)[-1] == 0xa5 && reinterpret_cast<unsigned char*>(length)[sizeof(*length)] == 0xa5);
+#ifdef _WIN32
+            count = written.size();
+            Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(view), bytes,
+                written.data(), &count, true) && count != 0);
+#endif
+        }
+        reset(0);
+        Require(get(data + page, length) == 0 && *length == 0 && data[page] == 0xa5);
+#ifdef _WIN32
+        const int failure = net ? static_cast<int>(0x8041010eu) : -1;
+        reset(4);
+        Require(sceKernelMprotect(data, page, 1) == 0);
+        {
+            const GuestArena::HostWrite denied(output, sizeof(int));
+            Require(!denied.Open());
+        }
+        Require(get(output, length) == failure && *error == 14);
+        Require(*length == 4 && std::all_of(output, output + sizeof(int), [](unsigned char value) { return value == 0xa5; }));
+        Require(sceKernelMprotect(data, page, 3) == 0);
+        reset(8);
+        Require(sceKernelMprotect(data + page * 2, page, 1) == 0);
+        {
+            const GuestArena::HostWrite denied(length, sizeof(*length));
+            Require(!denied.Open());
+        }
+        Require(get(output, length) == failure && *error == 14);
+        Require(*length == 8 && std::all_of(output, output + sizeof(int), [](unsigned char value) { return value == 0xa5; }));
+        if (!net) Require(get(nullptr, length) == -1 && *error == 14 && *length == 8);
+        Require(sceKernelMprotect(data + page * 2, page, 3) == 0);
+#endif
+        Require((net ? sceNetSocketClose(descriptor) : close_nid_postfix(descriptor)) == 0);
+    }
+    Require(sceKernelMprotect(view, bytes, 3) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(twin), bytes) == 0);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(view), bytes) == 0);
+    Require(sceKernelReleaseDirectMemory(physical, bytes) == 0);
+}
+
 int main() {
     for (const int type : {1, 2}) {
         const int descriptor = sceNetSocket("ipv6-only", 28, type, 0);
@@ -100,6 +193,7 @@ int main() {
         DualStack(descriptor, type);
         Require(sceNetSocketClose(descriptor) == 0);
     }
+    ExerciseGuestOutputs();
     const int ipv4 = sceNetSocket("ipv4-only", 2, 2, 0);
     Require(ipv4 >= 0);
     const int value = 1;
