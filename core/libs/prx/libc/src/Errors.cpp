@@ -1,6 +1,5 @@
 #include "prx/libc/include/WindowsFormatting.hpp"
 #include "prx/libc/include/Api.hpp"
-#include "prx/libc/include/ErrorMessages.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
@@ -45,7 +44,6 @@ constexpr const char* messages[] = {
     "Previous owner died"
 };
 static_assert(sizeof(messages) / sizeof(messages[0]) == 97);
-bool Known(int error) { return error >= 0 && error < 97; }
 bool NamedByStrerror(int error) { return error > 0 && error < 95; }
 
 void Describe(int error, char (&text)[128]) {
@@ -56,13 +54,6 @@ void Describe(int error, char (&text)[128]) {
 }
 
 extern "C" {
-void FreeBsdErrorMessage_nid_no_patch(int error, char* buffer, std::size_t length) {
-    const int saved = *__error_nid_postfix();
-    if (Known(error)) std::snprintf(buffer, length, "%s", messages[error]);
-    else std::snprintf(buffer, length, "Unknown error: %d", error);
-    *__error_nid_postfix() = saved;
-}
-
 char* APS5_VABI strerror_nid_postfix(int error) {
     thread_local char buffer[128];
     Describe(error, buffer);

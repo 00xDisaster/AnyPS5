@@ -1,6 +1,5 @@
 #include "prx/libc/include/WindowsFormatting.hpp"
 #include "prx/libc/include/Api.hpp"
-#include "prx/libc/include/ErrorMessages.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/SonyCrt.hpp"
 #include <cerrno>
@@ -41,7 +40,7 @@ extern "C" int APS5_VABI wcscpy_s_nid_postfix(std::uint16_t* dest, std::size_t s
 namespace {
 
 std::size_t ReadErrorMessage(int error, char (&message)[128]) {
-    FreeBsdErrorMessage_nid_no_patch(error, message, sizeof(message));
+    strerror_r_nid_postfix(error, message, sizeof(message));
     return std::strlen(message);
 }
 
@@ -80,5 +79,5 @@ extern "C" int APS5_VABI strerror_s_nid_postfix(char* buffer, std::size_t capaci
     std::memcpy(buffer, message, capacity - 1);
     buffer[capacity - 1] = '\0';
     if (capacity > 3) std::memcpy(buffer + capacity - 4, "...", 3);
-    return 34;
+    return 0;
 }
