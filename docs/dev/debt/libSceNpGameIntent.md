@@ -2,8 +2,8 @@
 
 ### Silent stubs
 
-- [sceNpGameIntentVshInitialize, sceNpGameIntentVshTerminate](../../../core/libs/prx/libSceNpGameIntent/Export.cpp) (libSceNpGameIntent) - VSH initialization and termination return 0 without performing shell operations
-- [sceNpAppLauncherInitialize, sceNpAppLauncherTerminate](../../../core/libs/prx/libSceNpGameIntent/Export.cpp) (libSceNpGameIntent) - app-launcher lifecycle returns success without tracking launch state; `sceNpAppLauncherInitialize` accepts its init parameter without validation — a title calls it early in boot, and returning success lets it continue
+- [sceNpGameIntentVshInitialize, sceNpGameIntentVshTerminate](../../../core/libs/prx/libSceNpGameIntent/Export.cpp) (libSceNpGameIntent) - VSH initialization and termination return 0 without performing shell operations, matching `sceNpGameIntentInitialize` and `sceNpGameIntentTerminate`
+- [sceNpAppLauncherInitialize, sceNpAppLauncherTerminate](../../../core/libs/prx/libSceNpGameIntent/Export.cpp) (libSceNpGameIntent) - app-launcher lifecycle returns success without performing launch work; `sceNpAppLauncherInitialize` accepts its init parameter without validation, following the silent-stub precedent of `sceNpGameIntentInitialize` — a title calls it early in boot, and returning success lets it continue; an atomic flag tracks initialized state so `sceNpAppLauncherLaunchApp` can reject calls made outside the lifecycle
 
 ### Unknown function info
 

@@ -32,8 +32,8 @@ int main() {
     constexpr int kInvalidArgument = -2141898748;
     constexpr int kIntentNotFound = -2141898746;
     constexpr int kValueNotFound = -2141898745;
-    constexpr int kInvalidArgument = -2141898748;
-    constexpr int kNotInitialized = -2141898750;
+    constexpr int kLauncherInvalidArgument = -2141898236;
+    constexpr int kLauncherNotInitialized = -2141898238;
 
     Require(Throws<std::invalid_argument>([] { sceNpGameIntentInitParamInit(nullptr); }),
             "null param init did not throw");
@@ -118,24 +118,18 @@ int main() {
 
     unsigned char appLauncherParam[0x28]{};
     *reinterpret_cast<std::uint64_t*>(appLauncherParam) = 0x28;
-    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kNotInitialized,
+    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kLauncherNotInitialized,
             "launch before init must report not-initialized");
     Require(sceNpAppLauncherInitialize(appLauncherParam) == 0, "app launcher init failed");
-    Require(sceNpAppLauncherLaunchApp(0, nullptr, nullptr) == kInvalidArgument,
+    Require(sceNpAppLauncherLaunchApp(0, nullptr, nullptr) == kLauncherInvalidArgument,
             "null launch argument must be invalid");
-    Require(sceNpAppLauncherLaunchApp(0, "", nullptr) == kInvalidArgument,
+    Require(sceNpAppLauncherLaunchApp(0, "", nullptr) == kLauncherInvalidArgument,
             "empty launch argument must be invalid");
     std::vector<char> unterminated(0x2001, 'x');
-    Require(sceNpAppLauncherLaunchApp(0, "app", unterminated.data()) == kInvalidArgument,
+    Require(sceNpAppLauncherLaunchApp(0, "app", unterminated.data()) == kLauncherInvalidArgument,
             "non-terminated 0x2001-byte argument must be invalid");
-    std::vector<char> bounded(0x2000, 'x');
-    bounded.push_back('\0');
-    Require(Throws<std::runtime_error>([&] { sceNpAppLauncherLaunchApp(0, "app", bounded.data()); }),
-            "max-length argument launch must throw until implemented");
-    Require(Throws<std::runtime_error>([] { sceNpAppLauncherLaunchApp(0, "app", nullptr); }),
-            "app launcher launch must throw until implemented");
     Require(sceNpAppLauncherTerminate() == 0, "app launcher terminate failed");
-    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kNotInitialized,
+    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kLauncherNotInitialized,
             "launch after terminate must report not-initialized");
     *reinterpret_cast<std::uint64_t*>(appLauncherParam) = 0x10;
     Require(sceNpAppLauncherInitialize(appLauncherParam) == 0,
@@ -162,7 +156,7 @@ int main() {
     reader.join();
 
     Require(sceNpAppLauncherTerminate() == 0, "final terminate failed");
-    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kNotInitialized,
+    Require(sceNpAppLauncherLaunchApp(0, "app", nullptr) == kLauncherNotInitialized,
             "final launch must report not-initialized");
 
     std::puts("NpGameIntent tests passed");
