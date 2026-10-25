@@ -233,7 +233,7 @@ if(APS5_ENABLE_TRACY)
     list(APPEND PATCHED_OUTPUTS ${TRACY_CLIENT_COPIED})
 endif()
 
-if(TARGET mimalloc)
+if(TARGET mimalloc AND WIN32)
     add_executable(pe_import_first ${CMAKE_CURRENT_SOURCE_DIR}/allocator/PeImportFirstMain.cpp ${CMAKE_CURRENT_SOURCE_DIR}/allocator/PeImportFirst.cpp)
     target_compile_features(pe_import_first PRIVATE cxx_std_20)
     if(MINGW)
@@ -254,6 +254,14 @@ if(TARGET mimalloc)
             COMMENT "Copying mimalloc-redirect.dll beside the libraries"
     )
     list(APPEND PATCHED_OUTPUTS ${PATCHED_DIR}/mimalloc.dll ${PATCHED_DIR}/mimalloc-redirect.dll)
+elseif(TARGET mimalloc)
+    add_custom_command(
+            OUTPUT ${PATCHED_DIR}/libmimalloc.dylib
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:mimalloc> ${PATCHED_DIR}/libmimalloc.dylib
+            DEPENDS mimalloc
+            COMMENT "Copying libmimalloc.dylib beside the libraries"
+    )
+    list(APPEND PATCHED_OUTPUTS ${PATCHED_DIR}/libmimalloc.dylib)
 endif()
 
 add_custom_target(libs DEPENDS ${PATCHED_OUTPUTS})
