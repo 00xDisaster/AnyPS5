@@ -90,6 +90,16 @@ class SanitizerReportTests(unittest.TestCase):
         code, _, stderr = self.run_main(Path(self.directory.name) / "missing.xml")
         self.assertEqual(code, 2)
 
+    def test_a_report_without_tests_is_rejected(self):
+        summary = self.write("", "summary.md")
+        for text in (suite(), '<testsuites><testsuite name="(empty)" tests="0"/></testsuites>'):
+            with self.subTest(text=text):
+                code, stdout, stderr = self.run_main(self.write(text), "--summary", summary)
+                self.assertEqual(code, 2)
+                self.assertEqual(stdout, "")
+                self.assertIn("lists no tests", stderr)
+        self.assertEqual(summary.read_text(encoding="utf-8"), "")
+
     def test_summary_file_is_appended_to(self):
         summary = self.write("existing\n", "summary.md")
         code, stdout, _ = self.run_main(self.write(suite(case("passes"))), "--title", "Nightly", "--summary", summary)
