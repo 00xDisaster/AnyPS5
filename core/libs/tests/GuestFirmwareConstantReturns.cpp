@@ -1,37 +1,13 @@
 #include "SceTypes.hpp"
+#include "prx/libSceComposite/libSceComposite.hpp"
+#include "prx/libSceFsInternalForVsh/libSceFsInternalForVsh.hpp"
+#include "prx/libSceHttpCache/libSceHttpCache.hpp"
+#include "prx/libScePlayReady/libScePlayReady.hpp"
+#include "prx/libSceSdma/libSceSdma.hpp"
+#include "prx/libSceSsl/libSceSsl.hpp"
+#include "prx/libSceVisionManager/libSceVisionManager.hpp"
+#include "prx/libmdbg_syscore/libmdbg_syscore.hpp"
 #include <cstdlib>
-
-extern "C" {
-int APS5_VABI sceCompositorCreateIndirectRenderTarget(void);
-int APS5_VABI sceCompositorDeleteIndirectRenderTarget(void);
-int APS5_VABI sceCompositorSetIndirectCanvasCommand(void);
-int APS5_VABI sceCompositorSetIndirectCompositionCommand(void);
-int APS5_VABI sceCompositorSetIndirectRenderTargetConfigCommand(void);
-int APS5_VABI sceFsErriCtl(void);
-int APS5_VABI sceFsErriGetState(void);
-int APS5_VABI sceHttpCacheDebugSetUrl(void);
-int APS5_VABI scePlayReadyMemGetStats(void);
-int APS5_VABI sceSdmaInitialize(void);
-int APS5_VABI sceSdmaFinalize(void);
-int APS5_VABI sceSdmaQueryWorkingBufferSize(void);
-int APS5_VABI sceSdmaFlushAllWithEvent(void);
-int APS5_VABI sceSdmaWaitForEvent(void);
-int APS5_VABI CRYPTO_uninitAsymmetricKey(void);
-int APS5_VABI VLONG_freeVlongQueue(void);
-int APS5_VABI sceVisionManagerOpen(void);
-int APS5_VABI sceVisionManagerClose(void);
-int APS5_VABI sceVisionManagerRequestFindUser(void);
-int APS5_VABI sceVisionManagerRequestFindUserInRegion(void);
-int APS5_VABI sceVisionManagerRequestFindUserWithoutIdentify(void);
-int APS5_VABI sceVisionManagerRequestRegisterUserInRegion(void);
-int APS5_VABI sceVisionManagerGetResultOfFindUser(void);
-int APS5_VABI sceVisionManagerGetResultOfFindUserInRegion(void);
-int APS5_VABI sceVisionManagerGetResultOfFindUserWithoutIdentify(void);
-int APS5_VABI sceVisionManagerGetResultOfRegisterUserInRegion(void);
-int APS5_VABI sceVisionManagerLoadSettings(void);
-int APS5_VABI sceDebugGetProcessEventCntlFlag(void);
-int APS5_VABI sceDebugSetProcessEventCntlFlag(void);
-}
 
 namespace {
 
