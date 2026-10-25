@@ -1,3 +1,4 @@
+#include "prx/libSceIcu/libSceIcu.hpp"
 #include "prx/libc/include/General.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -5,8 +6,6 @@
 #include <limits>
 
 namespace {
-
-using CharacterAt = char16_t (APS5_VABI*)(std::int32_t, void*);
 
 bool IsLead(std::int32_t value) {
     return value >= 0xd800 && value <= 0xdbff;
@@ -27,7 +26,7 @@ int Digit(char16_t value, int base) {
     return digit < base ? digit : -1;
 }
 
-std::int32_t Decode(CharacterAt characterAt, std::int32_t& position, std::int32_t length, void* context) {
+std::int32_t Decode(Icu::UnescapeCharacterAt characterAt, std::int32_t& position, std::int32_t length, void* context) {
     const auto start = position;
     if (position < 0 || position >= length) return -1;
     if (!characterAt) NotImplemented_nid_no_patch("u_unescapeAt: null callback");
@@ -117,7 +116,7 @@ char16_t APS5_VABI ByteAt(std::int32_t position, void* context) {
 
 extern "C" {
 
-std::int32_t APS5_VABI u_unescapeAt_nid_postfix(CharacterAt characterAt, std::int32_t* offset, std::int32_t length, void* context) {
+std::int32_t APS5_VABI u_unescapeAt_nid_postfix(Icu::UnescapeCharacterAt characterAt, std::int32_t* offset, std::int32_t length, void* context) {
     if (!offset) NotImplemented_nid_no_patch(__func__);
     return Decode(characterAt, *offset, length, context);
 }

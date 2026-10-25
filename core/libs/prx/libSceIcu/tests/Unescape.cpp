@@ -1,4 +1,4 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceIcu/libSceIcu.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -11,12 +11,6 @@
 #include <string_view>
 #include <vector>
 
-using CharacterAt = char16_t (APS5_VABI*)(std::int32_t, void*);
-
-extern "C" {
-std::int32_t APS5_VABI u_unescape_nid_postfix(const char*, char16_t*, std::int32_t);
-std::int32_t APS5_VABI u_unescapeAt_nid_postfix(CharacterAt, std::int32_t*, std::int32_t, void*);
-}
 
 namespace {
 
