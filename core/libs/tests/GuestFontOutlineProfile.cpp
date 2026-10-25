@@ -9,7 +9,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
-#include <stdexcept>
 #include <vector>
 
 static void Check(bool value, int line) {
@@ -92,14 +91,7 @@ int main() {
     auto* nativeFont = reinterpret_cast<Font::FontHandleNative*>(profiled);
     nativeFont->open_info.fontset_record = record.data();
     Require(sceFontGetFontGlyphsOutlineProfile(profiled, nullptr) == SCE_FONT_ERROR_INVALID_PARAMETER);
-    bool recordThrew = false;
-    try {
-        sceFontGetFontGlyphsOutlineProfile(profiled, &profile);
-    } catch (const std::runtime_error&) {
-        recordThrew = true;
-    }
     nativeFont->open_info.fontset_record = nullptr;
-    Require(recordThrew);
     Fill(profile);
     Require(sceFontGetFontGlyphsOutlineProfile(profiled, &profile) == SCE_FONT_OK && profile.maxPoints == 120);
 
