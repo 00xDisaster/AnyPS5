@@ -78,6 +78,12 @@ void TestRunningAppUser() {
     TestRunningAppAnswer<std::int32_t>(sceShellCoreUtilGetUserFocus, USER_SERVICE_INITIAL_USER_ID, Sentinel);
 }
 
+void TestRunningAppState() {
+    TestRunningAppAnswer<bool>(sceLncUtilIsAppSuspended, false, true);
+    TestRunningAppAnswer<bool>(sceSystemServiceIsAppSuspended, false, true);
+    TestRunningAppAnswer<bool>(sceLncUtilIsSpeculativeLaunch, false, true);
+}
+
 void TestRunningBigApp() {
     Require(sceLncUtilGetAppIdOfRunningBigApp() == sceSystemServiceGetAppIdOfRunningBigApp());
     TestBigAppList(sceLncUtilGetAppIdListOfBigApp);
@@ -199,5 +205,6 @@ int main() {
     Require(sceSystemServiceReceiveEvent(&event) == SYSTEM_SERVICE_ERROR_NO_EVENT);
     TestRunningBigApp();
     TestRunningAppUser();
+    TestRunningAppState();
     TestPlayerDialogParam();
 }

@@ -324,11 +324,6 @@ int APS5_VABI sceLncUtilIsActiveCdlg(bool* active) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilIsAppSuspended(std::int32_t appId, bool* suspended) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceLncUtilIsCdlgActivated(std::uint8_t* activated) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -355,7 +350,9 @@ bool APS5_VABI sceLncUtilIsShellUiFgAndGameBgCpuMode() {
 }
 
 int APS5_VABI sceLncUtilIsSpeculativeLaunch(std::int32_t appId, bool* speculative) {
-    NotImplemented_nid_no_patch(__func__);
+    if (appId != sceSystemServiceGetAppIdOfRunningBigApp()) NotImplemented_nid_no_patch("sceLncUtilIsSpeculativeLaunch: application other than the running title");
+    if (speculative == nullptr) NotImplemented_nid_no_patch("sceLncUtilIsSpeculativeLaunch: null output");
+    *speculative = false;
     return 0;
 }
 
@@ -1926,11 +1923,6 @@ int APS5_VABI sceSystemServiceInitializeForShellCore() {
 }
 
 int APS5_VABI sceSystemServiceInvokeAppLaunchLink(const char* uri) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceSystemServiceIsAppSuspended(std::int32_t appId, bool* suspended) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
