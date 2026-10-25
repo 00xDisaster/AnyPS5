@@ -23,5 +23,3 @@
 - [sceNetCtlGetInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) finds the host's default route in `/proc/net/route` on Linux and, on macOS, in the routing table read with `sysctl(NET_RT_FLAGS, RTF_GATEWAY)`, where an interface-scoped default route ranks after the unscoped one
 - [sceNetCtlGetIfStat](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) throws on macOS: an unprivileged process reads the interface byte counters (`getifaddrs` and `sysctl(NET_RT_IFLIST2)` alike) reduced to their low 32 bits, so a total would wrap every 4 GiB
 - [Host interface cache](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - on Windows, `sceNetCtlGetState`, `sceNetCtlGetStateV6`, `sceNetCtlCheckCallback`, `sceNetCtlGetIfStat` and `sceNetCtlGetInfo` reuse the last host interface query until `NotifyUnicastIpAddressChange`, `NotifyIpInterfaceChange` or `NotifyRouteChange2` reports a change, instead of calling `GetAdaptersAddresses` on every call. A DNS server change with no address, interface or route change is seen only at the next such change. If the notifications cannot be registered, every call queries the host as before.
-
-
