@@ -253,7 +253,7 @@ bool recordCopiesOnCpu(const UnitShadow& shadow, const std::vector<SlabCopies>& 
         std::vector<VkBufferCopy> regions;
         for (const auto& region : entry.regions) {
             regions.push_back({region.srcOffset, offset, region.size});
-            pieces.push_back({shadow.importBase + region.dstOffset, offset, region.size});
+            pieces.push_back({shadow.importBase + region.dstOffset - shadow.importLead, offset, region.size});
             offset += region.size;
         }
         copyBuffer(commands, entry.slab->buffer, host->Handle(), static_cast<std::uint32_t>(regions.size()), regions.data());
