@@ -271,6 +271,29 @@ static void CheckInitParam() {
     Require(sceNetGetRandom(&randomOutput) == 0);
 }
 
+static void CheckIfFlags() {
+    std::uint32_t flags = 0x5a5a5a5a;
+    Require(sceNetConfigGetIfFlags(0, &flags) == 0);
+    Require(flags == 0x8049);
+    for (const std::uint32_t interfaceId : {1u, 4u, 10u, 0xffffffffu}) {
+        flags = 0x5a5a5a5a;
+        bool threw = false;
+        try {
+            sceNetConfigGetIfFlags(interfaceId, &flags);
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        Require(threw && flags == 0x5a5a5a5a);
+    }
+    bool threw = false;
+    try {
+        sceNetConfigGetIfFlags(0, nullptr);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw);
+}
+
 static void CheckNetMemory() {
     *sceNetErrnoLoc() = 33;
     for (const std::int32_t size : {0, -1, INT32_MIN}) {
@@ -1814,6 +1837,7 @@ int main() {
     CheckNetMemory();
     CheckNetstat();
     CheckEmptyEpoll();
+    CheckIfFlags();
     CheckDontWait();
     CheckAddressText(2, "127.0.0.1");
     CheckAddressText(2, "255.255.255.255");
