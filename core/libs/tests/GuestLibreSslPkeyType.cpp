@@ -1,13 +1,10 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <source_location>
 #include <stdexcept>
-
-extern "C" {
-int APS5_VABI EVP_PKEY_type_nid_postfix(int);
-}
 
 static void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (condition) return;

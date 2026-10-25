@@ -1,3 +1,4 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
 #include <stdexcept>
 #include <string>
 #include "prx/libc/include/General.hpp"
