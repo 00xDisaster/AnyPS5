@@ -61,6 +61,12 @@ def relink_unfenced(text, source, destination):
 
     while index < len(runs):
         opening = runs[index]
+        preceding = text[:opening.start()]
+        backslashes = len(preceding) - len(preceding.rstrip("\\"))
+        if backslashes % 2:
+            index += 1
+            continue
+
         closing_index = next(
             (i for i in range(index + 1, len(runs))
              if runs[i].group() == opening.group()),
@@ -94,7 +100,10 @@ def relink(text, source, destination):
             outside.clear()
 
     for line in text.splitlines(keepends=True):
-        marker = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})([^\r\n]*)", line)
+        if marker and marker.group(1).startswith("`") and "`" in marker.group(2):
+            marker = None
+
 
         if fence_char is None:
             if marker:
