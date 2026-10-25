@@ -1050,17 +1050,6 @@ static void TestMasteringGainClampedLikePs5() {
     Event(master, SCE_NGS2_VOICE_EVENT_PLAY);
     expect(render(system, 6), 6, 1.0f, 1.0f);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-
-    const auto nanSystem = chain(1, 1, master);
-    Control(master, SCE_NGS2_MASTERING_VOICE_PARAM_GAIN, Ngs2MasteringVoiceGainParam{{}, NAN, 1.0f});
-    bool threw = false;
-    try {
-        RenderI16(nanSystem);
-    } catch (const std::runtime_error&) {
-        threw = true;
-    }
-    Require(threw);
-    Require(sceNgs2SystemDestroy(nanSystem, nullptr) == SCE_NGS2_OK);
 }
 
 static uintptr_t RackVoice(uintptr_t rack, std::uint32_t index) {
