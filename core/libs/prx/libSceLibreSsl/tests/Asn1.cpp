@@ -11,6 +11,7 @@
 #include <exception>
 #include <limits>
 #include <span>
+#include <utility>
 #include <stdexcept>
 #include <vector>
 
@@ -51,6 +52,45 @@ void CheckConversion(int type, std::span<const unsigned char> input, std::span<c
         && value.flags == original.flags, "conversion preserves the input object");
     Require(std::equal(input.begin(), input.end(), storage.begin()), "conversion preserves the input bytes");
     free_nid_postfix(result);
+}
+
+constexpr std::uint64_t Asn1Error(int reason) {
+    return (std::uint64_t{13} << 24) | (std::uint64_t{0xfff} << 12) | static_cast<std::uint64_t>(reason);
+}
+
+void RequireConversionError(unsigned char** output, int type, const unsigned char* data, int length, int reason, const char* message) {
+    ERR_clear_error_nid_postfix();
+    Asn1String value{length, type, const_cast<unsigned char*>(data), 0};
+    const unsigned char* before = output ? *output : nullptr;
+    Require(ASN1_STRING_to_UTF8_nid_postfix(output, &value) == -1, message);
+    Require(!output || *output == before, "a failed conversion leaves the output alone");
+    Require(ERR_get_error_nid_postfix() == Asn1Error(reason) && ERR_get_error_nid_postfix() == 0, message);
+}
+
+void MalformedStrings() {
+    unsigned char sentinel = 0xab;
+    unsigned char* result = &sentinel;
+    constexpr unsigned char oddBmp[] = {0, 0x41, 0};
+    RequireConversionError(&result, 30, oddBmp, 3, 129, "odd BMPString length");
+    RequireConversionError(&result, 30, nullptr, 1, 129, "BMPString length is checked before the data");
+    constexpr unsigned char bmpSurrogate[] = {0, 0x41, 0xd8, 0};
+    RequireConversionError(&result, 30, bmpSurrogate, 4, 124, "BMPString surrogate");
+    constexpr unsigned char shortUniversal[] = {0, 0, 0, 0x41, 0};
+    RequireConversionError(&result, 28, shortUniversal, 5, 133, "UniversalString length not a multiple of four");
+    RequireConversionError(&result, 28, nullptr, 2, 133, "UniversalString length is checked before the data");
+    constexpr unsigned char universalBeyond[] = {0, 0x11, 0, 0};
+    RequireConversionError(&result, 28, universalBeyond, 4, 124, "UniversalString above U+10FFFF");
+    constexpr unsigned char universalSurrogate[] = {0, 0, 0xdc, 0};
+    RequireConversionError(&result, 28, universalSurrogate, 4, 124, "UniversalString surrogate");
+    constexpr unsigned char overlong[] = {0xc0, 0x80};
+    constexpr unsigned char truncated[] = {'A', 0xe2, 0x82};
+    constexpr unsigned char surrogate[] = {0xed, 0xa0, 0x80};
+    constexpr unsigned char beyond[] = {0xf5, 0x80, 0x80, 0x80};
+    constexpr unsigned char continuation[] = {0x80};
+    for (const auto& [data, length] : {std::pair{overlong, 2}, std::pair{truncated, 3}, std::pair{surrogate, 3},
+             std::pair{beyond, 4}, std::pair{continuation, 1}})
+        RequireConversionError(&result, 12, data, length, 134, "malformed UTF8String");
+    RequireConversionError(nullptr, 30, oddBmp, 3, 129, "a malformed string fails before the output is used");
 }
 
 void Accessors() {
@@ -175,12 +215,13 @@ void Strings() {
 
 std::size_t lastAllocationSize = 0;
 int allocationCount = 0;
+bool failAllocation = false;
 int freeCount = 0;
 
 void* APS5_VABI Allocate_nid_no_patch(std::size_t size) {
     lastAllocationSize = size;
     ++allocationCount;
-    return std::malloc(size);
+    return failAllocation ? nullptr : std::malloc(size);
 }
 
 void APS5_VABI Free_nid_no_patch(void* pointer) {
@@ -204,6 +245,20 @@ void Allocator() {
     constexpr unsigned char expected[] = {0xc3, 0xbf};
     CheckConversion(20, input, expected);
     Require(allocationCount == 1 && lastAllocationSize == 3 && freeCount == 1, "conversion uses the application allocator");
+    failAllocation = true;
+    unsigned char sentinel = 0xab;
+    unsigned char* result = &sentinel;
+    unsigned char latin[] = {0xff};
+    Asn1String converted{1, 20, latin, 0};
+    ERR_clear_error_nid_postfix();
+    Require(ASN1_STRING_to_UTF8_nid_postfix(&result, &converted) == -1 && result == &sentinel, "allocation failure of a converted string");
+    Require(ERR_get_error_nid_postfix() == Asn1Error(65) && ERR_get_error_nid_postfix() == 0, "one malloc failure for a converted string");
+    unsigned char utf8[] = {'A'};
+    Asn1String copied{1, 12, utf8, 0};
+    Require(ASN1_STRING_to_UTF8_nid_postfix(&result, &copied) == -1 && result == &sentinel, "allocation failure of a UTF8String copy");
+    Require(ERR_get_error_nid_postfix() == Asn1Error(65) && ERR_get_error_nid_postfix() == Asn1Error(65) && ERR_get_error_nid_postfix() == 0,
+        "ASN1_STRING_set and ASN1_mbstring_ncopy both report the malloc failure of a UTF8String copy");
+    failAllocation = false;
 }
 
 } // namespace
@@ -218,4 +273,5 @@ int main(int argc, char**) {
     Accessors();
     Integers();
     Strings();
+    MalformedStrings();
 }
