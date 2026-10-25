@@ -359,6 +359,39 @@ void PooledPlaneCopies(const Context& context, const WatchedBlock& first, const 
     ClearDepthSurfaces(context.device);
 }
 
+void SharedLayerRanges(const Context& context, const WatchedBlock& block) {
+    ClearDepthSurfaces(context.device);
+    auto resource = ArrayOver(block.Address());
+    resource.depthOrLastArray = 3;
+    const auto geometry = DescribeSurface(resource);
+    for (std::uint32_t layer = 0; layer < 4; ++layer) {
+        DepthSurfaceView(context, DepthTarget{block.Address() + geometry.GuestLayerOffset(layer), 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 1.0f, 0, 0});
+    }
+    DepthSurfaceView(context, DepthTarget{block.Address() + 16u * LayerBytes, 0, {Side, Side}, VK_FORMAT_D32_SFLOAT, 1.0f, 0, 0});
+    const auto sample = [&](std::uint32_t lastArray, std::uint32_t baseArray, std::uint32_t fromSlices, std::uint32_t intoCopy) {
+        auto range = resource;
+        range.depthOrLastArray = lastArray;
+        range.baseArray = baseArray;
+        imageToBufferCopies = 0;
+        bufferToImageCopies = 0;
+        const auto texture = DepthSurfaceTexture(context, words, range, components);
+        const auto when = "layers " + std::to_string(baseArray) + "-" + std::to_string(lastArray);
+        Require(texture != nullptr, "the 2D array over depth surfaces was not sampled through its depth planes for " + when);
+        if (imageToBufferCopies.load() != fromSlices || bufferToImageCopies.load() != intoCopy) {
+            throw std::runtime_error("sampling " + when + " of the depth surfaces recorded " + std::to_string(imageToBufferCopies.load()) + " depth surface copies and " + std::to_string(bufferToImageCopies.load()) + " plane copy fills, expected " + std::to_string(fromSlices) + " and " + std::to_string(intoCopy));
+        }
+        const auto view = texture->SampledViewRange(false);
+        Require(view.layers == lastArray + 1u - baseArray, "the view sampling " + when + " covers " + std::to_string(view.layers) + " layers, not the texture's own");
+        return texture;
+    };
+    sample(3, 0, 4, 1);
+    sample(2, 0, 0, 0);
+    sample(1, 0, 0, 0);
+    sample(2, 1, 0, 0);
+    sample(3, 0, 0, 0);
+    ClearDepthSurfaces(context.device);
+}
+
 void RunCubeGather(const Context& base, const WatchedBlock& block) {
     TextureDetiler detiler(base);
     auto context = base;
@@ -462,6 +495,7 @@ int main() {
                 WatchedBlock second;
                 PooledPlaneCopies(context, block, second);
             }
+            SharedLayerRanges(context, block);
             RunCubeGather(context, block);
             RunCubeTiledSlice(context, block);
         }
