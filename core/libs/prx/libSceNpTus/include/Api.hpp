@@ -45,7 +45,7 @@ int APS5_VABI sceNpTssGetStorageAsync(void);
 int APS5_VABI sceNpTssGetDataAsync(void);
 int APS5_VABI sceNpTusGetDataForCrossSaveVUser(void);
 int APS5_VABI sceNpTusGetDataForCrossSaveVUserAsync(void);
-int APS5_VABI sceNpTusGetMultiUserVariableForCrossSave(void);
+int APS5_VABI sceNpTusGetMultiUserVariableForCrossSave(int reqId, const std::uint64_t* targetAccountIdArray, std::int32_t slotId, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option);
 int APS5_VABI sceNpTusGetFriendsVariableA(void);
 int APS5_VABI sceNpTusGetFriendsVariableAAsync(void);
 int APS5_VABI sceNpTusGetFriendsVariableForCrossSave(void);
