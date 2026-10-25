@@ -1,3 +1,4 @@
+#include "prx/libSceJobManager/libSceJobManager.hpp"
 #include "SceTypes.hpp"
 #include <condition_variable>
 #include <cstdint>
@@ -114,10 +115,6 @@ int APS5_VABI sceAgcDriverDeleteEqEvent(KernelEqueue, int) {
     return 0;
 }
 
-void APS5_VABI _ZN3sce3Job10JobManagerC1Ev(void*);
-int APS5_VABI _ZN3sce3Job10JobManager10initializeEPvmjjjmPKNS1_12ConfigParamsE(void*, void*, std::uint64_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint64_t, const void*);
-int APS5_VABI _ZN3sce3Job10JobManager8shutdownEv(void*);
-void* APS5_VABI _ZN3sce3Job10JobManager27getSequenceFactoryInterfaceENS1_8PriorityE(void*, std::uint32_t);
 
 }
 
