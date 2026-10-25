@@ -2,6 +2,7 @@
 #define CORE_LIBS_PRX_LIBSCEAUDIOOUT_SRC_AUDIOOUT2INTERNAL_HPP
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <chrono>
 #include <cstddef>
@@ -116,6 +117,8 @@ struct AudioOut2Context {
     // Largest sample magnitude of the grains mixed since the last summary: the mixed signal's level.
     float summaryPeak = 0.0f;
     std::chrono::steady_clock::time_point summaryStart;
+    bool deviceBacked = false;
+    std::atomic<std::uint32_t> publishedQueueLevel{0};
 };
 
 // Mixes every port of the context that carries PCM data into out (stereo float, frames frames), summing
