@@ -1,3 +1,5 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
@@ -5,33 +7,6 @@
 #include <cstring>
 #include <source_location>
 #include <stdexcept>
-
-using SessionFunction = int (APS5_VABI*)(void*);
-using StringFunction = int (APS5_VABI*)(void*, void*);
-
-struct TestUiMethod {
-    char* name;
-    SessionFunction openSession;
-    StringFunction writeString;
-    SessionFunction flush;
-    StringFunction readString;
-    SessionFunction closeSession;
-    void* constructPrompt;
-};
-
-extern "C" {
-TestUiMethod* APS5_VABI UI_create_method_nid_postfix(char*);
-void APS5_VABI UI_destroy_method_nid_postfix(TestUiMethod*);
-int APS5_VABI UI_method_set_opener_nid_postfix(TestUiMethod*, SessionFunction);
-SessionFunction APS5_VABI UI_method_get_opener_nid_postfix(TestUiMethod*);
-int APS5_VABI UI_method_set_writer_nid_postfix(TestUiMethod*, StringFunction);
-StringFunction APS5_VABI UI_method_get_writer_nid_postfix(TestUiMethod*);
-int APS5_VABI UI_method_set_reader_nid_postfix(TestUiMethod*, StringFunction);
-StringFunction APS5_VABI UI_method_get_reader_nid_postfix(TestUiMethod*);
-int APS5_VABI UI_method_set_closer_nid_postfix(TestUiMethod*, SessionFunction);
-SessionFunction APS5_VABI UI_method_get_closer_nid_postfix(TestUiMethod*);
-void APS5_VABI free_nid_postfix(void*);
-}
 
 static int APS5_VABI Open(void*) { return 1; }
 static int APS5_VABI Close(void*) { return 2; }
@@ -56,7 +31,7 @@ static void InitializeHeap() {
 
 static void TestCreate() {
     char name[] = "title prompt";
-    TestUiMethod* method = UI_create_method_nid_postfix(name);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(name);
     Require(method != nullptr);
     Require(method->name != nullptr && method->name != name && !std::strcmp(method->name, "title prompt"));
     name[0] = 'X';
@@ -82,7 +57,7 @@ static void TestDestroy() {
 }
 
 static void TestSetOpener() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_set_opener_nid_postfix(method, Open) == 0 && method->openSession == Open);
     Require(!method->writeString && !method->readString && !method->closeSession && !method->flush && !method->constructPrompt);
     Require(UI_method_set_opener_nid_postfix(method, nullptr) == 0 && method->openSession == nullptr);
@@ -91,7 +66,7 @@ static void TestSetOpener() {
 }
 
 static void TestGetOpener() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_get_opener_nid_postfix(method) == nullptr);
     Require(UI_method_set_opener_nid_postfix(method, Open) == 0);
     Require(UI_method_get_opener_nid_postfix(method) == Open);
@@ -101,7 +76,7 @@ static void TestGetOpener() {
 }
 
 static void TestSetWriter() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_set_writer_nid_postfix(method, Write) == 0 && method->writeString == Write);
     Require(!method->openSession && !method->readString && !method->closeSession && !method->flush && !method->constructPrompt);
     Require(UI_method_set_writer_nid_postfix(method, nullptr) == 0 && method->writeString == nullptr);
@@ -110,7 +85,7 @@ static void TestSetWriter() {
 }
 
 static void TestGetWriter() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_get_writer_nid_postfix(method) == nullptr);
     Require(UI_method_set_writer_nid_postfix(method, Write) == 0);
     Require(UI_method_get_writer_nid_postfix(method) == Write);
@@ -120,7 +95,7 @@ static void TestGetWriter() {
 }
 
 static void TestSetReader() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_set_reader_nid_postfix(method, Read) == 0 && method->readString == Read);
     Require(!method->openSession && !method->writeString && !method->closeSession && !method->flush && !method->constructPrompt);
     Require(UI_method_set_reader_nid_postfix(method, nullptr) == 0 && method->readString == nullptr);
@@ -129,7 +104,7 @@ static void TestSetReader() {
 }
 
 static void TestGetReader() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_get_reader_nid_postfix(method) == nullptr);
     Require(UI_method_set_reader_nid_postfix(method, Read) == 0);
     Require(UI_method_get_reader_nid_postfix(method) == Read);
@@ -139,7 +114,7 @@ static void TestGetReader() {
 }
 
 static void TestSetCloser() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_set_closer_nid_postfix(method, Close) == 0 && method->closeSession == Close);
     Require(!method->openSession && !method->writeString && !method->readString && !method->flush && !method->constructPrompt);
     Require(UI_method_set_closer_nid_postfix(method, nullptr) == 0 && method->closeSession == nullptr);
@@ -148,7 +123,7 @@ static void TestSetCloser() {
 }
 
 static void TestGetCloser() {
-    TestUiMethod* method = UI_create_method_nid_postfix(nullptr);
+    LibreSslUiMethod* method = UI_create_method_nid_postfix(nullptr);
     Require(UI_method_get_closer_nid_postfix(method) == nullptr);
     Require(UI_method_set_closer_nid_postfix(method, Close) == 0);
     Require(UI_method_get_closer_nid_postfix(method) == Close);
