@@ -169,6 +169,9 @@ static void TestUserFxChain() {
 
     const auto custom = Voice(rack);
     Control(custom, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
+    const float initial = 1.0f;
+    for (unsigned index = 0; index < 2; ++index)
+        Control(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | index, Ngs2CustomVoiceUserFx2Param{{}, &initial, sizeof(initial)});
     Patch(custom, master);
     Event(custom, SCE_NGS2_VOICE_EVENT_PLAY);
 
@@ -301,6 +304,9 @@ static void TestCustomSampler() {
     Control(voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_PITCH, Ngs2SamplerVoicePitchParam{{}, 1.0f});
     const Ngs2VoiceParamHeader exitLoop{sizeof(Ngs2VoiceParamHeader), 0, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_EXIT_LOOP};
     Require(sceNgs2VoiceControl(voice, &exitLoop) == SCE_NGS2_OK);
+    const float initial = 1.0f;
+    for (unsigned index = 0; index < 2; ++index)
+        Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | index, Ngs2CustomVoiceUserFx2Param{{}, &initial, sizeof(initial)});
     Patch(voice, master);
     Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
 

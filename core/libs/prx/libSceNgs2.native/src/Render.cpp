@@ -464,22 +464,30 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
             voices.push_back(&voice);
         }
     }
-    if (system.jobManagers[0].handle != 0) RenderScheduled(system, voices, grain);
-    std::vector<std::vector<float>> mixes(numBufferInfo);
-    for (auto* voice : voices) {
-        RenderVoice(*voice, voices, grain, system.option.sample_rate);
-        if ((voice->rack->rackId != SCE_NGS2_RACK_ID_MASTERING && voice->rack->rackId != SCE_NGS2_RACK_ID_CUSTOM_MASTERING) || !voice->hasSamples || voice->KilledForRender()) continue;
-        auto& mix = OutputMix(mixes, bufferInfo, numBufferInfo, *voice, grain);
-        const std::uint32_t outputChannels = bufferInfo[voice->outputId].num_channels;
-        for (std::uint32_t channel = 0; channel < voice->channels; channel++) {
-            const bool lfe = channel == 3 && (voice->channels == 6 || voice->channels == 8);
-            const float level = lfe ? voice->lfeLevel : voice->fbwLevel;
-            for (std::uint32_t i = 0; i < grain; i++) mix[i * outputChannels + channel] += voice->samples[channel * grain + i] * level;
+    {
+        struct ProcessingScope {
+            Ngs2System& system;
+            bool previous;
+            explicit ProcessingScope(Ngs2System& value) : system(value), previous(value.processingVoices) { system.processingVoices = true; }
+            ~ProcessingScope() { system.processingVoices = previous; }
+        } processing(system);
+        if (system.jobManagers[0].handle != 0) RenderScheduled(system, voices, grain);
+        std::vector<std::vector<float>> mixes(numBufferInfo);
+        for (auto* voice : voices) {
+            RenderVoice(*voice, voices, grain, system.option.sample_rate);
+            if ((voice->rack->rackId != SCE_NGS2_RACK_ID_MASTERING && voice->rack->rackId != SCE_NGS2_RACK_ID_CUSTOM_MASTERING) || !voice->hasSamples || voice->KilledForRender()) continue;
+            auto& mix = OutputMix(mixes, bufferInfo, numBufferInfo, *voice, grain);
+            const std::uint32_t outputChannels = bufferInfo[voice->outputId].num_channels;
+            for (std::uint32_t channel = 0; channel < voice->channels; channel++) {
+                const bool lfe = channel == 3 && (voice->channels == 6 || voice->channels == 8);
+                const float level = lfe ? voice->lfeLevel : voice->fbwLevel;
+                for (std::uint32_t i = 0; i < grain; i++) mix[i * outputChannels + channel] += voice->samples[channel * grain + i] * level;
+            }
         }
-    }
-    for (std::uint32_t i = 0; i < numBufferInfo; i++) {
-        if (!mixes[i].empty()) WriteOutput(bufferInfo[i], mixes[i]);
-        else if (outputBytes[i] != 0) std::memset(bufferInfo[i].buffer, 0, outputBytes[i]);
+        for (std::uint32_t i = 0; i < numBufferInfo; i++) {
+            if (!mixes[i].empty()) WriteOutput(bufferInfo[i], mixes[i]);
+            else if (outputBytes[i] != 0) std::memset(bufferInfo[i].buffer, 0, outputBytes[i]);
+        }
     }
     for (auto* rack : system.racks) {
         for (auto& value : rack->voices) {

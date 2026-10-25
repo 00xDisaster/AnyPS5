@@ -146,10 +146,12 @@ void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
                 fx.work.resize(module.work_size);
                 fx.state.resize(option.module[m].state_size);
                 fx.flags = USER_FX2_FLAG_FIRST_PROCESS;
-                if (module.setup_handler == nullptr) continue;
-                auto context = UserFxContext(rack, m, i);
-                const int result = module.setup_handler(&context);
-                if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 setup handler failed with " + std::to_string(result));
+                if (module.setup_handler != nullptr) {
+                    auto context = UserFxContext(rack, m, i);
+                    const int result = module.setup_handler(&context);
+                    if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 setup handler failed with " + std::to_string(result));
+                }
+                fx.initialParam = fx.param;
             }
         } else if (option.module[m].module_id == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX) {
             for (std::uint32_t i = 0; i < rack.voices.size(); i++) {
@@ -171,11 +173,22 @@ void Ngs2CleanupUserFx(Ngs2Rack& rack) {
     }
 }
 
+void Ngs2ResetUserFx2(Ngs2Voice& voice) {
+    for (auto& fx : voice.userFx) {
+        std::copy(fx.initialParam.begin(), fx.initialParam.end(), fx.param.begin());
+        fx.controlParam.clear();
+        fx.configured = false;
+        fx.active = false;
+        fx.flags = USER_FX2_FLAG_FIRST_PROCESS;
+    }
+}
+
 static void SetupCustomSubmixer(Ngs2Voice& voice, const Ngs2CustomSubmixerVoiceSetupParam& setup) {
     if (setup.flags != 0) throw std::runtime_error("NGS2: custom submixer setup flags are not implemented");
     if (setup.num_input_channels != setup.num_output_channels) throw std::runtime_error("NGS2: custom submixer channel conversion is not implemented");
     if (setup.num_input_channels == 0 || setup.num_input_channels > voice.rack->maxChannels) APS5_INVALID_ARG_EX;
     if (Ngs2HasPitchShift(voice)) voice.ResetSetup();
+    else Ngs2ResetUserFx2(voice);
     voice.channels = setup.num_input_channels;
 }
 
@@ -186,6 +199,9 @@ static void SetUserFxParam(Ngs2Voice& voice, std::uint32_t index, const Ngs2Cust
     auto& fx = voice.userFx[index];
     if (param.data_size != fx.param.size() || (param.data == nullptr && param.data_size != 0)) APS5_INVALID_ARG_EX;
     if (param.data_size != 0) std::memcpy(fx.param.data(), param.data, param.data_size);
+    fx.controlParam = fx.param;
+    fx.configured = true;
+    fx.active = true;
     fx.flags |= USER_FX2_FLAG_PARAM_CHANGED;
 }
 
@@ -301,7 +317,7 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
         } else if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) {
             auto& fx = voice.userFx[m];
             const auto& module = voice.rack->userFx[m];
-            if (module.process_handler == nullptr) continue;
+            if (!fx.active || module.process_handler == nullptr) continue;
             Ngs2UserFx2ProcessContext context{channels.data(), voice.rack->userFxCommon[m].data(), fx.param.data(), fx.work.data(), fx.state.data(),
                                               module.user_data, voice.UserFxFlags(fx.flags), voice.channels, voice.channels, grain, sampleRate, 0, {}};
             const int result = module.process_handler(&context);

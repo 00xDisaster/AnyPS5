@@ -95,6 +95,9 @@ struct Ngs2Port {
 struct Ngs2UserFx2 {
     std::vector<std::uint8_t> param;
     std::vector<std::uint8_t> controlParam;
+    std::vector<std::uint8_t> initialParam;
+    bool configured = false;
+    bool active = false;
     std::vector<std::uint8_t> work;
     std::vector<std::uint8_t> state;
     std::uint32_t flags = 0;
@@ -235,6 +238,7 @@ struct Ngs2System {
     std::int64_t renderCount = 0;
     std::uint32_t renderDepth = 0;
     bool jobsExecuting = false;
+    bool processingVoices = false;
     std::uintptr_t userData = 0;
     std::vector<Ngs2Rack*> racks;
     std::atomic<std::uint64_t> callbackSequence{0};
@@ -264,6 +268,8 @@ private:
     std::uint32_t depth;
 };
 
+bool Ngs2ControlActive(const Ngs2System& system);
+bool Ngs2ControlActive(const Ngs2Rack& rack);
 bool Ngs2ExclusiveElsewhere();
 bool Ngs2SetJobWorker(bool active);
 bool Ngs2RenderingHere(const Ngs2System& system);
@@ -309,6 +315,7 @@ bool Ngs2ProcessReverb(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
 void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
 void Ngs2PublishSamplerState(Ngs2Voice& voice);
 void Ngs2ResetJobSchedulerOption(Ngs2JobSchedulerOption& option);
+void Ngs2ResetUserFx2(Ngs2Voice& voice);
 void Ngs2PrepareControlMix(Ngs2Voice& voice);
 void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);
 void Ngs2RenderSilence(const Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);

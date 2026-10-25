@@ -390,6 +390,7 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
         system = Ngs2FindSystem(system_handle);
     }
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    if (Ngs2ControlActive(*system)) throw std::runtime_error("NGS2: destroying a system from its UserFx2 control handler is not implemented");
     if (Ngs2RenderingHere(*system)) throw std::runtime_error("NGS2: destroying a system from its own render (a voice callback) is not implemented");
     while (!system->racks.empty()) {
         const int result = Ngs2DestroyRack(*system->racks.back(), nullptr);
@@ -508,6 +509,7 @@ int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBuffe
         system = Ngs2FindSystem(system_handle);
     }
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    if (Ngs2ControlActive(*system)) throw std::runtime_error("NGS2: rendering a system from its UserFx2 control handler is not implemented");
     if (num_buffer_info > 31) return SCE_NGS2_ERROR_INVALID_NUM_RENDER_BUFFERS;
     if (buffer_info == nullptr || num_buffer_info == 0) APS5_INVALID_ARG_EX;
     for (std::uint32_t i = 0; i < num_buffer_info; i++) {

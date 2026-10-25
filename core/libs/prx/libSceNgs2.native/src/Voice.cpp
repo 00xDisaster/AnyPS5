@@ -30,6 +30,35 @@ static void SendEvent(Ngs2Voice& voice, std::uint32_t eventId) {
     voice.SetEvent(eventId);
 }
 
+struct Ngs2ControlFrame;
+static thread_local Ngs2ControlFrame* currentControl = nullptr;
+
+struct Ngs2ControlFrame {
+    Ngs2Voice& voice;
+    Ngs2ControlFrame* previous;
+    explicit Ngs2ControlFrame(Ngs2Voice& value) : voice(value), previous(currentControl) { currentControl = this; }
+    ~Ngs2ControlFrame() { currentControl = previous; }
+    Ngs2ControlFrame(const Ngs2ControlFrame&) = delete;
+    Ngs2ControlFrame& operator=(const Ngs2ControlFrame&) = delete;
+};
+
+bool Ngs2ControlActive(const Ngs2System& system) {
+    for (auto* frame = currentControl; frame != nullptr; frame = frame->previous)
+        if (frame->voice.rack->system == &system) return true;
+    return false;
+}
+
+bool Ngs2ControlActive(const Ngs2Rack& rack) {
+    for (auto* frame = currentControl; frame != nullptr; frame = frame->previous)
+        if (frame->voice.rack == &rack) return true;
+    return false;
+}
+
+static void CheckControlReentry(const Ngs2Voice& voice) {
+    for (auto* frame = currentControl; frame != nullptr; frame = frame->previous)
+        if (&frame->voice == &voice) throw std::runtime_error("NGS2: same-voice reentry from a UserFx2 control handler is not implemented");
+}
+
 bool Ngs2Voice::IsSampler() const {
     return rack != nullptr && (rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER);
 }
@@ -63,7 +92,13 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
                 stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_INUSE;
                 if (userFxHandler) userFxFlags |= 3;
                 for (auto& fx : customUserFx) if (fx.handler) fx.flags |= 3;
-                for (auto& fx : userFx) fx.flags |= 3;
+                for (auto& fx : userFx) {
+                    if (fx.configured) {
+                        std::copy(fx.controlParam.begin(), fx.controlParam.end(), fx.param.begin());
+                        fx.active = true;
+                    }
+                    fx.flags |= 3;
+                }
             }
             break;
         case SCE_NGS2_VOICE_EVENT_STOP:
@@ -121,7 +156,7 @@ static void PublishPendingEvent(Ngs2Voice& voice, const Ngs2PendingControl& cont
 }
 
 static bool DeferringControls(const Ngs2Voice& voice) {
-    return voice.rack->system->jobsExecuting || !voice.pendingControls.empty();
+    return voice.rack->system->processingVoices || voice.rack->system->jobsExecuting || !voice.pendingControls.empty();
 }
 
 static void EnqueueControl(Ngs2Voice& voice, Ngs2PendingControl control) {
@@ -137,6 +172,7 @@ static bool DeferEvent(Ngs2Voice& voice, std::uint32_t event) {
 }
 
 void Ngs2Voice::ResetSetup() {
+    Ngs2ResetUserFx2(*this);
     ++waveformRevision;
     SetEvent(SCE_NGS2_VOICE_EVENT_STOP_IMM);
     Ngs2ResetPitchShift(*this);
@@ -206,13 +242,16 @@ static int ControlUserFx2(Ngs2Voice& voice, std::uint32_t index, const Ngs2Custo
     auto& fx = voice.userFx[index];
     const auto& module = voice.rack->userFx[index];
     if (value.data == nullptr && value.data_size != 0) APS5_INVALID_ARG_EX;
-    if (fx.controlParam.size() != fx.param.size()) fx.controlParam = fx.param;
+    if (!fx.configured) fx.controlParam = fx.param;
+    fx.configured = true;
     Ngs2UserFx2ControlContext context{value.data, value.data_size, voice.rack->userFxCommon[index].data(), fx.controlParam.data(), module.user_data, {}};
+    const Ngs2ControlFrame frame(voice);
     const int result = module.control_handler(&context);
     if (result < 0) return result;
     if (DeferringControls(voice)) EnqueueControl(voice, Ngs2UserFxControl{index, fx.controlParam});
     else {
         std::copy(fx.controlParam.begin(), fx.controlParam.end(), fx.param.begin());
+        fx.active = true;
         fx.flags |= 2;
     }
     return SCE_NGS2_OK;
@@ -274,6 +313,8 @@ static Ngs2PendingControl CaptureParamControl(Ngs2Voice& voice, const Ngs2VoiceP
             const auto* data = static_cast<const std::uint8_t*>(value.data);
             result.param.assign(data, data + value.data_size);
         }
+        voice.userFx[index].controlParam = result.param;
+        voice.userFx[index].configured = true;
         return result;
     }
     throw std::runtime_error("NGS2: this buffered voice parameter is not implemented");
@@ -328,6 +369,7 @@ void Ngs2Voice::ApplyPendingControls() {
             userFxFlags = value.handler ? 2 : 0;
         } else if constexpr (std::is_same_v<TValue, Ngs2UserFxControl>) {
             std::copy(value.param.begin(), value.param.end(), userFx[value.index].param.begin());
+            userFx[value.index].active = true;
             userFx[value.index].flags |= 2;
         } else Ngs2ApplyCustomParam(*this, value.header);
     }, control);
@@ -673,6 +715,7 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
         found = Ngs2FindVoice(voice_handle);
     }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     auto& voice = *found;
     for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
         if ((param->id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
@@ -722,6 +765,7 @@ int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCom
         found = Ngs2FindVoice(voice_handle);
     }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     auto& voice = *found;
     if (commands == nullptr && num_commands != 0) APS5_INVALID_ARG_EX;
     if (DeferringControls(voice)) {
@@ -758,6 +802,7 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
     const Ngs2Lock lock;
     auto* found = Ngs2FindVoice(voice_handle);
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     if (state_size < sizeof(Ngs2VoiceState)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     if (state == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     const auto& voice = *found;
@@ -824,6 +869,7 @@ int APS5_VABI sceNgs2VoiceGetPortInfo(uintptr_t voice_handle, uint32_t port, Ngs
         found = Ngs2FindVoice(voice_handle);
     }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     auto& voice = *found;
     const auto& source = PortAt(voice, port);
     auto volume = source.volume;
@@ -844,6 +890,7 @@ int APS5_VABI sceNgs2VoiceQueryInfo(uintptr_t voice_handle, uint32_t info_id, vo
     const Ngs2Lock lock;
     auto* found = Ngs2FindVoice(voice_handle);
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     const auto& voice = *found;
     switch (info_id) {
         case SCE_NGS2_VOICE_INFO_CHANNELS: {
@@ -860,6 +907,7 @@ int APS5_VABI sceNgs2VoiceGetStateFlags(uintptr_t voice_handle, uint32_t* state_
     const Ngs2Lock lock;
     const auto* found = Ngs2FindVoice(voice_handle);
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     *state_flags = found->pendingPlay ? SCE_NGS2_VOICE_STATE_FLAG_INUSE : found->stateFlags;
     return SCE_NGS2_OK;
 }
@@ -868,6 +916,7 @@ int APS5_VABI sceNgs2VoiceGetOwner(uintptr_t voice_handle, uintptr_t* owner_rack
     std::lock_guard lock(Ngs2Mutex());
     const auto* found = Ngs2FindVoice(voice_handle);
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     if (owner_rack == nullptr || voice_index == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     *owner_rack = reinterpret_cast<Ngs2Handle>(found->rack);
     *voice_index = static_cast<uint32_t>(found - found->rack->voices.data());
@@ -880,6 +929,7 @@ int APS5_VABI sceNgs2VoiceGetMatrixInfo(uintptr_t voice_handle, uint32_t matrix_
     const Ngs2Lock lock;
     const auto* found = Ngs2FindVoice(voice_handle);
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
+    CheckControlReentry(*found);
     if (matrix_id >= found->matrices.size()) APS5_INVALID_ARG_EX;
     const auto* levels = &found->matrices[matrix_id];
     for (const auto& control : found->pendingControls)
