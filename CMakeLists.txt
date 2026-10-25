@@ -55,6 +55,7 @@ endif()
 
 option(ANYPS5_ENABLE_SPIRV_TOOLS "Enable SPIRV-Tools validation and optimization" OFF)
 option(ANYPS5_ENABLE_ASAN "Build Linux targets with AddressSanitizer and use an ASan-compatible guest arena range" OFF)
+option(ANYPS5_ENABLE_TSAN "Build Linux targets with ThreadSanitizer" OFF)
 option(APS5_ENABLE_TIMING_LOG "Write frame timings asynchronously to frame-timing.log" OFF)
 option(APS5_ENABLE_TRACY "Build the Tracy profiler client and report performance timer scopes as Tracy zones" OFF)
 option(ANYPS5_USE_SYSTEM_DEPS "Resolve SDL2, freetype, Vulkan-Headers, SPIRV-Headers, glslang and SPIRV-Tools from the system instead of the bundled submodules" OFF)
@@ -74,6 +75,18 @@ if(NOT ANYPS5_CXX_LINKS_STANDARD_LIBRARY)
     message(FATAL_ERROR "The C++ compiler ${CMAKE_CXX_COMPILER} cannot link a program that uses the C++ standard library. "
         "Set CMAKE_CXX_COMPILER to the C++ driver (g++ or clang++, not gcc or clang) in a new build directory. "
         "Supported toolchains are listed in docs/dev/BUILD.md.")
+endif()
+
+if(ANYPS5_ENABLE_ASAN AND ANYPS5_ENABLE_TSAN)
+    message(FATAL_ERROR "ANYPS5_ENABLE_ASAN and ANYPS5_ENABLE_TSAN cannot be combined")
+endif()
+if(ANYPS5_ENABLE_TSAN)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "ANYPS5_ENABLE_TSAN is supported only on Linux")
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+        message(FATAL_ERROR "ANYPS5_ENABLE_TSAN requires GCC or Clang")
+    endif()
 endif()
 
 if(ANYPS5_ENABLE_ASAN)
