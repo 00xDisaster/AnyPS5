@@ -150,7 +150,6 @@ int CondOperations::SetName(PthreadCond* cond, const char* name) {
     const auto current = resolveLocked(cond);
     if (!current)
         return SCE_KERNEL_ERROR_EINVAL;
-    current->_name = name;
     return 0;
 }
 
