@@ -1,3 +1,4 @@
+#include "prx/libSceAudio3d/include/Audio3d.hpp"
 #include "SceTypes.hpp"
 #include <array>
 #include <bit>
@@ -7,9 +8,6 @@
 #include <cstring>
 #include <stdexcept>
 
-extern "C" void APS5_VABI sceAudio3dGetDefaultOpenParameters(Audio3dOpenParameters* parameters);
-extern "C" int APS5_VABI sceAudio3dInitialize(std::int64_t reserved);
-extern "C" const char* APS5_VABI sceAudio3dStrError(std::int32_t error);
 
 static_assert(sizeof(Audio3dOpenParameters) == 0x28);
 static_assert(offsetof(Audio3dOpenParameters, num_beds) == 0x20);
