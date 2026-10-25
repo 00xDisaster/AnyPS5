@@ -2066,16 +2066,22 @@ bool StorageTexture::Refresh() {
 }
 
 bool StorageTexture::RefreshLayers(std::uint32_t first, std::uint32_t count) {
-    if (count == 0 || geometry.thick || geometry.imageLayers <= 1 || first >= geometry.imageLayers || count > geometry.imageLayers - first || geometry.layerBytes == 0 || trackedLayerBytes == 0 || descriptor.dccAddress != 0) return Refresh();
+    const auto whole = [this] {
+        static_cast<void>(FlushDepthPlanes(descriptor.baseAddress, static_cast<std::size_t>(guestBytes)));
+        return Refresh();
+    };
+    if (count == 0 || geometry.thick || geometry.imageLayers <= 1 || first >= geometry.imageLayers || count > geometry.imageLayers - first || geometry.layerBytes == 0 || trackedLayerBytes == 0 || descriptor.dccAddress != 0) return whole();
     const auto begin = geometry.GuestLayerOffset(first);
     const auto end = geometry.GuestLayerOffset(first + count - 1) + geometry.layerBytes;
     const auto firstLayer = static_cast<std::uint32_t>(begin / trackedLayerBytes);
     const auto lastLayer = static_cast<std::uint32_t>(std::min<std::uint64_t>((end + trackedLayerBytes - 1) / trackedLayerBytes, trackedLayers));
-    if (firstLayer >= lastLayer || (firstLayer == 0 && lastLayer == trackedLayers)) return Refresh();
+    if (firstLayer >= lastLayer || (firstLayer == 0 && lastLayer == trackedLayers)) return whole();
     for (std::uint32_t layer = 0; layer < trackedLayers; ++layer) {
-        if (layerPending[layer] && (layer < firstLayer || layer >= lastLayer)) return Refresh();
+        if (layerPending[layer] && (layer < firstLayer || layer >= lastLayer)) return whole();
     }
-    if (pendingAlias() != nullptr) return Refresh();
+    if (pendingAlias() != nullptr) return whole();
+    const auto scopeBegin = layerBegin(firstLayer);
+    static_cast<void>(FlushDepthPlanes(scopeBegin, static_cast<std::size_t>(layerBegin(lastLayer - 1) + layerBytes(lastLayer - 1) - scopeBegin)));
     return refresh(firstLayer, lastLayer);
 }
 
@@ -3908,6 +3914,18 @@ void waitForIdlePublish(const char* reason) {
 bool StorageTexture::FlushPending(std::uint64_t address, std::size_t bytes, const StorageTexture* except, const char* reason, PublishScope scope, bool* published, bool waited) {
     static_cast<void>(FlushDepthPlanes(address, bytes));
     if (published != nullptr) *published = false;
+    const auto nothingToStore = [&] {
+        auto& pending = Pending();
+        if (pending.flushingCount.load(std::memory_order_acquire) != 0) return false;
+        if (!pending.textures.SurelyClear(address, bytes)) {
+            std::lock_guard lock(pending.mutex);
+            const auto* exempt = refreshing;
+            if (pending.textures.MayOverlap(address, bytes) && std::any_of(pending.textures.begin(), pending.textures.end(), [&](const StorageTexture* texture) { return texture != except && texture != exempt && texture->overlaps(address, bytes) && texture->pendingUnitInside(address, bytes); })) return false;
+            if (pending.flushingCount.load(std::memory_order_acquire) != 0) return false;
+        }
+        return scope == PublishScope::None || !AnyShadowedOverlaps(address, bytes);
+    };
+    if (nothingToStore()) return false;
     if (AgcDriver::DriverDetail::DrawPipeline::HeldReads(address, bytes)) {
         queuedReadHeld.fetch_add(1, std::memory_order_relaxed);
         return false;
