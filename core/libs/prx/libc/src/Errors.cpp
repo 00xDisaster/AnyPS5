@@ -5,6 +5,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
 #include <cstring>
+#include <stdexcept>
 
 namespace {
 // Guest FreeBSD errno numbering, not the host CRT's numbering.
@@ -69,13 +70,14 @@ char* APS5_VABI strerror_nid_postfix(int error) {
 }
 
 int APS5_VABI strerror_r_nid_postfix(int error, char* buffer, std::size_t length) {
+    if (length < 23) return 34;
+    if (!buffer) throw std::invalid_argument("strerror_r: a null buffer of 23 bytes or more, which the console writes through");
     const int saved = *__error_nid_postfix();
     char text[128];
     Describe(error, text);
     *__error_nid_postfix() = saved;
-    const auto required = std::strlen(text) + 1;
-    if (!buffer || length < required) return 34;
-    std::memcpy(buffer, text, required);
+    std::strncpy(buffer, text, length - 1);
+    buffer[length - 1] = '\0';
     return 0;
 }
 
