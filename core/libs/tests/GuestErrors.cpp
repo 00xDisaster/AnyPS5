@@ -58,40 +58,43 @@ int main() {
     Require(std::strcmp(parent, "Invalid argument") == 0);
     char buffer[128];
     for (int error = 0; error <= 96; ++error) {
-        Require(strerror_r_nid_postfix(error, buffer, sizeof(buffer)) == 0);
-        Require(std::strcmp(buffer, freebsd[error]) == 0);
         char coded[32];
         std::snprintf(coded, sizeof(coded), "error_code=0x%08x", static_cast<unsigned>(error));
         const char* expected = error == 0 ? "No error" : error < 95 ? freebsd[error] : coded;
+        Require(strerror_r_nid_postfix(error, buffer, sizeof(buffer)) == 0);
+        Require(std::strcmp(buffer, expected) == 0);
         Require(std::strcmp(strerror_nid_postfix(error), expected) == 0);
         Require(*__error_nid_postfix() == 13);
     }
-    Require(strerror_r_nid_postfix(-1, buffer, sizeof(buffer)) == 22);
-    Require(std::strcmp(buffer, "Unknown error: -1") == 0);
-    Require(*__error_nid_postfix() == 13);
-    struct UnknownError {
-        int error;
-        const char* text;
-        const char* coded;
-    };
-    for (const UnknownError& unknown : {UnknownError{97, "Unknown error: 97", "error_code=0x00000061"},
-                                        UnknownError{9999, "Unknown error: 9999", "error_code=0x0000270f"},
-                                        UnknownError{INT_MAX, "Unknown error: 2147483647", "error_code=0x7fffffff"},
-                                        UnknownError{-1, "Unknown error: -1", "error_code=0xffffffff"},
-                                        UnknownError{INT_MIN, "Unknown error: -2147483648", "error_code=0x80000000"}}) {
-        Require(strerror_r_nid_postfix(unknown.error, buffer, sizeof(buffer)) == 22);
-        Require(std::strcmp(buffer, unknown.text) == 0);
+    for (const int error : {97, 100, 1000, 9999, INT_MAX, -1, INT_MIN}) {
+        char coded[32];
+        std::snprintf(coded, sizeof(coded), "error_code=0x%08x", static_cast<unsigned>(error));
+        Require(strerror_r_nid_postfix(error, buffer, sizeof(buffer)) == 0);
+        Require(std::strcmp(buffer, coded) == 0);
         Require(*__error_nid_postfix() == 13);
-        Require(std::strcmp(strerror_nid_postfix(unknown.error), unknown.coded) == 0);
+        Require(std::strcmp(strerror_nid_postfix(error), coded) == 0);
         Require(*__error_nid_postfix() == 13);
     }
-    char sentinel[] = "xyz";
-    Require(strerror_r_nid_postfix(22, sentinel, 1) == 34);
-    Require(sentinel[0] == 0 && sentinel[1] == 'y');
-    sentinel[0] = 'x';
-    Require(strerror_r_nid_postfix(22, sentinel, 0) == 34 && sentinel[0] == 'x');
+    struct ShortBuffer {
+        int error;
+        const char* text;
+    };
+    for (const ShortBuffer& entry : {ShortBuffer{0, "No error"}, ShortBuffer{22, "Invalid argument"},
+                                     ShortBuffer{95, "error_code=0x0000005f"}, ShortBuffer{-1, "error_code=0xffffffff"}}) {
+        const std::size_t required = std::strlen(entry.text) + 1;
+        for (const std::size_t length : {std::size_t{0}, std::size_t{1}, std::size_t{5}, required - 1}) {
+            char canary[64];
+            std::memset(canary, 0xcc, sizeof(canary));
+            Require(strerror_r_nid_postfix(entry.error, canary, length) == 34);
+            for (const char byte : canary) Require(static_cast<unsigned char>(byte) == 0xcc);
+            Require(*__error_nid_postfix() == 13);
+        }
+        char exact[64];
+        std::memset(exact, 0xcc, sizeof(exact));
+        Require(strerror_r_nid_postfix(entry.error, exact, required) == 0);
+        Require(std::strcmp(exact, entry.text) == 0);
+        Require(static_cast<unsigned char>(exact[required]) == 0xcc);
+    }
     Require(strerror_r_nid_postfix(22, nullptr, 0) == 34);
-    char truncated[4];
-    Require(strerror_r_nid_postfix(97, truncated, sizeof(truncated)) == 22 && std::strcmp(truncated, "Unk") == 0);
-    Require(strerror_r_nid_postfix(-1, truncated, sizeof(truncated)) == 22 && std::strcmp(truncated, "Unk") == 0);
+    Require(strerror_r_nid_postfix(22, nullptr, sizeof(buffer)) == 34);
 }

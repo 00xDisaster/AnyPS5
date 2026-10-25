@@ -1,5 +1,6 @@
 #include "prx/libc/include/WindowsFormatting.hpp"
 #include "prx/libc/include/Api.hpp"
+#include "prx/libc/include/ErrorMessages.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/SonyCrt.hpp"
 #include <cerrno>
@@ -10,7 +11,6 @@
 #include <cstring>
 #include <limits>
 #include <mutex>
-#include <stdexcept>
 
 extern "C" void APS5_VABI ignore_handler_s_nid_postfix(const char* message, void* pointer, int error) {
     SonyIgnoreHandlerS(message, pointer, error);
@@ -41,8 +41,7 @@ extern "C" int APS5_VABI wcscpy_s_nid_postfix(std::uint16_t* dest, std::size_t s
 namespace {
 
 std::size_t ReadErrorMessage(int error, char (&message)[128]) {
-    const int result = strerror_r_nid_postfix(error, message, sizeof(message));
-    if (result != 0 && result != 22) throw std::runtime_error("strerror_s: error message exceeds internal buffer");
+    FreeBsdErrorMessage_nid_no_patch(error, message, sizeof(message));
     return std::strlen(message);
 }
 

@@ -60,12 +60,13 @@ void CheckMessages() {
     CheckMessage(2, "No such file or directory");
     CheckMessage(11, "Resource deadlock avoided");
     CheckMessage(35, "Resource temporarily unavailable");
+    CheckMessage(95, "State not recoverable");
     CheckMessage(96, "Previous owner died");
     CheckMessage(-1, "Unknown error: -1");
     CheckMessage(97, "Unknown error: 97");
     CheckMessage(std::numeric_limits<int>::min(), "Unknown error: -2147483648");
     CheckMessage(std::numeric_limits<int>::max(), "Unknown error: 2147483647");
-    for (int error = 0; error < 97; ++error) {
+    for (int error = 1; error < 95; ++error) {
         char expected[128];
         Require(strerror_r_nid_postfix(error, expected, sizeof(expected)) == 0, "existing guest error table");
         CheckMessage(error, expected);
