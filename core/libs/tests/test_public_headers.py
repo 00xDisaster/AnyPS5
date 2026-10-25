@@ -186,8 +186,16 @@ def compile_headers(compiler, compiler_args, groups, workers=4):
             if forbidden:
                 raise RuntimeError(f"Public headers depend on 3rdparty: {group}\n" + "\n".join(map(str, forbidden)))
 
+    errors = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(compile_one, groups))
+        futures = [(group, pool.submit(compile_one, group)) for group in groups]
+        for group, future in futures:
+            try:
+                future.result()
+            except Exception as error:
+                errors.append(f"{group}: {error}")
+    if errors:
+        raise RuntimeError(f"{len(errors)} header compilation units failed:\n\n" + "\n\n".join(errors))
 
 
 def main():
