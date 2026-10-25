@@ -32,8 +32,8 @@ LATER_FUNCTION = 0x300
 def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False, data_pointer=False, gap_entry=False,
             plt_at=None, early_function=False, function_tls=False, pointer_target=None, gap_bytes=None, functions=None,
             tls=False, gap_embedded_data=False, gap_data_then_syscall=False, gap_callback_syscall_undecodable=False,
-            gap_decoded_padding_syscall=False):
-    has_gap_embedded = gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall
+            gap_decoded_padding_syscall=False, gap_stub_then_data=False):
+    has_gap_embedded = gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall or gap_stub_then_data
     plt = (LATER_FUNCTION + FUNCTION_SIZE + gap if has_gap_embedded else FUNCTION + FUNCTION_SIZE + gap) if plt_at is None else plt_at
     entry = FUNCTION + FUNCTION_SIZE if gap_entry else FUNCTION
     data = plt + 0x20 if plt > FUNCTION else FUNCTION + FUNCTION_SIZE
@@ -104,7 +104,7 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
         image[entry:entry + len(UNSUPPORTED_TLS)] = UNSUPPORTED_TLS
     if function_tls:
         image[FUNCTION:FUNCTION + len(UNSUPPORTED_TLS)] = UNSUPPORTED_TLS
-    if gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall:
+    if gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall or gap_stub_then_data:
         table = FUNCTION + FUNCTION_SIZE + 0x10
         image[FUNCTION:FUNCTION + 3] = b"\x48\x8d\x05"
         struct.pack_into("<iB", image, FUNCTION + 3, table - (FUNCTION + 7), 0xC3)
@@ -120,6 +120,9 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
         elif gap_decoded_padding_syscall:
             image[table:table + 13] = b"\x0f\x78\xcc\xb8\x09\x00\x00\x00\x0f\x05\x00\x01\x90"
             image[table + 13:LATER_FUNCTION] = b"\x90" * (LATER_FUNCTION - (table + 13))
+        elif gap_stub_then_data:
+            image[table:table + 15] = b"\x0f\x78\xcc\xb8\x09\x00\x00\x00\x0f\x05\xc3\x0f\x78\x33\x1e"
+            image[table + 15:LATER_FUNCTION] = b"\x90" * (LATER_FUNCTION - (table + 15))
         else:
             image[table:LATER_FUNCTION] = b"\x0f\x78\x33\x1e" * ((LATER_FUNCTION - table) // 4)
         image[data:data + 0x30] = b"\x90" * 0x30
@@ -247,6 +250,9 @@ def main():
             for name, sce_block in (("sce", True), ("sysv", False)):
                 run(relinker, work, name + "-gap-decoded-padding-syscall-" + target,
                     fixture(sce_block=sce_block, gap_decoded_padding_syscall=True),
+                    "Forbidden syscall instruction", target=target)
+                run(relinker, work, name + "-gap-stub-then-data-" + target,
+                    fixture(sce_block=sce_block, gap_stub_then_data=True),
                     "Forbidden syscall instruction", target=target)
             run(relinker, work, "gap-data-then-syscall-" + target,
                 fixture(sce_block=False, gap_data_then_syscall=True), "Forbidden syscall instruction", target=target)

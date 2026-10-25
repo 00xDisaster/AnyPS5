@@ -155,13 +155,15 @@ public:
             const auto next = pos + info.Length;
             const bool isSyscall = IsForbiddenSyscallInstruction(code, pos, info);
             syscalls[pos] = isSyscall || syscalls[next];
+            if (EndsControlFlow(info, isSyscall)) {
+                trailing[pos] = Trailing::Terminator;
+                continue;
+            }
             if (trailing[next] != Trailing::Padding) {
                 trailing[pos] = trailing[next];
                 continue;
             }
-            trailing[pos] = nop || code[pos] == 0xcc || code[pos] == 0x00
-                ? Trailing::Padding
-                : (EndsControlFlow(info, isSyscall) ? Trailing::Terminator : Trailing::NonTerminator);
+            trailing[pos] = nop || code[pos] == 0xcc || code[pos] == 0x00 ? Trailing::Padding : Trailing::NonTerminator;
         }
     }
 

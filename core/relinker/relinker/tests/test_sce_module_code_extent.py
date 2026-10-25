@@ -115,10 +115,10 @@ def unwind_table_multiple(text, base, functions, header, frame):
 
 
 def sce_module(gap_embedded_data=False, gap_data_then_syscall=False, gap_callback_syscall_undecodable=False,
-               gap_decoded_padding_syscall=False):
+               gap_decoded_padding_syscall=False, gap_stub_then_data=False):
     image = bytearray(0xC00)
     tags = [(0x61000035, 0), (0x61000037, 1), (0x61000039, 0x20), (0x6100003B, 24), (0x6100003F, 24), (0, 0)]
-    has_gap = gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall
+    has_gap = gap_embedded_data or gap_data_then_syscall or gap_callback_syscall_undecodable or gap_decoded_padding_syscall or gap_stub_then_data
     headers = [
         (PT_LOAD, 5, 0x400, 0x1000, 0x100, 0x100, 0x100),
         (PT_LOAD, 6, 0x600, 0x2000, 0x400, 0x400, 0x100),
@@ -147,6 +147,9 @@ def sce_module(gap_embedded_data=False, gap_data_then_syscall=False, gap_callbac
         elif gap_decoded_padding_syscall:
             text[table:table + 13] = b"\x0f\x78\xcc\xb8\x09\x00\x00\x00\x0f\x05\x00\x01\x90"
             text[table + 13:0x40] = b"\x90" * (0x40 - (table + 13))
+        elif gap_stub_then_data:
+            text[table:table + 15] = b"\x0f\x78\xcc\xb8\x09\x00\x00\x00\x0f\x05\xc3\x0f\x78\x33\x1e"
+            text[table + 15:0x40] = b"\x90" * (0x40 - (table + 15))
         else:
             text[table:0x40] = b"\x0f\x78\x33\x1e" * 8
         text[0x40:0x48] = b"\xc3" + b"\x90" * 7
@@ -197,6 +200,7 @@ def main():
             run_module(relinker, work, "sce-module-gap-data-then-syscall-" + system, sce_module(gap_data_then_syscall=True), flags, "Forbidden syscall instruction")
             run_module(relinker, work, "sce-module-gap-callback-syscall-" + system, sce_module(gap_callback_syscall_undecodable=True), flags, "Forbidden syscall instruction")
             run_module(relinker, work, "sce-module-gap-decoded-padding-syscall-" + system, sce_module(gap_decoded_padding_syscall=True), flags, "Forbidden syscall instruction")
+            run_module(relinker, work, "sce-module-gap-stub-then-data-" + system, sce_module(gap_stub_then_data=True), flags, "Forbidden syscall instruction")
     print("SCE module code extent tests passed")
 
 

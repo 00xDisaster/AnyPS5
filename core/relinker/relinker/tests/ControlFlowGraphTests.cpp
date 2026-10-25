@@ -522,6 +522,29 @@ void CheckDecodedPaddingSuffix() {
     Require(tables[0].Begin == TextAddress + 0x10 && tables[0].End == TextAddress + 0x12, "Mask extended over the syscall after a decoded padding suffix");
 }
 
+void CheckStubBeforeUndecodableData() {
+    Bytes text(0x38, 0x90);
+    text[0] = 0x48;
+    text[1] = 0x8d;
+    text[2] = 0x05;
+    SetDisplacement(text, 3, 7, TextAddress + 0x10);
+    text[7] = 0xc3;
+    for (std::size_t i = 8; i < 0x10; ++i) text[i] = 0xcc;
+    static constexpr std::uint8_t suffix[]{
+        0x0f, 0x78, 0xcc, 0xb8, 0x09, 0x00, 0x00, 0x00,
+        0x0f, 0x05, 0xc3, 0x0f, 0x78, 0x33, 0x1e
+    };
+    std::memcpy(text.data() + 0x10, suffix, sizeof(suffix));
+    const std::vector<std::pair<VirtualAddress, VirtualAddress>> functions{
+        {TextAddress, TextAddress + 8},
+        {TextAddress + text.size(), TextAddress + text.size() + 8}
+    };
+    const auto tables = Relinker::FindRelativeJumpTables(text, TextAddress, functions);
+    Require(tables.size() == 1, "Expected one data table before a syscall stub followed by undecodable data");
+    Require(tables[0].Begin == TextAddress + 0x10, "Data table start before a syscall stub was incorrect");
+    Require(tables[0].End <= TextAddress + 0x13, "Mask covered the syscall stub before undecodable data");
+}
+
 void CheckLargeZeroGaps() {
     constexpr std::size_t stride = 0x10000;
     constexpr std::size_t count = 32;
@@ -583,6 +606,7 @@ int main() {
         CheckRelativeJumpTables();
         CheckEmbeddedDataTables();
         CheckDecodedPaddingSuffix();
+        CheckStubBeforeUndecodableData();
         CheckLargeZeroGaps();
         std::cout << "Control-flow graph tests passed\n";
         return 0;
