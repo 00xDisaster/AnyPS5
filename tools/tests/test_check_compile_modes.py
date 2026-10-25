@@ -178,7 +178,7 @@ class CheckCompileModeTests(unittest.TestCase):
         self.check_forwarded_options((("-Xpreprocessor", "-E"), ("-Xpreprocessor", "-M")))
 
     def test_comma_forwarded_preprocessor_actions_are_rejected(self):
-        self.check_forwarded_options((("-Wp,-E",), ("-Wp,-M,forwarded.d",)))
+        self.check_forwarded_options((("-Wp,-E",), ("-Wp,-E,-P",)))
 
     def test_include_directory_values_can_look_like_modes(self):
         def configure(root, build, source):
@@ -186,6 +186,17 @@ class CheckCompileModeTests(unittest.TestCase):
             directory.mkdir()
             (directory / "only_here.h").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
             return ["-I", "-E"], '#include "only_here.h"\n#ifndef FROM_INCLUDE\n#error include lost\n#endif\n', ""
+        self.check_modes(((),), configure=configure)
+
+    def test_forwarded_macro_options_are_preserved(self):
+        self.check_modes((("-Wp,-DOTHER=1,-UUNUSED",),))
+
+    def test_forwarded_include_operands_can_look_like_modes(self):
+        def configure(root, build, source):
+            directory = build / "-E"
+            directory.mkdir()
+            (directory / "forwarded.h").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
+            return ["-Wp,-I,-E"], '#include "forwarded.h"\n#ifndef FROM_INCLUDE\n#error include lost\n#endif\n', ""
         self.check_modes(((),), configure=configure)
 
     def test_library_directory_values_can_look_like_modes(self):
