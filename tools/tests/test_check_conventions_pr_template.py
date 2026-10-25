@@ -111,7 +111,20 @@ class PullRequestTemplateTests(unittest.TestCase):
         checklist = "- [x] Depends on: none\n- [x] AI-assisted: yes\n"
         self.assert_findings(body(checklist, what="<!-- nothing -->"), ["fill the '### What' section"])
         self.assert_findings(body(checklist, tested="  \n"), ["fill the '### Tested' section"])
-        self.assert_findings(body(checklist).replace("### What", "#### What"), ["add the '### What' heading of the template"])
+        self.assert_findings(body(checklist).replace("### What", "#### What"),
+                             ["add the '### What' heading of the template; found '#### What'"])
+
+    def test_a_heading_at_another_level_or_case_is_named(self):
+        checklist = "- [x] Depends on: none\n- [x] AI-assisted: yes\n"
+        cases = {
+            "## What": "add the '### What' heading of the template; found '## What'",
+            "  ### what  ": "add the '### What' heading of the template; found '### what'",
+            "#WHAT": "add the '### What' heading of the template; found '#WHAT'",
+        }
+        for heading, finding in cases.items():
+            with self.subTest(heading=heading):
+                self.assert_findings(body(checklist).replace("### What", heading), [finding])
+        self.assert_findings(body(checklist).replace("### What", "### Whatever"), ["add the '### What' heading of the template"])
 
     def test_a_body_without_template_headings_names_each_heading(self):
         text = "What\nFix x.\n\nTested\nNot tested.\n\nChecklist\n- [x] Depends on: none\n- [x] AI-assisted: yes\n"
