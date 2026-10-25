@@ -1,29 +1,11 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libkernel/Pthread/include/Rwlock.hpp"
 #include "SceTypes.hpp"
 #include <cstdio>
 #include <exception>
 #include <initializer_list>
 #include <stdexcept>
 #include <string_view>
-
-extern "C" {
-int APS5_VABI pthread_mutex_init_nid_postfix(PthreadMutex* mutex, const PthreadMutexattr* attr);
-int APS5_VABI pthread_mutex_lock_nid_postfix(PthreadMutex* mutex);
-int APS5_VABI pthread_mutex_unlock_nid_postfix(PthreadMutex* mutex);
-int APS5_VABI pthread_mutex_destroy_nid_postfix(PthreadMutex* mutex);
-int APS5_VABI pthread_mutexattr_init_nid_postfix(PthreadMutexattr* attr);
-int APS5_VABI pthread_mutexattr_destroy_nid_postfix(PthreadMutexattr* attr);
-int APS5_VABI pthread_mutexattr_gettype_nid_postfix(const PthreadMutexattr* attr, int* type);
-int APS5_VABI scePthreadMutexattrSetkind(PthreadMutexattr* attr, int kind);
-int APS5_VABI scePthreadMutexattrGetkind(PthreadMutexattr attr);
-int APS5_VABI pthread_rwlock_init_nid_postfix(PthreadRwlock* rwlock, const PthreadRwlockattr* attr);
-int APS5_VABI pthread_rwlock_wrlock_nid_postfix(PthreadRwlock* rwlock);
-int APS5_VABI pthread_rwlock_unlock_nid_postfix(PthreadRwlock* rwlock);
-int APS5_VABI pthread_rwlock_destroy_nid_postfix(PthreadRwlock* rwlock);
-int APS5_VABI pthread_rwlockattr_init_nid_postfix(PthreadRwlockattr* attr);
-int APS5_VABI pthread_rwlockattr_destroy_nid_postfix(PthreadRwlockattr* attr);
-int APS5_VABI pthread_rwlockattr_settype_np_nid_postfix(PthreadRwlockattr* attr, int type);
-int APS5_VABI scePthreadRwlockattrSettype(PthreadRwlockattr* attr, int type);
-}
 
 namespace {
 
