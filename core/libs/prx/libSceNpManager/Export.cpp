@@ -358,9 +358,8 @@ int APS5_VABI sceNpIsPlusMember(int, bool* isMember) {
     *isMember = false;
     return 0;
 }
-int APS5_VABI sceNpManagerIntAbortRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpManagerIntAbortRequest(int reqId) {
+    return sceNpAbortRequest(reqId);
 }
 int APS5_VABI sceNpManagerIntAddActiveSigninStateCallback(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -435,16 +434,14 @@ int APS5_VABI sceNpManagerIntCreateLoginRequest(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntCreateRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return AddRequest();
 }
 int APS5_VABI sceNpManagerIntDeleteLoginContext(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceNpManagerIntDeleteRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpManagerIntDeleteRequest(int reqId) {
+    return sceNpDeleteRequest(reqId);
 }
 int APS5_VABI sceNpManagerIntGetAccessTokenViaImplicitFlow(void) {
     NotImplemented_nid_no_patch(__func__);

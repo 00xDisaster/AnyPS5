@@ -242,6 +242,32 @@ void CheckIdMapperRequestLifecycle() {
     Require(sceNpIdMapperDeleteRequest(second) == RequestNotFound, "second delete of an IdMapper request");
 }
 
+void CheckManagerIntRequestLifecycle() {
+    const int first = sceNpManagerIntCreateRequest();
+    const int second = sceNpManagerIntCreateRequest();
+    Require(first > 0 && second > first, "sceNpManagerIntCreateRequest must return increasing positive request ids");
+    const int shared = sceNpCreateRequest();
+    Require(shared > second, "NpManagerInt request ids must come from the NP request pool");
+    Require(sceNpDeleteRequest(shared) == 0, "sceNpDeleteRequest failed after NpManagerInt requests");
+    Require(sceNpManagerIntAbortRequest(first) == 0, "abort on a live NpManagerInt request");
+    Require(sceNpManagerIntAbortRequest(first) == 0, "abort must leave the NpManagerInt request live");
+    Require(sceNpManagerIntDeleteRequest(first) == 0, "delete after abort on an NpManagerInt request");
+    const int unknownIds[] = {0, -1, 0x7fffffff, first, shared};
+    for (const int id : unknownIds) {
+        Require(sceNpManagerIntAbortRequest(id) == RequestNotFound, "NpManagerInt abort must reject an absent or deleted id");
+        Require(sceNpManagerIntDeleteRequest(id) == RequestNotFound, "NpManagerInt delete must reject an absent or deleted id");
+    }
+    int many[64];
+    for (int& id : many) {
+        id = sceNpManagerIntCreateRequest();
+        Require(id > second, "sceNpManagerIntCreateRequest must keep returning new request ids");
+    }
+    for (const int id : many) Require(sceNpManagerIntDeleteRequest(id) == 0, "deleting each NpManagerInt request");
+    for (const int id : many) Require(sceNpManagerIntAbortRequest(id) == RequestNotFound, "abort after delete");
+    Require(sceNpManagerIntDeleteRequest(second) == 0, "delete the second NpManagerInt request");
+    Require(sceNpManagerIntDeleteRequest(second) == RequestNotFound, "second delete of an NpManagerInt request");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -401,6 +427,7 @@ int main() {
     CheckRequestTimeouts();
     CheckAsyncRequestLifecycle();
     CheckIdMapperRequestLifecycle();
+    CheckManagerIntRequestLifecycle();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));
