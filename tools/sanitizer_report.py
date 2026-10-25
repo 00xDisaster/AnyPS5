@@ -6,6 +6,7 @@ from pathlib import Path
 
 FAILED_STATUSES = ("fail", "notrun")
 SKIPPED_STATUSES = ("disabled",)
+CTEST_SKIP = re.compile(r"SKIP_RETURN_CODE=\d+|SKIP_REGULAR_EXPRESSION_MATCHED", re.IGNORECASE)
 SANITIZERS = ("address", "undefined", "thread")
 REPORT_LINES = (
     re.compile(r"SUMMARY: \w+Sanitizer: .*"),
@@ -24,9 +25,11 @@ def results(path):
         name = case.get("name")
         if not name:
             raise ValueError(f"{path}: testcase has no name")
-        if case.find("skipped") is not None or case.get("status") in SKIPPED_STATUSES:
+        skipped, status = case.find("skipped"), case.get("status")
+        reason = (skipped.get("message") or "").strip() if skipped is not None else ""
+        if status in SKIPPED_STATUSES or (skipped is not None and (CTEST_SKIP.fullmatch(reason) or status not in FAILED_STATUSES)):
             outcome = "skipped"
-        elif case.get("status") in FAILED_STATUSES or case.find("failure") is not None or case.find("error") is not None:
+        elif status in FAILED_STATUSES or case.find("failure") is not None or case.find("error") is not None:
             outcome = "failed"
         else:
             outcome = "passed"
