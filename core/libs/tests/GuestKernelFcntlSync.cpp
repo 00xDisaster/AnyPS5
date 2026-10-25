@@ -40,10 +40,11 @@ void Toggle(const std::string& path) {
     Require((fcntl_nid_postfix(file, GetFlags) & Synchronous) != 0);
     before = Synced();
     Require(write_nid_postfix(file, "b", 1) == 1 && Synced() == before + 1);
-    const KernelIovec vectors[] = {{"c", 1}, {"d", 1}};
+    char c[] = "c", d[] = "d", y[] = "y", z[] = "z";
+    const KernelIovec vectors[] = {{c, 1}, {d, 1}};
     Require(writev_nid_postfix(file, vectors, 2) == 2 && Synced() == before + 2);
     Require(pwrite_nid_disambig1_nid_postfix(file, "x", 1, 10) == 1 && Synced() == before + 3);
-    const KernelIovec tail[] = {{"y", 1}, {"z", 1}};
+    const KernelIovec tail[] = {{y, 1}, {z, 1}};
     Require(pwritev_nid_postfix(file, tail, 2, 11) == 2 && Synced() == before + 4);
 
     const int duplicate = dup_nid_postfix(file);
