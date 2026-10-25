@@ -1603,21 +1603,6 @@ int APS5_VABI X509_STORE_add_lookup_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI X509_STORE_free_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI X509_STORE_new_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI X509_STORE_set_flags_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI X509_VERIFY_PARAM_set1_host_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;

@@ -9,6 +9,38 @@ struct Asn1String {
     std::int64_t flags;
 };
 
+struct LibreSslX509VerifyParamId {
+    void* hosts;
+    std::uint32_t hostFlags;
+    char* peerName;
+    char* email;
+    std::uint64_t emailLength;
+    unsigned char* ip;
+    std::uint64_t ipLength;
+};
+
+struct LibreSslX509VerifyParam {
+    char* name;
+    std::int64_t checkTime;
+    std::uint64_t inheritanceFlags;
+    std::uint64_t flags;
+    std::int32_t purpose;
+    std::int32_t trust;
+    std::int32_t depth;
+    void* policies;
+    LibreSslX509VerifyParamId* id;
+};
+
+struct LibreSslX509Store {
+    std::int32_t cache;
+    void* objects;
+    void* lookupMethods;
+    LibreSslX509VerifyParam* param;
+    void* callbacks[11];
+    void* exData;
+    std::int32_t references;
+};
+
 inline constexpr int MaxRounds = 14;
 
 struct AesKey {
@@ -380,9 +412,9 @@ int APS5_VABI X509_STORE_CTX_set_error_nid_postfix(void);
 int APS5_VABI X509_STORE_add_cert_nid_postfix(void);
 int APS5_VABI X509_STORE_add_crl_nid_postfix(void);
 int APS5_VABI X509_STORE_add_lookup_nid_postfix(void);
-int APS5_VABI X509_STORE_free_nid_postfix(void);
-int APS5_VABI X509_STORE_new_nid_postfix(void);
-int APS5_VABI X509_STORE_set_flags_nid_postfix(void);
+void APS5_VABI X509_STORE_free_nid_postfix(LibreSslX509Store* store);
+LibreSslX509Store* APS5_VABI X509_STORE_new_nid_postfix(void);
+int APS5_VABI X509_STORE_set_flags_nid_postfix(LibreSslX509Store* store, std::uint64_t flags);
 int APS5_VABI X509_VERIFY_PARAM_set1_host_nid_postfix(void);
 int APS5_VABI X509_VERIFY_PARAM_set1_ip_asc_nid_postfix(void);
 int APS5_VABI X509_VERIFY_PARAM_set_hostflags_nid_postfix(void);
