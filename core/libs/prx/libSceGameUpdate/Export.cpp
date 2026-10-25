@@ -1,4 +1,6 @@
+#include "prx/libSceGameUpdate/include/Api.hpp"
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <mutex>
