@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <limits>
+#include <map>
 #include <tuple>
 #include <utility>
 #include <domain/ImportModule.hpp>
@@ -427,6 +428,7 @@ RelinkResult RelinkerPipeline::Relink() {
         const auto symbolBytes = getTagValue(DT_OS_SYMTABSZ);
         if (symbolBytes % symEntSize != 0 || dynSymTabOffset > raw.size() || symbolBytes > raw.size() - dynSymTabOffset)
             throw RelinkerException("Invalid executable dynamic symbol table size");
+        std::map<std::string, const std::uint8_t*> exportEntries;
         for (ByteCount off = symEntSize; off < symbolBytes; off += symEntSize) {
             const auto* symbol = raw.data() + dynSymTabOffset + off;
             std::uint16_t section = 0;
@@ -438,6 +440,12 @@ RelinkResult RelinkerPipeline::Relink() {
             name.resize(name.find('#') == std::string::npos ? name.size() : name.find('#'));
             const FileByteOffset entryOffset = dynSymTabOffset + off;
             const auto type = symbol[4] & 15;
+            if (name.empty())
+                throw RelinkerException("Empty executable export name", entryOffset);
+            if ((symbol[4] >> 4) > STB_WEAK || (symbol[5] & ~3) != 0 || (type != STT_NOTYPE && type != STT_OBJECT && type != STT_FUNC && type != STT_TLS))
+                throw RelinkerException("Unsupported executable export attributes: " + name, entryOffset);
+            if (const auto [previous, inserted] = exportEntries.emplace(name, symbol); !inserted && std::memcmp(previous->second + 4, symbol + 4, symEntSize - 4) != 0)
+                throw RelinkerException("Conflicting executable exports after stripping #: " + name, entryOffset);
             std::uint64_t value = 0;
             std::uint64_t size = 0;
             std::memcpy(&value, symbol + 8, sizeof(value));
