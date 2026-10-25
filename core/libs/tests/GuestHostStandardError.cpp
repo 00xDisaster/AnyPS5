@@ -24,10 +24,6 @@ extern "C" {
 
 extern FileStream* __stderrp_nid_postfix;
 extern FileStream* __stdoutp_nid_postfix;
-#ifdef __APPLE__
-void* APS5_VABI __cxa_allocate_exception_nid_postfix(std::size_t);
-[[noreturn]] void APS5_VABI __cxa_throw_nid_postfix(void*, std::type_info*, void (*)(void*));
-#endif
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
