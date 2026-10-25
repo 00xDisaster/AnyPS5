@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -226,12 +227,21 @@ static std::int32_t SpawnChild(const char* role) {
 
     char program[] = "/app0/child.bin";
     char* arguments[] = {program, nullptr};
-    char roleValue[64];
-    std::strcpy(roleValue, "ANYPS5_POSIX_SPAWN_ROLE=");
-    std::strcat(roleValue, role);
-    char* environment[] = {roleValue, nullptr};
+    std::vector<std::string> entries;
+#ifdef _WIN32
+    char** const parentEnvironment = _environ;
+#else
+    char** const parentEnvironment = environ;
+#endif
+    for (char** entry = parentEnvironment; entry != nullptr && *entry != nullptr; ++entry)
+        entries.push_back(*entry);
+    entries.push_back(std::string("ANYPS5_POSIX_SPAWN_ROLE=") + role);
+    std::vector<char*> environment;
+    for (auto& entry : entries)
+        environment.push_back(entry.data());
+    environment.push_back(nullptr);
     std::int32_t processId = 0;
-    Check(posix_spawn_nid_postfix(&processId, program, nullptr, nullptr, arguments, environment) == 0);
+    Check(posix_spawn_nid_postfix(&processId, program, nullptr, nullptr, arguments, environment.data()) == 0);
     Check(processId > 0);
     return processId;
 }
