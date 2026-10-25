@@ -216,6 +216,32 @@ void CheckAsyncRequestLifecycle() {
     Require(sceNpDeleteRequest(unusedAsyncResult) == RequestNotFound, "second delete");
 }
 
+void CheckIdMapperRequestLifecycle() {
+    const int first = sceNpIdMapperCreateRequest();
+    const int second = sceNpIdMapperCreateRequest();
+    Require(first > 0 && second > first, "sceNpIdMapperCreateRequest must return increasing positive request ids");
+    const int shared = sceNpCreateRequest();
+    Require(shared > second, "IdMapper request ids must come from the NP request pool");
+    Require(sceNpDeleteRequest(shared) == 0, "sceNpDeleteRequest failed after IdMapper requests");
+    Require(sceNpIdMapperAbortRequest(first) == 0, "abort on a live IdMapper request");
+    Require(sceNpIdMapperAbortRequest(first) == 0, "abort must leave the IdMapper request live");
+    Require(sceNpIdMapperDeleteRequest(first) == 0, "delete after abort on an IdMapper request");
+    const int unknownIds[] = {0, -1, 0x7fffffff, first, shared};
+    for (const int id : unknownIds) {
+        Require(sceNpIdMapperAbortRequest(id) == RequestNotFound, "IdMapper abort must reject an absent or deleted id");
+        Require(sceNpIdMapperDeleteRequest(id) == RequestNotFound, "IdMapper delete must reject an absent or deleted id");
+    }
+    int many[64];
+    for (int& id : many) {
+        id = sceNpIdMapperCreateRequest();
+        Require(id > second, "sceNpIdMapperCreateRequest must keep returning new request ids");
+    }
+    for (const int id : many) Require(sceNpIdMapperDeleteRequest(id) == 0, "deleting each IdMapper request");
+    for (const int id : many) Require(sceNpIdMapperAbortRequest(id) == RequestNotFound, "abort after delete");
+    Require(sceNpIdMapperDeleteRequest(second) == 0, "delete the second IdMapper request");
+    Require(sceNpIdMapperDeleteRequest(second) == RequestNotFound, "second delete of an IdMapper request");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -374,6 +400,7 @@ int main() {
     CheckLegacyStateCallback();
     CheckRequestTimeouts();
     CheckAsyncRequestLifecycle();
+    CheckIdMapperRequestLifecycle();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));

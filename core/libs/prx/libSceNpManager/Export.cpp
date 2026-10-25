@@ -284,9 +284,8 @@ int APS5_VABI sceNpGetParentalControlInfoA(int reqId, int userId, int8_t* age, v
     if (!age || !info || userId == USER_SERVICE_USER_ID_INVALID) return SCE_NP_ERROR_INVALID_ARGUMENT;
     return SignedOutRequest(reqId);
 }
-int APS5_VABI sceNpIdMapperAbortRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpIdMapperAbortRequest(int reqId) {
+    return sceNpAbortRequest(reqId);
 }
 int APS5_VABI sceNpIdMapperAccountIdToNpId(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -297,12 +296,10 @@ int APS5_VABI sceNpIdMapperAccountIdToOnlineId(void) {
     return 0;
 }
 int APS5_VABI sceNpIdMapperCreateRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return AddRequest();
 }
-int APS5_VABI sceNpIdMapperDeleteRequest(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceNpIdMapperDeleteRequest(int reqId) {
+    return sceNpDeleteRequest(reqId);
 }
 int APS5_VABI sceNpIdMapperNpIdToAccountId(void) {
     NotImplemented_nid_no_patch(__func__);
