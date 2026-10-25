@@ -75,8 +75,75 @@ constexpr int mutexRecursive = 0x100;
 constexpr std::uint64_t mutexTag = 0x5854'4D5F'4D54'5844ull;
 constexpr std::uint64_t conditionTag = 0x5854'4E43'5F44'4E43ull;
 
+#ifdef _WIN32
+struct DinkumwareNativeMutex {
+    CRITICAL_SECTION value;
+
+    DinkumwareNativeMutex() {
+        if (!InitializeCriticalSectionAndSpinCount(&value, 0))
+            throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "_Mtx_init: initializing critical section failed");
+    }
+
+    ~DinkumwareNativeMutex() { DeleteCriticalSection(&value); }
+    void lock() { EnterCriticalSection(&value); }
+    void unlock() { LeaveCriticalSection(&value); }
+    bool try_lock() { return TryEnterCriticalSection(&value) != FALSE; }
+
+    template<class Clock, class Duration>
+    bool try_lock_until(const std::chrono::time_point<Clock, Duration>& deadline) {
+        if (try_lock())
+            return true;
+        for (;;) {
+            const auto now = Clock::now();
+            if (now >= deadline)
+                return false;
+            const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - now).count();
+            Sleep(static_cast<DWORD>(std::min<std::int64_t>(remaining, 1)));
+            if (try_lock()) {
+                if (Clock::now() <= deadline)
+                    return true;
+                unlock();
+                return false;
+            }
+        }
+    }
+};
+
+struct DinkumwareNativeCondition {
+    CONDITION_VARIABLE value = CONDITION_VARIABLE_INIT;
+
+    void notify_one() { WakeConditionVariable(&value); }
+    void notify_all() { WakeAllConditionVariable(&value); }
+
+    void wait(std::unique_lock<DinkumwareNativeMutex>& lock) {
+        if (SleepConditionVariableCS(&value, &lock.mutex()->value, INFINITE) == FALSE)
+            throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "_Cnd_wait: condition wait failed");
+    }
+
+    template<class Clock, class Duration>
+    std::cv_status wait_until(std::unique_lock<DinkumwareNativeMutex>& lock,
+                              const std::chrono::time_point<Clock, Duration>& deadline) {
+        for (;;) {
+            const auto now = Clock::now();
+            if (now >= deadline)
+                return std::cv_status::timeout;
+            const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - now).count();
+            const auto largest = static_cast<std::int64_t>(std::numeric_limits<DWORD>::max() - 1U);
+            const auto milliseconds = static_cast<DWORD>(std::min<std::int64_t>(remaining, largest));
+            if (SleepConditionVariableCS(&value, &lock.mutex()->value, milliseconds) != FALSE)
+                return std::cv_status::no_timeout;
+            const DWORD error = GetLastError();
+            if (error != ERROR_TIMEOUT)
+                throw std::system_error(static_cast<int>(error), std::system_category(), "_Cnd_timedwait: condition wait failed");
+            if (Clock::now() >= deadline)
+                return std::cv_status::timeout;
+        }
+    }
+};
+#else
 using DinkumwareNativeMutex = std::timed_mutex;
 using DinkumwareNativeCondition = std::condition_variable_any;
+#endif
 
 struct DinkumwareMutex {
     std::uint64_t tag = mutexTag;
