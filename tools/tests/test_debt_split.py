@@ -30,6 +30,24 @@ ORIGINAL = index([A_STUB, B_STUB, C_STUB], [A_FUNCTIONAL, SHADER, SHARED])
 class DebtSplitTests(unittest.TestCase):
 
 
+    def test_relink_escaped_first_backtick_in_run(self):
+        source = "docs/dev/TechnicalDebt.md"
+        destination = "docs/dev/debt/libSceA.md"
+
+        original = (
+            "prefix \\``[example](../../core/sample.cpp)` "
+            "[real](../../core/real.cpp)"
+        )
+        expected = (
+            "prefix \\``[example](../../core/sample.cpp)` "
+            "[real](../../../core/real.cpp)"
+        )
+
+        self.assertEqual(
+            debt_split.relink(original, source, destination),
+            expected,
+        )
+
     def test_relink_escaped_backticks_do_not_hide_links(self):
         source = "docs/dev/TechnicalDebt.md"
         destination = "docs/dev/debt/libSceA.md"

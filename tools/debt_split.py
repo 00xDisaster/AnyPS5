@@ -61,15 +61,21 @@ def relink_unfenced(text, source, destination):
 
     while index < len(runs):
         opening = runs[index]
-        preceding = text[:opening.start()]
+        opening_start = opening.start()
+        delimiter = opening.group()
+
+        preceding = text[:opening_start]
         backslashes = len(preceding) - len(preceding.rstrip("\\"))
         if backslashes % 2:
-            index += 1
-            continue
+            opening_start += 1
+            delimiter = delimiter[1:]
+            if not delimiter:
+                index += 1
+                continue
 
         closing_index = next(
             (i for i in range(index + 1, len(runs))
-             if runs[i].group() == opening.group()),
+             if runs[i].group() == delimiter),
             None,
         )
 
@@ -78,8 +84,8 @@ def relink_unfenced(text, source, destination):
             continue
 
         closing = runs[closing_index]
-        result.append(LINK.sub(replace, text[position:opening.start()]))
-        result.append(text[opening.start():closing.end()])
+        result.append(LINK.sub(replace, text[position:opening_start]))
+        result.append(text[opening_start:closing.end()])
         position = closing.end()
         index = closing_index + 1
 
