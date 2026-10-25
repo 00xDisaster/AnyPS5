@@ -678,6 +678,12 @@ void CheckClaimedTargets(AgcDriver::VulkanDevice& device) {
         std::puts("claimed target retirement not tested: the device cannot render two-sample color and stencil");
         return;
     }
+    const auto bindStencil = [&](const Block& plane, const Block& depth) {
+        AgcDriver::Graphics::DepthTarget stencil{depth.Address(), plane.Address(), {Side, Side}, VK_FORMAT_D32_SFLOAT_S8_UINT, 1.0f, 0u, depth.Address() + BlockBytes, false, 2u};
+        stencil.htileDepthOnly = true;
+        AgcDriver::Graphics::DepthSurfaceView(context, stencil);
+        device.WaitIdle();
+    };
     for (const bool drawnAgain : {false, true}) {
         Block color(BlockBytes);
         Block depth(2u * BlockBytes);
@@ -685,10 +691,7 @@ void CheckClaimedTargets(AgcDriver::VulkanDevice& device) {
         Draw(device, state);
         device.WaitIdle();
         Require(Refused(color.Address(), 0x1000u, "a read of a drawn 2x target"), "a drawn 2x target is not guarded");
-        AgcDriver::Graphics::DepthTarget stencil{depth.Address(), color.Address(), {Side, Side}, VK_FORMAT_D32_SFLOAT_S8_UINT, 1.0f, 0u, depth.Address() + BlockBytes, false, 2u};
-        stencil.htileDepthOnly = true;
-        AgcDriver::Graphics::DepthSurfaceView(context, stencil);
-        device.WaitIdle();
+        bindStencil(color, depth);
         if (drawnAgain) {
             Draw(device, state);
             device.WaitIdle();
@@ -717,7 +720,39 @@ void CheckClaimedTargets(AgcDriver::VulkanDevice& device) {
         Require(!Refused(reused.Address() + BlockBytes, 0x1000u, "a read of the part of a 2x target that a 4x target drawn over it does not cover"), "a 2x target that a 4x target was drawn over is still guarded");
         Require(Refused(reused.Address(), 0x1000u, "a read of a 4x target drawn over a 2x target"), "a 4x target drawn over a 2x target is not guarded");
     }
-    std::puts("a 2x target whose memory a D32S8 stencil plane, a single-sample color target or a 4x target was bound over after its last draw is retired at the next guarded read; one drawn again after the stencil bind stays guarded");
+    if (context.storageImageMultisample) {
+        Block color(BlockBytes);
+        Block depth(2u * BlockBytes);
+        Draw(device, TargetState(DecodeTarget(color.Address(), 1u)));
+        device.WaitIdle();
+        bindStencil(color, depth);
+        StoreSamples(device, TargetDescriptor(color, 1u), {{0u, 0u, 0u}});
+        const bool refused = Refused(color.Address(), 0x1000u, "a read of a 2x target that a dispatch stored to after a stencil plane was bound over it");
+        AgcDriver::Graphics::ClearDepthSurfaces(context.device);
+        Require(refused, "a 2x target that a dispatch stored to after a D32S8 target's stencil plane was bound over it is not guarded");
+    } else {
+        std::puts("a dispatch's store after a claim not tested: storage image multisampling unavailable");
+    }
+    {
+        Block fmask(BlockBytes);
+        Block depth(2u * BlockBytes);
+        AgcDriver::Graphics::ColorTarget oneFragment{};
+        oneFragment.extent = {128u, 128u};
+        oneFragment.samples = 1u;
+        oneFragment.coverageSamples = 4u;
+        oneFragment.fmaskAddress = fmask.Address();
+        AgcDriver::Graphics::GuardOneFragmentFmask(context, oneFragment);
+        bindStencil(fmask, depth);
+        std::string refusal;
+        try {
+            AgcDriver::Graphics::RequireNoMultisampleTarget(fmask.Address(), 0x1000u, "a read of claimed FMASK");
+        } catch (const std::exception& error) {
+            refusal = error.what();
+        }
+        AgcDriver::Graphics::ClearDepthSurfaces(context.device);
+        Require(refusal.find("overlaps the FMASK") != std::string::npos, "a stencil plane bound over a one-fragment target's FMASK retired its guard: " + refusal);
+    }
+    std::puts("a 2x target whose memory a D32S8 stencil plane, a single-sample color target or a 4x target was bound over after its last draw is retired at the next guarded read; one drawn again or stored to after the stencil bind stays guarded, and a one-fragment target's FMASK guard keeps refusing");
 }
 
 void StoreWords(const Block& block, std::uint64_t bytes, std::uint32_t word) {
