@@ -1,3 +1,5 @@
+#include "prx/libSceLibreSsl/libSceLibreSsl.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -6,16 +8,7 @@
 #include <span>
 #include <vector>
 
-extern "C" void* APS5_VABI malloc_nid_postfix(std::size_t size);
-
 namespace {
-
-struct Asn1String {
-    std::int32_t length;
-    std::int32_t type;
-    unsigned char* data;
-    std::int64_t flags;
-};
 
 static_assert(sizeof(Asn1String) == 24);
 static_assert(offsetof(Asn1String, data) == 8);
@@ -77,9 +70,9 @@ void AppendCharacter(std::vector<unsigned char>& output, std::uint32_t value) {
 
 extern "C" {
 
-std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const void* value) {
+std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const Asn1String* value) {
     if (!value) return 0;
-    const auto& integer = *static_cast<const Asn1String*>(value);
+    const auto& integer = *value;
     if (integer.type != 2 && integer.type != 0x102) return -1;
     if (integer.length > 8) return -1;
     if (integer.length <= 0 || !integer.data) return 0;
@@ -93,24 +86,24 @@ std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const void* value) {
     return static_cast<std::int64_t>(magnitude);
 }
 
-unsigned char* APS5_VABI ASN1_STRING_data_nid_postfix(void* value) {
+unsigned char* APS5_VABI ASN1_STRING_data_nid_postfix(Asn1String* value) {
     if (!value) NotImplemented_nid_no_patch(__func__);
-    return static_cast<Asn1String*>(value)->data;
+    return value->data;
 }
 
-int APS5_VABI ASN1_STRING_length_nid_postfix(const void* value) {
+int APS5_VABI ASN1_STRING_length_nid_postfix(const Asn1String* value) {
     if (!value) NotImplemented_nid_no_patch(__func__);
-    return static_cast<const Asn1String*>(value)->length;
+    return value->length;
 }
 
-int APS5_VABI ASN1_STRING_type_nid_postfix(void* value) {
+int APS5_VABI ASN1_STRING_type_nid_postfix(Asn1String* value) {
     if (!value) NotImplemented_nid_no_patch(__func__);
-    return static_cast<Asn1String*>(value)->type;
+    return value->type;
 }
 
-int APS5_VABI ASN1_STRING_to_UTF8_nid_postfix(unsigned char** output, void* value) {
+int APS5_VABI ASN1_STRING_to_UTF8_nid_postfix(unsigned char** output, Asn1String* value) {
     if (!value) return -1;
-    const auto& string = *static_cast<const Asn1String*>(value);
+    const auto& string = *value;
     const int width = CharacterWidth(string.type);
     if (width < 0) return -1;
     if (!output || (!string.data && string.length != 0)) NotImplemented_nid_no_patch(__func__);

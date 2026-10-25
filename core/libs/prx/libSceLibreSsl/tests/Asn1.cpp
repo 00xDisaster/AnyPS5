@@ -1,4 +1,5 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceLibreSsl/libSceLibreSsl.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include <algorithm>
 #include <array>
@@ -13,27 +14,11 @@
 #include <stdexcept>
 #include <vector>
 
-extern "C" {
-std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const void* value);
-unsigned char* APS5_VABI ASN1_STRING_data_nid_postfix(void* value);
-int APS5_VABI ASN1_STRING_length_nid_postfix(const void* value);
-int APS5_VABI ASN1_STRING_type_nid_postfix(void* value);
-int APS5_VABI ASN1_STRING_to_UTF8_nid_postfix(unsigned char** output, void* value);
-void APS5_VABI free_nid_postfix(void* pointer);
-}
-
 namespace {
 
-struct String {
-    std::int32_t length;
-    std::int32_t type;
-    unsigned char* data;
-    std::int64_t flags;
-};
-
-static_assert(sizeof(String) == 24);
-static_assert(offsetof(String, data) == 8);
-static_assert(offsetof(String, flags) == 16);
+static_assert(sizeof(Asn1String) == 24);
+static_assert(offsetof(Asn1String, data) == 8);
+static_assert(offsetof(Asn1String, flags) == 16);
 
 void Require(bool condition, const char* message) {
     if (condition) return;
@@ -54,8 +39,8 @@ void RequireThrows(TAction action, const char* message) {
 void CheckConversion(int type, std::span<const unsigned char> input, std::span<const unsigned char> expected, int length = -2) {
     std::vector<unsigned char> storage(input.begin(), input.end());
     storage.push_back(0);
-    String value{length == -2 ? static_cast<int>(input.size()) : length, type, storage.data(), 0x123456789abcdef};
-    const String original = value;
+    Asn1String value{length == -2 ? static_cast<int>(input.size()) : length, type, storage.data(), 0x123456789abcdef};
+    const Asn1String original = value;
     unsigned char sentinel = 0xab;
     unsigned char* result = &sentinel;
     Require(ASN1_STRING_to_UTF8_nid_postfix(&result, &value) == static_cast<int>(expected.size()), "UTF-8 byte length");
@@ -70,7 +55,7 @@ void CheckConversion(int type, std::span<const unsigned char> input, std::span<c
 
 void Accessors() {
     unsigned char data[] = {'a', 0, 'b'};
-    String value{3, 12, data, std::numeric_limits<std::int64_t>::max()};
+    Asn1String value{3, 12, data, std::numeric_limits<std::int64_t>::max()};
     Require(ASN1_STRING_data_nid_postfix(&value) == data, "data accessor preserves pointer identity");
     ASN1_STRING_data_nid_postfix(&value)[2] = 'c';
     Require(data[2] == 'c', "data accessor permits writes");
@@ -92,12 +77,12 @@ void Integers() {
         0, 0x01, 0x0123, 0x012345, 0x01234567, 0x0123456789, 0x0123456789ab,
         0x0123456789abcd, 0x0123456789abcdef};
     for (int length = 0; length <= 8; ++length) {
-        String value{length, 2, data, -1};
+        Asn1String value{length, 2, data, -1};
         Require(ASN1_INTEGER_get_nid_postfix(&value) == expected[length], "positive integer and 64-bit guest long");
         value.type = 0x102;
         Require(ASN1_INTEGER_get_nid_postfix(&value) == -expected[length], "negative integer magnitude");
     }
-    String value{9, 2, nullptr, 0};
+    Asn1String value{9, 2, nullptr, 0};
     Require(ASN1_INTEGER_get_nid_postfix(&value) == -1, "overlength is rejected before null data");
     value.length = 8;
     Require(ASN1_INTEGER_get_nid_postfix(&value) == 0, "integer with null data");
@@ -105,7 +90,7 @@ void Integers() {
         for (int type : {2, 0x102}) {
             for (auto* bytes : {data, static_cast<unsigned char*>(nullptr), reinterpret_cast<unsigned char*>(1)}) {
                 value = {length, type, bytes, -1};
-                const String original = value;
+                const Asn1String original = value;
                 Require(ASN1_INTEGER_get_nid_postfix(&value) == 0, "LibreSSL 2.5.4 nonpositive integer length");
                 Require(value.length == original.length && value.type == original.type && value.data == original.data
                     && value.flags == original.flags, "nonpositive integer length preserves input");
@@ -124,7 +109,7 @@ void Integers() {
     Require(ASN1_INTEGER_get_nid_postfix(&value) == -std::numeric_limits<std::int64_t>::max(), "negative maximum magnitude");
     std::array<unsigned char, 8> minimum{0x80, 0, 0, 0, 0, 0, 0, 0};
     value = {8, 0x102, minimum.data(), -1};
-    const String original = value;
+    const Asn1String original = value;
     Require(ASN1_INTEGER_get_nid_postfix(&value) == std::numeric_limits<std::int64_t>::min(), "minimum signed integer");
     Require(value.length == original.length && value.type == original.type && value.data == original.data
         && value.flags == original.flags && minimum == std::array<unsigned char, 8>{0x80, 0, 0, 0, 0, 0, 0, 0}, "minimum integer preserves input");
@@ -159,7 +144,7 @@ void Strings() {
     CheckConversion(12, universalUtf8, universalUtf8);
     for (int type : {12, 19, 20, 22, 23, 24, 26, 28, 30}) {
         CheckConversion(type, {}, {});
-        String empty{0, type, nullptr, 0};
+        Asn1String empty{0, type, nullptr, 0};
         unsigned char* result = nullptr;
         Require(ASN1_STRING_to_UTF8_nid_postfix(&result, &empty) == 0 && result && *result == 0, "empty null-data string");
         free_nid_postfix(result);
@@ -176,11 +161,11 @@ void Strings() {
     Require(ASN1_STRING_to_UTF8_nid_postfix(nullptr, nullptr) == -1, "null input checked before output");
     for (int type = -1; type <= 32; ++type) {
         if (type == 12 || type == 19 || type == 20 || type == 22 || type == 23 || type == 24 || type == 26 || type == 28 || type == 30) continue;
-        String value{0, type, nullptr, 0};
+        Asn1String value{0, type, nullptr, 0};
         Require(ASN1_STRING_to_UTF8_nid_postfix(&result, &value) == -1 && result == &sentinel, "unsupported string tag");
         Require(ASN1_STRING_to_UTF8_nid_postfix(nullptr, &value) == -1, "tag checked before output");
     }
-    String value{0, 12, nullptr, 0};
+    Asn1String value{0, 12, nullptr, 0};
     RequireThrows([&] { ASN1_STRING_to_UTF8_nid_postfix(nullptr, &value); }, "null conversion output");
     value.length = 1;
     RequireThrows([&] { ASN1_STRING_to_UTF8_nid_postfix(&result, &value); }, "null nonempty string data");
