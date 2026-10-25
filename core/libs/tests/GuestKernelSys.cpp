@@ -930,6 +930,40 @@ int main() {
     Require(kldunload_nid_postfix(-1) == -1 && Error() == 1);
     Require(kldunload_nid_postfix(0) == -1 && Error() == 1);
     Require(kldunload_nid_postfix(1) == -1 && Error() == 1);
+    struct SymbolLookup {
+        std::int32_t version;
+        const char* name;
+        std::uint64_t value;
+        std::uint64_t size;
+    };
+    const std::string longSymbol(1024, 's');
+    SymbolLookup lookup{32, "symbol", 7, 9};
+    Require(kldsym_nid_postfix(-1, 1, nullptr) == -1 && Error() == 14);
+    Require(kldsym_nid_postfix(-1, 1, reinterpret_cast<void*>(0x10)) == -1 && Error() == 14);
+    Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 2);
+    Require(lookup.value == 7 && lookup.size == 9);
+    for (const std::int32_t version : {0, 24, 31, 33}) {
+        lookup = {version, "symbol", 0, 0};
+        Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 22);
+        lookup.name = nullptr;
+        Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 22);
+    }
+    for (const int command : {0, 2, -1}) {
+        lookup = {32, nullptr, 0, 0};
+        Require(kldsym_nid_postfix(-1, command, &lookup) == -1 && Error() == 22);
+    }
+    lookup = {32, nullptr, 0, 0};
+    Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 14);
+    lookup.name = reinterpret_cast<const char*>(0x10);
+    Require(kldsym_nid_postfix(0, 1, &lookup) == -1 && Error() == 14);
+    lookup.name = longSymbol.c_str();
+    Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 63);
+    lookup.name = "";
+    Require(kldsym_nid_postfix(-1, 1, &lookup) == -1 && Error() == 2);
+    lookup.name = "symbol";
+    for (const int missing : {-2147483647 - 1, 1, 2, 3, 100, 2147483647}) {
+        Require(kldsym_nid_postfix(missing, 1, &lookup) == -1 && Error() == 2);
+    }
     const std::string throughFile = (root / "file.txt" / "child").string();
     Require(pathconf_nid_postfix(throughFile.c_str(), 4) == -1 && Error() == 20);
     Require(fchmodat_nid_postfix(-100, throughFile.c_str(), 0600, 0) == -1 && Error() == 20);
