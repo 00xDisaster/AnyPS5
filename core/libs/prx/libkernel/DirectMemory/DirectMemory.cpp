@@ -703,9 +703,9 @@ bool WriteSharedBacking(std::uintptr_t address, const void* source, std::size_t 
 }
 #endif
 
-void AddMapping(std::uintptr_t address, std::size_t len, std::uint64_t phys, int nativeProt) {
+void AddMapping(std::uintptr_t address, std::size_t len, std::uint64_t phys, int nativeProt, bool records = true) {
     ValidatePhysicalRange(phys, len);
-    EraseMappings(address, address + len);
+    if (records) EraseMappings(address, address + len);
     const auto last = phys + len;
     auto it = g_physBlocks.upper_bound(phys);
     --it;
@@ -713,7 +713,7 @@ void AddMapping(std::uintptr_t address, std::size_t len, std::uint64_t phys, int
         const auto runEnd = std::min(last, it->second.end);
         const auto bytes = static_cast<std::size_t>(runEnd - cursor);
         it->second.backing->Map(address + (cursor - phys), bytes, cursor - it->second.base, nativeProt);
-        InsertMapping(address + (cursor - phys), DirectMapping{address + (cursor - phys) + bytes, cursor, it->second.backing->MemoryType(), nativeProt, it->second.backing});
+        if (records) InsertMapping(address + (cursor - phys), DirectMapping{address + (cursor - phys) + bytes, cursor, it->second.backing->MemoryType(), nativeProt, it->second.backing});
         cursor = runEnd;
     }
 #if defined(__linux__)
@@ -768,7 +768,10 @@ bool RemapFixedIntoRegistered(GuestAllocations::Mutation& mutation, void* addr, 
         if (physStart >= 0) {
             const auto phys = static_cast<std::uint64_t>(physStart);
             auto existing = g_directMappings.upper_bound(address);
-            if (existing != g_directMappings.begin() && (--existing)->first <= address && existing->second.end >= address + len && existing->second.phys + (address - existing->first) == phys && existing->second.nativeProtection == nativeProtection) return;
+            if (existing != g_directMappings.begin() && (--existing)->first <= address && existing->second.end >= address + len && existing->second.phys + (address - existing->first) == phys && existing->second.nativeProtection == nativeProtection) {
+                AddMapping(address, len, phys, nativeProtection, false);
+                return;
+            }
             AddMapping(address, len, phys, nativeProtection);
         } else {
             EraseMappings(address, address + len);
@@ -1485,9 +1488,9 @@ void CreateDirectMemoryBacking(int64_t start, size_t len, int memoryType) {
     });
 #endif
     const auto backing = std::make_shared<PhysicalBacking>(len, memoryType, first);
-    g_physBlocks.emplace(first, PhysicalBlock{last, first, backing});
     std::map<std::uint64_t, PhysicalPage> pages;
     for (std::size_t offset = 0; offset < len; offset += PS5_PAGE_SIZE) pages.emplace(first + offset, PhysicalPage{backing, offset});
+    g_physBlocks.emplace(first, PhysicalBlock{last, first, backing});
     g_physPages.merge(pages);
     Trace("allocate physical 0x%llx+0x%zx", static_cast<unsigned long long>(first), len);
 }
