@@ -954,6 +954,7 @@ static void CheckAcoshfMsunBoundaries() {
         {0x4d7fffffu, {0x41a0cf66u, 0x41a0cf65u, 0x41a0cf66u, 0x41a0cf65u}, 32u},
         {0x4d800000u, {0x41a0cf66u, 0x41a0cf64u, 0x41a0cf66u, 0x41a0cf64u}, 32u},
         {0x4d800001u, {0x41a0cf66u, 0x41a0cf65u, 0x41a0cf67u, 0x41a0cf65u}, 32u},
+        {0x4d8050f2u, {0x41a0d473u, 0x41a0d472u, 0x41a0d474u, 0x41a0d472u}, 32u},
         {0x7f7fffffu, {0x42b2d4fcu, 0x42b2d4fbu, 0x42b2d4fdu, 0x42b2d4fbu}, 32u},
     };
     const int rounding[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
