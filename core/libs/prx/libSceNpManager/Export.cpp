@@ -302,12 +302,10 @@ int APS5_VABI sceNpIdMapperDeleteRequest(int reqId) {
     return sceNpDeleteRequest(reqId);
 }
 int APS5_VABI sceNpIdMapperNpIdToAccountId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpIdMapperOnlineIdToAccountId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpInGameMessageAbortHandle(void) {
     NotImplemented_nid_no_patch(__func__);

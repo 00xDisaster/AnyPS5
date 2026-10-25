@@ -268,6 +268,11 @@ void CheckManagerIntRequestLifecycle() {
     Require(sceNpManagerIntDeleteRequest(second) == RequestNotFound, "second delete of an NpManagerInt request");
 }
 
+void CheckIdMapperAccountIdLookups() {
+    Require(sceNpIdMapperNpIdToAccountId() == SignedOut, "sceNpIdMapperNpIdToAccountId must report NP as signed out");
+    Require(sceNpIdMapperOnlineIdToAccountId() == SignedOut, "sceNpIdMapperOnlineIdToAccountId must report NP as signed out");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -428,6 +433,7 @@ int main() {
     CheckAsyncRequestLifecycle();
     CheckIdMapperRequestLifecycle();
     CheckManagerIntRequestLifecycle();
+    CheckIdMapperAccountIdLookups();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));
