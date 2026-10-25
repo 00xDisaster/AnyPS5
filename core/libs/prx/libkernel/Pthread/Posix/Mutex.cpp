@@ -166,7 +166,7 @@ int APS5_VABI pthread_mutexattr_settype_nid_postfix(PthreadMutexattr* attr, int 
 int APS5_VABI pthread_mutexattr_gettype_nid_postfix(const PthreadMutexattr* attr, int* type) {
     if (!attr || !*attr) return POSIX_EINVAL;
     if (!type) throw std::runtime_error("pthread_mutexattr_gettype: null type");
-    if (static_cast<std::uint32_t>((*attr)->type) > static_cast<std::uint32_t>(MutexType::Adaptive)) return POSIX_EINVAL;
+    if (static_cast<int>((*attr)->type) > static_cast<int>(MutexType::Adaptive)) return POSIX_EINVAL;
     *type = static_cast<int>((*attr)->type);
     return 0;
 }
@@ -176,7 +176,7 @@ int APS5_VABI pthread_mutexattr_setkind_np_nid_postfix(PthreadMutexattr* attr, i
         *__error_nid_postfix() = POSIX_EINVAL;
         return -1;
     }
-    (*attr)->type = static_cast<MutexType>(kind);
+    (*attr)->type = static_cast<MutexType>(static_cast<std::int32_t>(static_cast<std::int16_t>(kind)));
     return 0;
 }
 
