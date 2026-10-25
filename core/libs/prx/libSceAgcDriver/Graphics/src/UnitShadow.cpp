@@ -5,6 +5,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/Resources.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
+#include "prx/libc/include/HostThreadLocal.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -222,7 +223,12 @@ struct SlabCopies {
     std::vector<VkBufferCopy> regions;
 };
 
-thread_local bool publishOnCpu = false;
+struct PublishOnCpuStorage {};
+
+bool& publishOnCpu() {
+    return HostThreadLocal<bool, PublishOnCpuStorage>();
+}
+
 std::atomic<void (*)(std::uint64_t, std::uint64_t)> publishSelectedHook{nullptr};
 
 bool recordCopiesOnCpu(const UnitShadow& shadow, const std::vector<SlabCopies>& copies, const std::vector<std::pair<std::uint64_t, std::uint64_t>>& ranges, std::uint64_t bytes, std::uint64_t checked) {
@@ -413,7 +419,7 @@ std::size_t publishUnits(const std::shared_ptr<UnitShadow>& shadow, std::uint64_
         std::fprintf(stderr, "[shadow] publish %s: 0x%llx+0x%llx, %zu units, %.2f MiB, %zu slabs (packet 0x%x queue 0x%x)\n", ReasonNames[static_cast<std::size_t>(reason)], static_cast<unsigned long long>(ranges.front().first), static_cast<unsigned long long>(ranges.back().second - ranges.front().first), units, bytes / 1048576.0, copies.size(), packet.opcode, packet.queue);
     }
     if (const auto hook = publishSelectedHook.load(std::memory_order_acquire)) hook(ranges.front().first, ranges.front().second);
-    if (!publishOnCpu || !recordCopiesOnCpu(*shadow, copies, ranges, bytes, checked)) recordCopies(*shadow, copies, ranges, bytes);
+    if (!publishOnCpu() || !recordCopiesOnCpu(*shadow, copies, ranges, bytes, checked)) recordCopies(*shadow, copies, ranges, bytes);
     if (ShadowVerify()) verifyPublished(*shadow, copies);
     return units;
 }
@@ -529,10 +535,10 @@ void SetPublishSelectedHook(void (*hook)(std::uint64_t begin, std::uint64_t end)
     publishSelectedHook.store(hook, std::memory_order_release);
 }
 
-PublishOnCpuScope::PublishOnCpuScope() : previous(std::exchange(publishOnCpu, true)) {}
+PublishOnCpuScope::PublishOnCpuScope() : previous(std::exchange(publishOnCpu(), true)) {}
 
 PublishOnCpuScope::~PublishOnCpuScope() {
-    publishOnCpu = previous;
+    publishOnCpu() = previous;
 }
 
 std::size_t PublishShadow(std::uint64_t address, std::size_t bytes, PublishScope scope, PublishReason reason, bool waited) {
