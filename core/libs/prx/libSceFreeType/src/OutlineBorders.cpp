@@ -1,4 +1,4 @@
-#include "prx/libSceFreeType/include/GuestFreeType.hpp"
+#include "prx/libSceFreeType/include/Api.hpp"
 #include <algorithm>
 #include <bit>
 #include <cstdint>

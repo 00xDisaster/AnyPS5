@@ -1,4 +1,4 @@
-#include "prx/libSceFreeType/include/GuestFreeType.hpp"
+#include "prx/libSceFreeType/include/Api.hpp"
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_STROKER_H
@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 #ifdef _WIN32
 #include <windows.h>
@@ -24,7 +25,8 @@
 
 using FreeType::GuestOutline;
 using FreeType::GuestVector;
-using Query = int (APS5_VABI*)(const GuestOutline*);
+using Query = decltype(&FT_Outline_GetInsideBorder_nid_postfix);
+static_assert(std::is_same_v<Query, decltype(&FT_Outline_GetOutsideBorder_nid_postfix)>);
 static_assert(sizeof(GuestOutline) == 40 && alignof(GuestOutline) == 8);
 static_assert(offsetof(GuestOutline, points) == 8 && offsetof(GuestOutline, contours) == 24);
 static_assert(offsetof(GuestOutline, flags) == 32 && sizeof(GuestVector) == 16);
