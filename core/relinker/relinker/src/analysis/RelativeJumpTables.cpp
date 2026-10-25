@@ -320,19 +320,25 @@ std::vector<RelativeJumpTable> FindRelativeJumpTables(std::span<const std::uint8
             pos += info.Length;
         }
     }
+    auto knownFunctions = functions;
+    std::erase_if(knownFunctions, [](const auto& range) { return range.first >= range.second; });
+    std::sort(knownFunctions.begin(), knownFunctions.end());
+    std::vector<std::pair<VirtualAddress, VirtualAddress>> mergedFunctions;
+    for (const auto& range : knownFunctions) {
+        if (!mergedFunctions.empty() && range.first <= mergedFunctions.back().second)
+            mergedFunctions.back().second = std::max(mergedFunctions.back().second, range.second);
+        else
+            mergedFunctions.emplace_back(range);
+    }
     std::vector<VirtualAddress> pendingTargets(branchTargets.begin(), branchTargets.end());
     std::set<VirtualAddress> exploredGaps;
     while (!pendingTargets.empty()) {
         const auto current = pendingTargets.back();
         pendingTargets.pop_back();
         if (current < segmentVAddr || current >= segmentEnd) continue;
-        bool inKnownFunction = false;
-        for (const auto& [funcBegin, funcEnd] : functions) {
-            if (current >= funcBegin && current < funcEnd) {
-                inKnownFunction = true;
-                break;
-            }
-        }
+        const auto after = std::upper_bound(mergedFunctions.begin(), mergedFunctions.end(), current,
+            [](VirtualAddress value, const auto& range) { return value < range.first; });
+        const bool inKnownFunction = after != mergedFunctions.begin() && current < std::prev(after)->second;
         if (inKnownFunction || !exploredGaps.insert(current).second) continue;
         auto pos = static_cast<std::size_t>(current - segmentVAddr);
         while (pos < segment.size()) {
