@@ -1,25 +1,9 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <thread>
-
-extern "C" {
-int APS5_VABI sigaction_nid_postfix(int, const void*, void*);
-int APS5_VABI sigprocmask_nid_postfix(int, const void*, void*);
-int APS5_VABI raise_nid_postfix(int);
-[[gnu::returns_twice]] int APS5_VABI setjmp_nid_postfix(std::uint64_t* buffer);
-[[noreturn]] void APS5_VABI longjmp_nid_postfix(std::uint64_t* buffer, int value);
-}
-
-struct GuestSignalSet {
-    std::uint32_t bits[4];
-};
-
-struct GuestSigaction {
-    std::uintptr_t handler;
-    int flags;
-    GuestSignalSet mask;
-};
 
 static constexpr int SigKill = 9;
 static constexpr int SigTerm = 15;
