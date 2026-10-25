@@ -531,12 +531,14 @@ void TestConstructed() {
     const std::uint32_t word = 0xCAFEF00Du;
     auto offset = recorder.Offset();
     auto commands = recorder.Commands();
+    std::memset(recorder.memory.data() + offset, 0x5A, 20);
     Require(sceAmprCommandBufferConstructNop(&recorder.buffer, 7, payload, sizeof(payload), &word) == 0);
     RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNopWithData(4));
     Require(HeaderAt(recorder, offset) == 0x5452730Fu);
     const std::uint8_t* data = recorder.memory.data() + offset + Apr::NopHeaderBytes;
     const std::uint8_t padding[3] = {};
     Require(std::memcmp(data, &word, sizeof(word)) == 0 && std::memcmp(data + 4, payload, sizeof(payload)) == 0 && std::memcmp(data + 9, padding, sizeof(padding)) == 0);
+    Require(recorder.memory[offset + 16] == 0x5A);
     offset = recorder.Offset();
     Require(sceAmprCommandBufferConstructNop(&recorder.buffer, 0x15, payload, 4, nullptr) == 0);
     Require(HeaderAt(recorder, offset) == 0x5452510Fu);

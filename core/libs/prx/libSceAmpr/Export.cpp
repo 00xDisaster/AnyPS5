@@ -379,6 +379,7 @@ int APS5_VABI sceAmprCommandBufferConstructNop(Apr::CommandBufferObject* buffer,
         data += sizeof(*word);
     }
     if (payloadBytes != 0u) std::memcpy(data, payload, payloadBytes);
+    std::memset(data + payloadBytes, 0, (4u - payloadBytes % 4u) % 4u);
     return 0;
 }
 
