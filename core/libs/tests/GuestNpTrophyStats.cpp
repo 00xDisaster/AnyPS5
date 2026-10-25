@@ -24,6 +24,7 @@ struct NpUniversalDataSystemEvent;
 struct NpUniversalDataSystemEventPropertyObject;
 
 static constexpr int InitialUser = 0x10000000;
+static constexpr int InvalidArgument = -2141900542;
 
 static const char TropConf[] = R"({"defaultLanguage":"en-US","trophies":[
     {"id":"0","grade":"P"},
@@ -222,6 +223,8 @@ static void KeepStatsAcrossRuns(int context) {
 }
 
 static void UnlockThroughStats(int context, Unlocks& unlocks) {
+    Require(sceNpUniversalDataSystemCreateContext(nullptr, InitialUser, 0, 0) == InvalidArgument, "a null context was accepted");
+    Require(sceNpUniversalDataSystemCreateHandle(nullptr) == InvalidArgument, "a null handle was accepted");
     const auto uds = OpenUds(0);
     Post(uds, "COLLECT", [](NpUniversalDataSystemEventPropertyObject* properties) {
         Require(sceNpUniversalDataSystemEventPropertyObjectSetUInt64(properties, "counter", 9) == 0, "counter was not set");
