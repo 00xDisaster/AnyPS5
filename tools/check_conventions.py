@@ -401,8 +401,10 @@ class Check:
         body = re.sub(r"<!--.*?-->", "", body or "", flags=re.S)
         sections = dict(zip(SECTION.findall(body), SECTION.split(body)[2::2]))
         for name in ("What", "Tested", "Checklist"):
-            if not sections.get(name, "").strip():
-                self.report("pr-template", "", 0, f"section '{name}' is missing or empty")
+            if name not in sections:
+                self.report("pr-template", "", 0, f"add the '### {name}' heading of the template")
+            elif not sections[name].strip():
+                self.report("pr-template", "", 0, f"fill the '### {name}' section")
         checklist = sections.get("Checklist", "")
         for item in re.findall(r"^\s*[-*+]\s*\[ \]\s*(.+)$", checklist, re.M):
             self.report("pr-template", "", 0, f"unchecked: {item.strip()}")
