@@ -90,6 +90,11 @@ int main() {
     Require(mlock_nid_postfix(mapped, length) == 0);
 #ifdef __APPLE__
     Require(WiredCount(mapped) == 1);
+    void* remapped = mapped;
+    Require(sceKernelMapFlexibleMemory(&remapped, length, 3, 0x10) == 0 && remapped == mapped);
+    Require(WiredCount(mapped) == 0);
+    Require(mlock_nid_postfix(mapped, length) == 0);
+    Require(WiredCount(mapped) == 1);
 #endif
     bytes[length - 1] = 7;
 
