@@ -18,6 +18,7 @@ struct ActivationState {
     unsigned controls = 0;
     unsigned guards = 0;
     bool nested = false;
+    bool crossThread = false;
     std::array<std::uint32_t, 8> flags{};
     std::array<float, 8> before{};
 };
@@ -41,9 +42,13 @@ static int APS5_VABI ActivationControl(Ngs2UserFx2ControlContext* context) {
     state.before[state.controls++] = *static_cast<float*>(context->param);
     const float value = *static_cast<const float*>(context->data);
     if (value == 0.25f && state.mode == Activation::PeerControl) {
-        std::uint32_t flags = 99;
-        Require(sceNgs2VoiceGetStateFlags(state.peer, &flags) == SCE_NGS2_OK && flags == 0);
-        Require(SetValue(state.peer, 0.75f) == SCE_NGS2_OK);
+        const auto controlPeer = [&] {
+            std::uint32_t flags = 99;
+            Require(sceNgs2VoiceGetStateFlags(state.peer, &flags) == SCE_NGS2_OK && flags == 0);
+            Require(SetValue(state.peer, 0.75f) == SCE_NGS2_OK);
+        };
+        if (state.crossThread) { std::thread helper(controlPeer); helper.join(); }
+        else controlPeer();
         state.nested = true;
     }
     if (state.mode == Activation::Cycle && value == 0.25f) {
@@ -90,7 +95,9 @@ static int APS5_VABI ActivationProcess(Ngs2UserFx2ProcessContext* context) {
     state.flags[state.calls++] = context->flags;
     const float value = *static_cast<const float*>(context->param);
     if (state.mode == Activation::ProcessControl && state.calls == 2) {
-        Require(SetValue(state.voice, 0.25f) == SCE_NGS2_OK);
+        const auto controlSelf = [&] { Require(SetValue(state.voice, 0.25f) == SCE_NGS2_OK); };
+        if (state.crossThread) { std::thread helper(controlSelf); helper.join(); }
+        else controlSelf();
         Require(*static_cast<const float*>(context->param) == value);
     }
     for (unsigned channel = 0; channel < context->num_input_channels; ++channel)
@@ -141,7 +148,7 @@ static int APS5_VABI ActivationSend(Ngs2UserFxProcessContext* context) {
     return SCE_NGS2_OK;
 }
 
-static void TestActivation(Activation mode, unsigned order, bool handler = true, bool sampler = false, bool external = true) {
+static void TestActivation(Activation mode, unsigned order, bool handler = true, bool sampler = false, bool external = true, bool crossThread = false) {
     const auto firstBuffer = usedBuffers;
     Manager manager{{}, order};
     Ngs2JobSchedulerOption scheduler{};
@@ -169,6 +176,7 @@ static void TestActivation(Activation mode, unsigned order, bool handler = true,
     Require(sceNgs2SystemCreate(&option, &buffer, &system) == SCE_NGS2_OK);
     const auto master = Mastering(system, 2);
     ActivationState state{mode}, peer{mode};
+    state.crossThread = crossThread;
     const auto target = ActivationVoice(system, state, handler, sampler);
     if (mode == Activation::PeerControl || mode == Activation::Cycle) {
         state.peer = ActivationVoice(system, peer, true);
@@ -264,6 +272,12 @@ int main(int argc, char** argv) {
     for (auto mode : {Activation::Untouched, Activation::Late, Activation::FailBeforePlay, Activation::FailThenPlay, Activation::ProcessControl, Activation::PeerControl}) {
         TestActivation(mode, 2, true, true);
         ++cases;
+    }
+    for (auto mode : {Activation::ProcessControl, Activation::PeerControl}) {
+        TestActivation(mode, 2, true, false, true, true);
+        TestActivation(mode, 0, true, false, false, true);
+        TestActivation(mode, 2, true, true, true, true);
+        cases += 3;
     }
     TestActivation(Activation::Reset, 2);
     TestActivation(Activation::Reset, 2, true, true);

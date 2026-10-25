@@ -162,7 +162,14 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
 
 int Ngs2DestroyRack(Ngs2Rack& rack, Ngs2ContextBufferInfo* outBufferInfo) {
     if (rack.lockDepth != 0) Ngs2LeaveExclusive(rack.lockDepth);
-    Ngs2CleanupUserFx(rack);
+    rack.destroying = true;
+    try {
+        Ngs2CleanupUserFx(rack);
+    } catch (...) {
+        rack.destroying = false;
+        Ngs2NotifyWaiters();
+        throw;
+    }
     auto& racks = rack.system->racks;
     std::erase(racks, &rack);
     Ngs2NotifyWaiters();
@@ -232,6 +239,11 @@ int APS5_VABI sceNgs2RackDestroy(uintptr_t rack_handle, Ngs2ContextBufferInfo* b
     if (rack == nullptr) return SCE_NGS2_ERROR_INVALID_RACK_HANDLE;
     if (Ngs2ControlActive(*rack)) throw std::runtime_error("NGS2: destroying a rack from its UserFx2 control handler is not implemented");
     if (Ngs2RenderingHere(*rack->system)) throw std::runtime_error("NGS2: destroying a rack of a system from that system's render (a voice callback) is not implemented");
+    while (rack != nullptr && rack->voiceAccesses != 0) {
+        Ngs2WaitOnce();
+        rack = Ngs2FindRack(rack_handle);
+    }
+    if (rack == nullptr) return SCE_NGS2_ERROR_INVALID_RACK_HANDLE;
     return Ngs2DestroyRack(*rack, buffer_info);
 }
 

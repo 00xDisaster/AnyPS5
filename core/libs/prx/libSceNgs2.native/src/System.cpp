@@ -173,7 +173,7 @@ Ngs2System* Ngs2FindSystem(Ngs2Handle handle) {
 Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
     for (auto* system : Systems()) {
         for (auto* rack : system->racks) {
-            if (reinterpret_cast<Ngs2Handle>(rack) == handle) return rack;
+            if (!rack->destroying && reinterpret_cast<Ngs2Handle>(rack) == handle) return rack;
         }
     }
     return nullptr;
@@ -182,6 +182,7 @@ Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
 Ngs2Voice* Ngs2FindVoice(Ngs2Handle handle) {
     for (auto* system : Systems()) {
         for (auto* rack : system->racks) {
+            if (rack->destroying) continue;
             for (auto& voice : rack->voices) {
                 if (reinterpret_cast<Ngs2Handle>(&voice) == handle) return &voice;
             }
@@ -392,6 +393,11 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     if (Ngs2ControlActive(*system)) throw std::runtime_error("NGS2: destroying a system from its UserFx2 control handler is not implemented");
     if (Ngs2RenderingHere(*system)) throw std::runtime_error("NGS2: destroying a system from its own render (a voice callback) is not implemented");
+    while (system != nullptr && system->voiceAccesses != 0) {
+        Ngs2WaitOnce();
+        system = Ngs2FindSystem(system_handle);
+    }
+    if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     while (!system->racks.empty()) {
         const int result = Ngs2DestroyRack(*system->racks.back(), nullptr);
         if (result != SCE_NGS2_OK) return result;
@@ -510,6 +516,11 @@ int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBuffe
     }
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     if (Ngs2ControlActive(*system)) throw std::runtime_error("NGS2: rendering a system from its UserFx2 control handler is not implemented");
+    while (system != nullptr && system->controlCallbacks != 0) {
+        Ngs2WaitOnce();
+        system = Ngs2FindSystem(system_handle);
+    }
+    if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     if (num_buffer_info > 31) return SCE_NGS2_ERROR_INVALID_NUM_RENDER_BUFFERS;
     if (buffer_info == nullptr || num_buffer_info == 0) APS5_INVALID_ARG_EX;
     for (std::uint32_t i = 0; i < num_buffer_info; i++) {

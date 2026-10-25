@@ -160,6 +160,7 @@ struct Ngs2Voice {
     bool acceptsBlocks = true;
     std::vector<Ngs2PendingControl> pendingControls;
     bool pendingPlay = false;
+    std::thread::id controlOwner{};
     alignas(std::atomic_ref<bool>::required_alignment) mutable bool killCurrent = false;
     std::uint64_t decodedSamples = 0;
     std::uint64_t decodedBytes = 0;
@@ -222,6 +223,8 @@ struct Ngs2Rack {
     std::vector<Ngs2CustomModuleInfo> customModules;
     std::thread::id lockOwner{};
     std::uint32_t lockDepth = 0;
+    std::uint32_t voiceAccesses = 0;
+    bool destroying = false;
 };
 
 struct Ngs2JobManager {
@@ -239,6 +242,8 @@ struct Ngs2System {
     std::uint32_t renderDepth = 0;
     bool jobsExecuting = false;
     bool processingVoices = false;
+    std::uint32_t voiceAccesses = 0;
+    std::uint32_t controlCallbacks = 0;
     std::uintptr_t userData = 0;
     std::vector<Ngs2Rack*> racks;
     std::atomic<std::uint64_t> callbackSequence{0};

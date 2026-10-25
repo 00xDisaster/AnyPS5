@@ -320,7 +320,11 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
             if (!fx.active || module.process_handler == nullptr) continue;
             Ngs2UserFx2ProcessContext context{channels.data(), voice.rack->userFxCommon[m].data(), fx.param.data(), fx.work.data(), fx.state.data(),
                                               module.user_data, voice.UserFxFlags(fx.flags), voice.channels, voice.channels, grain, sampleRate, 0, {}};
-            const int result = module.process_handler(&context);
+            int result;
+            {
+                const Ngs2Unlocked unlocked;
+                result = module.process_handler(&context);
+            }
             if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 process handler failed with " + std::to_string(result));
             fx.flags = 0;
             voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
@@ -329,7 +333,11 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
                 auto& fx = voice.customUserFx[m];
                 Ngs2UserFxProcessContext context{channels.data(), fx.data[0], fx.data[1], fx.data[2],
                                                  voice.UserFxFlags(fx.flags), voice.channels, grain, sampleRate};
-                const int result = fx.handler(&context);
+                int result;
+                {
+                    const Ngs2Unlocked unlocked;
+                    result = fx.handler(&context);
+                }
                 if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx process handler failed with " + std::to_string(result));
                 fx.flags = 0;
                 voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
@@ -344,7 +352,11 @@ void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_
     for (std::uint32_t c = 0; c < voice.channels; ++c) channels[c] = voice.samples.data() + static_cast<std::size_t>(c) * grain;
     Ngs2UserFxProcessContext context{channels.data(), voice.userFxData[0], voice.userFxData[1], voice.userFxData[2],
                                     voice.UserFxFlags(voice.userFxFlags), voice.channels, grain, sampleRate};
-    const int result = voice.userFxHandler(&context);
+    int result;
+    {
+        const Ngs2Unlocked unlocked;
+        result = voice.userFxHandler(&context);
+    }
     if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx process handler failed with " + std::to_string(result));
     voice.userFxFlags = 0;
     voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });

@@ -36,8 +36,17 @@ static thread_local Ngs2ControlFrame* currentControl = nullptr;
 struct Ngs2ControlFrame {
     Ngs2Voice& voice;
     Ngs2ControlFrame* previous;
-    explicit Ngs2ControlFrame(Ngs2Voice& value) : voice(value), previous(currentControl) { currentControl = this; }
-    ~Ngs2ControlFrame() { currentControl = previous; }
+    explicit Ngs2ControlFrame(Ngs2Voice& value) : voice(value), previous(currentControl) {
+        currentControl = this;
+        voice.controlOwner = std::this_thread::get_id();
+        ++voice.rack->system->controlCallbacks;
+    }
+    ~Ngs2ControlFrame() {
+        currentControl = previous;
+        voice.controlOwner = {};
+        --voice.rack->system->controlCallbacks;
+        Ngs2NotifyWaiters();
+    }
     Ngs2ControlFrame(const Ngs2ControlFrame&) = delete;
     Ngs2ControlFrame& operator=(const Ngs2ControlFrame&) = delete;
 };
@@ -58,6 +67,32 @@ static void CheckControlReentry(const Ngs2Voice& voice) {
     for (auto* frame = currentControl; frame != nullptr; frame = frame->previous)
         if (&frame->voice == &voice) throw std::runtime_error("NGS2: same-voice reentry from a UserFx2 control handler is not implemented");
 }
+
+class Ngs2VoiceAccess {
+public:
+    Ngs2Voice* const voice;
+    explicit Ngs2VoiceAccess(Ngs2Handle handle) : voice(Ngs2FindVoice(handle)) {
+        if (voice == nullptr) return;
+        CheckControlReentry(*voice);
+        ++voice->rack->voiceAccesses;
+        ++voice->rack->system->voiceAccesses;
+        try {
+            while (voice->controlOwner != std::thread::id{}) Ngs2WaitOnce();
+        } catch (...) {
+            release();
+            throw;
+        }
+    }
+    ~Ngs2VoiceAccess() { if (voice != nullptr) release(); }
+    Ngs2VoiceAccess(const Ngs2VoiceAccess&) = delete;
+    Ngs2VoiceAccess& operator=(const Ngs2VoiceAccess&) = delete;
+private:
+    void release() {
+        --voice->rack->voiceAccesses;
+        --voice->rack->system->voiceAccesses;
+        Ngs2NotifyWaiters();
+    }
+};
 
 bool Ngs2Voice::IsSampler() const {
     return rack != nullptr && (rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER);
@@ -246,7 +281,11 @@ static int ControlUserFx2(Ngs2Voice& voice, std::uint32_t index, const Ngs2Custo
     fx.configured = true;
     Ngs2UserFx2ControlContext context{value.data, value.data_size, voice.rack->userFxCommon[index].data(), fx.controlParam.data(), module.user_data, {}};
     const Ngs2ControlFrame frame(voice);
-    const int result = module.control_handler(&context);
+    int result;
+    {
+        const Ngs2Unlocked unlocked;
+        result = module.control_handler(&context);
+    }
     if (result < 0) return result;
     if (DeferringControls(voice)) EnqueueControl(voice, Ngs2UserFxControl{index, fx.controlParam});
     else {
@@ -709,13 +748,9 @@ extern "C" {
 int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHeader* param_list) {
     if (param_list == nullptr) return SCE_NGS2_ERROR_NULL_PARAM_LIST;
     const Ngs2Lock lock;
-    auto* found = Ngs2FindVoice(voice_handle);
-    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
-        Ngs2WaitOnce();
-        found = Ngs2FindVoice(voice_handle);
-    }
+    const Ngs2VoiceAccess access(voice_handle);
+    auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     auto& voice = *found;
     for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
         if ((param->id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
@@ -759,13 +794,9 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
 
 int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCommand* commands, size_t num_commands) {
     const Ngs2Lock lock;
-    auto* found = Ngs2FindVoice(voice_handle);
-    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
-        Ngs2WaitOnce();
-        found = Ngs2FindVoice(voice_handle);
-    }
+    const Ngs2VoiceAccess access(voice_handle);
+    auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     auto& voice = *found;
     if (commands == nullptr && num_commands != 0) APS5_INVALID_ARG_EX;
     if (DeferringControls(voice)) {
@@ -800,9 +831,9 @@ int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCom
 
 int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state, size_t state_size) {
     const Ngs2Lock lock;
-    auto* found = Ngs2FindVoice(voice_handle);
+    const Ngs2VoiceAccess access(voice_handle);
+    auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     if (state_size < sizeof(Ngs2VoiceState)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     if (state == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     const auto& voice = *found;
@@ -863,13 +894,9 @@ int APS5_VABI sceNgs2VoiceGetPortInfo(uintptr_t voice_handle, uint32_t port, Ngs
     if (info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     if (info_size < sizeof(Ngs2VoicePortInfo)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     const Ngs2Lock lock;
-    auto* found = Ngs2FindVoice(voice_handle);
-    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
-        Ngs2WaitOnce();
-        found = Ngs2FindVoice(voice_handle);
-    }
+    const Ngs2VoiceAccess access(voice_handle);
+    auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     auto& voice = *found;
     const auto& source = PortAt(voice, port);
     auto volume = source.volume;
@@ -888,9 +915,9 @@ int APS5_VABI sceNgs2VoiceGetPortInfo(uintptr_t voice_handle, uint32_t port, Ngs
 int APS5_VABI sceNgs2VoiceQueryInfo(uintptr_t voice_handle, uint32_t info_id, void* info, size_t info_size) {
     if (info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     const Ngs2Lock lock;
-    auto* found = Ngs2FindVoice(voice_handle);
+    const Ngs2VoiceAccess access(voice_handle);
+    auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     const auto& voice = *found;
     switch (info_id) {
         case SCE_NGS2_VOICE_INFO_CHANNELS: {
@@ -905,18 +932,18 @@ int APS5_VABI sceNgs2VoiceQueryInfo(uintptr_t voice_handle, uint32_t info_id, vo
 int APS5_VABI sceNgs2VoiceGetStateFlags(uintptr_t voice_handle, uint32_t* state_flags) {
     if (state_flags == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     const Ngs2Lock lock;
-    const auto* found = Ngs2FindVoice(voice_handle);
+    const Ngs2VoiceAccess access(voice_handle);
+    const auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     *state_flags = found->pendingPlay ? SCE_NGS2_VOICE_STATE_FLAG_INUSE : found->stateFlags;
     return SCE_NGS2_OK;
 }
 
 int APS5_VABI sceNgs2VoiceGetOwner(uintptr_t voice_handle, uintptr_t* owner_rack, uint32_t* voice_index) {
-    std::lock_guard lock(Ngs2Mutex());
-    const auto* found = Ngs2FindVoice(voice_handle);
+    const Ngs2Lock lock;
+    const Ngs2VoiceAccess access(voice_handle);
+    const auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     if (owner_rack == nullptr || voice_index == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     *owner_rack = reinterpret_cast<Ngs2Handle>(found->rack);
     *voice_index = static_cast<uint32_t>(found - found->rack->voices.data());
@@ -927,9 +954,9 @@ int APS5_VABI sceNgs2VoiceGetMatrixInfo(uintptr_t voice_handle, uint32_t matrix_
     if (info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     if (info_size < sizeof(Ngs2VoiceMatrixInfo)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     const Ngs2Lock lock;
-    const auto* found = Ngs2FindVoice(voice_handle);
+    const Ngs2VoiceAccess access(voice_handle);
+    const auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
-    CheckControlReentry(*found);
     if (matrix_id >= found->matrices.size()) APS5_INVALID_ARG_EX;
     const auto* levels = &found->matrices[matrix_id];
     for (const auto& control : found->pendingControls)
