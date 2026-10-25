@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 
 extern "C" {
@@ -63,7 +64,6 @@ int main() {
     Require(fallback[0] == 55 && fallback[1] == -1 && fallback[2] == -1);
     std::filesystem::remove_all(skipped);
 
-    int value = 0;
     *__error_nid_postfix() = 0;
     Require(sceKernelGetCpuTemperature(nullptr) == SCE_KERNEL_ERROR_EFAULT && *__error_nid_postfix() == 14);
     *__error_nid_postfix() = 0;
@@ -75,14 +75,19 @@ int main() {
         *__error_nid_postfix() = 0;
         Require(sceKernelGetSocSensorTemperature(invalid, nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 22);
     }
-    for (const int absent : {3, 32, 64}) {
+    for (const int unmapped : {3, 15, 32, 64}) {
+        int untouched = -12345;
+        bool threw = false;
+        try {
+            sceKernelGetSocSensorTemperature(unmapped, &untouched);
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        Require(threw && untouched == -12345);
         *__error_nid_postfix() = 0;
-        Require(sceKernelGetSocSensorTemperature(absent, &value) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 22);
-        Require(sceKernelGetSocSensorTemperature(absent, nullptr) == SCE_KERNEL_ERROR_EFAULT);
+        Require(sceKernelGetSocSensorTemperature(unmapped, nullptr) == SCE_KERNEL_ERROR_EFAULT && *__error_nid_postfix() == 14);
     }
 
-    int sentinel = -12345;
-    Require(sceKernelGetSocSensorTemperature(15, &sentinel) == SCE_KERNEL_ERROR_EINVAL && sentinel == -12345);
     int probe = -12345;
     const int result = sceKernelGetSocSensorTemperature(0, &probe);
     Require(result == 0 ? (probe >= 0 && probe <= 130) : (result == SCE_KERNEL_ERROR_EINVAL && probe == -12345));

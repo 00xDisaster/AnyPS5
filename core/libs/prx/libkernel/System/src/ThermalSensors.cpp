@@ -272,7 +272,7 @@ int APS5_VABI sceKernelGetCpuTemperature(int* outCelsius) {
 int APS5_VABI sceKernelGetSocSensorTemperature(int sensorId, int* outCelsius) {
     if (sensorId < 0 || sensorId > 64) return Fail(22);
     if (outCelsius == nullptr) return Fail(14);
-    if (sensorId >= 3) return Fail(22);
+    if (sensorId >= 3) throw std::runtime_error("sceKernelGetSocSensorTemperature: channels 3 to 64 have no host sensor");
     int celsius[3];
     ReadHostSensors(celsius);
     if (celsius[sensorId] < 0) return Fail(22);
