@@ -338,6 +338,13 @@ static void CheckFacetGetcat() {
 
 static void CheckTimeGetVtableObject() {
     for (std::uintptr_t& slot : _ZTVSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix) {
+        Require(slot == 0);
+        slot = 0x1111;
+        Require(slot == 0x1111);
+        slot = 0;
+    }
+}
+
 static void CheckTimeGetWideVtableObject() {
     for (std::uintptr_t& slot : _ZTVSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEE_nid_postfix) {
         Require(slot == 0);
