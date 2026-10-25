@@ -1,4 +1,4 @@
-#include "prx/libSceJxr/GuestPixelInfo.h"
+#include "prx/libSceJxr/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
 #include <cstddef>
@@ -18,7 +18,7 @@
 #endif
 
 extern "C" int JxrReferenceCase_nid_no_patch(std::uint8_t, int, int, std::uint8_t*, std::uint64_t*);
-using Query = std::int64_t (APS5_VABI*)(JxrPixelInfo*, std::uint8_t);
+using Query = decltype(&PixelFormatLookup_nid_postfix);
 static_assert(sizeof(JxrPixelInfo) == 56 && alignof(JxrPixelInfo) == 8);
 static_assert(offsetof(JxrPixelInfo, guid) == 0 && offsetof(JxrPixelInfo, channels) == 8);
 static_assert(offsetof(JxrPixelInfo, colorFormat) == 16 && offsetof(JxrPixelInfo, bitDepth) == 20);

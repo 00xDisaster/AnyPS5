@@ -10,6 +10,7 @@ function(configure_jxr_native target)
         target_compile_options(${target} PRIVATE -include ${JXR_SOURCE_DIR}/image/sys/strcodec.h)
     else()
         target_compile_definitions(${target} PRIVATE __ANSI__)
+        target_compile_options(${target} PRIVATE -include ${CMAKE_SOURCE_DIR}/cmake/JxrCompat.h)
     endif()
     set_target_properties(${target} PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON
         POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)

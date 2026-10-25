@@ -1,4 +1,4 @@
-#include "prx/libSceJxr/GuestPixelInfo.h"
+#include "prx/libSceJxr/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
