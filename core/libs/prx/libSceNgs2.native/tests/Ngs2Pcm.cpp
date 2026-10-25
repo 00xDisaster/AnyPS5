@@ -97,6 +97,7 @@ static void TestFramesAndPositions(const PcmFixture& fixture, std::uint32_t chan
     const auto frameBytes = channels * fixture.bytes;
     const Ngs2WaveformBlock block{2, data.size() - 3, 0, skip, Grain * 2, 0, 0};
     playback.Add(data.data() + 1, &block, 1);
+    Control(playback.voice, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{});
     Require(playback.State().waveform_data == data.data() + 3 + skip * frameBytes);
     for (std::uint32_t pass = 0; pass < 2; pass++) {
         const auto output = playback.Render();
