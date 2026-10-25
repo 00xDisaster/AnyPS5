@@ -17,6 +17,7 @@ static constexpr int SCE_NP_ERROR_CALLBACK_ALREADY_REGISTERED = static_cast<int>
 static constexpr int SCE_NP_ERROR_CALLBACK_NOT_REGISTERED = static_cast<int>(0x80550009);
 static constexpr int SCE_NP_ERROR_INVALID_SIZE = static_cast<int>(0x80550011);
 static constexpr int SCE_NP_ERROR_REQUEST_NOT_FOUND = static_cast<int>(0x80550014);
+static constexpr int SCE_NP_ERROR_INVALID_ID = static_cast<int>(0x80550015);
 static constexpr int SCE_NP_ERROR_CALLBACK_MAX = static_cast<int>(0x8055001D);
 static constexpr int NP_ID_MAPPER_REFUSED_ARGUMENT = static_cast<int>(0x80553083);
 static constexpr int NP_ID_MAPPER_REFUSED_REQUEST_ID = static_cast<int>(0x80553085);
@@ -982,7 +983,7 @@ int APS5_VABI sceNpRegisterStateCallbackA(NpStateCallbackA callback, void* userd
 }
 
 int APS5_VABI sceNpUnregisterStateCallbackA(int callbackId) {
-    if (callbackId < 1 || callbackId > NP_STATE_CALLBACK_MAX) return SCE_NP_ERROR_INVALID_ARGUMENT;
+    if (static_cast<uint32_t>(callbackId) - 1u >= static_cast<uint32_t>(NP_STATE_CALLBACK_MAX)) return SCE_NP_ERROR_INVALID_ID;
     std::lock_guard lock(stateMutex);
     auto& entry = stateCallbacksA[callbackId - 1];
     if (!entry.callback) return SCE_NP_ERROR_CALLBACK_NOT_REGISTERED;
