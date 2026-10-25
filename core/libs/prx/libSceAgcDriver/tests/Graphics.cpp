@@ -11134,6 +11134,31 @@ void meshArgumentTests() {
     Require(same(ResolveMeshArguments(record(0xffffffffu, 1, 0), rules(points, 0xffffffffu)), {0, 0, 0, 0xffffffffu, 0}), "groups over the device limit draw nothing");
 }
 
+void meshLimitTests() {
+    AgcDriver::Graphics::Context context{};
+    context.meshLimits.maxMeshWorkGroupInvocations = 128;
+    context.meshLimits.maxMeshWorkGroupSize[0] = 96;
+    context.meshLimits.maxMeshOutputVertices = 256;
+    context.meshLimits.maxMeshOutputPrimitives = 512;
+    context.meshLimits.maxMeshSharedMemorySize = 12284;
+    ShaderRecompiler::MeshConfiguration mesh{4u, 32u, 96u, 96u, 32u, 128u, 2048u, 0u, 4u};
+    mesh.maxVertices = 256;
+    mesh.maxPrimitives = 512;
+    mesh.ldsSizeDwords = 3071;
+    AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96);
+    expectFailure([&] { AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 97); }, "mesh workgroup of 97 invocations exceeds device limits (128 invocations, 96 wide)");
+    mesh.maxVertices = 257;
+    expectFailure([&] { AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96); }, "mesh output vertices 257 exceed the device limit 256");
+    mesh.maxVertices = 256;
+    mesh.maxPrimitives = 513;
+    expectFailure([&] { AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96); }, "mesh output primitives 513 exceed the device limit 512");
+    mesh.maxPrimitives = 512;
+    mesh.ldsSizeDwords = 3072;
+    expectFailure([&] { AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96); }, "mesh LDS 12288 bytes exceeds the device shared memory limit 12284");
+    mesh.ldsSizeDwords = 3071;
+    AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96);
+}
+
 void debugBranchTests() {
     for (const auto opcode : {0x17u, 0x18u, 0x19u, 0x1au}) Require(recompilesDebugBranch(opcode), "a conditional debug branch did not recompile");
 }
@@ -12245,6 +12270,7 @@ int main(int argc, char** argv) {
         storageTextureBudgetTests();
         sampledBudgetReportTests();
         meshArgumentTests();
+        meshLimitTests();
         meshIndexBufferTests();
         stagingPoolBudgetTests();
         validationTests();
