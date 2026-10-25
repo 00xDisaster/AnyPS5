@@ -55,17 +55,12 @@ static constexpr int NET_CTL_EVENT_IPOBTAINED = 3;
 static constexpr int NET_CTL_STUN_STATUS_FAILED = 1;
 static constexpr int NET_CTL_STUN_STATUS_OK = 2;
 static constexpr int NET_CTL_NAT_TYPE_NONE = 0;
-static constexpr int NET_CTL_NAT_TYPE_1 = 1;
-static constexpr int NET_CTL_NAT_TYPE_2 = 2;
-static constexpr int NET_CTL_NAT_TYPE_3 = 3;
 static constexpr std::uint16_t STUN_BINDING_REQUEST = 0x0001;
 static constexpr std::uint16_t STUN_BINDING_RESPONSE = 0x0101;
 static constexpr std::uint32_t STUN_MAGIC_COOKIE = 0x2112A442u;
 static constexpr std::uint16_t STUN_ATTR_MAPPED_ADDRESS = 0x0001;
-static constexpr std::uint16_t STUN_ATTR_CHANGED_ADDRESS = 0x0005;
 static constexpr std::uint16_t STUN_ATTR_XOR_MAPPED_ADDRESS = 0x0020;
 static constexpr std::uint16_t STUN_ATTR_XOR_MAPPED_ADDRESS_LEGACY = 0x8020;
-static constexpr std::uint16_t STUN_ATTR_OTHER_ADDRESS = 0x802b;
 static constexpr std::size_t STUN_HEADER_SIZE = 20;
 static constexpr std::size_t STUN_TRANSACTION_ID_SIZE = 12;
 static constexpr int STUN_DEFAULT_TIMEOUT_MS = 300;
@@ -501,11 +496,6 @@ struct StunEndpoint {
     bool valid = false;
 };
 
-struct StunProbeResponse {
-    StunEndpoint mapped;
-    StunEndpoint other;
-};
-
 struct StunConfig {
     std::mutex lock;
     bool overrideActive = false;
@@ -599,7 +589,7 @@ static StunEndpoint DecodeStunIpv4Endpoint(const std::uint8_t* value, std::uint1
     return endpoint;
 }
 
-static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t size, const std::uint8_t* transactionId, StunProbeResponse& response) {
+static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t size, const std::uint8_t* transactionId, StunEndpoint& mapped) {
     if (size < STUN_HEADER_SIZE) return false;
     const auto type = static_cast<std::uint16_t>((static_cast<std::uint16_t>(packet[0]) << 8) | packet[1]);
     const auto length = static_cast<std::uint16_t>((static_cast<std::uint16_t>(packet[2]) << 8) | packet[3]);
@@ -607,7 +597,7 @@ static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t siz
     const std::uint32_t expectedCookie = htonl(STUN_MAGIC_COOKIE);
     if (std::memcmp(packet + 4, &expectedCookie, sizeof(expectedCookie)) != 0) return false;
     if (std::memcmp(packet + 8, transactionId, STUN_TRANSACTION_ID_SIZE) != 0) return false;
-    response = {};
+    mapped = {};
     bool hasXorMapped = false;
     const std::size_t end = STUN_HEADER_SIZE + length;
     for (std::size_t offset = STUN_HEADER_SIZE; offset < end;) {
@@ -620,24 +610,21 @@ static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t siz
         if (attrType == STUN_ATTR_XOR_MAPPED_ADDRESS || attrType == STUN_ATTR_XOR_MAPPED_ADDRESS_LEGACY) {
             const auto endpoint = DecodeStunIpv4Endpoint(value, attrLen, true);
             if (endpoint.valid) {
-                response.mapped = endpoint;
+                mapped = endpoint;
                 hasXorMapped = true;
             }
         } else if (attrType == STUN_ATTR_MAPPED_ADDRESS && !hasXorMapped) {
             const auto endpoint = DecodeStunIpv4Endpoint(value, attrLen, false);
-            if (endpoint.valid) response.mapped = endpoint;
-        } else if (attrType == STUN_ATTR_OTHER_ADDRESS || attrType == STUN_ATTR_CHANGED_ADDRESS) {
-            const auto endpoint = DecodeStunIpv4Endpoint(value, attrLen, false);
-            if (endpoint.valid) response.other = endpoint;
+            if (endpoint.valid) mapped = endpoint;
         }
         offset = valueOffset + ((static_cast<std::size_t>(attrLen) + 3u) & ~std::size_t(3u));
     }
-    return response.mapped.valid;
+    return mapped.valid;
 }
 
 static std::atomic<std::uint64_t> g_stunTransactionCounter{1};
 
-static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, int timeoutMs, StunProbeResponse& response) {
+static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, int timeoutMs, StunEndpoint& mapped) {
     std::uint8_t request[STUN_HEADER_SIZE] = {};
     request[0] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST >> 8);
     request[1] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST & 0xFF);
@@ -686,7 +673,7 @@ static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, in
         if (received < 0) return false;
 #endif
         if (received == 0) return false;
-        if (ParseStunBindingResponse(buffer, static_cast<std::size_t>(received), request + 8, response)) return true;
+        if (ParseStunBindingResponse(buffer, static_cast<std::size_t>(received), request + 8, mapped)) return true;
     }
 }
 
@@ -720,68 +707,13 @@ static NetCtlNatInfo DiscoverNatInfo(in_addr localAddress) {
         return result;
     }
 
-    sockaddr_in boundAddr{};
-#ifdef _WIN32
-    int boundLen = sizeof(boundAddr);
-#else
-    socklen_t boundLen = sizeof(boundAddr);
-#endif
-    if (getsockname(descriptor, reinterpret_cast<sockaddr*>(&boundAddr), &boundLen) != 0) {
-        CloseStunSocket(descriptor);
-        return result;
-    }
-    const std::uint16_t localPort = ntohs(boundAddr.sin_port);
-
-    StunProbeResponse firstResponse{};
-    sockaddr_in primaryServer{};
-    std::size_t primaryIndex = servers.size();
-    for (std::size_t i = 0; i < servers.size(); ++i) {
-        if (ProbeStunServer(descriptor, servers[i], timeoutMs, firstResponse)) {
-            primaryServer = servers[i];
-            primaryIndex = i;
-            break;
-        }
-    }
-    if (primaryIndex == servers.size()) {
-        CloseStunSocket(descriptor);
-        return result;
-    }
-
-    if (firstResponse.mapped.address == localAddress.s_addr && firstResponse.mapped.port == localPort) {
-        CloseStunSocket(descriptor);
-        result.stun_status = NET_CTL_STUN_STATUS_OK;
-        result.nat_type = NET_CTL_NAT_TYPE_1;
-        result.mapped_addr = firstResponse.mapped.address;
-        return result;
-    }
-
-    std::vector<sockaddr_in> secondaryServers;
-    if (firstResponse.other.valid) {
-        sockaddr_in otherServer{};
-        otherServer.sin_family = AF_INET;
-        otherServer.sin_addr.s_addr = firstResponse.other.address;
-        otherServer.sin_port = htons(firstResponse.other.port);
-        if (otherServer.sin_addr.s_addr != primaryServer.sin_addr.s_addr || otherServer.sin_port != primaryServer.sin_port) {
-            AppendUniqueStunServer(secondaryServers, otherServer);
-        }
-    }
-    for (std::size_t i = 0; i < servers.size(); ++i) {
-        if (i == primaryIndex) continue;
-        if (servers[i].sin_addr.s_addr != primaryServer.sin_addr.s_addr || servers[i].sin_port != primaryServer.sin_port) {
-            AppendUniqueStunServer(secondaryServers, servers[i]);
-        }
-    }
-
-    for (const auto& secondary : secondaryServers) {
-        StunProbeResponse secondResponse{};
-        if (ProbeStunServer(descriptor, secondary, timeoutMs, secondResponse)) {
+    for (const auto& server : servers) {
+        StunEndpoint mapped{};
+        if (ProbeStunServer(descriptor, server, timeoutMs, mapped)) {
             CloseStunSocket(descriptor);
             result.stun_status = NET_CTL_STUN_STATUS_OK;
-            result.nat_type = (secondResponse.mapped.address == firstResponse.mapped.address &&
-                               secondResponse.mapped.port == firstResponse.mapped.port)
-                                  ? NET_CTL_NAT_TYPE_2
-                                  : NET_CTL_NAT_TYPE_3;
-            result.mapped_addr = firstResponse.mapped.address;
+            result.nat_type = NET_CTL_NAT_TYPE_NONE;
+            result.mapped_addr = mapped.address;
             return result;
         }
     }

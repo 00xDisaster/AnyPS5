@@ -257,7 +257,7 @@ void AppendStunAddressAttribute(std::vector<std::uint8_t>& packet, std::uint16_t
     packet.insert(packet.end(), addrBytes, addrBytes + 4);
 }
 
-sockaddr_in ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped, const sockaddr_in* otherServer = nullptr) {
+void ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped) {
     Require(WaitReadable(serverSocket, 2000));
     std::uint8_t request[64] = {};
     sockaddr_in client{};
@@ -281,16 +281,12 @@ sockaddr_in ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, 
     response[1] = 0x01;
     std::memcpy(response.data() + 4, request + 4, 16);
     AppendStunAddressAttribute(response, xorMapped ? 0x0020 : 0x0001, effectiveAddr, effectivePort, xorMapped);
-    if (otherServer) {
-        AppendStunAddressAttribute(response, 0x802b, otherServer->sin_addr.s_addr, ntohs(otherServer->sin_port), false);
-    }
     const auto attrLen = static_cast<std::uint16_t>(response.size() - 20);
     response[2] = static_cast<std::uint8_t>(attrLen >> 8);
     response[3] = static_cast<std::uint8_t>(attrLen & 0xFF);
     const auto sent = sendto(serverSocket, reinterpret_cast<const char*>(response.data()), static_cast<int>(response.size()), 0,
                              reinterpret_cast<const sockaddr*>(&client), clientLen);
     Require(sent == static_cast<int>(response.size()));
-    return client;
 }
 
 void CheckNatDiscovery(in_addr address) {
@@ -322,65 +318,44 @@ void CheckNatDiscovery(in_addr address) {
         Require(recvfrom(server1, reinterpret_cast<char*>(drained), sizeof(drained), 0, reinterpret_cast<sockaddr*>(&from), &fromLen) == 20);
     }
 
-    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
-    std::thread openWorker([&] {
-        ReplyStunBinding(server1, address.s_addr, 0, true);
-    });
-    natInfo = {sizeof(natInfo), 0, 0, 0};
-    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    openWorker.join();
-    Require(natInfo.size == sizeof(natInfo));
-    Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 1);
-    Require(natInfo.mapped_addr == address.s_addr);
-
     const std::uint32_t externalIp = (ntohl(address.s_addr) == 0xCB00712Au) ? htonl(0xCB00712Bu) : htonl(0xCB00712Au);
-    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
-    std::thread incompleteWorker([&] {
-        ReplyStunBinding(server1, externalIp, 54321, true);
-    });
-    natInfo = {sizeof(natInfo), 99, 99, 0xFFFFFFFFu};
-    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    incompleteWorker.join();
-    Require(natInfo.size == sizeof(natInfo));
-    Require(natInfo.stun_status == 1);
-    Require(natInfo.nat_type == 0);
-    Require(natInfo.mapped_addr == 0);
-
     const sockaddr_in bothServers[2] = {server1Addr, server2Addr};
-    NetCtlSetStunServers_nid_no_patch(bothServers, 2, 1000);
-    std::thread type2Worker([&] {
-        const auto firstClient = ReplyStunBinding(server1, externalIp, 54321, true);
-        const auto secondClient = ReplyStunBinding(server2, externalIp, 54321, true);
-        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
-        Require(firstClient.sin_port == secondClient.sin_port);
+    NetCtlSetStunServers_nid_no_patch(bothServers, 2, 40);
+    std::thread fallbackWorker([&] {
+        Require(WaitReadable(server1, 2000));
+        std::uint8_t dropped[64] = {};
+        sockaddr_in from{};
+#ifdef _WIN32
+        int fromLen = sizeof(from);
+#else
+        socklen_t fromLen = sizeof(from);
+#endif
+        Require(recvfrom(server1, reinterpret_cast<char*>(dropped), sizeof(dropped), 0, reinterpret_cast<sockaddr*>(&from), &fromLen) == 20);
+        ReplyStunBinding(server2, externalIp, 54321, true);
     });
-    natInfo = {sizeof(natInfo), 0, 0, 0};
+    natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    type2Worker.join();
+    fallbackWorker.join();
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 2);
+    Require(natInfo.nat_type == 0);
     Require(natInfo.mapped_addr == externalIp);
 
-    NetCtlNatInfo cachedInfo{sizeof(cachedInfo), 0, 0, 0};
+    NetCtlNatInfo cachedInfo{sizeof(cachedInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&cachedInfo) == 0);
-    Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 2 && cachedInfo.mapped_addr == externalIp);
+    Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 0 && cachedInfo.mapped_addr == externalIp);
 
     NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
-    std::thread type3Worker([&] {
-        const auto firstClient = ReplyStunBinding(server1, externalIp, 54321, false, &server2Addr);
-        const auto secondClient = ReplyStunBinding(server2, externalIp, 54322, false);
-        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
-        Require(firstClient.sin_port == secondClient.sin_port);
+    std::thread legacyWorker([&] {
+        ReplyStunBinding(server1, address.s_addr, 0, false);
     });
-    natInfo = {sizeof(natInfo), 0, 0, 0};
+    natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    type3Worker.join();
+    legacyWorker.join();
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 3);
-    Require(natInfo.mapped_addr == externalIp);
+    Require(natInfo.nat_type == 0);
+    Require(natInfo.mapped_addr == address.s_addr);
 
     NetCtlSetStunServers_nid_no_patch(nullptr, 0, 0);
     CloseTestSocket(server1);
