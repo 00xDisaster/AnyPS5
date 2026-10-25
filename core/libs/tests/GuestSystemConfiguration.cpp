@@ -17,12 +17,6 @@ static_assert(offsetof(SceKernelSystemSwVersion, versionString) == 0x08);
 static_assert(offsetof(SceKernelSystemSwVersion, version) == 0x24);
 static_assert(sizeof(SceKernelSystemSwVersion) == 0x28);
 extern "C" {
-int APS5_VABI sysKernelGetLowerLimitSysexVersion_nid_postfix(char*);
-int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(std::uint32_t*);
-int APS5_VABI sysKernelGetUpdVersion_nid_postfix(std::uint32_t*);
-int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(std::uint32_t*);
-int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(std::uint32_t*);
-int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(std::uint32_t*);
 extern char** environ_nid_postfix;
 }
 static void Require(bool value) { if (!value) std::abort(); }
