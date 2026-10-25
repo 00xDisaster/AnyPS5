@@ -251,6 +251,26 @@ static void CheckRandom() {
     Require(std::any_of(values.begin() + 1, values.end(), [&](std::uint32_t value) { return value != values[0]; }));
 }
 
+static void CheckInitParam() {
+    alignas(8) std::array<std::uint8_t, 64> parameter{};
+    const auto* initialize = reinterpret_cast<const NetInitializeParameter*>(parameter.data());
+    std::uint32_t randomOutput = 0;
+    Require(sceNetTerm() == 0);
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    bool threw = false;
+    try {
+        sceNetInitParam(nullptr);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    Require(threw);
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    Require(sceNetInitParam(initialize) == 0);
+    Require(sceNetGetRandom(&randomOutput) == 0);
+    Require(sceNetInitParam(initialize) == 0);
+    Require(sceNetGetRandom(&randomOutput) == 0);
+}
+
 static void CheckNetMemory() {
     *sceNetErrnoLoc() = 33;
     for (const std::int32_t size : {0, -1, INT32_MIN}) {
@@ -1785,6 +1805,7 @@ int main() {
     Require(Failed(sceNetShowNetstat(), 200));
     Require(Failed(sceNetShowIfconfig(), 200));
     Require(sceNetInit_nid_postfix() == 0);
+    CheckInitParam();
     CheckEpollWritable();
     CheckSocketHostErrors();
     CheckPoolStats();
