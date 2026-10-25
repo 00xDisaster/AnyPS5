@@ -852,7 +852,11 @@ int APS5_VABI setpriority_nid_postfix(int which, int who, int niceval) {
         *__error_nid_postfix() = guestNoProcess;
         return -1;
     }
-    static_cast<void>(niceval);
+    if (which != guestPriorityProcess) {
+        throw std::runtime_error(std::string("setpriority: setting the nice value of ") +
+                                 (which == guestPriorityGroup ? "PRIO_PGRP" : "PRIO_USER") + " to " + std::to_string(niceval) +
+                                 " is not verified on the console");
+    }
     return 0;
 }
 
