@@ -1,4 +1,6 @@
 #include "prx/libSceJxr/libSceJxr.hpp"
+#include "prx/libc/include/GuestArena.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -8,6 +10,7 @@
 #include <cstring>
 #include <limits>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 
@@ -164,6 +167,59 @@ void CallbackMutation(Jxr::Stream& stream) {
     mutation = {};
 }
 
+#ifdef _WIN32
+std::int64_t APS5_VABI ObserveRead(Jxr::Stream*, void*, std::size_t) {
+    calls.push_back('r');
+    return 0;
+}
+#endif
+
+void GuestMapping(Jxr::Stream& stream) {
+    constexpr std::size_t mappingSize = 0x4000;
+    std::int64_t physical = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, mappingSize, 0, 0, &physical) == 0, "allocate guest packet backing");
+    void* mapping = nullptr;
+    Require(sceKernelMapDirectMemory(&mapping, mappingSize, 3, 0, physical, 0) == 0 && mapping, "map guest packet backing");
+    Require(GuestArena::GuestArenaContains_nid_postfix(mapping, mappingSize), "packet mapping is outside the guest arena");
+    auto* bytes = static_cast<std::uint8_t*>(mapping);
+    std::fill_n(bytes, mappingSize, 0xcc);
+    calls.clear();
+    readResult = 0;
+    seekResult = 0;
+    Jxr::BitIo io{7, 19, 13, ~8192, bytes, bytes + PacketSize, &stream, 91};
+    Require(readIS_nid_postfix(nullptr, &io) == 0, "guest packet refill failed");
+    Require(calls == std::vector<char>({'s', 'r'}) && lastBuffer == bytes && lastSize == PacketSize, "guest packet callback arguments differ");
+    Require(io.start == bytes + PacketSize && io.referenceOffset == 91 + PacketSize, "guest packet refill did not advance");
+    for (std::size_t i = 0; i < mappingSize; ++i) {
+        Require(bytes[i] == (i < PacketSize ? static_cast<std::uint8_t>(i * 17 + 91) : 0xcc), "guest packet refill changed unexpected bytes");
+    }
+#ifdef _WIN32
+    Require(sceKernelMprotect(mapping, mappingSize, 1) == 0, "protect guest packet backing read-only");
+    {
+        GuestArena::HostWrite access(bytes, PacketSize);
+        Require(!access.Open(), "read-only guest packet backing accepted a host write");
+    }
+    Jxr::Stream observedStream = stream;
+    observedStream.read = ObserveRead;
+    io = {7, 19, 13, ~8192, bytes, bytes + PacketSize, &observedStream, 91};
+    const auto initial = io;
+    std::array<std::uint8_t, mappingSize> before;
+    std::copy_n(bytes, mappingSize, before.begin());
+    calls.clear();
+    bool rejected = false;
+    try {
+        readIS_nid_postfix(nullptr, &io);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    Require(rejected && calls == std::vector<char>({'s'}), "rejected guest packet write invoked the read callback");
+    Require(std::memcmp(&io, &initial, sizeof(io)) == 0 && std::equal(before.begin(), before.end(), bytes), "rejected guest packet write mutated state or backing");
+    Require(sceKernelMprotect(mapping, mappingSize, 3) == 0, "restore writable guest packet backing");
+#endif
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapping), mappingSize) == 0, "unmap guest packet backing");
+    Require(sceKernelReleaseDirectMemory(physical, mappingSize) == 0, "release guest packet backing");
+}
+
 }
 
 int main() {
@@ -175,5 +231,6 @@ int main() {
     Writes(stream);
     Buffered();
     CallbackMutation(stream);
+    GuestMapping(stream);
     return 0;
 }

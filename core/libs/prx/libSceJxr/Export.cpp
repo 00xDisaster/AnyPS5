@@ -40,6 +40,7 @@ std::int64_t APS5_VABI readIS_nid_postfix(void*, Jxr::BitIo* io) {
     if (!io->start || !stream->read) NotImplemented_nid_no_patch(__func__);
     {
         GuestArena::HostWrite access(io->start, packetSize);
+        if (!access.Open()) NotImplemented_nid_no_patch(__func__);
         stream->read(stream, io->start, packetSize);
     }
     io->referenceOffset += packetSize;
