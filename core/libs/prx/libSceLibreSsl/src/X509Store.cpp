@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 
 static_assert(sizeof(LibreSslX509VerifyParamId) == 56);
@@ -76,6 +77,21 @@ void FreeStack(Stack* stack) {
 char** Elements(const Stack* stack, const char* function) {
     if (!stack->data) NotImplemented_nid_no_patch(function);
     return stack->data;
+}
+
+bool Push(Stack* stack, void* element, const char* function) {
+    if (!stack) return false;
+    if (stack->numAlloc <= stack->num + 1) {
+        if (stack->numAlloc <= 0 || stack->num < 0) NotImplemented_nid_no_patch(function);
+        auto* grown = static_cast<char**>(realloc_nid_postfix(stack->data, static_cast<std::size_t>(stack->numAlloc) * 2 * sizeof(char*)));
+        if (!grown) return false;
+        stack->data = grown;
+        stack->numAlloc *= 2;
+    }
+    stack->data[stack->num] = static_cast<char*>(element);
+    ++stack->num;
+    stack->sorted = 0;
+    return true;
 }
 
 bool HoldsElements(const Stack* stack, const char* function) {
@@ -164,6 +180,34 @@ int APS5_VABI X509_STORE_set_flags_nid_postfix(LibreSslX509Store* store, std::ui
     if (!store || !store->param) NotImplemented_nid_no_patch(__func__);
     store->param->flags |= flags;
     if (flags & PolicyMask) store->param->flags |= PolicyCheck;
+    return 1;
+}
+
+int APS5_VABI X509_VERIFY_PARAM_set1_host_nid_postfix(LibreSslX509VerifyParam* param, const char* name, std::size_t length) {
+    if (!param || !param->id) NotImplemented_nid_no_patch(__func__);
+    auto* id = param->id;
+    if (name && length == 0) length = std::strlen(name);
+    if (name && std::memchr(name, '\0', length)) return 0;
+    if (id->hosts) {
+        FreeStrings(static_cast<Stack*>(id->hosts), __func__);
+        id->hosts = nullptr;
+    }
+    if (!name || length == 0) return 1;
+    char* copy = strndup_nid_postfix(name, length);
+    if (!copy) return 0;
+    if (!id->hosts && !(id->hosts = NewStack(nullptr))) {
+        free_nid_postfix(copy);
+        return 0;
+    }
+    auto* hosts = static_cast<Stack*>(id->hosts);
+    if (!Push(hosts, copy, __func__)) {
+        free_nid_postfix(copy);
+        if (hosts->num == 0) {
+            FreeStack(hosts);
+            id->hosts = nullptr;
+        }
+        return 0;
+    }
     return 1;
 }
 
