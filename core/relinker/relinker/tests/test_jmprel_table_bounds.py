@@ -129,6 +129,8 @@ def main():
                         "Unsupported PLT relocation type", target=output_target)
                     run(relinker, work, prefix + "-relative-in-plt", fixture(relocation_type=8, **options),
                         "Unsupported PLT relocation type", target=output_target)
+                    run(relinker, work, prefix + "-none-in-plt", fixture(relocation_type=0, symbol_index=0, **options),
+                        "Unsupported PLT relocation type", target=output_target)
     print("Jump relocation table bounds tests passed")
 
 
