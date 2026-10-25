@@ -105,7 +105,10 @@ static void SignalTo() {
     signalled.target = scePthreadSelf();
     Require(scePthreadMutexInit(&signalled.mutex, nullptr, nullptr) == SCE_OK);
     Require(scePthreadCondInit(&signalled.cond, nullptr, nullptr) == SCE_OK);
-    Require(pthread_cond_signalto_np_nid_postfix(&signalled.cond, signalled.target) == 0);
+    Require(pthread_cond_signalto_np_nid_postfix(&signalled.cond, signalled.target) == 1);
+    Require(scePthreadCondSignalto(&signalled.cond, signalled.target) == static_cast<int>(0x80020001u));
+    Require(pthread_cond_signalto_np_nid_postfix(&signalled.cond, nullptr) == 22);
+    Require(scePthreadCondSignalto(&signalled.cond, nullptr) == static_cast<int>(0x80020016u));
     Require(scePthreadMutexLock(&signalled.mutex) == SCE_OK);
     Pthread thread = nullptr;
     Require(scePthreadCreate(&thread, nullptr, SignallerTo, &signalled, nullptr) == SCE_OK);
