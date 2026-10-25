@@ -92,7 +92,7 @@ jobs:
         if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         working-directory: build
         env:
-          ASAN_OPTIONS: 'detect_leaks=0:'
+          ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --output-on-failure --timeout 300 --parallel 4 --output-log ctest.log --output-junit ctest.xml || true
       - name: Summarize the sanitizer findings
