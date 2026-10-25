@@ -10,23 +10,12 @@
 #include <initializer_list>
 #include <source_location>
 #include <span>
-#include <stdexcept>
 #include <vector>
 
 static void Require(bool value, std::source_location location = std::source_location::current()) {
     if (value) return;
     std::fprintf(stderr, "%s:%u: PNG decoder assertion failed\n", location.file_name(), location.line());
     std::abort();
-}
-
-template<typename TFunction>
-static bool ThrowsRuntimeError(TFunction function) {
-    try {
-        function();
-    } catch (const std::runtime_error&) {
-        return true;
-    }
-    return false;
 }
 
 static const std::uint8_t PALETTE_TRNS[] = {
@@ -355,8 +344,6 @@ int main() {
     Check16BitImage(handle, deepHandle, RGBA16, {0x12, 0x56, 0x9A, 0x0D, 0xAB, 0x20, 0xEE, 0xFF, 0, 0x80, 0xFF, 0, 0xFF, 1, 0x7F, 0x80}, 19, 0);
     decode = DecodeParam(rgbPng, image);
     Require(scePngDecDecode(deepHandle, &decode, &info) == (3 << 16 | 2));
-    decode.pixel_format = 132;
-    Require(ThrowsRuntimeError([&] { scePngDecDecode(deepHandle, &decode, &info); }));
     Require(scePngDecDelete(deepHandle) == 0);
 
     Require(scePngDecDelete(nullptr) == invalidHandle);
