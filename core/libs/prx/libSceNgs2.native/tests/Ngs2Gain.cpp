@@ -5,6 +5,8 @@
 #include <cmath>
 #include <initializer_list>
 #include <limits>
+#include <stdexcept>
+#include <string_view>
 
 static std::int32_t APS5_VABI Generate(Ngs2UserFxProcessContext* context) {
     const auto* signal = reinterpret_cast<const float*>(context->user_data0);
@@ -200,6 +202,34 @@ static void TestLinkedParameters() {
     ExpectConstant(graph.Render(), {4});
 }
 
+static void TestIntegerOutput() {
+    for (const float gain : {1.0f, -1.0f}) {
+        GainGraph graph(1);
+        graph.Set({gain});
+        graph.Render();
+        std::array<std::int16_t, Grain> out{};
+        const Ngs2RenderBufferInfo info{out.data(), sizeof(out), SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 1};
+        Require(sceNgs2SystemRender(graph.system, &info, 1) == SCE_NGS2_OK);
+        for (const auto sample : out) Require(sample == (gain > 0.0f ? 16384 : -16384));
+    }
+    for (const float gain : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+        GainGraph graph(1);
+        graph.Set({gain});
+        graph.Render();
+        std::array<std::int16_t, Grain> out{};
+        out.fill(1234);
+        const Ngs2RenderBufferInfo info{out.data(), sizeof(out), SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 1};
+        bool rejected = false;
+        try {
+            Require(sceNgs2SystemRender(graph.system, &info, 1) == SCE_NGS2_OK);
+        } catch (const std::runtime_error& error) {
+            rejected = std::string_view(error.what()) == "NGS2: integer rendering of nonfinite samples is not implemented";
+        }
+        Require(rejected);
+        for (const auto sample : out) Require(sample == 1234);
+    }
+}
+
 int main() {
     TestRamps();
     TestEightChannels();
@@ -209,5 +239,6 @@ int main() {
     TestParameterPositions();
     TestZeroClearsNanSource();
     TestLinkedParameters();
+    TestIntegerOutput();
     return 0;
 }

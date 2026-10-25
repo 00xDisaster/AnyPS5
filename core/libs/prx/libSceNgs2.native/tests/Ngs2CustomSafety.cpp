@@ -6,8 +6,10 @@
 #include <string_view>
 
 static uintptr_t target = 0;
+static std::uint32_t setupCalls = 0;
 
 static int APS5_VABI ChangeSetup(Ngs2UserFxProcessContext* context) {
+    Require(++setupCalls == 1);
     std::fill_n(context->channel_data[0], context->num_grain_samples, 1.0f);
     Control(target, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 8, 8, 0, 0});
     return 0;
@@ -38,12 +40,13 @@ static uintptr_t Custom(uintptr_t system, std::uint32_t count, bool chain, std::
     return voice;
 }
 
-static bool Rejected(uintptr_t system) {
+static bool Rejected(uintptr_t system, std::string_view expected) {
     std::array<float, Grain * 2> out{};
     const Ngs2RenderBufferInfo info{out.data(), sizeof(out), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 2};
     try {
         Require(sceNgs2SystemRender(system, &info, 1) == 0);
     } catch (const std::runtime_error& error) {
+        if (std::string_view(error.what()) != expected) throw;
         std::printf("safely refused: %s\n", error.what());
         return true;
     }
@@ -51,15 +54,18 @@ static bool Rejected(uintptr_t system) {
 }
 
 static void TestSelfCallback() {
+    setupCalls = 0;
     const auto system = CreateSystem();
     target = Custom(system, 1, true);
     Control(target, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX, Ngs2CustomVoiceUserFxParam{{}, ChangeSetup, 0, 0, 0});
     Control(target, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 1, Ngs2CustomVoiceGainParam{});
-    Require(Rejected(system));
+    Require(Rejected(system, "NGS2: voice setup changes during custom processing are not implemented"));
+    Require(setupCalls == 1);
     Require(sceNgs2SystemDestroy(system, nullptr) == 0);
 }
 
 static void TestUpstreamCallback() {
+    setupCalls = 0;
     const auto system = CreateSystem();
     target = Custom(system, 2, false);
     const auto source = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
@@ -67,7 +73,8 @@ static void TestUpstreamCallback() {
     Control(source, SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX, Ngs2SubmixerVoiceUserFxParam{{}, ChangeSetup, 0, 0, 0});
     Control(source, SCE_NGS2_VOICE_PARAM_PATCH, Ngs2VoicePatchParam{{}, 0, 1, target});
     Event(source, SCE_NGS2_VOICE_EVENT_PLAY);
-    Require(Rejected(system));
+    Require(Rejected(system, "NGS2: channel layout changes during input rendering are not implemented"));
+    Require(setupCalls == 1);
     Require(sceNgs2SystemDestroy(system, nullptr) == 0);
 }
 
@@ -75,9 +82,9 @@ static void TestSetupLifecycle() {
     const auto system = CreateSystem();
     target = Custom(system, 1, true);
     Control(target, SCE_NGS2_CUSTOM_VOICE_PARAM_GAIN | 1, Ngs2CustomVoiceGainParam{});
-    Require(!Rejected(system));
+    Require(!Rejected(system, "NGS2: custom Gain processing after setup or stop is not verified"));
     Control(target, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
-    Require(Rejected(system));
+    Require(Rejected(system, "NGS2: custom Gain processing after setup or stop is not verified"));
     Require(sceNgs2SystemDestroy(system, nullptr) == 0);
 }
 
