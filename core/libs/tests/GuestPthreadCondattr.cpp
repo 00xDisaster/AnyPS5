@@ -57,6 +57,10 @@ int main() {
     CheckClock(&attr, 0);
     CheckClockRefused(&attr, nullptr);
     CheckClock(&attr, 0);
+    for (const KernelClockid clock : {0, 1, 2, Monotonic, 5, 12}) {
+        Require(scePthreadCondattrSetclock(&attr, clock) == SCE_OK);
+        Require(pthread_condattr_setclock_nid_postfix(&attr, clock) == 0);
+    }
     PthreadCondattr other = nullptr;
     Require(pthread_condattr_init_nid_postfix(&other) == 0);
     for (const KernelClockid clock : {0, 1, 2, Monotonic}) {
