@@ -2,6 +2,8 @@
 
 ### Unknown function info
 
+- [frexpf](../../../core/libs/prx/libc/src/Math.cpp) (libc) - follows the bundled PPSA03766 implementation: exponent-bit decomposition, conditional single-precision subnormal scaling, zero exponent for zero/NaN/infinity, and unchanged signaling NaNs. PPSA07923 agrees on results/exponents but unconditionally scales finite inputs, additionally raising overflow/inexact on large values; that SDK variant is not reproduced. Masked-exception observations cover rounding, DAZ/FTZ and sticky flags; unmasked traps and other SDK versions are unverified.
+
 - [strtonum](../../../core/libs/prx/libc/src/StringExtensions.cpp) (libc) is unverified on the console. Its signature, decimal parsing, inclusive bounds, error strings, error precedence and errno preservation follow [FreeBSD 11.4 strtonum.c](https://github.com/freebsd/freebsd-src/blob/8c639945a44588f6cfdddfb057bb5aad88735da0/lib/libc/stdlib/strtonum.c). Parsing uses the host `strtoll` with base 10. It is not exported by `libSceLibcInternal.sprx` on a PS5 (firmware 13.60), so a payload process cannot call it there
 - [fegetexcept](../../../core/libs/prx/libc/src/FloatingPoint.cpp) (libSceLibcInternal, implemented in libc) has not been read from the PS5 library or measured on a console. It follows FreeBSD 11.4 amd64 [fenv.h](https://github.com/freebsd/freebsd-src/blob/4554bee35405b36ea19e9e60d6abe6ea534e36e0/lib/msun/x86/fenv.h#L121-L133), reporting the six unmasked x87 exceptions independently of MXCSR; whether the PS5 uses the same rule when the units disagree is unverified.
 

@@ -385,7 +385,22 @@ long double APS5_VABI scalbnl_nid_postfix(long double x, int exponent) { return 
 float APS5_VABI significandf_nid_postfix(float x) { return x == 0.0f || !std::isfinite(x) ? x : std::scalbn(x, -std::ilogb(x)); }
 double APS5_VABI significand_nid_postfix(double x) { return x == 0.0 || !std::isfinite(x) ? x : std::scalbn(x, -std::ilogb(x)); }
 double APS5_VABI frexp_nid_postfix(double x, int* exponent) { return std::frexp(x, exponent); }
-float APS5_VABI frexpf_nid_postfix(float x, int* exponent) { return std::frexp(x, exponent); }
+float APS5_VABI frexpf_nid_postfix(float x, int* exponent) {
+    auto bits = std::bit_cast<std::uint32_t>(x);
+    auto magnitude = bits & 0x7fffffffu;
+    *exponent = 0;
+    if (magnitude == 0 || magnitude >= 0x7f800000u) return x;
+    int adjustment = 0;
+    if (magnitude < 0x00800000u) {
+        volatile float subnormal = x;
+        x = subnormal * 0x1p25f;
+        bits = std::bit_cast<std::uint32_t>(x);
+        magnitude = bits & 0x7fffffffu;
+        adjustment = -25;
+    }
+    *exponent = static_cast<int>(magnitude >> 23) - 126 + adjustment;
+    return std::bit_cast<float>((bits & 0x807fffffu) | 0x3f000000u);
+}
 // Guest long is 64-bit, including on Windows where native long is 32-bit.
 std::int64_t APS5_VABI lround_nid_postfix(double x) { return RoundToInt64(x); }
 std::int64_t APS5_VABI lroundf_nid_postfix(float x) { return RoundToInt64(x); }

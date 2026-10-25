@@ -1180,6 +1180,58 @@ static void CheckLogfConsoleBits() {
     }
 }
 
+static void CheckFrexpfEnvironment() {
+    constexpr struct {
+        std::uint32_t input;
+        std::uint32_t fraction;
+        int exponent;
+    } cases[] = {
+        {0x00000000u, 0x00000000u, 0}, {0x80000000u, 0x80000000u, 0},
+        {0x00000001u, 0x3f000000u, -148}, {0x80000001u, 0xbf000000u, -148},
+        {0x007fffffu, 0x3f7ffffeu, -126}, {0x807fffffu, 0xbf7ffffeu, -126},
+        {0x00800000u, 0x3f000000u, -125}, {0x80800000u, 0xbf000000u, -125},
+        {0x3f000000u, 0x3f000000u, 0}, {0x3f800000u, 0x3f000000u, 1},
+        {0xbf800000u, 0xbf000000u, 1}, {0x41400000u, 0x3f400000u, 4},
+        {0x7f7fffffu, 0x3f7fffffu, 128}, {0xff7fffffu, 0xbf7fffffu, 128},
+        {0x7f800000u, 0x7f800000u, 0}, {0xff800000u, 0xff800000u, 0},
+        {0x7f800001u, 0x7f800001u, 0}, {0xff800001u, 0xff800001u, 0},
+        {0x7fc01234u, 0x7fc01234u, 0}, {0xffc01234u, 0xffc01234u, 0},
+    };
+    std::fenv_t saved;
+    Require(std::fegetenv(&saved) == 0);
+    const unsigned savedCsr = _mm_getcsr();
+    constexpr int rounding[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
+    const int savedError = *__error_nid_postfix();
+    for (unsigned mode = 0; mode != 4; ++mode) {
+        for (unsigned denorm = 0; denorm != 4; ++denorm) {
+            const unsigned control = 0x1f80u | (mode << 13) | ((denorm & 1u) ? 0x40u : 0u) | ((denorm & 2u) ? 0x8000u : 0u);
+            for (const unsigned sticky : {0u, 5u, 32u}) {
+                for (const auto& item : cases) {
+                    Require(std::fesetenv(FE_DFL_ENV) == 0);
+                    Require(std::fesetround(rounding[mode]) == 0);
+                    *__error_nid_postfix() = 97;
+                    _mm_setcsr(control | sticky);
+                    int exponent = 77;
+                    const auto fraction = std::bit_cast<std::uint32_t>(frexpf_nid_postfix(std::bit_cast<float>(item.input), &exponent));
+                    const unsigned after = _mm_getcsr();
+                    const bool subnormal = (item.input & 0x7fffffffu) != 0 && (item.input & 0x7fffffffu) < 0x00800000u;
+                    const bool flushed = subnormal && (denorm & 1u) != 0;
+                    const unsigned flags = sticky | (subnormal && !flushed ? 2u : 0u);
+                    const auto expectedFraction = flushed ? (item.input & 0x80000000u) | 0x3f000000u : item.fraction;
+                    const int expectedExponent = flushed ? -151 : item.exponent;
+                    if (fraction != expectedFraction || exponent != expectedExponent || after != (control | flags) || *__error_nid_postfix() != 97) {
+                        std::fprintf(stderr, "frexpf input=%08x mode=%u denorm=%u sticky=%u fraction=%08x exponent=%d csr=%x\n", item.input, mode, denorm, sticky, fraction, exponent, after);
+                        std::abort();
+                    }
+                }
+            }
+        }
+    }
+    Require(std::fesetenv(&saved) == 0);
+    _mm_setcsr(savedCsr);
+    *__error_nid_postfix() = savedError;
+}
+
 static void CheckDinkumwareConstants() {
     RequireBytes(&_Inf_nid_postfix, {0, 0, 0, 0, 0, 0, 0xf0, 0x7f});
     RequireBytes(&_Denorm_nid_postfix, {1});
@@ -1745,4 +1797,5 @@ int main() {
     CheckScaling();
     CheckLongDoubleFunctions();
     CheckDinkumwareFloatCharacteristics();
+    CheckFrexpfEnvironment();
 }
