@@ -498,7 +498,10 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
-    parser = argparse.ArgumentParser(description="report open pull requests that overlap each other")
+    parser = argparse.ArgumentParser(
+        description="report open pull requests that overlap each other",
+        epilog="The exports found in the base are cached by source blob in pr_overlap-exports.json inside the git "
+               "directory; deleting that file only makes the next run slower.")
     parser.add_argument("--base", default="main")
     parser.add_argument("--out", type=Path, help="write <number>.md for every open pull request (empty when clean)")
     parser.add_argument("--branch", help="check a local branch against the open pull requests instead")
