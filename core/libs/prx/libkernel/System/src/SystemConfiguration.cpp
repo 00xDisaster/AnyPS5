@@ -187,13 +187,30 @@ std::int64_t APS5_VABI sysconf_nid_postfix(int name) {
         case 1: // _SC_ARG_MAX
             result = 262144;
             break;
+        case 2: {
+            GuestResourceLimit limit{};
+            if (getrlimit_nid_postfix(7, &limit) == 0) {
+                result = limit.rlim_cur;
+            }
+            break;
+        }
         case 3: // _SC_CLK_TCK
             result = 128;
+            break;
+        case 4:
+            result = 1023;
             break;
         case 5: { // _SC_OPEN_MAX
             GuestResourceLimit limit{};
             if (getrlimit_nid_postfix(8, &limit) == 0) {
                 result = limit.rlim_cur;
+            }
+            break;
+        }
+        case 26: {
+            GuestResourceLimit limit{};
+            if (getrlimit_nid_postfix(8, &limit) == 0) {
+                result = std::min<std::int64_t>(limit.rlim_cur, 32767);
             }
             break;
         }
@@ -210,6 +227,12 @@ std::int64_t APS5_VABI sysconf_nid_postfix(int name) {
 #else
             result = ::sysconf(name == 57 ? _SC_NPROCESSORS_CONF : _SC_NPROCESSORS_ONLN);
 #endif
+            break;
+        case 72:
+            result = 255;
+            break;
+        case 73:
+            result = 33;
             break;
         case 121: { // _SC_PHYS_PAGES: report host physical capacity in guest pages
 #ifdef _WIN32
