@@ -152,7 +152,7 @@ class CheckCompileModeTests(unittest.TestCase):
                     if expected:
                         self.assertIn("positional_syntax_error", result.stderr)
 
-    def check_forwarded_options(self, variants):
+    def check_forwarded_options(self, variants, response_text=None):
         compiler = self.compilers(("clang",))[0]
         for flags in variants:
             for field in ("arguments", "command"):
@@ -162,6 +162,8 @@ class CheckCompileModeTests(unittest.TestCase):
                         build = root / "build"
                         build.mkdir()
                         source = root / "unit.c"
+                        if response_text is not None:
+                            (build / "operand.rsp").write_text(response_text, encoding="utf-8")
                         source.write_text(text, encoding="utf-8")
                         object_file, dependency_file = build / "unit.o", build / "unit.d"
                         object_file.write_bytes(b"existing object output\n")
@@ -179,6 +181,9 @@ class CheckCompileModeTests(unittest.TestCase):
 
     def test_comma_forwarded_preprocessor_actions_are_rejected(self):
         self.check_forwarded_options((("-Wp,-E",), ("-Wp,-E,-P",)))
+
+    def test_forwarded_response_operands_cannot_hide_actions(self):
+        self.check_forwarded_options((("-Wp,-I,@operand.rsp",),), response_text="somewhere -E")
 
     def test_include_directory_values_can_look_like_modes(self):
         def configure(root, build, source):
