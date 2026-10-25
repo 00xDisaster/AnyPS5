@@ -414,7 +414,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
                     std::fill(scanCode.begin() + static_cast<std::ptrdiff_t>(maskBegin), scanCode.begin() + static_cast<std::ptrdiff_t>(maskEnd), std::uint8_t{0x90});
                 }
             }
-            const auto scanUnwindRanges = hasEhFrame ? SceUnwindRanges(code, header.MappedAddress, unwindFunctions) : std::vector<CodeRange>{};
+            const auto scanUnwindRanges = sceImage ? SceUnwindRanges(code, header.MappedAddress, unwindFunctions) : std::vector<CodeRange>{};
             for (const auto offset : syscallScanner.ScanCodeSectionForSyscalls(scanCode, header.MappedAddress, scanCode.size(), Io::Utf8Path(image.SourcePath), scanUnwindRanges)) {
                 if (offset > code.size() || code.size() - offset < 2u)
                     throw Domain::RelinkerException("Syscall trap patch exceeds guest executable segment", header.MappedAddress + offset);

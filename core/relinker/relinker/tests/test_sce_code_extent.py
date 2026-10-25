@@ -48,10 +48,10 @@ def fixture(sce_block=True, plt_push_offset=8, gap=0, interpreter_pointer=False,
     struct.pack_into("<HHIQQQIHHHHHH", image, 16, 3, 62, 1, entry, 64, 0, 0, 64, 56, header_count, 64, 0, 0)
     tags = [
         (1, 1),
-        (0x61000035, 0x600), (0x61000037, 16),
-        (0x61000039, 0x620), (0x6100003B, 24), (0x6100003F, 48),
-        (0x6100002F, 0x700), (0x61000031, 24 if interpreter_pointer or pointer_target is not None else 0), (0x61000033, 24),
-        (0x61000027, GOT), (0x61000029, 0x720), (0x6100002B, 7), (0x6100002D, 24),
+        (0x61000035 if sce_block else 5, 0x600), (0x61000037 if sce_block else 10, 16),
+        (0x61000039 if sce_block else 6, 0x620), (0x6100003B if sce_block else 11, 24), (0x6100003F, 48),
+        (0x6100002F if sce_block else 7, 0x700), (0x61000031 if sce_block else 8, 24 if interpreter_pointer or pointer_target is not None else 0), (0x61000033 if sce_block else 9, 24),
+        (0x61000027 if sce_block else 3, GOT), (0x61000029 if sce_block else 23, 0x720), (0x6100002B, 7), (0x6100002D if sce_block else 2, 24),
         (0, 0),
     ]
     struct.pack_into("<IIQQQQQQ", image, 64, PT_LOAD, 7, 0, 0, 0, len(image), len(image), 0x1000)
