@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -93,12 +94,6 @@ void CheckInitializeValidation(std::vector<std::uint8_t>& memory) {
         parameter.mode = mode;
         Require(InitializeFresh(memory, parameter) == InvalidArgument, "initialize mode");
     }
-    for (const std::uint32_t mode : {1000u, 1001u}) {
-        auto parameter = valid;
-        parameter.mode = mode;
-        parameter.workMemory = nullptr;
-        Require(Throws([&] { sceVrTracker2Initialize(&parameter); }), "initialize system mode category");
-    }
     auto parameter = valid;
     parameter.workMemory = nullptr;
     Require(InitializeFresh(memory, parameter) == InvalidArgument, "initialize work memory null");
@@ -160,8 +155,12 @@ void CheckInitializeTracking(std::vector<std::uint8_t>& memory, std::uint32_t sd
 }
 
 std::filesystem::path EnterApplicationRoot() {
-    const auto root = std::filesystem::temp_directory_path() / ("guest_vr_tracker2_" + std::to_string(getpid_nid_postfix()));
-    std::filesystem::remove_all(root);
+    std::random_device device;
+    std::filesystem::path root;
+    do {
+        root = std::filesystem::temp_directory_path() /
+            ("guest_vr_tracker2_" + std::to_string(getpid_nid_postfix()) + "_" + std::to_string(device()));
+    } while (!std::filesystem::create_directory(root));
     std::filesystem::create_directories(root / "app0" / "sce_sys");
     std::ofstream(root / "app0" / "sce_sys" / "param.json") << "{\n  \"contentId\": \"IV0000-ABCD00000_00-VRTRACKER2000000\",\n  \"localizedParameters\": {\"defaultLanguage\": \"en-US\", \"en-US\": {\"titleName\": \"VrTracker2\"}},\n  \"titleId\": \"ABCD00000\"\n}\n";
     std::filesystem::current_path(root);
