@@ -1,4 +1,5 @@
 #include <elfpatcher/general/SectionHeaderTableBuilder.hpp>
+#include <elfpatcher/general/ElfConstants.hpp>
 #include <io/ByteWriter.hpp>
 #include <io/BufferUtils.hpp>
 #include <algorithm>
@@ -42,7 +43,7 @@ int main() {
             const auto stringOffset = Io::ReadU64(bytes, alignedTable + 64 + 24);
             const auto stringSize = Io::ReadU64(bytes, alignedTable + 64 + 32);
             const auto stringEnd = stringOffset + stringSize;
-            Require(stringOffset == originalSize && stringSize != 0);
+            Require(stringOffset == originalSize && stringSize == sizeof(Elfpatcher::kShStrTabBlob));
             Require(stringEnd <= alignedTable && alignedTable - stringEnd < 8);
             Require(bytes[stringOffset] == 0 && bytes[stringEnd - 1] == 0);
             Require(std::equal(original.begin() + 64, original.end(), bytes.begin() + 64));
