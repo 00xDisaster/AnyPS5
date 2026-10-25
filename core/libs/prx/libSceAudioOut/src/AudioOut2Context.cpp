@@ -108,8 +108,8 @@ static void OpenDevice(AudioOut2Context& context) {
         AUDIOOUT2_TRACE("SDL audio init failed: %s\n", SDL_GetError());
         return;
     }
-    if (SDL_GetNumAudioDevices(0) == 0) {
-        AUDIOOUT2_TRACE("SDL reports no audio output device\n");
+    if (SdlAudioReportsNoOutputEndpoint(SDL_GetCurrentAudioDriver(), SDL_GetNumAudioDevices(0))) {
+        AUDIOOUT2_TRACE("SDL reports no WASAPI output endpoint\n");
         return;
     }
     SDL_AudioSpec desired{};
