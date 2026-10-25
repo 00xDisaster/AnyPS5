@@ -9,6 +9,7 @@
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 
@@ -29,13 +30,18 @@ void RequireThrows(TAction action) {
 struct Input {
     std::u16string text;
     std::vector<std::int32_t> positions;
+    std::int32_t* offset = nullptr;
+    std::int32_t base = 0;
+    std::vector<std::pair<std::int32_t, std::int32_t>> observations;
 };
 
 char16_t APS5_VABI Read_nid_no_patch(std::int32_t position, void* context) {
     auto& input = *static_cast<Input*>(context);
-    Require(position >= 0 && static_cast<std::size_t>(position) < input.text.size());
+    const auto relative = static_cast<std::int64_t>(position) - input.base;
+    Require(relative >= 0 && static_cast<std::size_t>(relative) < input.text.size());
     input.positions.push_back(position);
-    return input.text[position];
+    if (input.offset) input.observations.emplace_back(static_cast<std::int32_t>(relative), *input.offset - input.base);
+    return input.text[relative];
 }
 
 void At(std::u16string text, std::int32_t expected, std::int32_t consumed) {
@@ -43,6 +49,27 @@ void At(std::u16string text, std::int32_t expected, std::int32_t consumed) {
     std::int32_t offset = 0;
     Require(u_unescapeAt_nid_postfix(Read_nid_no_patch, &offset, input.text.size(), &input) == expected);
     Require(offset == consumed);
+}
+
+void CallbackOrder() {
+    const auto check = [](std::u16string text, std::int32_t expected, std::int32_t consumed,
+                          std::vector<std::pair<std::int32_t, std::int32_t>> observations, std::int32_t base = 0) {
+        auto offset = base;
+        Input input{std::move(text), {}, &offset, base, {}};
+        const auto length = static_cast<std::int32_t>(static_cast<std::int64_t>(base) + input.text.size());
+        Require(u_unescapeAt_nid_postfix(Read_nid_no_patch, &offset, length, &input) == expected);
+        Require(offset - base == consumed && input.observations == observations);
+    };
+    check(u"u0041!", 0x41, 5, {{0, 1}, {1, 1}, {2, 2}, {3, 3}, {4, 4}});
+    check(u"x{41}", 0x41, 5, {{0, 1}, {1, 1}, {2, 2}, {3, 3}, {4, 4}});
+    check(u"u12", -1, 0, {{0, 1}, {1, 1}, {2, 2}});
+    check(u"uD83D\\uDE00", 0x1f600, 11,
+          {{0, 1}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 5}, {7, 5}, {8, 5}, {9, 5}, {10, 5}});
+    check(u"uD800\\u12", 0xd800, 5,
+          {{0, 1}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 5}, {7, 5}, {8, 5}});
+    check(std::u16string(u"uD83D") + char16_t{0xde00}, 0x1f600, 6,
+          {{0, 1}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}}, std::numeric_limits<std::int32_t>::max() - 6);
+    check(u"u", -1, 0, {{0, 1}}, std::numeric_limits<std::int32_t>::max() - 1);
 }
 
 void SingleEscapes() {
@@ -98,8 +125,12 @@ void String(const char* escaped, std::u16string_view expected) {
     for (std::int32_t capacity = 0; capacity <= static_cast<std::int32_t>(expected.size()) + 2; ++capacity) {
         std::vector<char16_t> output(expected.size() + 4, 0xa55a);
         Require(u_unescape_nid_postfix(escaped, output.data() + 1, capacity) == static_cast<int>(expected.size()));
-        if (capacity >= static_cast<int>(expected.size()))
-            Require(std::equal(expected.begin(), expected.end(), output.begin() + 1));
+        auto prefix = std::min<std::size_t>(capacity, expected.size());
+        if (prefix > 0 && prefix < expected.size() && expected[prefix - 1] >= 0xd800 && expected[prefix - 1] <= 0xdbff
+            && expected[prefix] >= 0xdc00 && expected[prefix] <= 0xdfff) --prefix;
+        Require(std::equal(expected.begin(), expected.begin() + prefix, output.begin() + 1));
+        for (auto index = prefix; index < std::min<std::size_t>(capacity, expected.size()); ++index)
+            Require(output[index + 1] == 0xa55a);
         if (capacity > static_cast<int>(expected.size())) Require(output[expected.size() + 1] == 0);
         Require(output.front() == 0xa55a);
         for (std::size_t index = capacity + 1; index < output.size(); ++index) Require(output[index] == 0xa55a);
@@ -109,6 +140,7 @@ void String(const char* escaped, std::u16string_view expected) {
 void Strings() {
     String("", u"");
     String("plain text", u"plain text");
+    String("A\\u0042", u"AB");
     String("\\a\\b\\t\\n\\v\\f\\r\\e\\\"\\'\\?\\\\", u"\a\b\t\n\v\f\r\x1b\"'?\\");
     String("[a\\-z]\\cA\\777", u"[a-z]\x01\u01ff");
     String("A\\u0042\\U0001F600Z", u"AB\U0001f600Z");
@@ -139,7 +171,8 @@ void Strings() {
     for (std::uint32_t value = 0; value <= 0x10ffff; value += 17) {
         char escaped[16];
         std::snprintf(escaped, sizeof(escaped), "\\U%08x", value);
-        std::array<char16_t, 3> output{};
+        std::array<char16_t, 3> output;
+        output.fill(0xa55a);
         const auto size = u_unescape_nid_postfix(escaped, output.data(), output.size());
         if (value <= 0xffff) Require(size == 1 && output[0] == value && output[1] == 0);
         else Require(size == 2 && output[0] == 0xd800 + ((value - 0x10000) >> 10) && output[1] == 0xdc00 + ((value - 0x10000) & 0x3ff) && output[2] == 0);
@@ -150,6 +183,7 @@ void Strings() {
 
 int main() {
     SingleEscapes();
+    CallbackOrder();
     Strings();
     std::puts("ICU escape decoding tests passed");
 }
