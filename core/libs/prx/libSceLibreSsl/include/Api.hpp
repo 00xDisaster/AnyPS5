@@ -56,6 +56,17 @@ struct Sha512Context {
     std::uint32_t num, mdLength;
 };
 
+using StackCompare = int (APS5_VABI*)(const void*, const void*);
+using StackElementFree = void (APS5_VABI*)(void*);
+
+struct LibreSslStack {
+    int num;
+    char** data;
+    int sorted;
+    int numAlloc;
+    StackCompare comp;
+};
+
 extern "C" {
 
 std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const Asn1String* value);
@@ -415,10 +426,10 @@ int APS5_VABI sceLibreSslInit(void);
 int APS5_VABI sceLibreSslInitEx(void);
 int APS5_VABI sceLibreSslInitEx2(void);
 int APS5_VABI sceLibreSslTerm(void);
-int APS5_VABI sk_num_nid_postfix(void);
-int APS5_VABI sk_pop_nid_postfix(void);
-int APS5_VABI sk_pop_free_nid_postfix(void);
-int APS5_VABI sk_value_nid_postfix(void);
+int APS5_VABI sk_num_nid_postfix(const LibreSslStack* stack);
+void* APS5_VABI sk_pop_nid_postfix(LibreSslStack* stack);
+void APS5_VABI sk_pop_free_nid_postfix(LibreSslStack* stack, StackElementFree release);
+void* APS5_VABI sk_value_nid_postfix(const LibreSslStack* stack, int index);
 int APS5_VABI AES_set_encrypt_key_nid_postfix(const unsigned char* userKey, int bits, AesKey* key);
 int APS5_VABI AES_set_decrypt_key_nid_postfix(const unsigned char* userKey, int bits, AesKey* key);
 void APS5_VABI AES_encrypt_nid_postfix(const unsigned char* in, unsigned char* out, const AesKey* key);

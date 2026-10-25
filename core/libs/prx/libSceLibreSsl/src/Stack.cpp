@@ -1,18 +1,9 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <cstddef>
 #include <stdexcept>
 #include <string>
 #include "prx/libc/include/General.hpp"
-
-using StackCompare = int (APS5_VABI*)(const void*, const void*);
-using StackElementFree = void (APS5_VABI*)(void*);
-
-struct LibreSslStack {
-    int num;
-    char** data;
-    int sorted;
-    int numAlloc;
-    StackCompare comp;
-};
 
 static_assert(sizeof(LibreSslStack) == 32);
 static_assert(offsetof(LibreSslStack, num) == 0);
@@ -31,8 +22,6 @@ char** Elements(const LibreSslStack* stack, const char* function) {
 }
 
 extern "C" {
-void APS5_VABI free_nid_postfix(void* pointer);
-
 int APS5_VABI sk_num_nid_postfix(const LibreSslStack* stack) {
     if (!stack) return -1;
     return stack->num;

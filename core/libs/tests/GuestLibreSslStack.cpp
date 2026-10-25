@@ -1,3 +1,5 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
@@ -7,22 +9,6 @@
 #include <source_location>
 #include <stdexcept>
 #include <vector>
-
-struct TestStack {
-    int num;
-    char** data;
-    int sorted;
-    int numAlloc;
-    void* comp;
-};
-
-extern "C" {
-int APS5_VABI sk_num_nid_postfix(const TestStack*);
-void* APS5_VABI sk_value_nid_postfix(const TestStack*, int);
-void* APS5_VABI sk_pop_nid_postfix(TestStack*);
-void APS5_VABI sk_pop_free_nid_postfix(TestStack*, void (APS5_VABI*)(void*));
-void* APS5_VABI malloc_nid_postfix(std::size_t);
-}
 
 static void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (condition) return;
@@ -43,7 +29,7 @@ static void InitializeHeap() {
 static void TestNum() {
     char first = 'a';
     Require(sk_num_nid_postfix(nullptr) == -1);
-    TestStack stack {3, nullptr, 0, 0, nullptr};
+    LibreSslStack stack {3, nullptr, 0, 0, nullptr};
     char* elements[3] {&first, nullptr, &first};
     stack.data = elements;
     Require(sk_num_nid_postfix(&stack) == 3);
@@ -51,7 +37,7 @@ static void TestNum() {
     Require(sk_num_nid_postfix(&stack) == 0);
     stack.num = -2;
     Require(sk_num_nid_postfix(&stack) == -2);
-    TestStack detached {2, nullptr, 0, 0, nullptr};
+    LibreSslStack detached {2, nullptr, 0, 0, nullptr};
     Require(sk_num_nid_postfix(&detached) == 2);
 }
 
@@ -61,7 +47,7 @@ static void TestValue() {
     char third = 'c';
     Require(sk_value_nid_postfix(nullptr, 0) == nullptr);
     char* elements[4] {&first, nullptr, &third, &second};
-    TestStack stack {3, elements, 0, 4, nullptr};
+    LibreSslStack stack {3, elements, 0, 4, nullptr};
     Require(sk_value_nid_postfix(&stack, 0) == &first);
     Require(sk_value_nid_postfix(&stack, 1) == nullptr);
     Require(sk_value_nid_postfix(&stack, 2) == &third);
@@ -69,7 +55,7 @@ static void TestValue() {
     Require(sk_value_nid_postfix(&stack, -1) == nullptr);
     stack.num = -2;
     Require(sk_value_nid_postfix(&stack, 0) == nullptr);
-    TestStack detached {2, nullptr, 0, 0, nullptr};
+    LibreSslStack detached {2, nullptr, 0, 0, nullptr};
     Require(sk_value_nid_postfix(&detached, 2) == nullptr);
     RequireThrows([&] { sk_value_nid_postfix(&detached, 1); });
 }
@@ -79,7 +65,7 @@ static void TestPop() {
     char third = 'c';
     Require(sk_pop_nid_postfix(nullptr) == nullptr);
     char* elements[8] {&first, nullptr, &third};
-    TestStack stack {3, elements, 0, 8, nullptr};
+    LibreSslStack stack {3, elements, 0, 8, nullptr};
     Require(sk_pop_nid_postfix(&stack) == &third);
     Require(sk_num_nid_postfix(&stack) == 2 && stack.numAlloc == 8 && stack.data == elements && elements[2] == &third);
     Require(sk_value_nid_postfix(&stack, 2) == nullptr);
@@ -88,7 +74,7 @@ static void TestPop() {
     Require(sk_pop_nid_postfix(&stack) == nullptr && sk_num_nid_postfix(&stack) == 0);
     stack.num = -2;
     Require(sk_pop_nid_postfix(&stack) == nullptr && sk_num_nid_postfix(&stack) == -2);
-    TestStack detached {2, nullptr, 0, 0, nullptr};
+    LibreSslStack detached {2, nullptr, 0, 0, nullptr};
     RequireThrows([&] { sk_pop_nid_postfix(&detached); });
     Require(detached.num == 2);
 }
@@ -99,10 +85,10 @@ static void APS5_VABI Release(void* element) {
     released.push_back(element);
 }
 
-static TestStack* NewStack(std::vector<char*> elements, int capacity) {
-    auto* stack = static_cast<TestStack*>(malloc_nid_postfix(sizeof(TestStack)));
+static LibreSslStack* NewStack(std::vector<char*> elements, int capacity) {
+    auto* stack = static_cast<LibreSslStack*>(malloc_nid_postfix(sizeof(LibreSslStack)));
     Require(stack != nullptr);
-    std::memset(stack, 0, sizeof(TestStack));
+    std::memset(stack, 0, sizeof(LibreSslStack));
     stack->data = static_cast<char**>(malloc_nid_postfix(sizeof(char*) * static_cast<std::size_t>(capacity > 0 ? capacity : 1)));
     Require(stack->data != nullptr);
     for (int index = 0; index < capacity; ++index) stack->data[index] = nullptr;
@@ -120,7 +106,7 @@ static void TestPopFree() {
     sk_pop_free_nid_postfix(nullptr, nullptr);
     Require(released.empty());
 
-    TestStack* stack = NewStack({&first, nullptr, &second, &third}, 4);
+    LibreSslStack* stack = NewStack({&first, nullptr, &second, &third}, 4);
     sk_pop_free_nid_postfix(stack, Release);
     Require(released == std::vector<void*>({&first, &second, &third}));
     released.clear();
