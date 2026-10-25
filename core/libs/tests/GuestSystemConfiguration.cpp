@@ -17,7 +17,12 @@ static_assert(offsetof(SceKernelSystemSwVersion, versionString) == 0x08);
 static_assert(offsetof(SceKernelSystemSwVersion, version) == 0x24);
 static_assert(sizeof(SceKernelSystemSwVersion) == 0x28);
 extern "C" {
-
+int APS5_VABI sysKernelGetLowerLimitSysexVersion_nid_postfix(char*);
+int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(std::uint32_t*);
+int APS5_VABI sysKernelGetUpdVersion_nid_postfix(std::uint32_t*);
+int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(std::uint32_t*);
+int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(std::uint32_t*);
+int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(std::uint32_t*);
 extern char** environ_nid_postfix;
 }
 static void Require(bool value) { if (!value) std::abort(); }
@@ -524,6 +529,25 @@ static void CheckVersionLimits() {
     } update{0xaaaaaaaau, 0xaaaaaaaau};
     Require(sysKernelGetLowerLimitUpdVersion_nid_postfix(&update.version) == 0 && update.version == 0 && update.after == 0xaaaaaaaau);
     Require(sysKernelGetLowerLimitUpdVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    update = {0xaaaaaaaau, 0xaaaaaaaau};
+    Require(sysKernelGetUpdVersion_nid_postfix(&update.version) == 0 && update.version == 0 && update.after == 0xaaaaaaaau);
+    Require(sysKernelGetUpdVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    struct {
+        std::uint32_t mode;
+        std::uint32_t after;
+    } modeState{0xaaaaaaaau, 0xaaaaaaaau};
+    Require(sysKernelGetManufacturingMode_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
+    Require(sysKernelGetManufacturingMode_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    modeState = {0xaaaaaaaau, 0xaaaaaaaau};
+    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
+    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    modeState = {0xaaaaaaaau, 0xaaaaaaaau};
+    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
+    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
 }
 static void CheckSystemSwVersion() {
     *__error_nid_postfix() = 13;
