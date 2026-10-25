@@ -191,12 +191,25 @@ template<typename TRender> static GlyphImage RenderInto(TRender render) {
     return image;
 }
 
+static bool SurfaceOffset(const GlyphImage& image, std::uintptr_t& offset) {
+    const auto& surface = image.result.SurfaceImage;
+    const auto& rect = image.result.UpdateRect;
+    const auto base = reinterpret_cast<std::uintptr_t>(image.pixels.data());
+    const auto address = reinterpret_cast<std::uintptr_t>(surface.address);
+    const std::uintptr_t span = rect.w == 0 || rect.h == 0 ? 0 : static_cast<std::uintptr_t>(rect.h - 1) * surface.widthByte + static_cast<std::uintptr_t>(rect.w) * surface.pixelSizeByte;
+    if (address < base || address - base > image.pixels.size() || span > image.pixels.size() - (address - base)) return false;
+    offset = address - base;
+    return true;
+}
+
 static bool SameImage(const GlyphImage& left, const GlyphImage& right) {
     int lit = 0;
     for (const std::uint8_t pixel : left.pixels) lit += pixel != 0 ? 1 : 0;
     const auto& a = left.result;
     const auto& b = right.result;
-    const bool sameSurface = a.SurfaceImage.address - left.pixels.data() == b.SurfaceImage.address - right.pixels.data() && a.SurfaceImage.widthByte == b.SurfaceImage.widthByte && a.SurfaceImage.pixelSizeByte == b.SurfaceImage.pixelSizeByte && a.SurfaceImage.pixelFormat == b.SurfaceImage.pixelFormat;
+    std::uintptr_t leftOffset = 0;
+    std::uintptr_t rightOffset = 0;
+    const bool sameSurface = SurfaceOffset(left, leftOffset) && SurfaceOffset(right, rightOffset) && leftOffset == rightOffset && a.SurfaceImage.widthByte == b.SurfaceImage.widthByte && a.SurfaceImage.pixelSizeByte == b.SurfaceImage.pixelSizeByte && a.SurfaceImage.pixelFormat == b.SurfaceImage.pixelFormat;
     const bool sameOutput = a.stage == b.stage && sameSurface && std::memcmp(&a.UpdateRect, &b.UpdateRect, sizeof(a.UpdateRect)) == 0 && std::memcmp(&a.ImageMetrics, &b.ImageMetrics, sizeof(a.ImageMetrics)) == 0;
     return left.rc == SCE_FONT_OK && right.rc == SCE_FONT_OK && lit > 0 && left.pixels == right.pixels && std::memcmp(&left.metrics, &right.metrics, sizeof(left.metrics)) == 0 && sameOutput;
 }
