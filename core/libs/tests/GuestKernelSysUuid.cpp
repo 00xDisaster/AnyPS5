@@ -1,3 +1,5 @@
+#include "prx/libkernel_sys/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "SceTypes.hpp"
 #include <array>
 #include <chrono>
@@ -7,21 +9,7 @@
 #include <cstring>
 #include <source_location>
 
-extern "C" {
-int APS5_VABI uuidgen_nid_postfix(void*, int);
-int* APS5_VABI __error_nid_postfix();
-}
-
 namespace {
-
-struct Uuid {
-    std::uint32_t timeLow;
-    std::uint16_t timeMid;
-    std::uint16_t timeHiAndVersion;
-    std::uint8_t clockSeqHiAndReserved;
-    std::uint8_t clockSeqLow;
-    std::uint8_t node[6];
-};
 
 void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (!condition) {
@@ -34,19 +22,19 @@ int Error() {
     return *__error_nid_postfix();
 }
 
-std::uint64_t Timestamp(const Uuid& uuid) {
+std::uint64_t Timestamp(const GuestUuid& uuid) {
     return (static_cast<std::uint64_t>(uuid.timeHiAndVersion & 0x0fff) << 48) | (static_cast<std::uint64_t>(uuid.timeMid) << 32) | uuid.timeLow;
 }
 
-std::uint16_t Sequence(const Uuid& uuid) {
+std::uint16_t Sequence(const GuestUuid& uuid) {
     return static_cast<std::uint16_t>(((uuid.clockSeqHiAndReserved & 0x3f) << 8) | uuid.clockSeqLow);
 }
 
 }
 
 int main() {
-    std::array<Uuid, 3> first{};
-    std::array<Uuid, 2> second{};
+    std::array<GuestUuid, 3> first{};
+    std::array<GuestUuid, 2> second{};
     Require(uuidgen_nid_postfix(first.data(), 0) == -1 && Error() == 22);
     Require(uuidgen_nid_postfix(first.data(), 2049) == -1 && Error() == 22);
     Require(uuidgen_nid_postfix(nullptr, 1) == -1 && Error() == 14);

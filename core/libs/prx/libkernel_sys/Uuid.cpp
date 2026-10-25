@@ -1,25 +1,18 @@
+#include "prx/libkernel_sys/include/Api.hpp"
+#include "prx/libkernel/Time/include/Time.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <stdexcept>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/HostEntropy.hpp"
 
-extern "C" int* APS5_VABI __error_nid_postfix();
-extern "C" int APS5_VABI clock_gettime_nid_postfix(int clockId, KernelTimespec* tp);
+static_assert(sizeof(GuestUuid) == 16);
 
 namespace {
-
-struct GuestUuid {
-    std::uint32_t timeLow;
-    std::uint16_t timeMid;
-    std::uint16_t timeHiAndVersion;
-    std::uint8_t clockSeqHiAndReserved;
-    std::uint8_t clockSeqLow;
-    std::array<std::uint8_t, 6> node;
-};
-static_assert(sizeof(GuestUuid) == 16);
 
 constexpr int GuestEfault = 14;
 constexpr int GuestEinval = 22;
@@ -83,7 +76,7 @@ int APS5_VABI uuidgen_nid_postfix(GuestUuid* store, int count) {
         store[index].timeHiAndVersion = static_cast<std::uint16_t>(((time >> 48) & 0x0fff) | 0x1000);
         store[index].clockSeqHiAndReserved = static_cast<std::uint8_t>(variantSequence >> 8);
         store[index].clockSeqLow = static_cast<std::uint8_t>(variantSequence);
-        store[index].node = node;
+        std::memcpy(store[index].node, node.data(), node.size());
     }
     return 0;
 }
