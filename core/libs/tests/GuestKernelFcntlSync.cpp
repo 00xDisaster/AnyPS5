@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <chrono>
 #include <cstdint>
@@ -8,28 +9,7 @@
 #include <source_location>
 #include <string>
 
-namespace {
-
-struct Iovec {
-    const void* base;
-    std::size_t length;
-};
-
-}
-
-extern "C" {
-int APS5_VABI open_nid_postfix(const char* path, int flags, int mode);
-int APS5_VABI close_nid_postfix(int descriptor);
-int APS5_VABI dup_nid_postfix(int descriptor);
-int APS5_VABI pipe_nid_postfix(int* descriptors);
-int APS5_VABI fcntl_nid_postfix(int descriptor, int command, ...);
-std::int64_t APS5_VABI write_nid_postfix(int descriptor, const char* buffer, std::int64_t size);
-std::int64_t APS5_VABI pwrite_nid_disambig1_nid_postfix(int descriptor, const void* buffer, std::size_t size, std::int64_t offset);
-std::int64_t APS5_VABI writev_nid_postfix(int descriptor, const Iovec* vectors, int count);
-std::int64_t APS5_VABI pwritev_nid_postfix(int descriptor, const Iovec* vectors, int count, std::int64_t offset);
-std::int64_t APS5_VABI pread_nid_postfix(int descriptor, void* buffer, std::size_t size, std::int64_t offset);
-std::uint64_t FileSynchronousWritesForTest_nid_no_patch();
-}
+extern "C" std::uint64_t FileSynchronousWritesForTest_nid_no_patch();
 
 namespace {
 
@@ -60,10 +40,10 @@ void Toggle(const std::string& path) {
     Require((fcntl_nid_postfix(file, GetFlags) & Synchronous) != 0);
     before = Synced();
     Require(write_nid_postfix(file, "b", 1) == 1 && Synced() == before + 1);
-    const Iovec vectors[] = {{"c", 1}, {"d", 1}};
+    const KernelIovec vectors[] = {{"c", 1}, {"d", 1}};
     Require(writev_nid_postfix(file, vectors, 2) == 2 && Synced() == before + 2);
     Require(pwrite_nid_disambig1_nid_postfix(file, "x", 1, 10) == 1 && Synced() == before + 3);
-    const Iovec tail[] = {{"y", 1}, {"z", 1}};
+    const KernelIovec tail[] = {{"y", 1}, {"z", 1}};
     Require(pwritev_nid_postfix(file, tail, 2, 11) == 2 && Synced() == before + 4);
 
     const int duplicate = dup_nid_postfix(file);
