@@ -517,6 +517,38 @@ int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(std::uint32_t* versio
     return 0;
 }
 
+int APS5_VABI sysKernelGetUpdVersion_nid_postfix(std::uint32_t* version) {
+    if (version == nullptr) {
+        return SCE_KERNEL_ERROR_EINVAL;
+    }
+    *version = 0;
+    return 0;
+}
+
+int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(std::uint32_t* mode) {
+    if (mode == nullptr) {
+        return SCE_KERNEL_ERROR_EINVAL;
+    }
+    *mode = 0;
+    return 0;
+}
+
+int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(std::uint32_t* mode) {
+    if (mode == nullptr) {
+        return SCE_KERNEL_ERROR_EINVAL;
+    }
+    *mode = 0;
+    return 0;
+}
+
+int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(std::uint32_t* mode) {
+    if (mode == nullptr) {
+        return SCE_KERNEL_ERROR_EINVAL;
+    }
+    *mode = 0;
+    return 0;
+}
+
 int APS5_VABI sysctlnametomib_nid_postfix(const char* name, int* mib, std::size_t* size) {
     struct KnownName {
         const char* name;
