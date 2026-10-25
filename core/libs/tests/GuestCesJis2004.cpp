@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 
 extern "C" {
 void* APS5_VABI sceCesUcsProfileInitEucJis2004(void*);
@@ -12,6 +13,7 @@ void* APS5_VABI sceCesUcsProfileInitSJis1997Cp932(void*);
 int APS5_VABI sceCesMbcsUcsContextInit(void*, const void*);
 int APS5_VABI sceCesMbcsStrToUtf8Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
 int APS5_VABI sceCesUtf8StrToMbcsStr(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
+int APS5_VABI sceCesUtf32StrToMbcsStr(void*, const std::uint32_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
 int APS5_VABI sceCesMbcsStrToUtf32Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t, std::uint32_t*);
 int APS5_VABI sceCesMbcToUtf8(const void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
 int APS5_VABI sceCesEucJpToUcs2(const void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint16_t*);
@@ -65,6 +67,15 @@ void RequireEncodeFails(void* context, const char* utf8, int error) {
     Require(sceCesUtf8StrToMbcsStr(context, Bytes(utf8), static_cast<std::uint32_t>(std::strlen(utf8)), &used, out, sizeof(out), &produced) == error);
 }
 
+void RequireUtf32Encode(void* context, std::uint32_t first, std::uint32_t second, int error, std::uint32_t consumed, const char* mbcs, std::uint32_t size) {
+    const std::uint32_t utf32[2] = {first, second};
+    std::uint8_t out[16] = {};
+    std::uint32_t used = 0;
+    std::uint32_t produced = 0;
+    Require(sceCesUtf32StrToMbcsStr(context, utf32, 2, &used, out, sizeof(out), &produced) == error);
+    Require(used == consumed && produced == size && std::memcmp(out, mbcs, size) == 0);
+}
+
 void CheckEuc() {
     alignas(8) std::uint8_t sheet[64] = {};
     alignas(8) std::uint8_t context[64] = {};
@@ -90,7 +101,9 @@ void CheckEuc() {
         std::uint32_t produced = 0;
         Require(Decode(context, "\x8F\xB0\xA1", 3, out, sizeof(out), used, produced) == 0 && produced == 3 && std::memcmp(out, "\xE4\xB8\x82", 3) == 0);
     }
-    RequireDecodeFails(context, "\xA4\xF7", 2, unassignedCode);
+    for (const char* combining : {"\xA4\xF7", "\xA5\xF7", "\xA6\xF8", "\xAB\xC4"}) RequireDecodeFails(context, combining, 2, unassignedCode);
+    RequireUtf32Encode(context, 0x304B, 0x309A, unassignedCode, 1, "\xA4\xAB", 2);
+    RequireUtf32Encode(context, 0x00E6, 0x0300, 0, 2, "\xA9\xDC\xAB\xDC", 4);
     RequireDecodeFails(context, "\xA4", 1, srcBufferEnd);
     RequireDecodeFails(context, "\x8F\xA1", 2, srcBufferEnd);
     RequireDecodeFails(context, "\xA4\x41", 2, invalidEncode);
@@ -128,6 +141,8 @@ void CheckShiftJis() {
     RequireEncodes(context, "\xC2\xA5\xE2\x80\xBE", "\x81\x8F\x81\x50", 4);
     RequireEncodes(context, "\xE4\xB8\x82", "\xF0\x41", 2);
     RequireEncodeFails(context, "\xC4\x8A", unassignedCode);
+    for (const char* combining : {"\x82\xF5", "\x83\x97", "\x86\x63"}) RequireDecodeFails(context, combining, 2, unassignedCode);
+    RequireUtf32Encode(context, 0x304B, 0x309A, unassignedCode, 1, "\x82\xA9", 2);
     RequireDecodeFails(context, "\x82\xF5", 2, unassignedCode);
     RequireDecodeFails(context, "\x82", 1, srcBufferEnd);
     RequireDecodeFails(context, "\xFD", 1, invalidEncode);
