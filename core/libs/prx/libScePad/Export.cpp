@@ -914,13 +914,16 @@ int APS5_VABI scePadGetInfoByPortType(std::int32_t type, PadPortInfo* info) {
 }
 
 int APS5_VABI scePadResetLightBarAll(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    for (int port = 0; port < PAD_MAX_CONTROLLERS; ++port) Pad::SetLightBar(port, false, 0, 0, 0);
+    return PAD_OK;
 }
 
 int APS5_VABI scePadResetLightBarAllByPortType(std::uint32_t portType) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    if (portType == 3 || portType == 4 || portType == PAD_PORT_TYPE_REMOTE)
+        NotImplemented_nid_no_patch("scePadResetLightBarAllByPortType: port types 3, 4 and 16");
+    if (portType == PAD_PORT_TYPE_SPECIAL) return PAD_OK;
+    if (portType != PAD_PORT_TYPE_STANDARD) return PAD_ERROR_INVALID_ARG;
+    return scePadResetLightBarAll();
 }
 
 int APS5_VABI scePadSetLightBarForTracker(std::int32_t handle, const PadLightBarParam* color) {
