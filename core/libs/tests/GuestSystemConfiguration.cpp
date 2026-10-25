@@ -527,8 +527,8 @@ static void CheckVersionLimits() {
 }
 static void CheckSystemSwVersion() {
     *__error_nid_postfix() = 13;
-    Require(sceKernelGetSystemSwVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EFAULT && *__error_nid_postfix() == 13);
-    const std::uint64_t sizes[] = {0, 24, 39, 40, 41, 48, 64};
+    Require(sceKernelGetSystemSwVersion_nid_postfix(nullptr) == 0 && *__error_nid_postfix() == 13);
+    const std::uint64_t sizes[] = {0, 1, 24, 39, 40, 41, 48, 64, 0x1000, ~0ull};
     for (const std::uint64_t size : sizes) {
         struct {
             std::uint64_t prefix;
