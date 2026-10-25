@@ -111,6 +111,21 @@ class EnvReferenceTests(unittest.TestCase):
         self.assertEqual(found["APS5_DEEP_INTEGER"], [(source.as_posix(), 10, "integer", "")])
         self.assertEqual(found["APS5_DEEP_DEFAULT"], [(source.as_posix(), 15, "string", "99")])
 
+    def test_short_reads_in_long_expressions_keep_their_kind_and_default(self):
+        root = self.fixture()
+        source = root / "core" / "Sample.cpp"
+        source.write_text('auto integer = atoi(\n\n\n\nstd::getenv("APS5_SHORT_INTEGER"));\n'
+                          'auto present = std::getenv("APS5_SHORT_PRESENT")\n\n\n\n!= nullptr;\n'
+                          'auto text = std::getenv("APS5_STILL_STRING");\n'
+                          'if (text != nullptr) text = nullptr;\n'
+                          'auto fallback = std::getenv("APS5_SHORT_DEFAULT")\n\n\n\n? 1 : 42;\n',
+                          encoding="utf-8")
+        found = env_reference.reads([root / "core"])
+        self.assertEqual(found["APS5_SHORT_INTEGER"], [(source.as_posix(), 5, "integer", "")])
+        self.assertEqual(found["APS5_SHORT_PRESENT"], [(source.as_posix(), 6, "presence", "")])
+        self.assertEqual(found["APS5_STILL_STRING"], [(source.as_posix(), 11, "string", "")])
+        self.assertEqual(found["APS5_SHORT_DEFAULT"], [(source.as_posix(), 13, "string", "42")])
+
     def test_whitespace_before_parentheses_preserves_names_kinds_and_defaults(self):
         root = self.fixture()
         source = root / "core" / "Sample.cpp"

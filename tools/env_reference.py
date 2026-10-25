@@ -94,15 +94,12 @@ def reads(roots, prefixes=PREFIXES):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as error:
                 raise ValueError(f"cannot read {path.as_posix()}: {error}") from error
-            lines = text.splitlines()
             starts = [0] + [match.end() for match in re.finditer("\n", text)]
             for reader, match in line_reads(text, prefixes):
                 number = bisect.bisect_right(starts, match.start())
-                window = "\n".join(lines[number - 1:number + 2])
-                if match.end() - starts[number - 1] > len(window):
-                    start = max(text.rfind(token, 0, match.start()) for token in ";{}") + 1
-                    end = text.find(";", match.end())
-                    window = text[start:end + 1] if end >= 0 else text[start:]
+                start = max(text.rfind(token, 0, match.start()) for token in ";{}") + 1
+                end = text.find(";", match.end())
+                window = text[start:end + 1] if end >= 0 else text[start:]
                 found.setdefault(match.group("name"), []).append(
                     (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
     for sites in found.values():
