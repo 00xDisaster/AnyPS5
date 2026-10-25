@@ -109,6 +109,15 @@ static void PublishQueueLevel(AudioOut2Context& context) {
     context.publishedQueueLevel.store(level, std::memory_order_release);
 }
 
+struct QueueLevelPublisher {
+    AudioOut2Context& context;
+    const std::unique_lock<std::mutex>& lock;
+
+    ~QueueLevelPublisher() {
+        if (lock.owns_lock() && context.device != 0) PublishQueueLevel(context);
+    }
+};
+
 static void DeviceCallback(void* userdata, Uint8* stream, int length);
 
 static void OpenDevice(AudioOut2Context& context) {
@@ -229,7 +238,8 @@ static void Render(AudioOut2Context& context, const AudioOut2Grain& grain) {
 
 static void DeviceCallback(void* userdata, Uint8* stream, int length) {
     auto& context = *static_cast<AudioOut2Context*>(userdata);
-    std::lock_guard lock(context.lock);
+    std::unique_lock lock(context.lock);
+    const QueueLevelPublisher publication{context, lock};
     auto* out = reinterpret_cast<float*>(stream);
     const auto samples = static_cast<std::size_t>(length) / sizeof(float);
     const auto cushionSamples = static_cast<std::size_t>(CushionGrains(context)) * context.grain * AUDIO_OUT2_OUTPUT_CHANNELS;
@@ -242,7 +252,6 @@ static void DeviceCallback(void* userdata, Uint8* stream, int length) {
         context.priming = true;
         context.primes++;
     }
-    PublishQueueLevel(context);
 }
 
 static void TraceSummary(AudioOut2Context& context, Clock::time_point now) {
@@ -271,7 +280,8 @@ int APS5_VABI sceAudioOut2ContextAdvance(AudioOut2ContextHandle ctx) try {
     const AudioOutCall call;
     auto* context = FromHandle(ctx);
     if (!context) return SCE_AUDIO_OUT2_ERROR_INVALID_HANDLE;
-    std::lock_guard lock(context->lock);
+    std::unique_lock lock(context->lock);
+    const QueueLevelPublisher publication{*context, lock};
     if (context->device != 0) {
         if (!context->advancedMode) {
             while (!context->pendingGrains.empty()) {
@@ -283,7 +293,6 @@ int APS5_VABI sceAudioOut2ContextAdvance(AudioOut2ContextHandle ctx) try {
             context->advancedMode = true;
         }
         context->advancedGrains.push_back(AudioOut2CaptureGrain(*context, true));
-        PublishQueueLevel(*context);
         context->grainReady.notify_one();
     }
     context->advances++;
@@ -353,6 +362,7 @@ int APS5_VABI sceAudioOut2ContextPush(AudioOut2ContextHandle ctx, uint32_t block
     auto* context = FromHandle(ctx);
     if (!context) return SCE_AUDIO_OUT2_ERROR_INVALID_HANDLE;
     std::unique_lock lock(context->lock);
+    const QueueLevelPublisher publication{*context, lock};
     auto now = Clock::now();
     const auto waitStart = now;
     while (QueueLevel(*context, now) >= context->queueDepth) {
@@ -407,7 +417,6 @@ int APS5_VABI sceAudioOut2ContextPush(AudioOut2ContextHandle ctx, uint32_t block
             context->output.insert(context->output.end(), context->mix.begin(), context->mix.end());
         }
     }
-    if (context->device != 0) PublishQueueLevel(*context);
     context->pushes++;
     context->summaryPushes++;
     if (blocking) context->blockingPushes++;
