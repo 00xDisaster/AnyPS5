@@ -351,6 +351,10 @@ int APS5_VABI sceKernelGetModuleListInternal(KernelModule* handles, std::size_t 
     return sceKernelGetModuleList(handles, count, actual);
 }
 
+KernelModule APS5_VABI sceKernelLoadStartModuleForSysmodule(const char* moduleFileName, std::size_t args, const void* argp, std::uint32_t flags, const KernelLoadModuleOpt* opt, int* res) {
+    return sceKernelLoadStartModule(moduleFileName, args, argp, flags, opt, res);
+}
+
 int APS5_VABI fstat_nid_postfix(int d, FileStat* sb) {
     return static_cast<int>(_fstat_nid_postfix(d, sb));
 }
