@@ -75,7 +75,16 @@ def convert(relinker, source, output, extra, windows):
     return subprocess.run(command, capture_output=True, text=True)
 
 
-def comparison_path(path):
+def comparison_path(path, links=frozenset()):
+    for prefix in (*reversed(path.parents), path):
+        if not prefix.is_symlink():
+            continue
+        identity = prefix.parent.resolve() / prefix.name
+        if identity in links:
+            raise RuntimeError("symbolic link cycle")
+        target = prefix.readlink()
+        destination = target if target.is_absolute() else prefix.parent / target
+        return comparison_path(destination / path.relative_to(prefix), links | {identity})
     resolved = path.resolve()
     drive = resolved.drive
     if drive.casefold().startswith("\\\\?\\unc\\"):

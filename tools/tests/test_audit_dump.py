@@ -235,14 +235,52 @@ class AuditDumpTests(unittest.TestCase):
                     dump.resolve.return_value = dump_root
                     dump.absolute.return_value = normal
                     dump.rglob.return_value = ()
+                    dump.parents = ()
+                    dump.is_symlink.return_value = False
                     report = mock.Mock()
                     report.resolve.return_value = report_root / "not-created.json"
                     report.absolute.return_value = normal.parent / "outside-report.json"
                     report.parent.resolve.return_value = normal.parent
+                    report.parents = ()
+                    report.is_symlink.return_value = False
+                    report.parent.parents = ()
+                    report.parent.is_symlink.return_value = False
                     report.exists.return_value = False
                     self.assertTrue(audit_dump.report_overlaps_dump(report, dump))
                     report.resolve.return_value = report_root.parent / "outside-report.json"
                     self.assertFalse(audit_dump.report_overlaps_dump(report, dump))
+
+    def test_json_report_links_are_checked_when_resolve_leaves_the_alias(self):
+        resolve = Path.resolve
+        for name, target, directory in (
+            ("file", self.dump / "missing-report.json", False),
+            ("directory", self.dump / "missing-directory", True),
+        ):
+            with self.subTest(name=name):
+                link = self.root / ("unresolved-report-" + name)
+                try:
+                    os.symlink(target, link, target_is_directory=directory)
+                except OSError:
+                    self.skipTest("symbolic links unavailable")
+                report = link / "report.json" if directory else link
+
+                def unresolved_alias(path, *args, **kwargs):
+                    if path == link or path.is_relative_to(link):
+                        return path.absolute()
+                    return resolve(path, *args, **kwargs)
+
+                with mock.patch.object(Path, "resolve", unresolved_alias):
+                    self.assert_report_rejected(report)
+
+    def test_json_report_link_cycles_are_rejected_before_staging(self):
+        first = self.root / "report-cycle-first"
+        second = self.root / "report-cycle-second"
+        try:
+            os.symlink(second, first)
+            os.symlink(first, second)
+        except OSError:
+            self.skipTest("symbolic links unavailable")
+        self.assert_report_rejected(first)
 
     def test_json_output_hardlink_aliases_of_dump_files_are_rejected(self):
         self.module("Media/Plugins/libfmod.prx")
