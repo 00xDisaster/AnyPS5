@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <vector>
 #if defined(_WIN32)
 #include <windows.h>
@@ -29,6 +30,7 @@
 #include "prx/libkernel/KernelErrors.hpp"
 #include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
 #include "prx/libSceSystemService/SystemService.hpp"
+#include "prx/libSceUserService/UserService.hpp"
 #include "prx/libSceAgcDriver/Execution/include/HostHdr.hpp"
 
 namespace {
@@ -267,7 +269,7 @@ int RunningAppId(const std::string& caller, const char* titleId) {
 }
 
 template<typename TValue>
-int AnswerForRunningApp(const std::string& caller, std::int32_t appId, TValue* destination, TValue value) {
+int AnswerForRunningApp(const std::string& caller, std::int32_t appId, TValue* destination, std::type_identity_t<TValue> value) {
     if (appId != SYSTEM_SERVICE_RUNNING_APP_ID) NotImplemented_nid_no_patch((caller + ": application other than the running title").c_str());
     if (destination == nullptr) NotImplemented_nid_no_patch((caller + ": null output").c_str());
     *destination = value;
@@ -508,6 +510,18 @@ int APS5_VABI sceLncUtilGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t
 
 int APS5_VABI sceSystemServiceGetAppIdListOfBigApp(std::int32_t* appIds, std::uint32_t capacity, std::uint32_t* count) {
  return ListRunningBigApp("sceSystemServiceGetAppIdListOfBigApp", appIds, capacity, count);
+}
+
+int APS5_VABI sceLncUtilGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
+ return AnswerForRunningApp("sceLncUtilGetAppLaunchedUser", appId, userId, USER_SERVICE_INITIAL_USER_ID);
+}
+
+int APS5_VABI sceSystemServiceGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
+ return AnswerForRunningApp("sceSystemServiceGetAppLaunchedUser", appId, userId, USER_SERVICE_INITIAL_USER_ID);
+}
+
+int APS5_VABI sceShellCoreUtilGetUserFocus(std::int32_t appId, std::int32_t* userId) {
+ return AnswerForRunningApp("sceShellCoreUtilGetUserFocus", appId, userId, USER_SERVICE_INITIAL_USER_ID);
 }
 
 int APS5_VABI sceSystemServiceKillApp(int appId, int how, int reason, int coreDump) {

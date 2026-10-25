@@ -234,11 +234,6 @@ int APS5_VABI sceLncUtilGetAppFocusedAppStatus(LncAppStatus* status) {
     return 0;
 }
 
-int APS5_VABI sceLncUtilGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceLncUtilGetAppStatus(LncAppStatus* status) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -1049,11 +1044,6 @@ int APS5_VABI sceShellCoreUtilGetUmmStatus(std::int32_t userId, ShellCoreUmmStat
     return 0;
 }
 
-int APS5_VABI sceShellCoreUtilGetUserFocus(std::int32_t appId, std::int32_t* userId) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceShellCoreUtilGetUserIdOfMorpheusUser() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -1811,11 +1801,6 @@ int APS5_VABI sceSystemServiceGetAppCategoryType(std::int32_t appId, std::uint32
 }
 
 int APS5_VABI sceSystemServiceGetAppFocusedAppStatus(SystemServiceAppStatus* status) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceSystemServiceGetAppLaunchedUser(std::int32_t appId, std::int32_t* userId) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

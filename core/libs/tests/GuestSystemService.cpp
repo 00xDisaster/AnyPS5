@@ -1,12 +1,14 @@
 #include "prx/libSceSystemService/include/SystemService.hpp"
 #include "SceTypes.hpp"
 #include "prx/libSceSystemService/SystemService.hpp"
+#include "prx/libSceUserService/UserService.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <initializer_list>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -55,6 +57,25 @@ void TestBigAppList(TList list) {
     Require(Throws([&] { return list(nullptr, 2, &count); }));
     Require(Throws([&] { return list(appIds, 2, nullptr); }));
     Require(appIds[0] == Sentinel && appIds[1] == Sentinel && count == 0xdeadbeefu);
+}
+
+template<typename TValue, typename TQuery>
+void TestRunningAppAnswer(TQuery query, TValue expected, TValue sentinel) {
+    const std::int32_t runningAppId = sceSystemServiceGetAppIdOfRunningBigApp();
+    TValue value = sentinel;
+    Require(query(runningAppId, &value) == SYSTEM_SERVICE_OK && value == expected);
+    Require(Throws([&] { return query(runningAppId, nullptr); }));
+    for (const std::int32_t other : {runningAppId + 1, runningAppId - 1, -1, std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()}) {
+        TValue untouched = sentinel;
+        Require(Throws([&] { return query(other, &untouched); }) && untouched == sentinel);
+    }
+}
+
+void TestRunningAppUser() {
+    constexpr std::int32_t Sentinel = 0x5a5a5a5a;
+    TestRunningAppAnswer<std::int32_t>(sceLncUtilGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel);
+    TestRunningAppAnswer<std::int32_t>(sceSystemServiceGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel);
+    TestRunningAppAnswer<std::int32_t>(sceShellCoreUtilGetUserFocus, USER_SERVICE_INITIAL_USER_ID, Sentinel);
 }
 
 void TestRunningBigApp() {
@@ -177,5 +198,6 @@ int main() {
     event.event_type = 7;
     Require(sceSystemServiceReceiveEvent(&event) == SYSTEM_SERVICE_ERROR_NO_EVENT);
     TestRunningBigApp();
+    TestRunningAppUser();
     TestPlayerDialogParam();
 }
