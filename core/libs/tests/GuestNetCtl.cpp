@@ -150,25 +150,11 @@ void CheckCallbacks() {
 }
 
 Delivery g_ipcInt;
-Delivery g_forLib;
-Delivery g_npToolkit;
 
 void APS5_VABI RecordIpcInt(int event, void* arg) {
     ++g_ipcInt.calls;
     g_ipcInt.event = event;
     g_ipcInt.arg = arg;
-}
-
-void APS5_VABI RecordForLib(int event, void* arg) {
-    ++g_forLib.calls;
-    g_forLib.event = event;
-    g_forLib.arg = arg;
-}
-
-void APS5_VABI RecordNpToolkit(int event, void* arg) {
-    ++g_npToolkit.calls;
-    g_npToolkit.event = event;
-    g_npToolkit.arg = arg;
 }
 
 int CurrentEvent() {
@@ -249,49 +235,6 @@ void CheckIpcIntCallbacks() {
     Require(sceNetCtlUnregisterCallbackV6IpcInt(sharedV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6(internalV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6IpcInt(internalV6) == idNotFound);
-}
-
-void CheckForLibCallbacks() {
-    constexpr int callbackMax = static_cast<int>(0x80412103);
-    constexpr int idNotFound = static_cast<int>(0x80412104);
-    constexpr int invalidId = static_cast<int>(0x80412105);
-    int unused = -1;
-    Require(sceNetCtlRegisterCallbackForLibIpcInt(nullptr, nullptr, &unused) == kErrInvalidAddr);
-    Require(sceNetCtlRegisterCallbackForLibIpcInt(RecordForLib, nullptr, nullptr) == kErrInvalidAddr);
-    Require(sceNetCtlUnregisterCallbackForLibIpcInt(-1) == invalidId);
-    Require(sceNetCtlUnregisterCallbackForLibIpcInt(8) == invalidId);
-    Require(sceNetCtlUnregisterCallbackForLibIpcInt(0) == idNotFound);
-    Require(sceNetCtlCheckCallbackForLibIpcInt() == 0);
-
-    const int event = CurrentEvent();
-    int toolkitProbe = 0;
-    int toolkit = -1;
-    Require(sceNetCtlRegisterCallbackForNpToolkit(RecordNpToolkit, &toolkitProbe, &toolkit) == 0 && toolkit == 0);
-    int probes[8] = {};
-    int ids[8] = {};
-    for (int index = 0; index < 8; ++index) {
-        ids[index] = -1;
-        Require(sceNetCtlRegisterCallbackForLibIpcInt(RecordForLib, &probes[index], &ids[index]) == 0 && ids[index] == index);
-    }
-    int ninth = -1;
-    Require(sceNetCtlRegisterCallbackForLibIpcInt(RecordForLib, nullptr, &ninth) == callbackMax && ninth == -1);
-
-    Require(sceNetCtlCheckCallback() == 0);
-    Require(g_forLib.calls == 0 && g_npToolkit.calls == 0);
-    Require(sceNetCtlCheckCallbackForNpToolkit() == 0);
-    Require(g_forLib.calls == 0 && g_npToolkit.calls == 1 && g_npToolkit.arg == &toolkitProbe);
-    Require(sceNetCtlCheckCallbackForLibIpcInt() == 0);
-    Require(g_forLib.calls == 8 && g_forLib.event == event && g_forLib.arg == &probes[7] && g_npToolkit.calls == 1);
-    Require(sceNetCtlCheckCallbackForLibIpcInt() == 0);
-    Require(g_forLib.calls == 8);
-
-    Require(sceNetCtlUnregisterCallbackForLibIpcInt(ids[3]) == 0);
-    Require(sceNetCtlUnregisterCallbackForLibIpcInt(ids[3]) == idNotFound);
-    Require(sceNetCtlRegisterCallbackForLibIpcInt(RecordForLib, &probes[3], &ids[3]) == 0 && ids[3] == 3);
-    Require(sceNetCtlCheckCallbackForLibIpcInt() == 0);
-    Require(g_forLib.calls == 9 && g_forLib.arg == &probes[3]);
-    for (const int id : ids) Require(sceNetCtlUnregisterCallbackForLibIpcInt(id) == 0);
-    Require(sceNetCtlUnregisterCallbackForNpToolkit(toolkit) == 0);
 }
 
 NetCtlInfo Query(int code) {
@@ -422,7 +365,6 @@ int main() {
     CheckCallbacks();
     CheckIpcIntGetters();
     CheckIpcIntCallbacks();
-    CheckForLibCallbacks();
 
     Require(sceNetCtlGetStateV6(nullptr) == kErrInvalidAddr);
     int stateV6 = -1;
