@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libkernel/Pthread/include/Rwlock.hpp"
 #include "../include/Pthread.hpp"
 #include "../include/Rwlock.hpp"

@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include "prx/libkernel/Pthread/include/Pthread.hpp"
 #include <cstdint>
@@ -5,23 +6,6 @@
 #include <cstdlib>
 #include <source_location>
 #include <stdexcept>
-
-extern "C" {
-int APS5_VABI pthread_mutex_init_nid_postfix(PthreadMutex*, const PthreadMutexattr*);
-int APS5_VABI pthread_mutex_destroy_nid_postfix(PthreadMutex*);
-int APS5_VABI pthread_mutex_lock_nid_postfix(PthreadMutex*);
-int APS5_VABI pthread_mutex_unlock_nid_postfix(PthreadMutex*);
-int APS5_VABI pthread_mutex_setname_np_nid_postfix(PthreadMutex*, const char*);
-int APS5_VABI pthread_rwlock_init_nid_postfix(PthreadRwlock*, const PthreadRwlockattr*);
-int APS5_VABI pthread_rwlock_destroy_nid_postfix(PthreadRwlock*);
-int APS5_VABI pthread_rwlock_rdlock_nid_postfix(PthreadRwlock*);
-int APS5_VABI pthread_rwlock_unlock_nid_postfix(PthreadRwlock*);
-int APS5_VABI pthread_rwlock_setname_np_nid_postfix(PthreadRwlock*, const char*);
-int APS5_VABI pthread_barrier_init_nid_postfix(void**, void* const*, unsigned);
-int APS5_VABI pthread_barrier_destroy_nid_postfix(void**);
-int APS5_VABI pthread_barrier_wait_nid_postfix(void**);
-int APS5_VABI pthread_barrier_setname_np_nid_postfix(void**, const char*);
-}
 
 static constexpr int GuestEinval = 22;
 
@@ -75,7 +59,7 @@ static void TestRwlock() {
 }
 
 static void TestBarrier() {
-    void* barrier = nullptr;
+    PthreadBarrierPrivate* barrier = nullptr;
     Require(pthread_barrier_init_nid_postfix(&barrier, nullptr, 1) == 0);
     Require(pthread_barrier_setname_np_nid_postfix(&barrier, "first") == 0);
     Require(pthread_barrier_setname_np_nid_postfix(&barrier, nullptr) == 0);
@@ -84,7 +68,7 @@ static void TestBarrier() {
     Require(pthread_barrier_setname_np_nid_postfix(nullptr, "barrier") == GuestEinval);
     Require(pthread_barrier_destroy_nid_postfix(&barrier) == 0);
     Require(pthread_barrier_setname_np_nid_postfix(&barrier, "destroyed") == GuestEinval);
-    void* unset = nullptr;
+    PthreadBarrierPrivate* unset = nullptr;
     Require(pthread_barrier_setname_np_nid_postfix(&unset, "unset") == GuestEinval && unset == nullptr);
 }
 

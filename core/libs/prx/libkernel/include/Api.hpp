@@ -416,6 +416,7 @@ int APS5_VABI pthread_barrierattr_setpshared_nid_postfix(PthreadBarrierattrPriva
 int APS5_VABI pthread_barrier_init_nid_postfix(PthreadBarrierPrivate** barrier, PthreadBarrierattrPrivate* const* attr, unsigned count);
 int APS5_VABI pthread_barrier_wait_nid_postfix(PthreadBarrierPrivate** barrier);
 int APS5_VABI pthread_barrier_destroy_nid_postfix(PthreadBarrierPrivate** barrier);
+int APS5_VABI pthread_barrier_setname_np_nid_postfix(PthreadBarrierPrivate** barrier, const char* name);
 int APS5_VABI pthread_cond_destroy_nid_postfix(PthreadCond* cond);
 int APS5_VABI pthread_cond_broadcast_nid_postfix(PthreadCond* cond);
 int APS5_VABI pthread_cond_init_nid_postfix(PthreadCond* cond, const PthreadCondattr* attr);
@@ -441,6 +442,7 @@ int APS5_VABI pthread_mutex_getspinloops_np_nid_postfix(PthreadMutex* mutex, int
 int APS5_VABI pthread_mutex_setspinloops_np_nid_postfix(PthreadMutex* mutex, int count);
 int APS5_VABI pthread_mutex_getyieldloops_np_nid_postfix(PthreadMutex* mutex, int* count);
 int APS5_VABI pthread_mutex_setyieldloops_np_nid_postfix(PthreadMutex* mutex, int count);
+int APS5_VABI pthread_mutex_setname_np_nid_postfix(PthreadMutex* mutex, const char* name);
 int APS5_VABI pthread_mutexattr_destroy_nid_postfix(PthreadMutexattr* attr);
 int APS5_VABI pthread_mutexattr_init_nid_postfix(PthreadMutexattr* attr);
 int APS5_VABI pthread_mutexattr_getpshared_nid_postfix(const PthreadMutexattr* attr, int* pshared);
@@ -467,6 +469,7 @@ int APS5_VABI pthread_rwlock_tryrdlock_nid_postfix(PthreadRwlock* rwlock);
 int APS5_VABI pthread_rwlock_trywrlock_nid_postfix(PthreadRwlock* rwlock);
 int APS5_VABI pthread_rwlock_unlock_nid_postfix(PthreadRwlock* rwlock);
 int APS5_VABI pthread_rwlock_wrlock_nid_postfix(PthreadRwlock* rwlock);
+int APS5_VABI pthread_rwlock_setname_np_nid_postfix(PthreadRwlock* rwlock, const char* name);
 int APS5_VABI sem_init_nid_postfix(void* sem, int pshared, unsigned int value);
 int APS5_VABI sem_destroy_nid_postfix(void* sem);
 int APS5_VABI sem_wait_nid_postfix(void* sem);
