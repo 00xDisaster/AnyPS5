@@ -262,7 +262,10 @@ int main(int argc, char** argv) {
     RunLayout(argv[0], "--scenario-with-chunk-table", {{"playgo-chunk.dat", ChunkTableFile()}, {"playgo-scenario.json", "{}"}});
     std::int64_t eta = -1;
     std::int32_t speed = -1;
-    constexpr int validHandle = 1;
+    PlayGoInitParams fixtureInit{};
+    int validHandle = -1;
+    Require(scePlayGoInitialize(&fixtureInit) == 0);
+    Require(scePlayGoOpen(&validHandle, nullptr) == 0);
     constexpr int badHandleError = static_cast<int>(0x80B20009);
     constexpr int badPointerError = static_cast<int>(0x80B2000A);
     Require(scePlayGoGetEta(-1, nullptr, 0, &eta) == badHandleError);
@@ -272,6 +275,7 @@ int main(int argc, char** argv) {
     Require(scePlayGoGetInstallSpeed(validHandle, nullptr) == badPointerError);
     Require(scePlayGoGetInstallSpeed(validHandle, &speed) == 0 && speed == 2);
     Require(scePlayGoPrefetch(-1, nullptr, 0, 0) == badHandleError);
+    Require(scePlayGoClose(validHandle) == 0);
     RunLayout(argv[0], "--scenario-only", {{"playgo-scenario.json", "{}"}});
     RunLayout(argv[0], "--ficm-only", {{"playgo-ficm.dat", "x"}});
     RunLayout(argv[0], "--hash-table-only", {{"playgo-hash-table.dat", "x"}});
