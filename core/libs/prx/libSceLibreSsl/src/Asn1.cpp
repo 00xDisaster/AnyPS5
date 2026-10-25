@@ -8,7 +8,6 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
-#include <vector>
 
 namespace {
 
@@ -67,18 +66,20 @@ bool ReadCharacter(std::span<const unsigned char>& input, int width, std::uint32
     return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff);
 }
 
-void AppendCharacter(std::vector<unsigned char>& output, std::uint32_t value) {
-    const int bytes = value < 0x80 ? 1 : value < 0x800 ? 2 : value < 0x10000 ? 3 : 4;
-    if (output.size() >= static_cast<std::size_t>(std::numeric_limits<int>::max() - bytes))
-        throw std::length_error("ASN1_STRING_to_UTF8: output length overflow");
+int CharacterBytes(std::uint32_t value) {
+    return value < 0x80 ? 1 : value < 0x800 ? 2 : value < 0x10000 ? 3 : 4;
+}
+
+void WriteCharacter(unsigned char*& output, std::uint32_t value) {
+    const int bytes = CharacterBytes(value);
     if (bytes == 1) {
-        output.push_back(static_cast<unsigned char>(value));
+        *output++ = static_cast<unsigned char>(value);
         return;
     }
     constexpr unsigned char prefix[] = {0, 0, 0xc0, 0xe0, 0xf0};
-    output.push_back(static_cast<unsigned char>(prefix[bytes] | (value >> (6 * (bytes - 1)))));
+    *output++ = static_cast<unsigned char>(prefix[bytes] | (value >> (6 * (bytes - 1))));
     for (int index = bytes - 2; index >= 0; --index)
-        output.push_back(static_cast<unsigned char>(0x80 | ((value >> (6 * index)) & 0x3f)));
+        *output++ = static_cast<unsigned char>(0x80 | ((value >> (6 * index)) & 0x3f));
 }
 
 } // namespace
@@ -128,23 +129,29 @@ int APS5_VABI ASN1_STRING_to_UTF8_nid_postfix(unsigned char** output, Asn1String
     if (width == 2 && length % 2 != 0) return Asn1Error(InvalidBmpStringLength);
     if (width == 4 && length % 4 != 0) return Asn1Error(InvalidUniversalStringLength);
     if (!string.data && length != 0) throw std::invalid_argument("ASN1_STRING_to_UTF8: null nonempty string data");
-    std::span<const unsigned char> input(string.data, length);
-    std::vector<unsigned char> converted;
-    while (!input.empty()) {
+    const std::span<const unsigned char> characters(string.data, length);
+    std::size_t size = 0;
+    for (auto input = characters; !input.empty();) {
         std::uint32_t character;
         if (!ReadCharacter(input, width, character)) return Asn1Error(width == 0 ? InvalidUtf8String : IllegalCharacters);
-        AppendCharacter(converted, character);
+        size += static_cast<std::size_t>(CharacterBytes(character));
+        if (size > static_cast<std::size_t>(std::numeric_limits<int>::max() - 1)) throw std::length_error("ASN1_STRING_to_UTF8: output length overflow");
     }
     if (!output) throw std::invalid_argument("ASN1_STRING_to_UTF8: null output");
-    auto* result = static_cast<unsigned char*>(malloc_nid_postfix(converted.size() + 1));
+    auto* result = static_cast<unsigned char*>(malloc_nid_postfix(size + 1));
     if (!result) {
         if (width == 0) Asn1Error(MallocFailure);
         return Asn1Error(MallocFailure);
     }
-    if (!converted.empty()) std::memcpy(result, converted.data(), converted.size());
-    result[converted.size()] = 0;
+    unsigned char* cursor = result;
+    for (auto input = characters; !input.empty();) {
+        std::uint32_t character;
+        ReadCharacter(input, width, character);
+        WriteCharacter(cursor, character);
+    }
+    *cursor = 0;
     *output = result;
-    return static_cast<int>(converted.size());
+    return static_cast<int>(size);
 }
 
 }

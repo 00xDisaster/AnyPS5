@@ -245,6 +245,18 @@ void Allocator() {
     constexpr unsigned char expected[] = {0xc3, 0xbf};
     CheckConversion(20, input, expected);
     Require(allocationCount == 1 && lastAllocationSize == 3 && freeCount == 1, "conversion uses the application allocator");
+    constexpr unsigned char universal[] = {0, 0, 0, 'A', 0, 0, 0x03, 0xa9, 0, 0, 0x20, 0xac, 0, 0x01, 0xf6, 0x00};
+    constexpr unsigned char mixed[] = {'A', 0xce, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80};
+    CheckConversion(28, universal, mixed);
+    Require(allocationCount == 2 && lastAllocationSize == sizeof(mixed) + 1 && freeCount == 2,
+        "a conversion with every UTF-8 length makes one allocation of the exact size");
+    unsigned char badUtf8[] = {'A', 0xc0, 0x80};
+    Asn1String malformed{3, 12, badUtf8, 0};
+    unsigned char* untouched = nullptr;
+    ERR_clear_error_nid_postfix();
+    Require(ASN1_STRING_to_UTF8_nid_postfix(&untouched, &malformed) == -1 && untouched == nullptr && allocationCount == 2,
+        "a malformed string allocates nothing");
+    ERR_clear_error_nid_postfix();
     failAllocation = true;
     unsigned char sentinel = 0xab;
     unsigned char* result = &sentinel;
