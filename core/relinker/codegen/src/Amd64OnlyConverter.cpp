@@ -201,9 +201,9 @@ private:
         placement.Sites.push_back(_site(windowStart, head, moved.Finish()));
 
         StubBodyBuilder lowered;
-        lowered.Seek(static_cast<std::int64_t>(store) - static_cast<std::int64_t>(island));
+        lowered.Seek(_distance(store, island));
         _matcher.EmitOutOfLine(lowered, _bytes(index));
-        lowered.JumpTo(static_cast<std::int64_t>(_end(index)) - static_cast<std::int64_t>(island));
+        lowered.JumpTo(_distance(_end(index), island));
         placement.Sites.push_back(_site(island, kJmpRel32.Size, lowered.Finish()));
         placement.ReplacementLength = placement.Sites.back().Body.size();
         placement.Claimed.push_back(index);
