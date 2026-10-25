@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -48,7 +49,7 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
         }
     }
     const Ngs2VoiceCallbackInfo info{
-        voice.callbackData,
+        0,
         reinterpret_cast<Ngs2Handle>(&voice),
         repeat ? SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT : SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END,
         0,
@@ -64,9 +65,7 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
         Ngs2BindSamplerBlock(voice, true);
     }
     const auto revision = voice.waveformRevision;
-    if (voice.callback != nullptr && (voice.callbackFlags & info.flag) != 0) {
-        voice.pendingBlockCallbacks.push_back(info);
-    }
+    voice.pendingBlockCallbacks.push_back({info, voice.rack->system->callbackSequence.fetch_add(1, std::memory_order_relaxed)});
     return voice.waveformRevision == revision && (voice.state == Ngs2PlayState::Playing || voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop);
 }
 
@@ -260,6 +259,113 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
     voice.rendered = true;
 }
 
+struct Ngs2RenderJob {
+    Ngs2Voice* voice;
+    const std::vector<Ngs2Voice*>* voices;
+    std::uint32_t grain;
+    std::uint32_t sampleRate;
+    std::exception_ptr error;
+};
+
+static void APS5_VABI RunRenderJob(void* context, std::uint32_t index) {
+    auto& job = static_cast<Ngs2RenderJob*>(context)[index];
+    const bool previous = Ngs2SetJobWorker(true);
+    struct WorkerScope {
+        bool previous;
+        ~WorkerScope() { Ngs2SetJobWorker(previous); }
+    } workerScope{previous};
+    try { RenderVoice(*job.voice, *job.voices, job.grain, job.sampleRate); }
+    catch (...) {
+        job.error = std::current_exception();
+        std::fill(job.voice->samples.begin(), job.voice->samples.end(), 0.0f);
+        job.voice->hasSamples = false;
+        job.voice->rendered = true;
+    }
+}
+
+static bool ScheduledVoice(const Ngs2Voice& voice) {
+    return voice.channels != 0 && (voice.state == Ngs2PlayState::Playing ||
+        ((voice.IsSampler() || Ngs2HasPitchShift(voice)) && (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop)));
+}
+
+static void RenderScheduled(Ngs2System& system, const std::vector<Ngs2Voice*>& voices, std::uint32_t grain) {
+    auto& manager = system.jobManagers[0];
+    const auto& option = manager.option;
+    if (option.submit_handler == nullptr || option.flush_handler == nullptr || option.join_handler == nullptr) {
+        throw std::invalid_argument("NGS2: an active render job manager requires submit, flush and join handlers");
+    }
+    std::vector<std::uint32_t> depth(voices.size());
+    std::vector<std::uint8_t> visiting(voices.size());
+    const auto rank = [&](auto&& self, std::size_t i) -> std::uint32_t {
+        if (depth[i] != 0) return depth[i];
+        if (visiting[i] != 0) throw std::invalid_argument("NGS2: the voice patches form a cycle");
+        visiting[i] = 1;
+        std::uint32_t value = 1;
+        if (!voices[i]->IsSampler()) {
+            for (std::size_t j = 0; j < voices.size(); ++j) {
+                if (!ScheduledVoice(*voices[j])) continue;
+                for (const auto& port : voices[j]->ports) {
+                    if (port.dest == voices[i] && port.volume != 0.0f) value = std::max(value, self(self, j) + 1);
+                }
+            }
+        }
+        visiting[i] = 0;
+        return depth[i] = value;
+    };
+    std::vector<std::size_t> order;
+    for (std::size_t i = 0; i < voices.size(); ++i) {
+        if (ScheduledVoice(*voices[i])) { rank(rank, i); order.push_back(i); }
+        else RenderVoice(*voices[i], voices, grain, system.option.sample_rate);
+    }
+    const auto rackIndex = [&](const Ngs2Voice* voice) { return std::find(system.racks.begin(), system.racks.end(), voice->rack) - system.racks.begin(); };
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        if (depth[a] != depth[b]) return depth[a] < depth[b];
+        return rackIndex(voices[a]) > rackIndex(voices[b]);
+    });
+    std::vector<Ngs2RenderJob> jobs;
+    jobs.reserve(order.size());
+    for (auto i : order) jobs.push_back({voices[i], &voices, grain, system.option.sample_rate, {}});
+    system.jobsExecuting = true;
+    struct JobScope {
+        Ngs2System& system;
+        ~JobScope() { system.jobsExecuting = false; }
+    } jobScope{system};
+    bool submitted = false;
+    struct Completion {
+        const Ngs2JobManager& manager;
+        bool& submitted;
+        ~Completion() {
+            if (submitted) {
+                const Ngs2Unlocked unlocked;
+                manager.option.join_handler(manager.handle);
+            }
+        }
+    } completion{manager, submitted};
+    std::size_t start = 0;
+    while (start < jobs.size()) {
+        auto end = start + 1;
+        while (end < jobs.size() && depth[order[end]] == depth[order[start]]) ++end;
+        for (auto batch = start; batch < end;) {
+            const auto count = static_cast<std::uint32_t>(std::min<std::size_t>(end - batch, option.max_jobs));
+            submitted = true;
+            const Ngs2Unlocked unlocked;
+            option.submit_handler(manager.handle, RunRenderJob, jobs.data() + batch, count);
+            batch += count;
+        }
+        {
+            const Ngs2Unlocked unlocked;
+            if (end == jobs.size()) { option.join_handler(manager.handle); submitted = false; }
+            else option.flush_handler(manager.handle);
+        }
+        start = end;
+    }
+    for (const auto& job : jobs) if (job.error) std::rethrow_exception(job.error);
+    if (jobs.empty()) {
+        const Ngs2Unlocked unlocked;
+        option.join_handler(manager.handle);
+    }
+}
+
 static std::size_t SampleBytes(std::uint32_t waveformType) {
     if (waveformType == SCE_NGS2_WAVEFORM_TYPE_PCM_I16L) return sizeof(std::int16_t);
     if (waveformType == SCE_NGS2_WAVEFORM_TYPE_PCM_F32L) return sizeof(float);
@@ -324,9 +430,11 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
     for (auto* rack : system.racks) {
         for (auto& voice : rack->voices) {
             voice.rendered = false;
+            Ngs2PublishSamplerState(voice);
             voices.push_back(&voice);
         }
     }
+    if (system.jobManagers[0].handle != 0) RenderScheduled(system, voices, grain);
     std::vector<std::vector<float>> mixes(numBufferInfo);
     for (auto* voice : voices) {
         RenderVoice(*voice, voices, grain, system.option.sample_rate);
@@ -351,21 +459,27 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
             voice->stateFlags = static_cast<std::uint32_t>(voice->state);
             if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
             if (voice->state == Ngs2PlayState::Playing && voice->IsSampler() && voice->samplerStarved && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
+            Ngs2PublishSamplerState(*voice);
         }
-        for (auto& value : rack->voices) {
-            auto* voice = &value;
-            voice->dispatchBlockCallbacks.swap(voice->pendingBlockCallbacks);
-            struct CallbackScope {
-                std::vector<Ngs2VoiceCallbackInfo>& events;
-                ~CallbackScope() { events.clear(); }
-            } callbackScope{voice->dispatchBlockCallbacks};
-            for (auto info : voice->dispatchBlockCallbacks) {
-                if (voice->callback == nullptr) break;
-                if ((voice->callbackFlags & info.flag) == 0) continue;
-                info.callback_data = voice->callbackData;
-                const Ngs2Unlocked unlocked;
-                voice->callback(&info);
-            }
+        std::vector<std::pair<Ngs2Voice*, Ngs2QueuedCallback>> events;
+        for (auto& voice : rack->voices) {
+            voice.dispatchBlockCallbacks.swap(voice.pendingBlockCallbacks);
+            for (const auto& event : voice.dispatchBlockCallbacks) events.emplace_back(&voice, event);
+        }
+        struct CallbackScope {
+            Ngs2Rack& rack;
+            ~CallbackScope() { for (auto& voice : rack.voices) voice.dispatchBlockCallbacks.clear(); }
+        } callbackScope{*rack};
+        if (system.jobManagers[0].handle != 0) {
+            std::stable_sort(events.begin(), events.end(), [](const auto& a, const auto& b) { return a.second.sequence < b.second.sequence; });
+        }
+        for (const auto& event : events) {
+            auto* voice = event.first;
+            auto info = event.second.info;
+            if (voice->callback == nullptr || (voice->callbackFlags & info.flag) == 0) continue;
+            info.callback_data = voice->callbackData;
+            const Ngs2Unlocked unlocked;
+            voice->callback(&info);
         }
     }
     system.renderCount++;

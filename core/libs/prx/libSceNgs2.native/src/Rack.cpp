@@ -126,6 +126,7 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
                       const Ngs2BufferAllocator& allocator, Ngs2Handle* handle) {
     static std::uint32_t nextUid = 1;
     auto* system = Ngs2FindSystem(systemHandle);
+    if (system != nullptr && system->jobsExecuting) throw std::runtime_error("NGS2: creating racks from active job handlers is not implemented");
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     auto* rack = new (Ngs2Place(&bufferInfo, sizeof(Ngs2Rack), alignof(Ngs2Rack))) Ngs2Rack{};
     rack->system = system;

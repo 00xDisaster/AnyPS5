@@ -103,11 +103,19 @@ bool Ngs2RenderingHere(const Ngs2System& system) {
     return system.renderDepth != 0;
 }
 
+static thread_local bool jobWorker = false;
+
+bool Ngs2SetJobWorker(bool active) {
+    return std::exchange(jobWorker, active);
+}
+
 bool Ngs2ExclusiveElsewhere() {
+    if (jobWorker) return false;
     return Exclusive().depth != 0 && Exclusive().owner != std::this_thread::get_id();
 }
 
 void Ngs2EnterExclusive() {
+    if (jobWorker) throw std::runtime_error("NGS2: exclusive locking from a render job is not implemented");
     Exclusive().owner = std::this_thread::get_id();
     ++Exclusive().depth;
 }
@@ -241,22 +249,79 @@ static int CheckSystemOption(const Ngs2SystemOption* option, Ngs2SystemOption& c
     if (!ValidGrainSamples(option->num_grain_samples, option->max_grain_samples)) return SCE_NGS2_ERROR_INVALID_NUM_GRAIN_SAMPLES;
     if (!ValidSampleRate(option->sample_rate)) return SCE_NGS2_ERROR_INVALID_SAMPLE_RATE;
     if (option->max_voice_channels < 1 || option->max_voice_channels > MAX_VOICE_CHANNELS) return SCE_NGS2_ERROR_INVALID_NUM_CHANNELS;
-    if (std::any_of(std::begin(option->job_scheduler_options), std::end(option->job_scheduler_options), [](std::uintptr_t scheduler) { return scheduler != 0; })) {
-        throw std::runtime_error("NGS2: external job-manager scheduling is not implemented");
+    for (auto address : option->job_scheduler_options) {
+        if (address == 0) continue;
+        const auto& scheduler = *reinterpret_cast<const Ngs2JobSchedulerOption*>(address);
+        if (scheduler.max_jobs < 2 || scheduler.max_jobs > 16384) return static_cast<int>(0x804A8421u);
     }
     checked = *option;
     return SCE_NGS2_OK;
 }
 
+struct Ngs2JobPlan {
+    std::array<Ngs2ContextBufferInfo, 4> buffers{};
+    std::size_t size = sizeof(Ngs2System);
+};
+
+static int PlanJobs(const Ngs2SystemOption& option, Ngs2JobPlan& plan) {
+    for (std::uint32_t i = 0; i < plan.buffers.size(); ++i) {
+        const auto* scheduler = reinterpret_cast<const Ngs2JobSchedulerOption*>(option.job_scheduler_options[i]);
+        if (scheduler == nullptr || scheduler->query_handler == nullptr) continue;
+        const int result = scheduler->query_handler(scheduler, i, &plan.buffers[i]);
+        if (result < 0) return result;
+        const auto bytes = plan.buffers[i].host_buffer_size;
+        if (bytes > SIZE_MAX - plan.size - 7) throw std::invalid_argument("NGS2: scheduler buffer size overflows");
+        plan.size = (plan.size + 7) & ~std::size_t{7};
+        plan.size += bytes;
+    }
+    return SCE_NGS2_OK;
+}
+
+static void DestroyJobs(Ngs2System& system, bool reverse) {
+    for (std::size_t n = 0; n < system.jobManagers.size(); ++n) {
+        auto& manager = system.jobManagers[reverse ? system.jobManagers.size() - 1 - n : n];
+        if (manager.handle != 0 && manager.option.destroy_handler != nullptr) manager.option.destroy_handler(manager.handle);
+        manager.handle = 0;
+    }
+}
+
 static int CreateSystem(const Ngs2SystemOption& option, const Ngs2ContextBufferInfo& bufferInfo, const Ngs2BufferAllocator& allocator, Ngs2Handle* handle) {
     static std::uint32_t nextUid = 1;
     auto* system = new (Ngs2Place(&bufferInfo, sizeof(Ngs2System), alignof(Ngs2System))) Ngs2System{};
+    struct Cleanup {
+        Ngs2System* system;
+        ~Cleanup() { if (system != nullptr) { DestroyJobs(*system, true); std::destroy_at(system); } }
+    } cleanup{system};
+    std::size_t offset = sizeof(Ngs2System);
+    for (std::uint32_t i = 0; i < system->jobManagers.size(); ++i) {
+        const auto* scheduler = reinterpret_cast<const Ngs2JobSchedulerOption*>(option.job_scheduler_options[i]);
+        if (scheduler == nullptr || scheduler->query_handler == nullptr) continue;
+        Ngs2ContextBufferInfo buffer{};
+        const int queried = scheduler->query_handler(scheduler, i, &buffer);
+        if (queried < 0) return queried;
+        if (offset > SIZE_MAX - 7) throw std::invalid_argument("NGS2: scheduler buffer size overflows");
+        offset = (offset + 7) & ~std::size_t{7};
+        const auto lead = reinterpret_cast<std::uintptr_t>(system) - reinterpret_cast<std::uintptr_t>(bufferInfo.host_buffer);
+        if (lead > bufferInfo.host_buffer_size || offset > bufferInfo.host_buffer_size - lead || buffer.host_buffer_size > bufferInfo.host_buffer_size - lead - offset) {
+            throw std::invalid_argument("NGS2: scheduler buffer does not fit the system buffer");
+        }
+        buffer.host_buffer = reinterpret_cast<std::uint8_t*>(system) + offset;
+        offset += buffer.host_buffer_size;
+        if (scheduler->init_handler == nullptr) continue;
+        std::uintptr_t managerHandle = 0;
+        const int result = scheduler->init_handler(scheduler, i, &buffer, &managerHandle);
+        if (result < 0) return result;
+        auto& manager = system->jobManagers[i];
+        std::memcpy(&manager.option, scheduler, offsetof(Ngs2JobSchedulerOption, reserved_tail));
+        manager.handle = managerHandle;
+    }
     system->option = option;
     system->bufferInfo = bufferInfo;
     system->allocator = allocator;
     system->uid = nextUid++;
     Systems().push_back(system);
     *handle = reinterpret_cast<Ngs2Handle>(system);
+    cleanup.system = nullptr;
     std::lock_guard lock(SystemLockMutex());
     SystemLocks()[*handle] = {};
     return SCE_NGS2_OK;
@@ -266,13 +331,22 @@ static int CreateSystem(const Ngs2SystemOption& option, const Ngs2ContextBufferI
 
 extern "C" {
 
+int APS5_VABI sceNgs2JobSchedulerResetOption(Ngs2JobSchedulerOption* option) {
+    if (option == nullptr) return static_cast<int>(0x804A8012u);
+    Ngs2ResetJobSchedulerOption(*option);
+    return SCE_NGS2_OK;
+}
+
 int APS5_VABI sceNgs2SystemQueryBufferSize(const Ngs2SystemOption* option, Ngs2ContextBufferInfo* buffer_info) {
     if (buffer_info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
     std::memset(buffer_info, 0, offsetof(Ngs2ContextBufferInfo, user_data));
     Ngs2SystemOption checked{};
     const int result = CheckSystemOption(option, checked);
     if (result != SCE_NGS2_OK) return result;
-    buffer_info->host_buffer_size = sizeof(Ngs2System);
+    Ngs2JobPlan plan;
+    const int planned = PlanJobs(checked, plan);
+    if (planned < 0) return planned;
+    buffer_info->host_buffer_size = plan.size;
     return SCE_NGS2_OK;
 }
 
@@ -292,9 +366,19 @@ int APS5_VABI sceNgs2SystemCreateWithAllocator(const Ngs2SystemOption* option, c
     Ngs2SystemOption checked{};
     const int result = CheckSystemOption(option, checked);
     if (result != SCE_NGS2_OK) return result;
-    const auto bufferInfo = Allocate(allocator, sizeof(Ngs2System));
+    Ngs2JobPlan plan;
+    const int planned = PlanJobs(checked, plan);
+    if (planned < 0) return planned;
+    const auto bufferInfo = Allocate(allocator, plan.size);
     const Ngs2Lock lock;
-    return CreateSystem(checked, bufferInfo, *allocator, handle);
+    try {
+        const int created = CreateSystem(checked, bufferInfo, *allocator, handle);
+        if (created < 0) Ngs2ReleaseBuffer(*allocator, bufferInfo, nullptr);
+        return created;
+    } catch (...) {
+        Ngs2ReleaseBuffer(*allocator, bufferInfo, nullptr);
+        throw;
+    }
 }
 
 int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInfo* buffer_info) {
@@ -317,6 +401,7 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
         SystemLocks().erase(system_handle);
         SystemLockReleased().notify_all();
     }
+    DestroyJobs(*system, false);
     const auto bufferInfo = system->bufferInfo;
     const auto allocator = system->allocator;
     std::destroy_at(system);
@@ -348,6 +433,7 @@ int APS5_VABI sceNgs2SystemSetGrainSamples(uintptr_t system_handle, uint32_t num
     const Ngs2Lock lock;
     auto* system = Ngs2FindSystem(system_handle);
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    if (system->jobsExecuting) throw std::runtime_error("NGS2: changing grain size from an active job handler is not implemented");
     if (num_samples == 0 || num_samples > system->option.max_grain_samples) return SCE_NGS2_ERROR_INVALID_NUM_GRAIN_SAMPLES;
     system->option.num_grain_samples = num_samples;
     return SCE_NGS2_OK;
@@ -357,6 +443,7 @@ int APS5_VABI sceNgs2SystemSetSampleRate(uintptr_t system_handle, uint32_t sampl
     const Ngs2Lock lock;
     auto* system = Ngs2FindSystem(system_handle);
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    if (system->jobsExecuting) throw std::runtime_error("NGS2: changing sample rate from an active job handler is not implemented");
     if (!ValidSampleRate(sample_rate)) return SCE_NGS2_ERROR_INVALID_SAMPLE_RATE;
     for (const auto* rack : system->racks) {
         for (const auto& voice : rack->voices) {
@@ -389,6 +476,7 @@ int APS5_VABI sceNgs2SystemGetUserData(uintptr_t system_handle, uintptr_t* user_
 }
 
 int APS5_VABI sceNgs2SystemLock(uintptr_t system_handle) {
+    if (jobWorker) throw std::runtime_error("NGS2: system locking from a render job is not implemented");
     const auto self = std::this_thread::get_id();
     std::unique_lock lock(SystemLockMutex());
     auto& locks = SystemLocks();
@@ -412,6 +500,7 @@ int APS5_VABI sceNgs2SystemUnlock(uintptr_t system_handle) {
 }
 
 int APS5_VABI sceNgs2SystemRender(uintptr_t system_handle, const Ngs2RenderBufferInfo* buffer_info, uint32_t num_buffer_info) {
+    if (jobWorker) throw std::runtime_error("NGS2: recursive system rendering from a render job is not implemented");
     const Ngs2Lock lock;
     auto* system = Ngs2FindSystem(system_handle);
     while (system != nullptr && Ngs2ExclusiveElsewhere()) {

@@ -325,6 +325,18 @@ void Ngs2SetFilter(Ngs2Voice& voice, const Ngs2SamplerVoiceFilterParam& param) {
     filter.a2 = (1.0 - alpha) * inverseA0;
 }
 
+void Ngs2PublishSamplerState(Ngs2Voice& voice) {
+    auto& state = voice.publishedSampler;
+    state = {};
+    state.voice_state.state_flags = voice.stateFlags;
+    if (voice.state == Ngs2PlayState::Empty) return;
+    state.envelope_height = 1.0f;
+    state.num_decoded_samples = voice.decodedSamples;
+    state.decoded_data_size = voice.decodedBytes;
+    state.user_data = voice.waveformUserData;
+    state.waveform_data = voice.WaveformData();
+}
+
 static void ApplySamplerParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
     switch (param.id) {
         case SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP:
@@ -436,10 +448,15 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
     if (param_list == nullptr) return SCE_NGS2_ERROR_NULL_PARAM_LIST;
     const Ngs2Lock lock;
     auto* found = Ngs2FindVoice(voice_handle);
+    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
+        Ngs2WaitOnce();
+        found = Ngs2FindVoice(voice_handle);
+    }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
     try {
         for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
+            if (voice.rack->system->jobsExecuting && param->id != SCE_NGS2_VOICE_PARAM_CALLBACK) throw std::runtime_error("NGS2: render parameter changes from active job handlers are not implemented");
             if (voice.channels != 0 && (param->id >> 16) == voice.rack->rackId && (param->id == SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS || param->id == SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS)) {
                 const auto& blocks = ParamAs<Ngs2SamplerVoiceWaveformBlocksParam>(*param);
                 const bool reset = (blocks.flags & SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET) != 0;
@@ -471,9 +488,14 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
 int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCommand* commands, size_t num_commands) {
     const Ngs2Lock lock;
     auto* found = Ngs2FindVoice(voice_handle);
+    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
+        Ngs2WaitOnce();
+        found = Ngs2FindVoice(voice_handle);
+    }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
     if (commands == nullptr && num_commands != 0) APS5_INVALID_ARG_EX;
+    if (num_commands != 0 && voice.rack->system->jobsExecuting) throw std::runtime_error("NGS2: voice commands from active job handlers are not implemented");
     try {
         for (std::size_t i = 0; i < num_commands; i++) {
             const auto& command = commands[i];
@@ -507,6 +529,10 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
         case SCE_NGS2_RACK_ID_SAMPLER: {
             if (state_size != sizeof(Ngs2SamplerVoiceState)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
             auto& sampler = *reinterpret_cast<Ngs2SamplerVoiceState*>(state);
+            if (voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0) {
+                sampler = voice.publishedSampler;
+                return SCE_NGS2_OK;
+            }
             sampler = {};
             sampler.voice_state.state_flags = voice.stateFlags;
             if (voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
@@ -535,8 +561,9 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
             auto& sampler = *reinterpret_cast<Ngs2CustomSamplerVoiceState*>(state);
             sampler = {};
             sampler.voice_state.state_flags = voice.stateFlags;
-            if (voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
-            sampler.num_decoded_samples = voice.decodedSamples;
+            if (voice.rack->system->renderDepth == 0 && voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
+            sampler.num_decoded_samples = voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0
+                ? voice.publishedSampler.num_decoded_samples : voice.decodedSamples;
             return SCE_NGS2_OK;
         }
         case SCE_NGS2_RACK_ID_CUSTOM_MASTERING: {
@@ -554,6 +581,10 @@ int APS5_VABI sceNgs2VoiceGetPortInfo(uintptr_t voice_handle, uint32_t port, Ngs
     if (info_size != sizeof(Ngs2VoicePortInfo)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     const Ngs2Lock lock;
     auto* found = Ngs2FindVoice(voice_handle);
+    while (found != nullptr && Ngs2ExclusiveElsewhere()) {
+        Ngs2WaitOnce();
+        found = Ngs2FindVoice(voice_handle);
+    }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
     const auto& source = PortAt(voice, port);

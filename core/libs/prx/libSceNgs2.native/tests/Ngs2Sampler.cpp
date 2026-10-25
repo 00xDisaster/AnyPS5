@@ -3,6 +3,11 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <chrono>
+#include <mutex>
 
 static constexpr std::uint32_t RenderGrain = 256;
 static constexpr std::array<std::uint32_t, 8> Checkpoints{8, 12, 14, 20, 24, 30, 32, 40};
@@ -266,7 +271,7 @@ static int APS5_VABI OrderedUserFx(Ngs2UserFxProcessContext* context) {
     order.events.push_back(9);
     Require(Flags(order.first) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
     Require(Flags(order.second) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
-    if (order.mode == 4) ReplacePeerCallback(order, observers[1]);
+    if (order.mode == 4 || order.mode == 5) ReplacePeerCallback(order, observers[1]);
     return 0;
 }
 
@@ -293,9 +298,237 @@ static std::uintptr_t CallbackRack(std::uintptr_t system, bool custom) {
     return rack;
 }
 
-static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint32_t mode, bool mixed = false) {
+struct TestJobManager {
+    struct Batch { Ngs2JobHandler handler; void* context; std::uint32_t count; };
+    std::vector<Batch> batches;
+    std::thread::id renderThread = std::this_thread::get_id();
+    std::uint32_t submitted = 0;
+    std::uint32_t joined = 0;
+    bool immediate = false;
+    bool parallel = false;
+    bool deferredFlush = false;
+    std::uint32_t expectedJoins = 2;
+};
+
+static int APS5_VABI QueryJobs(const Ngs2JobSchedulerOption*, std::uint32_t slot, Ngs2ContextBufferInfo* buffer) {
+    Require(slot == 0);
+    *buffer = {};
+    buffer->host_buffer_size = 64;
+    return SCE_NGS2_OK;
+}
+
+static int APS5_VABI InitJobs(const Ngs2JobSchedulerOption* option, std::uint32_t slot, Ngs2ContextBufferInfo* buffer, std::uintptr_t* handle) {
+    Require(slot == 0 && buffer->host_buffer != nullptr && buffer->host_buffer_size == 64);
+    *handle = option->user_data;
+    return SCE_NGS2_OK;
+}
+
+static void RunJobs(TestJobManager& manager) {
+    Require(std::this_thread::get_id() == manager.renderThread);
+    for (const auto& batch : manager.batches) {
+        std::vector<std::thread> workers;
+        if (manager.parallel) {
+            for (std::uint32_t i = 0; i < batch.count; ++i) workers.emplace_back([&, i] { batch.handler(batch.context, i); });
+        } else workers.emplace_back([&] { for (auto i = batch.count; i-- > 0;) batch.handler(batch.context, i); });
+        for (auto& worker : workers) worker.join();
+    }
+    manager.batches.clear();
+}
+
+static int APS5_VABI SubmitJobs(std::uintptr_t handle, Ngs2JobHandler handler, void* context, std::uint32_t count) {
+    auto& manager = *reinterpret_cast<TestJobManager*>(handle);
+    Require(count != 0 && count <= (manager.immediate ? 2u : 16u));
+    manager.batches.push_back({handler, context, count});
+    manager.submitted += count;
+    if (manager.immediate) RunJobs(manager);
+    return SCE_NGS2_OK;
+}
+
+static int APS5_VABI FlushJobs(std::uintptr_t handle) {
+    auto& manager = *reinterpret_cast<TestJobManager*>(handle);
+    if (!manager.deferredFlush) RunJobs(manager);
+    return SCE_NGS2_OK;
+}
+
+static int APS5_VABI JoinJobs(std::uintptr_t handle) {
+    auto& manager = *reinterpret_cast<TestJobManager*>(handle);
+    RunJobs(manager);
+    ++manager.joined;
+    return SCE_NGS2_OK;
+}
+
+static int APS5_VABI DestroyJobs(std::uintptr_t handle) {
+    const auto& manager = *reinterpret_cast<TestJobManager*>(handle);
+    Require(manager.batches.empty() && manager.joined == manager.expectedJoins && manager.submitted != 0);
+    return SCE_NGS2_OK;
+}
+
+static std::uintptr_t CreateScheduledSystem(Ngs2JobSchedulerOption& scheduler) {
+    Ngs2SystemOption option{};
+    option.size = sizeof(option);
+    option.max_grain_samples = 512;
+    option.num_grain_samples = 64;
+    option.sample_rate = 48000;
+    option.max_voice_channels = 8;
+    option.job_scheduler_options[0] = reinterpret_cast<std::uintptr_t>(&scheduler);
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2SystemQueryBufferSize(&option, &query) == SCE_NGS2_OK);
+    const auto buffer = Buffer(query);
+    std::uintptr_t system = 0;
+    Require(sceNgs2SystemCreate(&option, &buffer, &system) == SCE_NGS2_OK);
+    return system;
+}
+
+static Ngs2JobSchedulerOption SchedulerOption(TestJobManager& manager) {
+    Ngs2JobSchedulerOption scheduler{};
+    scheduler.size = sizeof(scheduler);
+    scheduler.user_data = reinterpret_cast<std::uintptr_t>(&manager);
+    scheduler.query_handler = QueryJobs;
+    scheduler.init_handler = InitJobs;
+    scheduler.destroy_handler = DestroyJobs;
+    scheduler.submit_handler = SubmitJobs;
+    scheduler.flush_handler = FlushJobs;
+    scheduler.join_handler = JoinJobs;
+    scheduler.num_workers = 2;
+    scheduler.max_jobs = manager.immediate ? 2 : 16;
+    return scheduler;
+}
+
+struct ParallelJobs {
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::uint32_t arrived = 0;
+    std::uint32_t generation = 0;
+    bool fail = false;
+
+    void Meet() {
+        std::unique_lock lock(mutex);
+        const auto current = generation;
+        if (++arrived == 2) { arrived = 0; ++generation; ready.notify_all(); }
+        else Require(ready.wait_for(lock, std::chrono::seconds(5), [&] { return generation != current; }));
+    }
+    std::atomic<std::uint32_t> calls{0};
+    std::thread::id renderThread = std::this_thread::get_id();
+};
+
+static int APS5_VABI ParallelUserFx(Ngs2UserFxProcessContext* context) {
+    auto& jobs = *reinterpret_cast<ParallelJobs*>(context->user_data0);
+    Require(std::this_thread::get_id() != jobs.renderThread);
+    jobs.Meet();
+    jobs.calls.fetch_add(1);
+    if (jobs.fail && context->user_data1 == 1) return -5;
+    for (std::uint32_t i = 0; i < context->num_grain_samples; ++i) context->channel_data[0][i] = static_cast<float>(context->user_data1) / 16.0f;
+    return SCE_NGS2_OK;
+}
+
+static void TestParallelJobs(bool deferredFlush, bool builtin = false, bool failure = false) {
     const auto firstBuffer = usedBuffers;
-    const auto system = CreateSystem();
+    TestJobManager manager;
+    manager.parallel = true;
+    manager.deferredFlush = deferredFlush;
+    manager.expectedJoins = failure ? 5 : 3;
+    auto scheduler = SchedulerOption(manager);
+    if (builtin) {
+        Require(sceNgs2JobSchedulerResetOption(&scheduler) == SCE_NGS2_OK);
+        scheduler.num_workers = 2;
+        scheduler.max_jobs = 16;
+    }
+    const auto system = CreateScheduledSystem(scheduler);
+    const auto master = Mastering(system, 1);
+    ParallelJobs jobs;
+    for (std::uintptr_t i = 1; i <= 2; ++i) {
+        const auto voice = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
+        Control(voice, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
+        Control(voice, SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX,
+                Ngs2SubmixerVoiceUserFxParam{{}, ParallelUserFx, reinterpret_cast<std::uintptr_t>(&jobs), i, 0});
+        Patch(voice, master);
+        Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
+    }
+    std::array<float, 64> samples{};
+    const Ngs2RenderBufferInfo output{samples.data(), sizeof(samples), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
+    for (std::uint32_t grain = 0; grain < 3; ++grain) {
+        Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+        Require(jobs.calls.load() == 2 * (grain + 1));
+        for (auto sample : samples) Require(sample == 3.0f / 16.0f);
+        Require(manager.batches.empty());
+    }
+    if (failure) {
+        jobs.fail = true;
+        samples.fill(-1.0f);
+        bool rejected = false;
+        try { sceNgs2SystemRender(system, &output, 1); }
+        catch (const std::runtime_error&) { rejected = true; }
+        Require(rejected && manager.batches.empty() && jobs.calls.load() == 8);
+        for (auto sample : samples) Require(sample == -1.0f);
+        jobs.fail = false;
+        Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+        Require(jobs.calls.load() == 10);
+        for (auto sample : samples) Require(sample == 3.0f / 16.0f);
+    }
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    usedBuffers = firstBuffer;
+}
+
+struct SamplerPublication {
+    std::uintptr_t voice;
+    std::uint64_t decoded = 0;
+};
+
+static int APS5_VABI ReadSamplerPublication(Ngs2UserFxProcessContext* context) {
+    const auto& expected = *reinterpret_cast<SamplerPublication*>(context->user_data0);
+    Ngs2SamplerVoiceState state{};
+    Require(sceNgs2VoiceGetState(expected.voice, &state.voice_state, sizeof(state)) == SCE_NGS2_OK);
+    Require(state.num_decoded_samples == expected.decoded && state.decoded_data_size == expected.decoded * 2);
+    return SCE_NGS2_OK;
+}
+
+static void TestSamplerPublication() {
+    const auto firstBuffer = usedBuffers;
+    TestJobManager manager;
+    manager.deferredFlush = true;
+    manager.expectedJoins = 3;
+    auto scheduler = SchedulerOption(manager);
+    const auto system = CreateScheduledSystem(scheduler);
+    const auto master = Mastering(system, 1);
+    const auto sampler = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER));
+    Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP,
+            Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 1, 48000, 0, 0, 0}});
+    std::array<std::int16_t, 128> pcm{};
+    pcm.fill(1000);
+    const Ngs2WaveformBlock block{0, sizeof(pcm), 0, 0, 128, 0, 0};
+    Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS, Ngs2SamplerVoiceWaveformBlocksParam{{}, pcm.data(), 0, 1, &block});
+    const auto effect = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
+    Control(effect, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
+    SamplerPublication publication{sampler};
+    Control(effect, SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX,
+            Ngs2SubmixerVoiceUserFxParam{{}, ReadSamplerPublication, reinterpret_cast<std::uintptr_t>(&publication), 0, 0});
+    Patch(sampler, effect);
+    Patch(effect, master);
+    Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+    Event(effect, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::array<float, 64> samples{};
+    const Ngs2RenderBufferInfo output{samples.data(), sizeof(samples), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
+    for (std::uint32_t grain = 0; grain < 3; ++grain) {
+        publication.decoded = grain * 64;
+        Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+        Ngs2SamplerVoiceState state{};
+        Require(sceNgs2VoiceGetState(sampler, &state.voice_state, sizeof(state)) == SCE_NGS2_OK);
+        Require(state.num_decoded_samples == (grain < 2 ? (grain + 1) * 64 : 0));
+        for (std::uint32_t i = 0; i < samples.size(); ++i) {
+            const bool audible = grain == 0 ? i >= 3 : grain == 1 || i < 3;
+            Require(samples[i] == (audible ? 1000.0f / 32768.0f : 0.0f));
+        }
+    }
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    usedBuffers = firstBuffer;
+}
+
+static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint32_t mode, bool mixed = false, bool scheduled = false, bool immediate = false) {
+    const auto firstBuffer = usedBuffers;
+    TestJobManager manager;
+    manager.immediate = immediate;
+    auto scheduler = SchedulerOption(manager);
+    const auto system = scheduled ? CreateScheduledSystem(scheduler) : CreateSystem();
     Require(sceNgs2SystemSetGrainSamples(system, 64) == SCE_NGS2_OK);
     const auto master = Mastering(system, 1);
     const auto rack = CallbackRack(system, custom);
@@ -322,7 +555,7 @@ static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint3
         Control(voice, customVoice ? SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS : SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS,
                 Ngs2SamplerVoiceWaveformBlocksParam{{}, &pcm, 0, 1, &block});
         Control(voice, SCE_NGS2_VOICE_PARAM_CALLBACK,
-                Ngs2VoiceCallbackParam{{}, OrderedCallback, reinterpret_cast<std::uintptr_t>(&observer), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+                Ngs2VoiceCallbackParam{{}, mode == 5 && observer.id == 2 ? nullptr : OrderedCallback, reinterpret_cast<std::uintptr_t>(&observer), mode == 5 && observer.id == 2 ? 0u : SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
     }
     Patch(reverse ? order.second : order.first, effect);
     Patch(reverse ? order.first : order.second, effect);
@@ -331,7 +564,7 @@ static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint3
     std::array<float, 64> samples{};
     const Ngs2RenderBufferInfo output{samples.data(), sizeof(samples), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
     Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
-    const std::vector<int> expected = mode == 2 ? std::vector<int>{9, 1} : std::vector<int>{9, 1, mode == 1 || mode == 4 ? 22 : 2};
+    const std::vector<int> expected = scheduled && shared ? std::vector<int>{9, mode == 4 || mode == 5 ? 22 : 2, 1} : mode == 2 ? std::vector<int>{9, 1} : std::vector<int>{9, 1, mode == 1 || mode == 4 || mode == 5 ? 22 : 2};
     Require(order.events == expected);
     for (std::size_t i = 0; i < samples.size(); ++i) Require(samples[i] == (i == 3 ? 2000.0f / 32768.0f : 0.0f));
     Require(Flags(order.first) == 0 && Flags(order.second) == 0);
@@ -351,8 +584,17 @@ int main() {
     for (bool custom : {false, true})
         for (bool shared : {false, true})
             for (bool reverse : {false, true})
-                for (std::uint32_t mode = 0; mode < 5; ++mode) TestCallbackOrder(custom, shared, reverse, mode);
+                for (std::uint32_t mode = 0; mode < 6; ++mode) TestCallbackOrder(custom, shared, reverse, mode);
     TestCallbackOrder(true, false, false, 0, true);
     TestCallbackOrder(true, false, true, 1, true);
+    for (bool custom : {false, true})
+        for (bool shared : {false, true})
+            for (std::uint32_t mode = 0; mode < 6; ++mode) TestCallbackOrder(custom, shared, false, mode, false, true);
+    TestCallbackOrder(true, true, true, 1, false, true, true);
+    TestParallelJobs(false);
+    TestParallelJobs(true);
+    TestParallelJobs(false, true);
+    TestParallelJobs(true, false, true);
+    TestSamplerPublication();
     return 0;
 }

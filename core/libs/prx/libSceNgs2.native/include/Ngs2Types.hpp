@@ -150,6 +150,24 @@ struct Ngs2BufferAllocator {
     std::uintptr_t user_data;
 };
 
+using Ngs2JobHandler = void (APS5_VABI *)(void*, std::uint32_t);
+
+struct Ngs2JobSchedulerOption {
+    std::size_t size;
+    std::uintptr_t user_data;
+    std::int32_t (APS5_VABI *query_handler)(const Ngs2JobSchedulerOption*, std::uint32_t, Ngs2ContextBufferInfo*);
+    std::int32_t (APS5_VABI *init_handler)(const Ngs2JobSchedulerOption*, std::uint32_t, Ngs2ContextBufferInfo*, std::uintptr_t*);
+    std::int32_t (APS5_VABI *destroy_handler)(std::uintptr_t);
+    std::int32_t (APS5_VABI *submit_handler)(std::uintptr_t, Ngs2JobHandler, void*, std::uint32_t);
+    std::int32_t (APS5_VABI *flush_handler)(std::uintptr_t);
+    std::int32_t (APS5_VABI *join_handler)(std::uintptr_t);
+    std::uintptr_t reserved[4];
+    std::uint32_t num_workers;
+    std::uint32_t max_jobs;
+    std::uintptr_t reserved_tail;
+};
+static_assert(sizeof(Ngs2JobSchedulerOption) == 112);
+
 struct Ngs2SystemOption {
     std::size_t size;
     char name[64];

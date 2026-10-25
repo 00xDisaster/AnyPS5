@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -107,10 +108,16 @@ struct Ngs2VoiceCustomGain {
     std::array<float, SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS> target{};
 };
 
+struct Ngs2QueuedCallback {
+    Ngs2VoiceCallbackInfo info;
+    std::uint64_t sequence;
+};
+
 struct Ngs2Voice {
     Ngs2Rack* rack = nullptr;
     Ngs2PlayState state = Ngs2PlayState::Empty;
     std::uint32_t stateFlags = 0;
+    Ngs2SamplerVoiceState publishedSampler{};
     std::uint32_t channels = 0;
     std::uint32_t inputChannels = 0;
     std::uint32_t sampleRate = 0;
@@ -125,8 +132,8 @@ struct Ngs2Voice {
     bool samplerEnded = false;
     std::uint32_t pcmRemaining = 0;
     std::uint32_t pcmSkipRemaining = 0;
-    std::vector<Ngs2VoiceCallbackInfo> pendingBlockCallbacks;
-    std::vector<Ngs2VoiceCallbackInfo> dispatchBlockCallbacks;
+    std::vector<Ngs2QueuedCallback> pendingBlockCallbacks;
+    std::vector<Ngs2QueuedCallback> dispatchBlockCallbacks;
     std::vector<float> samplerScratch;
     std::vector<Ngs2Block> samplerReplayBlocks;
     std::uint32_t samplerWritePosition = 0;
@@ -189,15 +196,23 @@ struct Ngs2Rack {
     std::uint32_t lockDepth = 0;
 };
 
+struct Ngs2JobManager {
+    Ngs2JobSchedulerOption option{};
+    std::uintptr_t handle = 0;
+};
+
 struct Ngs2System {
     Ngs2SystemOption option{};
+    std::array<Ngs2JobManager, 4> jobManagers{};
     Ngs2ContextBufferInfo bufferInfo{};
     Ngs2BufferAllocator allocator{};
     std::uint32_t uid = 0;
     std::int64_t renderCount = 0;
     std::uint32_t renderDepth = 0;
+    bool jobsExecuting = false;
     std::uintptr_t userData = 0;
     std::vector<Ngs2Rack*> racks;
+    std::atomic<std::uint64_t> callbackSequence{0};
 };
 
 std::string Ngs2Hex(std::uint32_t value);
@@ -225,6 +240,7 @@ private:
 };
 
 bool Ngs2ExclusiveElsewhere();
+bool Ngs2SetJobWorker(bool active);
 bool Ngs2RenderingHere(const Ngs2System& system);
 void Ngs2EnterExclusive();
 void Ngs2LeaveExclusive(std::uint32_t depth = 1);
@@ -266,6 +282,8 @@ void Ngs2SetupReverb(Ngs2Voice& voice);
 void Ngs2ClearReverb(Ngs2Voice& voice);
 bool Ngs2ProcessReverb(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
 void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
+void Ngs2PublishSamplerState(Ngs2Voice& voice);
+void Ngs2ResetJobSchedulerOption(Ngs2JobSchedulerOption& option);
 void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);
 void Ngs2RenderSilence(const Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);
 float Ngs2DefaultLevel(std::uint32_t sourceChannels, std::uint32_t source, std::uint32_t destChannels, std::uint32_t dest);
