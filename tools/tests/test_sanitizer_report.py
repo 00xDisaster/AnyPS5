@@ -45,6 +45,21 @@ class SanitizerReportTests(unittest.TestCase):
             "passes": "passed", "fails": "failed", "skips": "skipped", "never_built": "failed", "switched_off": "skipped",
         })
 
+    def test_not_run_tests_are_skips_only_with_a_ctest_skip_status(self):
+        path = self.write(suite(
+            case("skip_code", "notrun", '<skipped message="SKIP_RETURN_CODE=77"/><system-out>skipped, no display</system-out>'),
+            case("skip_regex", "notrun", '<skipped message="SKIP_REGULAR_EXPRESSION_MATCHED"/>'),
+            case("missing", "notrun", '<skipped message="Unable to find executable"/>'
+                                      '<system-out>Unable to find executable: build/tests/missing_tests</system-out>'),
+            case("no_message", "notrun", "<skipped/>"),
+        ))
+        self.assertEqual(sanitizer_report.results(path), {
+            "skip_code": "skipped", "skip_regex": "skipped", "missing": "failed", "no_message": "failed",
+        })
+        code, stdout, _ = self.run_main(path)
+        self.assertEqual(code, 1)
+        self.assertIn("4 tests: 0 passed, 2 skipped, 2 failed.", stdout)
+
     def test_summary_counts_and_sorts_the_failed_tests(self):
         text, failing = sanitizer_report.summarize("ASan", {"b": "failed", "a": "failed", "c": "passed", "d": "skipped"})
         self.assertTrue(failing)
