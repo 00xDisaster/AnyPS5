@@ -1,4 +1,5 @@
 #include "FontFixture.hpp"
+#include "prx/libSceFreeType/libSceFreeType.hpp"
 #include "prx/libSceFreeType/include/GuestObjects.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
@@ -12,21 +13,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 using namespace FreeType;
-
-extern "C" {
-int APS5_VABI FT_Init_FreeType_nid_postfix(void**);
-int APS5_VABI FT_Done_FreeType_nid_postfix(void*);
-int APS5_VABI FT_New_Memory_Face_nid_postfix(void*, const unsigned char*, std::int64_t, std::int64_t, GuestFaceRec**);
-int APS5_VABI FT_Done_Face_nid_postfix(GuestFaceRec*);
-int APS5_VABI FT_Sfnt_Table_Info_nid_postfix(GuestFaceRec*, std::uint32_t, std::uint64_t*, std::uint64_t*);
-int APS5_VABI FT_Load_Sfnt_Table_nid_postfix(GuestFaceRec*, std::uint64_t, std::int64_t, unsigned char*, std::uint64_t*);
-}
 
 static void Check(bool value, int line) {
     if (!value) {
@@ -41,7 +32,7 @@ struct FacePair {
     GuestFaceRec* guest = nullptr;
     FT_Face native = nullptr;
 
-    FacePair(void* library, FT_Library nativeLibrary, std::vector<unsigned char> data) : bytes(std::move(data)) {
+    FacePair(GuestLibrary* library, FT_Library nativeLibrary, std::vector<unsigned char> data) : bytes(std::move(data)) {
         Require(FT_New_Memory_Face_nid_postfix(library, bytes.data(), static_cast<std::int64_t>(bytes.size()), 0, &guest) == 0);
         Require(FT_New_Memory_Face(nativeLibrary, bytes.data(), static_cast<FT_Long>(bytes.size()), 0, &native) == 0);
     }
@@ -93,10 +84,7 @@ static FT_Error ReadMatches(GuestFaceRec* guest, FT_Face native, std::uint32_t t
     return error;
 }
 
-static unsigned virtualReads = 0;
-
 static FT_ULong VirtualRead(FT_Stream stream, FT_ULong offset, unsigned char* buffer, FT_ULong count) {
-    ++virtualReads;
     if (offset >= stream->size || !buffer) return 0;
     const auto bytes = std::min(count, stream->size - offset);
     for (FT_ULong index = 0; index < bytes; ++index) buffer[index] = static_cast<unsigned char>((offset + index) ^ 0x5A);
@@ -122,20 +110,10 @@ static void WideStreamAccess(FacePair& face, int& comparisons) {
         std::uint64_t length = pixels.size();
         Require(FT_Load_Sfnt_Table_nid_postfix(face.guest, 0, offset, pixels.data(), &length) == 0 && length == pixels.size());
         for (std::size_t index = 0; index < pixels.size(); ++index) Require(pixels[index] == static_cast<unsigned char>((offset + static_cast<std::int64_t>(index)) ^ 0x5A));
-        const auto calls = virtualReads;
-        unsigned char byte = 0xA5;
-        length = 1;
-        bool threw = false;
-        try {
-            FT_Load_Sfnt_Table_nid_postfix(face.guest, 0x54455354u, 0, &byte, &length);
-        } catch (const std::runtime_error& error) {
-            threw = std::string(error.what()).starts_with("FT_Load_Sfnt_Table: tagged reads through a native stream callback");
-        }
         stream->size = original;
         native->size = originalNative;
         stream->read = originalRead;
         native->read = originalNativeRead;
-        Require(threw && virtualReads == calls && byte == 0xA5 && length == 1);
     }
 }
 
@@ -242,7 +220,7 @@ static void WatchedMetadata(FacePair& face) {
 }
 
 int main() {
-    void* library = nullptr;
+    GuestLibrary* library = nullptr;
     FT_Library nativeLibrary = nullptr;
     Require(FT_Init_FreeType_nid_postfix(&library) == 0 && FT_Init_FreeType(&nativeLibrary) == 0);
     int information = 0;

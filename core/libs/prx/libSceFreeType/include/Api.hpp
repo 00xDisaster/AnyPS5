@@ -46,6 +46,8 @@ std::uint32_t APS5_VABI FT_Get_Name_Index_nid_postfix(FreeType::GuestFaceRec* fa
 const char* APS5_VABI FT_Get_Postscript_Name_nid_postfix(FreeType::GuestFaceRec* face);
 std::uint32_t APS5_VABI FT_Get_Sfnt_Name_Count_nid_postfix(FreeType::GuestFaceRec* face);
 int APS5_VABI FT_Get_Sfnt_Name_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t index, FreeType::GuestSfntName* name);
+int APS5_VABI FT_Sfnt_Table_Info_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t tableIndex, std::uint64_t* tag, std::uint64_t* length);
+int APS5_VABI FT_Load_Sfnt_Table_nid_postfix(FreeType::GuestFaceRec* face, std::uint64_t tag, std::int64_t offset, unsigned char* buffer, std::uint64_t* length);
 int APS5_VABI FT_Outline_Check_nid_postfix(FreeType::GuestOutline* outline);
 void APS5_VABI FT_Outline_Get_CBox_nid_postfix(const FreeType::GuestOutline* outline, FreeType::GuestBBox* box);
 void APS5_VABI FT_Outline_Translate_nid_postfix(const FreeType::GuestOutline* outline, std::int64_t xOffset, std::int64_t yOffset);
