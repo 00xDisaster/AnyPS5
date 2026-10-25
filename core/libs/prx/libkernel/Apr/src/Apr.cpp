@@ -590,7 +590,7 @@ struct Deferred {
 std::optional<Deferred> _execute(const Apr::CommandBufferObject& buffer, std::uint32_t start = 0, ReadCursor read = {}, bool defer = false) {
     std::uint32_t cursor = start;
     while (cursor < buffer.offset) {
-        if (cursor + Apr::NopHeaderBytes > buffer.offset) throw std::runtime_error("APR: truncated command buffer");
+        if (buffer.offset - cursor < Apr::NopHeaderBytes) throw std::runtime_error("APR: truncated command buffer");
         std::uint32_t first;
         std::memcpy(&first, buffer.base + cursor, sizeof(first));
         if ((first & 0xffu) == static_cast<std::uint32_t>(Apr::Opcode::Nop)) {
