@@ -75,6 +75,20 @@ def convert(relinker, source, output, extra, windows):
     return subprocess.run(command, capture_output=True, text=True)
 
 
+def report_overlaps_dump(report, dump):
+    destination = report.resolve()
+    dump_path = dump.resolve()
+    if report.absolute().is_relative_to(dump.absolute()) or destination.is_relative_to(dump_path) or report.parent.resolve().is_relative_to(dump_path):
+        return True
+    exists = report.exists()
+    for path in dump.rglob("*"):
+        if path.is_symlink() and path.is_dir() and destination.is_relative_to(path.resolve()):
+            return True
+        if exists and path.is_file() and report.samefile(path):
+            return True
+    return False
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dump", help="the title's extracted app0 directory, holding eboot.bin")
@@ -82,7 +96,7 @@ def main(argv=None):
     parser.add_argument("--libs", action="append", required=True, help="built .prx directory, as for import_audit.py (repeatable)")
     parser.add_argument("--work", help="directory for the unwrapped files and registries (default: a temporary one, removed afterwards)")
     parser.add_argument("--windows", action="store_true", help="convert for Windows, as the title would be run there")
-    parser.add_argument("--json", help="also write import_audit.py's JSON report to this file")
+    parser.add_argument("--json", help="also write import_audit.py's JSON report to this file outside the input dump")
     args = parser.parse_args(argv)
     dump = Path(args.dump)
     if not (dump / "eboot.bin").is_file():
@@ -90,10 +104,18 @@ def main(argv=None):
     relinker = Path(args.relinker).resolve()
     if not relinker.is_file():
         parser.error(f"{args.relinker}: no such relinker")
+    dump_path = dump.resolve()
+    if args.json:
+        report = Path(args.json)
+        try:
+            overlaps = report_overlaps_dump(report, dump)
+        except (OSError, RuntimeError) as error:
+            parser.error(f"{report}: cannot check JSON output against the input dump: {error}")
+        if overlaps:
+            parser.error(f"{report}: JSON output overlaps the input dump")
     with tempfile.TemporaryDirectory() as temporary:
         work = Path(args.work) if args.work else Path(temporary)
         source, output = work / "source", work / "output"
-        dump_path = dump.resolve()
         for generated in (source, output):
             generated_path = generated.resolve()
             if dump_path.is_relative_to(generated_path) or generated_path.is_relative_to(dump_path):

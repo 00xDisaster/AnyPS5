@@ -193,6 +193,91 @@ class AuditDumpTests(unittest.TestCase):
                 work = dump / "work" if name == "work-in-dump" else root
                 self.assert_overlap_rejected(dump, work)
 
+    def assert_report_rejected(self, report):
+        work = self.root / "report-work"
+        marker = work / "source" / "preserve"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_bytes(b"previous work")
+        original = (self.dump / "eboot.bin").read_bytes()
+        with mock.patch.object(audit_dump, "prepare", return_value=([], [])) as prepare, mock.patch.object(audit_dump, "convert", return_value=subprocess.CompletedProcess([], 0)) as convert, mock.patch.object(audit_dump.import_audit, "main", return_value=0) as audit:
+            with self.assertRaises(SystemExit) as error:
+                self.run_main(self.dump, "--relinker", self.relinker, "--libs", "libs", "--work", work, "--json", report)
+        self.assertEqual(error.exception.code, 2)
+        prepare.assert_not_called()
+        convert.assert_not_called()
+        audit.assert_not_called()
+        self.assertEqual((self.dump / "eboot.bin").read_bytes(), original)
+        self.assertEqual(marker.read_bytes(), b"previous work")
+
+    def test_json_outputs_inside_the_dump_are_rejected_before_staging(self):
+        for relative in (".", "eboot.bin", "report.json", "new/directory/report.json"):
+            with self.subTest(relative=relative):
+                self.assert_report_rejected(self.dump / relative)
+
+    def test_json_output_symlink_aliases_of_the_dump_are_rejected(self):
+        for name, target, directory in (("file", self.dump / "eboot.bin", False), ("directory", self.dump, True), ("missing", self.dump / "not-created.json", False)):
+            with self.subTest(name=name):
+                link = self.root / ("report-link-" + name)
+                try:
+                    os.symlink(target, link, target_is_directory=directory)
+                except OSError:
+                    self.skipTest("symbolic links unavailable")
+                self.assert_report_rejected(link / "new.json" if directory else link)
+
+    def test_json_output_hardlink_aliases_of_dump_files_are_rejected(self):
+        self.module("Media/Plugins/libfmod.prx")
+        for name in ("eboot.bin", "Media/Plugins/libfmod.prx"):
+            with self.subTest(name=name):
+                link = self.root / (Path(name).name + ".report")
+                try:
+                    os.link(self.dump / name, link)
+                except OSError:
+                    self.skipTest("hard links unavailable")
+                self.assert_report_rejected(link)
+
+    def test_json_output_inside_the_dump_cannot_escape_through_a_symlink(self):
+        report = self.root / "outside-report.json"
+        report.write_bytes(b"preserve report")
+        link = self.dump / "report.json"
+        try:
+            os.symlink(report, link)
+        except OSError:
+            self.skipTest("symbolic links unavailable")
+        self.assert_report_rejected(link)
+        self.assertEqual(report.read_bytes(), b"preserve report")
+
+    def test_json_output_cannot_replace_files_in_a_linked_dump_directory(self):
+        modules = self.root / "shared-modules"
+        modules.mkdir()
+        module = modules / "libc.prx"
+        module.write_bytes(ELF)
+        try:
+            os.symlink(modules, self.dump / "sce_module", target_is_directory=True)
+        except OSError:
+            self.skipTest("symbolic links unavailable")
+        for report in (module, modules / "new-report.json"):
+            with self.subTest(report=report):
+                self.assert_report_rejected(report)
+                self.assertEqual(module.read_bytes(), ELF)
+        self.assertFalse((modules / "new-report.json").exists())
+
+    def test_a_dump_alias_still_protects_an_outward_report_link(self):
+        original = self.dump
+        alias = self.root / "dump-alias"
+        report = original / "report.json"
+        outside = self.root / "not-created.json"
+        try:
+            os.symlink(original, alias, target_is_directory=True)
+            os.symlink(outside, report)
+        except OSError:
+            self.skipTest("symbolic links unavailable")
+        self.dump = alias
+        try:
+            self.assert_report_rejected(report)
+        finally:
+            self.dump = original
+        self.assertFalse(outside.exists())
+
     def test_symlinked_work_paths_are_checked_against_the_resolved_dump(self):
         for generated in ("source", "output"):
             with self.subTest(generated=generated):
