@@ -325,6 +325,8 @@ RelinkResult RelinkerPipeline::Relink() {
             return std::nullopt;
         if ((raw[symOff + 4] & 15) != STT_TLS)
             throw RelinkerException("TLS relocation names a defined symbol that is not STT_TLS", pos);
+        if (section >= SHN_LORESERVE)
+            throw RelinkerException("Unsupported executable TLS symbol section", pos);
         std::uint64_t value = 0;
         std::memcpy(&value, raw.data() + symOff + 8, sizeof(value));
         return value;
