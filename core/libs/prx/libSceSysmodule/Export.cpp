@@ -1,3 +1,5 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libSceSysmodule/include/Api.hpp"
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -16,8 +18,6 @@
 #include "SceTypes.hpp"
 #include "ModuleTable.hpp"
 #include "prx/libc/include/General.hpp"
-
-extern "C" void* APS5_VABI dlopen_nid_postfix(const char* path, int flags);
 
 namespace {
 
@@ -306,6 +306,36 @@ int APS5_VABI sceSysmoduleIsLoadedInternal(std::uint32_t id) {
     if (it == gLoadCount.end() || it->second < 1) {
         return SCE_SYSMODULE_ERROR_UNLOADED;
     }
+    return 0;
+}
+
+int APS5_VABI sceSysmoduleIsCalledFromSysModule() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceSysmoduleIsCameraPreloaded() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceSysmoduleLoadModuleByNameInternal(std::uint8_t* fname, std::uint64_t a1, std::uint64_t a2, std::uint64_t a3, std::uint64_t a4, std::uint64_t a5) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceSysmoduleMapLibcForLibkernel() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceSysmodulePreloadModuleForLibkernel() {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI sceSysmoduleUnloadModuleByNameInternal() {
+    NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 
