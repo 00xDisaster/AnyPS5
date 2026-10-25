@@ -1,17 +1,11 @@
+#include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Execution/include/VulkanDevice.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
+#include "prx/libc/include/GuestArena.hpp"
 #include "Recompiler.hpp"
 #include "RdnaDecoder/RdnaDescriptorFormat.hpp"
 #include "RdnaDecoder/RdnaInstructionDecoder.hpp"
 #include "VulkanTestDevice.hpp"
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <sys/mman.h>
-#endif
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -48,30 +42,29 @@ alignas(256) constexpr std::array<std::uint32_t, 4> PixelCode{
 
 class LowBlock {
 public:
-    LowBlock() {
-#ifdef _WIN32
-        block = static_cast<std::uint32_t*>(VirtualAlloc(nullptr, BlockBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
-#else
-        void* mapped = mmap(reinterpret_cast<void*>(std::uintptr_t{1} << 36u), BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        block = mapped == MAP_FAILED ? nullptr : static_cast<std::uint32_t*>(mapped);
-#endif
-        Require(block != nullptr, "GCN buffer format lookup: cannot allocate the buffer block");
-        Require(reinterpret_cast<std::uintptr_t>(block) + BlockBytes <= GcnAddressLimit, "GCN buffer format lookup: the buffer block lies above the 44-bit GCN V# address range");
+    LowBlock() : block(static_cast<std::uint32_t*>(GuestArena::GuestArenaAllocate_nid_postfix(BlockBytes, BlockBytes))) {
+        Require(block != nullptr, "GCN buffer format lookup: cannot allocate the buffer block in the guest arena");
+        GuestArena::GuestArenaCommit_nid_postfix(block, BlockBytes, 0x04u, BlockBytes);
     }
 
     ~LowBlock() {
-#ifdef _WIN32
-        VirtualFree(block, 0, MEM_RELEASE);
-#else
-        munmap(block, BlockBytes);
-#endif
+        GuestArena::GuestArenaReset_nid_postfix(block, BlockBytes);
+        GuestArena::GuestArenaRelease_nid_postfix(block, BlockBytes);
     }
 
     LowBlock(const LowBlock&) = delete;
     LowBlock& operator=(const LowBlock&) = delete;
 
+    std::uintptr_t Address() const { return reinterpret_cast<std::uintptr_t>(block); }
+    bool Addressable() const { return Address() + BlockBytes <= GcnAddressLimit; }
     std::span<std::uint32_t, 4> Input() const { return std::span<std::uint32_t, 4>(block, 4); }
     std::span<std::uint32_t, 4> Output() const { return std::span<std::uint32_t, 4>(block + 64, 4); }
+
+    std::array<std::uint32_t, 4> Stored() const {
+        std::array<std::uint32_t, 4> words{};
+        AgcDriver::GuestMemory::Read(reinterpret_cast<std::uintptr_t>(Output().data()), std::as_writable_bytes(std::span(words)), 4);
+        return words;
+    }
 
 private:
     std::uint32_t* block = nullptr;
@@ -163,7 +156,7 @@ void Draw(AgcDriver::VulkanDevice& device, const LowBlock& block, std::uint32_t 
     device.WaitIdle();
     const auto translated = ShaderRecompiler::GcnBufferFormats()[(dataFormat << 3u) | numberFormat];
     const auto expected = translated != 0u ? InputWords[0] : 0u;
-    const auto output = block.Output();
+    const auto output = block.Stored();
     char text[96];
     std::snprintf(text, sizeof(text), ": translated format %u, loaded 0x%08x, expected 0x%08x", translated, output[0], expected);
     Require(output[0] == expected, "GCN buffer format lookup, " + what + text);
@@ -178,6 +171,10 @@ int main() {
         if (!device) return VulkanTestSkipped;
         ShaderRecompiler::SetGcnGuestShaders(true);
         const LowBlock block;
+        if (!block.Addressable()) {
+            std::printf("skipped, the guest arena block at 0x%llx lies above the 44-bit GCN V# address range\n", static_cast<unsigned long long>(block.Address()));
+            return VulkanTestSkipped;
+        }
         const std::array<ShaderRecompiler::MemoryRegion, 1> vertexMemory{{{reinterpret_cast<std::uintptr_t>(VertexCode.data()), std::as_bytes(std::span(VertexCode))}}};
         CheckModule(*device, block, vertexMemory);
         const auto firstUserData = UserData(block, 4u, 4u);
