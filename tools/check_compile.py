@@ -174,7 +174,7 @@ def syntax_arguments(arguments, directory, source):
         if not syntax_added and argument.startswith("-"):
             trimmed.append("-fsyntax-only")
             syntax_added = True
-        if argument == "--":
+        if not positional and argument == "--":
             positional = True
             trimmed.append(argument)
             index += 1
@@ -194,6 +194,10 @@ def syntax_arguments(arguments, directory, source):
             if not candidate.is_absolute():
                 candidate = directory / candidate
             if candidate.resolve() == wanted:
+                index += 1
+                continue
+            if positional:
+                trimmed.append(str(candidate.resolve()))
                 index += 1
                 continue
         elif (argument not in WITHOUT_VALUE and not argument.startswith(JOINED_OPTIONS) and "=" not in argument and index + 1 < len(arguments)

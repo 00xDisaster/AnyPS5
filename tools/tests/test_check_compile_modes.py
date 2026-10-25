@@ -99,6 +99,29 @@ class CheckCompileModeTests(unittest.TestCase):
     def test_joined_options_before_preprocessing_modes_are_preserved(self):
         self.check_modes((("-DANOTHER_MACRO", "-E"), ("-UUNUSED_MACRO", "-E"), ("-O2", "-Wall", "-E")))
 
+    def test_explicit_cpp_language_is_preserved(self):
+        self.check_modes((("-E", "-x", "c++"),))
+
+    def test_clang_end_of_options_preserves_mode_named_inputs(self):
+        compiler = shutil.which("clang")
+        if compiler is None:
+            self.skipTest("needs Clang")
+        for field in ("arguments", "command"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory(prefix="syntax positional ") as name:
+                root = Path(name).resolve()
+                build = root / "build"
+                build.mkdir()
+                source = root / "unit.c"
+                source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                other = build / "-E"
+                arguments = [compiler, "-x", "c", "--", "-E", str(source)]
+                for text, expected in (("int extra;\n", 0), ("int positional_syntax_error = ;\n", 1)):
+                    other.write_text(text, encoding="utf-8")
+                    result = self.run_tool(root, build, source, arguments, field)
+                    self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                    if expected:
+                        self.assertIn("positional_syntax_error", result.stderr)
+
     def test_include_directory_values_can_look_like_modes(self):
         def configure(root, build, source):
             directory = build / "-E"
