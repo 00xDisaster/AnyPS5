@@ -1,4 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceHttpCache/libSceHttpCache.hpp"
+#include "prx/libSceRtc/libSceRtc.hpp"
+#include "prx/libSceUserService/libSceUserService.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -9,69 +12,13 @@
 
 namespace {
 
-struct Header {
-    const char* name;
-    const char* value;
-};
+using Header = HttpCacheHeader;
+using Request = HttpCacheRequest;
+using ResponseHeader = HttpCacheResponseHeader;
+using Response = HttpCacheResponse;
+using QuotaEntry = HttpCacheQuotaEntry;
+using Quota = HttpCacheQuota;
 
-struct Request {
-    std::uint32_t method;
-    std::uint32_t reserved;
-    const char* url;
-    std::size_t headerCount;
-    const Header* headers;
-};
-
-struct ResponseHeader {
-    std::uint32_t statusCode;
-    std::uint32_t reserved;
-    std::size_t headerCount;
-    const Header* headers;
-};
-
-struct Response {
-    std::uint32_t statusCode;
-    std::uint32_t reserved;
-    std::size_t headerCount;
-    const Header* headers;
-    std::uint64_t contentLength;
-};
-
-struct QuotaEntry {
-    const char* name;
-    std::uint64_t size;
-};
-
-struct Quota {
-    std::size_t count;
-    const QuotaEntry* entries;
-};
-
-}
-
-extern "C" {
-int APS5_VABI sceHttpCacheInit(std::size_t);
-int APS5_VABI sceHttpCacheTerm(std::int32_t);
-int APS5_VABI sceHttpCacheCreateRequest(std::int32_t, std::int32_t);
-int APS5_VABI sceHttpCacheDeleteRequest(std::int32_t);
-int APS5_VABI sceHttpCacheCompleteRequest(std::int32_t);
-int APS5_VABI sceHttpCacheReadData(std::int32_t, std::size_t, void*);
-int APS5_VABI sceHttpCacheSetData(std::int32_t, const void*, std::size_t);
-int APS5_VABI sceHttpCacheRetrieve(std::int32_t, const Request*, Response*, Request*, std::int32_t*);
-int APS5_VABI sceHttpCacheRevalidate(std::int32_t, const ResponseHeader*, Response*, std::int32_t*);
-int APS5_VABI sceHttpCacheSetResponseHeader(std::int32_t, const ResponseHeader*);
-int APS5_VABI sceHttpCacheSetQuota(std::int32_t, const Quota*);
-int APS5_VABI sceHttpCacheClearAll(std::int32_t, std::int32_t);
-int APS5_VABI sceHttpCacheClearAllUserTags(std::int32_t, const std::int32_t*, std::size_t);
-int APS5_VABI sceHttpCacheRegisterCacheInfoUrl(const void*);
-int APS5_VABI sceHttpCacheSetCacheSharing(std::uint8_t);
-int APS5_VABI sceHttpCacheSystemSendStatistics();
-int APS5_VABI sceHttpCacheSystemTerm();
-int APS5_VABI sceHttpCacheDebugSetUrl();
-int APS5_VABI sceUserServiceInitialize(const void*);
-int APS5_VABI sceUserServiceTerminate();
-int APS5_VABI sceRtcGetCurrentTick(std::uint64_t*);
-int APS5_VABI sceRtcSetCurrentTick(const std::uint64_t*);
 }
 
 namespace {
@@ -204,9 +151,9 @@ void TestCacheLimit() {
 constexpr std::uint64_t TicksPerSecond = 1000000;
 
 void Advance(std::uint64_t seconds) {
-    std::uint64_t tick = 0;
+    RtcTick tick{};
     Require(sceRtcGetCurrentTick(&tick) == 0);
-    tick += seconds * TicksPerSecond;
+    tick.tick += seconds * TicksPerSecond;
     Require(sceRtcSetCurrentTick(&tick) == 0);
 }
 

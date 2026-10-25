@@ -16,6 +16,8 @@
 #include <tuple>
 #include <vector>
 #include "SceTypes.hpp"
+#include "prx/libSceRtc/libSceRtc.hpp"
+#include "prx/libSceUserService/libSceUserService.hpp"
 #include "prx/libc/include/General.hpp"
 
 static_assert(sizeof(HttpCacheHeader) == 16);
@@ -32,15 +34,6 @@ static_assert(offsetof(HttpCacheResponse, headers) == 16);
 static_assert(offsetof(HttpCacheResponse, contentLength) == 24);
 static_assert(sizeof(HttpCacheQuotaEntry) == 16);
 static_assert(sizeof(HttpCacheQuota) == 16);
-
-extern "C" {
-int APS5_VABI sceUserServiceInitialize(const void* params);
-int APS5_VABI sceUserServiceTerminate();
-int APS5_VABI sceUserServiceGetRegisteredUserIdList(void* list);
-int APS5_VABI sceRtcGetCurrentTick(RtcTick* tick);
-int APS5_VABI sceRtcGetTickResolution();
-int APS5_VABI sceRtcParseDateTime(RtcTick* utc, const char* dateTime);
-}
 
 namespace {
 
@@ -182,7 +175,7 @@ bool RegisteredUser(std::int32_t userId) {
     if (userId == SharedUser) return true;
     std::int32_t list[20];
     for (auto& entry : list) entry = -1;
-    if (sceUserServiceGetRegisteredUserIdList(list) < 0) return false;
+    if (sceUserServiceGetRegisteredUserIdList(reinterpret_cast<UserServiceRegisteredUserIdList*>(list)) < 0) return false;
     for (const auto entry : list) {
         if (entry != -1 && entry == userId) return true;
     }
