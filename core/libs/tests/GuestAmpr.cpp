@@ -54,13 +54,18 @@ struct Recorder {
     std::uint32_t Commands() const { return sceAmprCommandBufferGetNumCommands(&buffer); }
 };
 
+std::uint32_t HeaderAt(const Recorder& recorder, std::uint32_t offset) {
+    std::uint32_t first;
+    std::memcpy(&first, recorder.memory.data() + offset, sizeof(first));
+    return first;
+}
+
 void RequireAppended(const Recorder& recorder, std::uint32_t offset, std::uint32_t commands, Apr::Opcode opcode, std::uint64_t measured) {
     Require(recorder.Offset() == offset + measured);
     Require(recorder.Commands() == commands + 1);
     if (opcode == Apr::Opcode::Nop) {
-        std::uint32_t first;
-        std::memcpy(&first, recorder.memory.data() + offset, sizeof(first));
-        Require(first == Apr::NopHeader(static_cast<std::uint32_t>(measured / 4u)) && measured % 4u == 0u);
+        const std::uint32_t first = HeaderAt(recorder, offset);
+        Require(Apr::IsNopHeader(first) && Apr::NopDwords(first) * 4u == measured);
         return;
     }
     Apr::CommandHeader header;
@@ -344,15 +349,20 @@ void TestNops() {
     for (std::uint32_t dwords = 1; dwords <= 16; ++dwords) {
         const auto offset = recorder.Offset();
         const auto commands = recorder.Commands();
+        std::memset(recorder.memory.data() + offset, 0x5A, dwords * 4u);
         Require(sceAmprCommandBufferNop(&recorder.buffer, dwords) == 0);
         RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNop(dwords));
+        Require(HeaderAt(recorder, offset) == (0x5452000Fu | (dwords - 1u) << 8u));
+        for (std::size_t index = Apr::NopHeaderBytes; index < dwords * 4u; ++index) Require(recorder.memory[offset + index] == 0x5A);
     }
     const auto offset = recorder.Offset();
     const auto commands = recorder.Commands();
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 3, data) == 0);
     RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNopWithData(4));
+    Require(HeaderAt(recorder, offset) == 0x5452030Fu);
     Require(std::memcmp(recorder.memory.data() + offset + Apr::NopHeaderBytes, data, sizeof(data)) == 0);
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 0, nullptr) == 0);
+    Require(HeaderAt(recorder, offset + 16u) == 0x5452000Fu);
     const auto emptyPayloadOffset = recorder.Offset();
     std::memset(recorder.memory.data() + emptyPayloadOffset, 0x5A, sceAmprMeasureCommandSizeNopWithData(4));
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 3, nullptr) == 0);
@@ -365,6 +375,14 @@ void TestNops() {
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 16, data) == invalidArgument);
     Require(sceAmprMeasureCommandSizeNop(0) == rejected && sceAmprMeasureCommandSizeNop(17) == rejected);
     Require(sceAmprMeasureCommandSizeNopWithData(0) == rejected && sceAmprMeasureCommandSizeNopWithData(17) == rejected);
+
+    Apr::CommandBufferObject unbound{};
+    Require(sceAmprCommandBufferConstructor(&unbound) == 0);
+    Require(sceAmprCommandBufferNop(&unbound, 0) == permissionDenied);
+    Require(sceAmprCommandBufferNop(&unbound, 17) == permissionDenied);
+    Require(sceAmprCommandBufferNopWithData(&unbound, 16, data) == permissionDenied);
+    Require(sceAmprCommandBufferConstructNop(&unbound, 0, data, 61, nullptr) == permissionDenied);
+    Require(unbound.offset == 0 && unbound.numCommands == 0);
 }
 
 void TestNopPadding() {
@@ -515,9 +533,16 @@ void TestConstructed() {
     auto commands = recorder.Commands();
     Require(sceAmprCommandBufferConstructNop(&recorder.buffer, 7, payload, sizeof(payload), &word) == 0);
     RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNopWithData(4));
+    Require(HeaderAt(recorder, offset) == 0x5452730Fu);
     const std::uint8_t* data = recorder.memory.data() + offset + Apr::NopHeaderBytes;
     const std::uint8_t padding[3] = {};
     Require(std::memcmp(data, &word, sizeof(word)) == 0 && std::memcmp(data + 4, payload, sizeof(payload)) == 0 && std::memcmp(data + 9, padding, sizeof(padding)) == 0);
+    offset = recorder.Offset();
+    Require(sceAmprCommandBufferConstructNop(&recorder.buffer, 0x15, payload, 4, nullptr) == 0);
+    Require(HeaderAt(recorder, offset) == 0x5452510Fu);
+    offset = recorder.Offset();
+    Require(sceAmprCommandBufferConstructNop(&recorder.buffer, -1, payload, 4, nullptr) == 0);
+    Require(HeaderAt(recorder, offset) == 0x5452F10Fu);
 
     const std::array<std::uint8_t, 60> large{};
     offset = recorder.Offset();
@@ -711,11 +736,11 @@ void TestMalformedCommandSizes() {
     requireHeaderFailure(Apr::Opcode::WriteAddress, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
     requireHeaderFailure(Apr::Opcode::PopMarker, std::numeric_limits<std::uint32_t>::max(), 2u * sizeof(Apr::CommandHeader), "APR: malformed command");
 
-    const std::uint32_t emptyNop = Apr::NopHeader(0);
-    requireFailure(&emptyNop, sizeof(emptyNop), sizeof(emptyNop), "APR: malformed command");
-    const std::uint32_t overflowingNop = Apr::NopHeader(0xffffffu);
-    requireFailure(&overflowingNop, sizeof(overflowingNop), 2u * sizeof(overflowingNop), "APR: malformed command");
-    const std::uint32_t nops[2] = {Apr::NopHeader(1), Apr::NopHeader(1)};
+    const std::uint32_t overflowingNop = Apr::NopHeader(15);
+    requireFailure(&overflowingNop, sizeof(overflowingNop), sizeof(overflowingNop), "APR: malformed command");
+    const Apr::CommandHeader eightByteNop{Apr::Opcode::Nop, sizeof(Apr::CommandHeader)};
+    requireFailure(&eightByteNop, sizeof(eightByteNop), sizeof(eightByteNop), "APR: unknown opcode 0");
+    const std::uint32_t nops[2] = {Apr::NopHeader(0), Apr::NopHeader(0)};
     requireFailure(nops, sizeof(nops), 7u, "APR: truncated command buffer");
 
     std::array<std::uint8_t, 2 * sizeof(Apr::CommandHeader)> memory{};

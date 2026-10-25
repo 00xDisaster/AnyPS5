@@ -593,10 +593,10 @@ std::optional<Deferred> _execute(const Apr::CommandBufferObject& buffer, std::ui
         if (buffer.offset - cursor < Apr::NopHeaderBytes) throw std::runtime_error("APR: truncated command buffer");
         std::uint32_t first;
         std::memcpy(&first, buffer.base + cursor, sizeof(first));
-        if ((first & 0xffu) == static_cast<std::uint32_t>(Apr::Opcode::Nop)) {
-            const std::uint64_t bytes = std::uint64_t{Apr::NopDwords(first)} * 4u;
-            if (bytes == 0u || bytes > buffer.offset - cursor) throw std::runtime_error("APR: malformed command");
-            cursor += static_cast<std::uint32_t>(bytes);
+        if (Apr::IsNopHeader(first)) {
+            const std::uint32_t bytes = Apr::NopDwords(first) * Apr::NopHeaderBytes;
+            if (bytes > buffer.offset - cursor) throw std::runtime_error("APR: malformed command");
+            cursor += bytes;
             continue;
         }
         if (cursor + sizeof(Apr::CommandHeader) > buffer.offset) throw std::runtime_error("APR: truncated command buffer");
