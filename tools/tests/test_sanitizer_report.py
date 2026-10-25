@@ -135,6 +135,19 @@ class SanitizerReportTests(unittest.TestCase):
         code, _, _ = self.run_main(junit, "--known", Path(self.directory.name) / "missing.txt", "--sanitizer", "address")
         self.assertEqual(code, 2)
 
+    def test_known_failures_that_pass_or_did_not_run_are_listed_without_failing(self):
+        found = {"fixed": "passed", "still_broken": "failed", "skipped_now": "skipped"}
+        known = {"fixed": "was broken", "still_broken": "stack switch", "skipped_now": "device", "renamed": "old name"}
+        text, failing = sanitizer_report.summarize("ASan", found, known)
+        self.assertFalse(failing)
+        self.assertIn("| Listed as known but passed | Reason |\n| - | - |\n| `fixed` | was broken |\n", text)
+        self.assertIn("| Listed as known but not in this run |\n| - |\n| `renamed` |\n", text)
+        self.assertNotIn("`skipped_now`", text)
+
+    def test_no_stale_tables_when_every_known_failure_still_fails(self):
+        text, _ = sanitizer_report.summarize("ASan", {"fiber": "failed"}, {"fiber": "stack switch"})
+        self.assertNotIn("Listed as known but", text)
+
 
 if __name__ == "__main__":
     unittest.main()
