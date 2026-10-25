@@ -24,7 +24,7 @@ def fixture(interpreter=True, trailing=False):
     tags = [(5, DATA_ADDRESS + 0x600), (10, 1), (6, DATA_ADDRESS + 0x620), (11, 24),
             (7, DATA_ADDRESS + 0x700), (8, 24), (9, 24), (0, 0)]
     struct.pack_into("<IIQQQQQQ", image, 64,
-                     1, 4, 0, DATA_ADDRESS, DATA_ADDRESS, CODE_OFFSET, CODE_OFFSET, 0x1000)
+                     1, 6, 0, DATA_ADDRESS, DATA_ADDRESS, CODE_OFFSET, CODE_OFFSET, 0x1000)
     struct.pack_into("<IIQQQQQQ", image, 120,
                      1, 5, CODE_OFFSET, 0, 0, 0x1000, 0x1000, 0x1000)
     struct.pack_into("<IIQQQQQQ", image, 176, 2, 6, 0x400, DATA_ADDRESS + 0x400,
