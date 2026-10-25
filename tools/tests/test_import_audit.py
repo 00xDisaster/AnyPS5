@@ -1314,6 +1314,21 @@ class ImportAuditTests(unittest.TestCase):
         stubs = import_audit.source_stubs(source)
         self.assertEqual(stubs.get(("libSceBom.prx", nid_names.compute_nid("sceBomPending"))), "sceBomPending")
 
+    def test_source_stubs_passes_decoded_text_without_bom_to_alias_scanner(self):
+        source = self.work.source
+        write_source(source, "libSceBomAlias", "\ufeff" + 'APS5_EXPORT("AAAAAAAAAAA", sceBomAlias);\n' + STUB_SOURCE.format(name="sceBomAlias"))
+        seen = []
+        real = nid_names.source_aliases
+
+        def spy(text):
+            seen.append(text)
+            return real(text)
+
+        with patch.object(nid_names, "source_aliases", spy):
+            import_audit.source_stubs(source)
+        self.assertTrue(seen)
+        self.assertTrue(all(text.startswith("APS5_EXPORT(") for text in seen))
+
     def test_disambiguated_stubs_use_the_nid_of_their_symbol(self):
         source = self.work.source
         write_source(source, "libkernel", STUB_SOURCE.format(name="fstat_nid_disambig1_nid_postfix")
