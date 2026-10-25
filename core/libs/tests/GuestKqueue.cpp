@@ -637,23 +637,28 @@ static void SocketShutReadReportsEof() {
         Require(Poll(kq, events, 4) == 1 && events[0].data == 0 && (events[0].flags & EvEof) != 0);
         Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0 && close_nid_postfix(kq) == 0);
     }
-    const int kq = kqueue_nid_postfix();
-    int pair[2];
-    Require(socketpair_nid_postfix(Unix, Stream, 0, pair) == 0);
-    KernelEvent events[4]{};
-    Require(Apply(kq, Change(static_cast<std::uintptr_t>(pair[0]), EvfiltRead, EvAdd)) == 0);
-    const KernelTimespec limit{5, 0};
-    const auto start = std::chrono::steady_clock::now();
-    std::thread shutter([&pair] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        Require(shutdown_nid_postfix(pair[0], 0) == 0);
-    });
-    Require(kevent_nid_postfix(kq, nullptr, 0, events, 4, &limit) == 1);
-    const auto waited = std::chrono::steady_clock::now() - start;
-    shutter.join();
-    Require(waited >= std::chrono::milliseconds(40) && waited < std::chrono::seconds(4));
-    Require(events[0].data == 0 && (events[0].flags & EvEof) != 0);
-    Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0 && close_nid_postfix(kq) == 0);
+    for (const bool duplicated : {false, true}) {
+        const int kq = kqueue_nid_postfix();
+        int pair[2];
+        Require(socketpair_nid_postfix(Unix, Stream, 0, pair) == 0);
+        const int watched = duplicated ? dup_nid_postfix(pair[0]) : pair[0];
+        Require(watched >= 0);
+        KernelEvent events[4]{};
+        Require(Apply(kq, Change(static_cast<std::uintptr_t>(watched), EvfiltRead, EvAdd)) == 0);
+        const KernelTimespec limit{5, 0};
+        const auto start = std::chrono::steady_clock::now();
+        std::thread shutter([&pair] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            Require(shutdown_nid_postfix(pair[0], 0) == 0);
+        });
+        Require(kevent_nid_postfix(kq, nullptr, 0, events, 4, &limit) == 1);
+        const auto waited = std::chrono::steady_clock::now() - start;
+        shutter.join();
+        Require(waited >= std::chrono::milliseconds(40) && waited < std::chrono::seconds(4));
+        Require(events[0].ident == static_cast<std::uintptr_t>(watched) && events[0].data == 0 && (events[0].flags & EvEof) != 0);
+        if (duplicated) Require(close_nid_postfix(watched) == 0);
+        Require(close_nid_postfix(pair[0]) == 0 && close_nid_postfix(pair[1]) == 0 && close_nid_postfix(kq) == 0);
+    }
 }
 
 #ifdef __linux__
