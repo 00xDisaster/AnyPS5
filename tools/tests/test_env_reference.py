@@ -99,6 +99,18 @@ class EnvReferenceTests(unittest.TestCase):
         self.assertIn("APS5_DEEP_STRING", out.getvalue())
         self.assertIn("APS5_DEEP_COUNT", out.getvalue())
 
+    def test_long_multiline_reads_keep_surrounding_expression_context(self):
+        root = self.fixture()
+        source = root / "core" / "Sample.cpp"
+        source.write_text('auto a = std::getenv(\n\n\n\n"APS5_DEEP_PRESENT") != nullptr;\n'
+                          'auto b = atoi(\n\n\n\nstd::getenv(\n\n\n\n"APS5_DEEP_INTEGER"));\n'
+                          'auto c = std::getenv(\n\n\n\n"APS5_DEEP_DEFAULT") ? 0 : 99;\n',
+                          encoding="utf-8")
+        found = env_reference.reads([root / "core"])
+        self.assertEqual(found["APS5_DEEP_PRESENT"], [(source.as_posix(), 1, "presence", "")])
+        self.assertEqual(found["APS5_DEEP_INTEGER"], [(source.as_posix(), 10, "integer", "")])
+        self.assertEqual(found["APS5_DEEP_DEFAULT"], [(source.as_posix(), 15, "string", "99")])
+
     def test_whitespace_before_parentheses_preserves_names_kinds_and_defaults(self):
         root = self.fixture()
         source = root / "core" / "Sample.cpp"
