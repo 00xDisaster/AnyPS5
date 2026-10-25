@@ -13,17 +13,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <source_location>
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceNet/libSceNet.hpp"
 #include "prx/libkernel/Socket/include/SocketPoll.hpp"
 
-extern "C" {
-int APS5_VABI sceNetInit_nid_postfix();
-int APS5_VABI sceNetSocket(const char*, int, int, int);
-int APS5_VABI sceNetSocketClose(int);
-int APS5_VABI sceNetSetsockopt(int, int, int, const void*, std::uint32_t);
-int APS5_VABI sceNetGetsockopt(int, int, int, void*, std::uint32_t*);
-int* APS5_VABI sceNetErrnoLoc();
-}
 
 static void Require(bool condition, std::source_location where = std::source_location::current()) {
     if (!condition) {
