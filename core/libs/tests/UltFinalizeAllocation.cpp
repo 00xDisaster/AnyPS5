@@ -1,22 +1,9 @@
-#include "SceTypes.hpp"
-#include "prx/libSceUlt/SceUltTypes.hpp"
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceUlt/libSceUlt.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
-
-extern "C" {
-int APS5_VABI sceUltInitialize();
-int APS5_VABI sceUltFinalize();
-int APS5_VABI sceUltSemaphoreCreate(void*, const char*, std::uint32_t, void*, const void*, std::uint32_t);
-int APS5_VABI sceUltSemaphoreTryAcquire(void*, std::int32_t);
-int APS5_VABI sceUltSemaphoreRelease(void*, std::int32_t);
-int APS5_VABI sceUltMutexCreate(void*, const char*, void*, const UltMutexOptParam*, std::uint32_t);
-int APS5_VABI sceUltMutexTryLock(void*);
-int APS5_VABI sceUltMutexUnlock(void*);
-}
 
 static int allocationBudget = -1;
 static unsigned allocationAttempts = 0;
@@ -79,5 +66,7 @@ int main() {
         Require(sceUltMutexTryLock(&mutex) == ULT_ERROR_STATE, "finalized mutex is still live");
     }
     std::printf("finalization allocation budgets: 8 cases, %u rejections, %u incorrect lifecycles\n", rejectedCases, failures);
+    Require(rejectedCases > 0, "no allocation failure was injected");
+    Require(rejectedCases < 8, "no finalization succeeded without a retry");
     return failures == 0 ? 0 : 1;
 }
