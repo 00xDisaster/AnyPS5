@@ -14,6 +14,7 @@ static constexpr int SaResethand = 0x4;
 static constexpr int SaNodefer = 0x10;
 static constexpr int SigBlock = 1;
 static constexpr int SigUnblock = 2;
+static constexpr int SigSetmask = 3;
 
 static std::uint32_t Bit(int signal) { return 1u << (signal - 1); }
 
@@ -54,6 +55,29 @@ static void APS5_VABI BlockFromOtherThread(int) {
         const GuestSignalSet set{{Bit(SigTerm), 0, 0, 0}};
         Require(sigprocmask_nid_postfix(SigBlock, &set, nullptr) == 0);
     }).join();
+}
+
+static void APS5_VABI SetMaskFromOtherThread(int) {
+    ++calls;
+    std::thread([] {
+        const GuestSignalSet set{{Bit(SigTerm), 0, 0, 0}};
+        Require(sigprocmask_nid_postfix(SigSetmask, &set, nullptr) == 0);
+    }).join();
+}
+
+static void APS5_VABI SaveAndRestoreMask(int) {
+    ++calls;
+    GuestSignalSet old{};
+    Require(sigprocmask_nid_postfix(SigBlock, nullptr, &old) == 0);
+    Require(sigprocmask_nid_postfix(SigSetmask, &old, nullptr) == 0);
+}
+
+static void APS5_VABI ReplaceAndRestoreMask(int) {
+    ++calls;
+    const GuestSignalSet none{};
+    GuestSignalSet old{};
+    Require(sigprocmask_nid_postfix(SigSetmask, &none, &old) == 0);
+    Require(sigprocmask_nid_postfix(SigSetmask, &old, nullptr) == 0);
 }
 
 static GuestSignalSet setInHandler{};
@@ -131,6 +155,28 @@ static void CheckOtherThreadKeptSameSignal() {
     Require(CurrentMask() == 0);
 }
 
+static void CheckOtherThreadSetMaskKept() {
+    calls = 0;
+    Install(SigUsr1, SetMaskFromOtherThread, SaRestart, 0);
+    Require(raise_nid_postfix(SigUsr1) == 0);
+    Require(calls == 1);
+    Require(CurrentMask() == Bit(SigTerm));
+    const GuestSignalSet none{};
+    Require(sigprocmask_nid_postfix(SigSetmask, &none, nullptr) == 0);
+    Require(CurrentMask() == 0);
+}
+
+static void CheckMaskRestoredInsideHandler(int signal, void (APS5_VABI* handler)(int)) {
+    calls = 0;
+    Install(signal, handler, SaRestart, 0);
+    Require(raise_nid_postfix(signal) == 0);
+    Require(calls == 1);
+    Require(CurrentMask() == 0);
+    Require(raise_nid_postfix(signal) == 0);
+    Require(calls == 2);
+    Require(CurrentMask() == 0);
+}
+
 static void CheckUnblockInsideHandler() {
     calls = 0;
     callsAfterNestedRaise = 0;
@@ -172,6 +218,10 @@ int main() {
     CheckResethand();
     CheckOtherThreadKept();
     CheckOtherThreadKeptSameSignal();
+    CheckOtherThreadSetMaskKept();
+    CheckMaskRestoredInsideHandler(SigUsr2, SaveAndRestoreMask);
+    CheckMaskRestoredInsideHandler(SigTerm, SaveAndRestoreMask);
+    CheckMaskRestoredInsideHandler(SigUsr2, ReplaceAndRestoreMask);
     CheckUnblockInsideHandler();
     CheckUpperMaskWords();
     CheckLeftWithLongjmp();

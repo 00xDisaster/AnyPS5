@@ -46,6 +46,7 @@ std::atomic<std::uint32_t> blockedMask{0};
 std::atomic<std::uint32_t> blockedMaskExtra[3]{};
 std::atomic<std::uint64_t> handlerHolds[MaxSignal + 1]{};
 constexpr std::uint64_t HoldCount = 0xffffffffu;
+thread_local std::uint32_t holdReleases[MaxSignal + 1]{};
 static_assert(std::atomic<std::uint32_t>::is_always_lock_free);
 std::mutex registration;
 GuestSigaction dispositions[MaxSignal + 1]{};
@@ -180,12 +181,28 @@ void RunHandler(int guest, GuestHandler handler) {
     if ((flags & SaNodefer) == 0) mask[SignalWord(guest)] |= SignalBit(guest);
     mask[0] &= ~UnblockableSignals;
     if ((flags & SaResethand) != 0) ResetToDefault(guest);
+    std::uint32_t before[4];
+    for (int word = 0; word < 4; ++word) before[word] = (word == 0 ? blockedMask.load() : blockedMaskExtra[word - 1].load()) & mask[word];
     std::uint32_t epochs[MaxSignal + 1]{};
-    for (int held = 1; held <= MaxSignal; ++held)
-        if (mask[SignalWord(held)] & SignalBit(held)) epochs[held] = static_cast<std::uint32_t>(handlerHolds[held].fetch_add(1) >> 32);
+    std::uint32_t releases[MaxSignal + 1]{};
+    for (int held = 1; held <= MaxSignal; ++held) {
+        if ((mask[SignalWord(held)] & SignalBit(held)) == 0) continue;
+        releases[held] = holdReleases[held];
+        epochs[held] = static_cast<std::uint32_t>(handlerHolds[held].fetch_add(1) >> 32);
+    }
     handler(guest);
-    for (int held = 1; held <= MaxSignal; ++held)
-        if (mask[SignalWord(held)] & SignalBit(held)) ReleaseHold(held, epochs[held]);
+    std::uint32_t replaced[4]{};
+    for (int held = 1; held <= MaxSignal; ++held) {
+        if ((mask[SignalWord(held)] & SignalBit(held)) == 0) continue;
+        if (holdReleases[held] != releases[held]) replaced[SignalWord(held)] |= SignalBit(held);
+        ReleaseHold(held, epochs[held]);
+    }
+    for (int word = 0; word < 4; ++word) {
+        if (replaced[word] == 0) continue;
+        auto& target = word == 0 ? blockedMask : blockedMaskExtra[word - 1];
+        target.fetch_and(~(replaced[word] & ~before[word]));
+        target.fetch_or(replaced[word] & before[word]);
+    }
 }
 void Dispatch(int native) {
     int guest = 0;
@@ -539,14 +556,20 @@ int ChangeBlockedMask(int how, const GuestSignalSet* set, GuestSignalSet* previo
                     blockedMask.fetch_and(~set->bits[0]);
                     for (int word = 1; word < 4; ++word) blockedMaskExtra[word - 1].fetch_and(~set->bits[word]);
                     if (releaseHolds)
-                        for (int guest = 1; guest <= MaxSignal; ++guest)
-                            if (SignalInSet(*set, guest)) ClearHold(guest);
+                        for (int guest = 1; guest <= MaxSignal; ++guest) {
+                            if (!SignalInSet(*set, guest)) continue;
+                            ClearHold(guest);
+                            ++holdReleases[guest];
+                        }
                     break;
                 case 3:
                     blockedMask.store(set->bits[0] & ~UnblockableSignals);
                     for (int word = 1; word < 4; ++word) blockedMaskExtra[word - 1].store(set->bits[word]);
                     if (releaseHolds)
-                        for (int guest = 1; guest <= MaxSignal; ++guest) ClearHold(guest);
+                        for (int guest = 1; guest <= MaxSignal; ++guest) {
+                            ClearHold(guest);
+                            ++holdReleases[guest];
+                        }
                     break;
             }
         }
