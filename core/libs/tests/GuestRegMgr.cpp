@@ -29,10 +29,8 @@ int main() {
 
     Require(sceRegMgrGetInt(0x1000, nullptr) == static_cast<int>(0x80820001));
     Require(sceRegMgrGetStr(0x1001, nullptr, 10) == static_cast<int>(0x80820001));
-    Require(sceRegMgrGetStr(0x1001, strBuf, 0) == static_cast<int>(0x80820001));
     Require(sceRegMgrGetStr(0x1001, strBuf, -1) == static_cast<int>(0x80820001));
     Require(sceRegMgrGetBin(0x1002, nullptr, 10) == static_cast<int>(0x80820001));
-    Require(sceRegMgrGetBin(0x1002, binBuf, 0) == static_cast<int>(0x80820001));
     Require(sceRegMgrGetBin(0x1002, binBuf, -1) == static_cast<int>(0x80820001));
 
     intVal = 0x55AA;

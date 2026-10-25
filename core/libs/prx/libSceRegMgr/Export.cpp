@@ -44,7 +44,8 @@ public:
     }
 
     int getStr(int64_t key, char* out, int len) {
-        if (out == nullptr || len <= 0) return SCE_REG_MGR_ERROR_INVALID_PARAM;
+        if (len == 0) NotImplemented_nid_no_patch(__func__);
+        if (out == nullptr || len < 0) return SCE_REG_MGR_ERROR_INVALID_PARAM;
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = entries_.find(key);
         if (it == entries_.end()) return SCE_REG_MGR_ERROR_NOT_FOUND;
@@ -55,7 +56,8 @@ public:
     }
 
     int getBin(int64_t key, void* out, int size) {
-        if (out == nullptr || size <= 0) return SCE_REG_MGR_ERROR_INVALID_PARAM;
+        if (size == 0) NotImplemented_nid_no_patch(__func__);
+        if (out == nullptr || size < 0) return SCE_REG_MGR_ERROR_INVALID_PARAM;
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = entries_.find(key);
         if (it == entries_.end()) return SCE_REG_MGR_ERROR_NOT_FOUND;
