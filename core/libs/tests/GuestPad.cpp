@@ -486,6 +486,30 @@ static void CheckLightBarResets(int handle) {
     for (int port = 0; port < PAD_MAX_CONTROLLERS; ++port) Require(LightBarIs(port, false, 0, 0, 0));
 }
 
+static bool VibrationIs(int port, std::uint8_t large, std::uint8_t small) {
+    const PadOutputState output = OutputOf(port);
+    return output.vibrationLarge == large && output.vibrationSmall == small;
+}
+
+static void CheckVibrationForce(int user, int handle) {
+    const PadVibrationParam strong{70, 80};
+    const PadVibrationParam weak{5, 6};
+    Require(scePadSetVibrationForce(handle, &strong) == PAD_OK && VibrationIs(0, 70, 80));
+    Require(scePadSetVibration(handle, &weak) == PAD_OK && VibrationIs(0, 5, 6));
+    Require(scePadSetVibrationForce(handle, &weak) == scePadSetVibration(handle, &weak) && VibrationIs(0, 5, 6));
+    Require(scePadSetVibrationForce(handle, nullptr) == PAD_ERROR_INVALID_ARG && VibrationIs(0, 5, 6));
+    Require(scePadSetVibrationForce(handle + 1, &strong) == PAD_ERROR_INVALID_HANDLE && VibrationIs(0, 5, 6));
+    Require(scePadSetVibrationForce(-1, &strong) == PAD_ERROR_INVALID_HANDLE);
+    const int special = scePadOpen_nid_postfix(user, PAD_PORT_TYPE_SPECIAL, 0, nullptr);
+    Require(special >= PAD_SPECIAL_HANDLE);
+    Require(scePadSetVibrationForce(special, &strong) == PAD_OK && VibrationIs(0, 5, 6));
+    Require(scePadSetVibrationForce(special, nullptr) == PAD_ERROR_INVALID_ARG);
+    Require(scePadClose_nid_postfix(special) == PAD_OK);
+    Require(scePadSetVibrationForce(special, &strong) == PAD_ERROR_INVALID_HANDLE);
+    const PadVibrationParam off{0, 0};
+    Require(scePadSetVibrationForce(handle, &off) == PAD_OK && VibrationIs(0, 0, 0));
+}
+
 static void CheckAccessibilityControllerState(int handle) {
     std::uint32_t state = 7;
     Require(scePadGetAccessibilityControllerState(handle + 1, nullptr) == PAD_ERROR_INVALID_ARG);
@@ -697,6 +721,7 @@ int main() {
     CheckAccessibilityControllerState(handle);
     CheckIsValidHandle(user, handle);
     CheckLightBarResets(handle);
+    CheckVibrationForce(user, handle);
     CheckControllerType(handle);
     CheckInjectedState(commandPath);
     CheckInjectedQueueTimes(commandPath);
@@ -724,6 +749,11 @@ int main() {
     Require(!scePadIsValidHandle(handle, PAD_PORT_TYPE_STANDARD));
     Require(scePadSetLightBar(handle, &lightBar) == PAD_OK && LightBarIs(0, true, 255, 128, 64));
     Require(scePadResetLightBarAll() == PAD_OK && LightBarIs(0, false, 0, 0, 0));
+    const PadVibrationParam closedVibration{9, 10};
+    Require(scePadSetVibrationForce(handle, &closedVibration) == scePadSetVibration(handle, &closedVibration) && VibrationIs(0, 9, 10));
+    Require(scePadSetVibrationForce(handle + 1, &closedVibration) == PAD_ERROR_INVALID_HANDLE);
+    const PadVibrationParam closedOff{0, 0};
+    Require(scePadSetVibrationForce(handle, &closedOff) == PAD_OK && VibrationIs(0, 0, 0));
     Require(scePadUnknown_n3kSX62fgNo() == PAD_OK);
     Require(scePadSetVibrationTriggerEffectWeakWhileEmbeddedMicInUse(true) == 0);
     Require(scePadSetAngularVelocityDeadbandState(handle, false) == 0);
