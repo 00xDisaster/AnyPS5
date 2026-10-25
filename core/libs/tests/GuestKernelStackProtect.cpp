@@ -14,8 +14,6 @@
 #endif
 #include <windows.h>
 #elif defined(__APPLE__)
-#include <climits>
-#include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 #include <sys/mman.h>
@@ -464,7 +462,7 @@ static void ProtectHostStacks() {
     for (void* partial : {static_cast<void*>(nullptr), reinterpret_cast<void*>(1)}) RunOnReservedStack(ProtectReservedStack, partial);
     RunOnReservedStack(ProtectStackBottom, nullptr);
 }
-#else
+#elif defined(__linux__)
 static int ProtectUnlimitedStack() {
     int local = 0;
     void* start = nullptr;
@@ -517,13 +515,7 @@ static bool ChildPasses(const char* mode, bool unlimitedStack) {
     if (child == 0) {
         rlimit limit{};
         if (unlimitedStack && getrlimit(RLIMIT_STACK, &limit) == 0) limit.rlim_cur = RLIM_INFINITY;
-#ifdef __APPLE__
-        char path[PATH_MAX];
-        std::uint32_t size = sizeof(path);
-        if (_NSGetExecutablePath(path, &size) == 0 && (!unlimitedStack || setrlimit(RLIMIT_STACK, &limit) == 0)) execl(path, path, mode, static_cast<char*>(nullptr));
-#else
         if (!unlimitedStack || setrlimit(RLIMIT_STACK, &limit) == 0) execl("/proc/self/exe", "/proc/self/exe", mode, static_cast<char*>(nullptr));
-#endif
         std::_Exit(127);
     }
     int status = 0;
@@ -548,11 +540,15 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
     ProtectHostStacks();
-#else
+#elif defined(__linux__)
     if (argc > 1 && std::strcmp(argv[1], "--unlimited-stack") == 0) return ProtectUnlimitedStack();
     if (argc > 1 && std::strcmp(argv[1], "--read-only-bottom") == 0) return ProtectMainStackBottom({1}, 3);
     if (argc > 1 && std::strcmp(argv[1], "--reprotect-bottom") == 0) return ProtectMainStackBottom({0, 3}, 7);
     ProtectMainStacks();
+    ProtectStack(0);
+#else
+    (void)argc;
+    (void)argv;
     ProtectStack(0);
 #endif
     std::atomic<bool> passed{false};
