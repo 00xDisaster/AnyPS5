@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -101,7 +102,13 @@ void WriteMounts(const FakeHost& host, const std::string& lines) {
     auto staged = host.mountInfo;
     staged += ".new";
     WriteFile(staged, lines);
-    std::filesystem::rename(staged, host.mountInfo);
+    std::error_code error;
+    for (int attempt = 0; attempt < 500; ++attempt) {
+        std::filesystem::rename(staged, host.mountInfo, error);
+        if (!error) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    Require(false, "replace the fake mountinfo");
 }
 
 std::string Escaped(const std::filesystem::path& path) {
@@ -120,11 +127,11 @@ std::string MountLine(std::string_view device, std::string_view root, const std:
 }
 
 std::string FirstLine(const FakeHost& host) {
-    return MountLine("8:17", "/", host.firstMount, "rw,nosuid,relatime", "vfat");
+    return MountLine("8_17", "/", host.firstMount, "rw,nosuid,relatime", "vfat");
 }
 
 std::string SecondLine(const FakeHost& host) {
-    return MountLine("8:33", "/", host.secondMount, "ro,relatime", "exfat");
+    return MountLine("8_33", "/", host.secondMount, "ro,relatime", "exfat");
 }
 
 FakeHost CreateHost() {
@@ -148,29 +155,26 @@ bool Link(const FakeHost& host, std::string_view device, const std::filesystem::
 }
 
 bool CreateDevices(const FakeHost& host) {
-    const auto probe = host.sys / "devices" / "probe:0";
-    std::error_code error;
-    std::filesystem::create_directories(probe, error);
-    if (error || !Link(host, "0:0", probe)) return false;
-    const auto controller = host.sys / "devices" / "pci0000:00" / "0000:00:14.0" / "usb1";
+    if (!Link(host, "0_0", host.sys / "devices" / "probe")) return false;
+    const auto controller = host.sys / "devices" / "pci0000_00" / "0000_00_14.0" / "usb1";
     const auto first = controller / "1-1";
     WriteFile(first / "idVendor", "0781\n");
     WriteFile(first / "idProduct", "5581\n");
     WriteFile(first / "bcdDevice", "0100\n");
     WriteFile(first / "serial", "4C530001\n");
-    WriteFile(first / "1-1:1.0" / "bInterfaceClass", "08\n");
-    const auto firstScsi = first / "1-1:1.0" / "host6" / "target6:0:0" / "6:0:0:0";
+    WriteFile(first / "1-1_1.0" / "bInterfaceClass", "08\n");
+    const auto firstScsi = first / "1-1_1.0" / "host6" / "target6_0_0" / "6_0_0_0";
     WriteFile(firstScsi / "vendor", "SanDisk \n");
     WriteFile(firstScsi / "model", "Ultra Fit       \n");
     const auto second = controller / "1-2";
     WriteFile(second / "idVendor", "090c\n");
     WriteFile(second / "idProduct", "1000\n");
     WriteFile(second / "bcdDevice", "1100\n");
-    WriteFile(second / "1-2:1.0" / "bInterfaceClass", "08\n");
-    const auto secondScsi = second / "1-2:1.0" / "host7" / "target7:0:0" / "7:0:0:0";
+    WriteFile(second / "1-2_1.0" / "bInterfaceClass", "08\n");
+    const auto secondScsi = second / "1-2_1.0" / "host7" / "target7_0_0" / "7_0_0_0";
     WriteFile(secondScsi / "vendor", "Samsung \n");
     WriteFile(secondScsi / "model", "Flash Drive     \n");
-    const auto sata = host.sys / "devices" / "pci0000:00" / "0000:00:17.0" / "ata1" / "host0" / "target0:0:0" / "0:0:0:0";
+    const auto sata = host.sys / "devices" / "pci0000_00" / "0000_00_17.0" / "ata1" / "host0" / "target0_0_0" / "0_0_0_0";
     WriteFile(sata / "vendor", "ATA     \n");
     WriteFile(sata / "model", "Disk            \n");
     WriteFile(host.firstMount / "song.txt", "song");
@@ -178,8 +182,8 @@ bool CreateDevices(const FakeHost& host) {
     std::filesystem::create_directories(host.firstMount / "Music");
     WriteFile(host.secondMount / "Readme.txt", "readme");
     WriteFile(host.root / "media" / "efi" / "boot.efi", "efi");
-    return Link(host, "8:17", firstScsi / "block" / "sdb" / "sdb1") && Link(host, "8:33", secondScsi / "block" / "sdc" / "sdc1") &&
-           Link(host, "8:1", sata / "block" / "sda" / "sda1") && Link(host, "8:49", firstScsi / "block" / "sdd" / "sdd1");
+    return Link(host, "8_17", firstScsi / "block" / "sdb" / "sdb1") && Link(host, "8_33", secondScsi / "block" / "sdc" / "sdc1") &&
+           Link(host, "8_1", sata / "block" / "sda" / "sda1") && Link(host, "8_49", firstScsi / "block" / "sdd" / "sdd1");
 }
 
 void TestInitializeAndTerminate() {
@@ -378,6 +382,18 @@ void TestDeviceMaps() {
     Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/Music/../Music", 0, 0, mountPoint, nullptr); },
                        "sceUsbStorageRequestMap: a directory with . or .. components is not implemented"),
             "map a directory with a .. component did not throw");
+#ifdef _WIN32
+    constexpr std::string_view otherDrive = "sceUsbStorageRequestMap: a directory with a root name is not implemented";
+#else
+    constexpr std::string_view otherDrive = "sceUsbStorageRequestMap: mapping a directory the device does not hold is not implemented";
+#endif
+    Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "C:/Windows", 0, 0, mountPoint, nullptr); }, otherDrive),
+            "map a directory of another drive did not throw");
+    Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/C:Windows", 0, 0, mountPoint, nullptr); }, otherDrive),
+            "map a drive-relative directory did not throw");
+    Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "Music\\..", 0, 0, mountPoint, nullptr); },
+                       "sceUsbStorageRequestMap: a directory with a backslash is not implemented"),
+            "map a directory with a backslash did not throw");
     Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/", 1, 0, mountPoint, nullptr); },
                        "sceUsbStorageRequestMap: nonzero flags or a volume size are not implemented"),
             "map with flags did not throw");
@@ -429,8 +445,8 @@ void TestDeviceGetdents() {
 }
 
 void TestDevices(const FakeHost& host) {
-    WriteMounts(host, FirstLine(host) + MountLine("8:1", "/", host.root / "media" / "efi", "rw", "vfat") +
-                          MountLine("8:49", "/", host.root / "media", "rw", "ext4") + MountLine("8:17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
+    WriteMounts(host, FirstLine(host) + MountLine("8_1", "/", host.root / "media" / "efi", "rw", "vfat") +
+                          MountLine("8_49", "/", host.root / "media", "rw", "ext4") + MountLine("8_17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
     Require(sceUsbStorageInit(nullptr) == 0, "initialize with a device");
     TestDeviceInfo(host);
     TestDeviceMaps();

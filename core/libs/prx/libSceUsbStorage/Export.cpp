@@ -160,33 +160,36 @@ std::vector<Registration>::iterator Registered(Service& service, std::int32_t ev
                         [&](const auto& registration) { return registration.eventType == eventType && registration.callback == callback; });
 }
 
-std::string RelativeDirectory(const char* directory, const char* function) {
-    std::string relative;
-    if (directory == nullptr) return relative;
+std::filesystem::path HostName(std::string_view name) {
+    return std::filesystem::path(std::u8string(name.begin(), name.end()));
+}
+
+std::vector<std::string> DirectoryNames(const char* directory, const char* function) {
+    std::vector<std::string> names;
+    if (directory == nullptr) return names;
     std::string_view text(directory);
     if (text.find('\\') != std::string_view::npos) throw std::runtime_error(std::string(function) + ": a directory with a backslash is not implemented");
     while (!text.empty()) {
         const auto separator = text.find('/');
         const auto name = text.substr(0, separator);
         if (name == "." || name == "..") throw std::runtime_error(std::string(function) + ": a directory with . or .. components is not implemented");
-        if (!name.empty()) {
-            if (!relative.empty()) relative += '/';
-            relative += name;
-        }
+        if (HostName(name).has_root_path()) throw std::runtime_error(std::string(function) + ": a directory with a root name is not implemented");
+        if (!name.empty()) names.emplace_back(name);
         if (separator == std::string_view::npos) break;
         text.remove_prefix(separator + 1);
     }
-    return relative;
+    return names;
 }
 
 std::string Map(Device& device, std::uint32_t slot, const char* directory, const char* function) {
-    const auto relative = RelativeDirectory(directory, function);
     auto host = device.volume.root;
-    if (!relative.empty()) host /= std::filesystem::path(std::u8string(relative.begin(), relative.end()));
+    auto path = MountPoint(slot);
+    for (const auto& name : DirectoryNames(directory, function)) {
+        host /= HostName(name);
+        path += "/" + name;
+    }
     std::error_code error;
     if (!std::filesystem::is_directory(host, error)) throw std::runtime_error(std::string(function) + ": mapping a directory the device does not hold is not implemented");
-    auto path = MountPoint(slot);
-    if (!relative.empty()) path += "/" + relative;
     if (path.size() >= UsbStorage::MountPointSize) throw std::runtime_error(std::string(function) + ": a mount point longer than 127 bytes is not implemented");
     if (std::find(device.maps.begin(), device.maps.end(), path) != device.maps.end()) {
         throw std::runtime_error(std::string(function) + ": mapping a mapped directory again is not implemented");
