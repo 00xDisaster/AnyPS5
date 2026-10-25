@@ -163,20 +163,20 @@ void FrameRecorder::UnregisterVideoOutput(std::uint32_t handle) {
     record(std::move(call), true);
 }
 
-void FrameRecorder::Submit(const Packet& packet, std::uint32_t queue) {
+void FrameRecorder::Submit(const Packet& packet, std::uint32_t queue, const std::function<void()>& accept) {
     auto call = make(FrameCallKind::Submit);
     call.queue = queue;
     call.address = pointer(packet.addr);
     call.size = packet.dw_num;
     call.flags = packet.flags;
-    record(std::move(call), false);
+    record(std::move(call), false, {}, accept);
 }
 
-void FrameRecorder::Flip(const FlipInfo& info) {
+void FrameRecorder::Flip(const FlipInfo& info, const std::function<void()>& accept) {
     auto call = make(FrameCallKind::Flip);
     call.cpuFlip = true;
     call.values = {info.handle, flipValue(info.index), info.mode, flipValue(info.argument)};
-    record(std::move(call), false);
+    record(std::move(call), false, {}, accept);
 }
 
 void FrameRecorder::ReserveEopFlip(const FlipInfo& info, std::uint32_t token) {
@@ -198,8 +198,8 @@ void FrameRecorder::ReserveEopFlip(const FlipInfo& info, std::uint32_t token) {
     ++recordedCalls;
 }
 
-void FrameRecorder::Suspend() {
-    record(make(FrameCallKind::Suspend), false);
+void FrameRecorder::Suspend(const std::function<void()>& accept) {
+    record(make(FrameCallKind::Suspend), false, {}, accept);
 }
 
 void FrameRecorder::PresentBuffer(const DisplayBuffer& buffer) {
@@ -236,8 +236,13 @@ void FrameRecorder::writeReferenceFrames() {
     }
 }
 
-void FrameRecorder::record(FrameCall call, bool prologueCall, std::span<const Shader* const> shaders) {
+void FrameRecorder::record(FrameCall call, bool prologueCall, std::span<const Shader* const> shaders, const std::function<void()>& accept) {
     std::lock_guard lock(mutex);
+    recordLocked(std::move(call), prologueCall, shaders);
+    if (accept) accept();
+}
+
+void FrameRecorder::recordLocked(FrameCall call, bool prologueCall, std::span<const Shader* const> shaders) {
     if (state == State::Waiting) {
         if (!prologueCall) return;
         call.ordinal = ++ordinal;
