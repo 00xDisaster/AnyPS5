@@ -1,21 +1,10 @@
 #include "SceTypes.hpp"
+#include "prx/libc/include/Api.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
-
-extern "C" {
-int APS5_VABI sched_getparam_nid_postfix(int pid, KernelSchedParam* param);
-int APS5_VABI sched_getscheduler_nid_postfix(int pid);
-int APS5_VABI sched_setparam_nid_postfix(int pid, const KernelSchedParam* param);
-int APS5_VABI pthread_getschedparam_nid_postfix(Pthread thread, int* policy, KernelSchedParam* param);
-int APS5_VABI pthread_setschedparam_nid_postfix(Pthread thread, int policy, const KernelSchedParam* param);
-Pthread APS5_VABI scePthreadSelf();
-int APS5_VABI scePthreadCreate(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name);
-int APS5_VABI scePthreadJoin(Pthread thread, void** retval);
-int APS5_VABI getpid_nid_postfix(void);
-int* APS5_VABI __error_nid_postfix();
-}
 
 static constexpr int GUEST_ESRCH = 3;
 static constexpr int GUEST_EFAULT = 14;
