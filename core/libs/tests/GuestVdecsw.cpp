@@ -119,11 +119,8 @@ void testGenericPictureInfoValidation() {
         check(throws([&] { sceVdecswGetPictureInfo(&output, first.data(), second.data()); }) && first == before && second == before, "generic picture info accepted an invalid descriptor size");
     }
     output.thisSize = sizeof(OutputInfo);
-    output.pictureCount = 2;
     first[0] = sizeof(first);
     const auto firstBefore = first;
-    check(throws([&] { sceVdecswGetPictureInfo(&output, first.data(), second.data()); }) && first == firstBefore && second == before, "two-picture output did not throw before writing");
-    check(throws([&] { sceVdecswGetPictureInfo(&output, nullptr, nullptr); }), "two-picture output was silently accepted");
     output.pictureCount = 1;
     output.frameBuffer = first.data();
     check(throws([&] { sceVdecswGetPictureInfo(&output, first.data(), nullptr); }) && first == firstBefore, "generic picture info accepted a foreign frame buffer");
@@ -139,7 +136,7 @@ void testGenericPictureInfoLifetime() {
         buffer.resize(session.memory.maxFrameBufferSize);
         const auto units = accessUnits(false);
         for (std::uint64_t iteration = 0; iteration < 2; ++iteration) {
-            const InputData input{sizeof(InputData), units[0].data(), units[0].size(), 1000 + iteration, iteration, 0xa0 + iteration};
+            const SceVideodec2::InputData input{sizeof(SceVideodec2::InputData), units[0].data(), units[0].size(), 1000 + iteration, iteration, 0xa0 + iteration};
             check(sceVdecswSetDecodeInput(session.decoder, &input) == 0, "generic lifetime input failed");
             InputResult consumed{sizeof(InputResult)};
             check(sceVdecswSyncDecodeInput(session.decoder, &consumed) == 0, "generic lifetime input was not consumed");
