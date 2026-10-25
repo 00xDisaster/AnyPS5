@@ -1,6 +1,7 @@
 agc_driver_graphics undefined UBSan stops on the misaligned guest word loads of the ASan build's CopyGuestBytes (Execution/src/GuestMemory.cpp), which #10973 fixes, and then on Graphics/src/DepthSurface.cpp:730, which binds a TextureDetiler reference to a null pointer when the context has no detiler.
 agc_driver_graphics_maps_fallback undefined UBSan stops on the misaligned guest word loads of the ASan build's CopyGuestBytes (Execution/src/GuestMemory.cpp), which #10973 fixes, and then on Graphics/src/DepthSurface.cpp:730, which binds a TextureDetiler reference to a null pointer when the context has no detiler.
 agc_driver_pm4 undefined UBSan stops on the misaligned guest word loads of the ASan build's CopyGuestBytes (Execution/src/GuestMemory.cpp); #10973 fixes them.
+agc_performance_overlay address,undefined Runs past its 30 s ctest TIMEOUT in the sanitizer build on ubuntu-latest (timed out at 30.18 s); it passes without sanitizers.
 atrac9_config_data undefined LibAtrac9's BitReverse32 shifts a 32-bit value by 32 (3rdparty/LibAtrac9/C/src/utility.c:14); #9548 guards the shift.
 atrac9_gradient address,undefined atrac9_gradient_tests does not link in an ANYPS5_ENABLE_ASAN build ('undefined reference to symbol pow'), so ctest reports it as not run; #9710 links it with libm.
 guest_ajm undefined LibAtrac9's BitReverse32 shifts a 32-bit value by 32 (3rdparty/LibAtrac9/C/src/utility.c:14); #9548 guards the shift.
