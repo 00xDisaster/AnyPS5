@@ -1,6 +1,6 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
 #include <cstddef>
 #include <cstdint>
-#include "prx/libc/include/general/VabiMacros.hpp"
 
 namespace {
 struct OcspString {

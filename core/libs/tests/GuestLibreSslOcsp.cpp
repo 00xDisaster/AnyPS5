@@ -1,15 +1,10 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-
-extern "C" {
-const char* APS5_VABI OCSP_response_status_str_nid_postfix(std::int64_t);
-const char* APS5_VABI OCSP_cert_status_str_nid_postfix(std::int64_t);
-const char* APS5_VABI OCSP_crl_reason_str_nid_postfix(std::int64_t);
-}
 
 using StringFunction = const char* (APS5_VABI*)(std::int64_t);
 
