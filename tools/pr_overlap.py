@@ -261,18 +261,22 @@ def related(prs, executor):
     scan(mine)
     others = {n: pr for n, pr in prs.items() if n}
     chosen = {}
-    for (n, pr), (files, found) in zip(others.items(), executor.map(probe, others.values())):
+    for index, ((n, pr), (files, found)) in enumerate(zip(others.items(), executor.map(probe, others.values())), 1):
         if files & mine["files"] or found & mine["exports"]:
             chosen[n] = pr
         else:
             pr.update(tree=None, files=set(), added=set(), exports=set())
+        if index % PROGRESS_EVERY == 0 or index == len(others):
+            progress(f"probed {index}/{len(others)} pull requests, {len(chosen)} share files or exports with the branch")
     return chosen
 
 
 def scan_all(prs, jobs):
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         pending = related(prs, executor) if 0 in prs else prs
-        list(executor.map(scan, pending.values()))
+        for index, _ in enumerate(executor.map(scan, pending.values()), 1):
+            if index % PROGRESS_EVERY == 0 or index == len(pending):
+                progress(f"merged {index}/{len(pending)} pull requests into the base")
 
 
 def hunks(pr, path):
