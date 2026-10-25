@@ -130,11 +130,6 @@ static void CheckStickDeadZones(int handle) {
     PadControllerInformation info{};
     Require(scePadGetControllerInformation(handle, &info) == PAD_OK);
     Require(info.stickInfo.deadZoneLeft == 13 && info.stickInfo.deadZoneRight == 13);
-    std::array<std::uint8_t, 0x2c> extended{};
-    Require(scePadGetExtControllerInformation(handle, extended.data()) == PAD_OK);
-    PadControllerInformation base{};
-    std::memcpy(&base, extended.data(), sizeof(base));
-    Require(base.stickInfo.deadZoneLeft == 13 && base.stickInfo.deadZoneRight == 13);
 }
 
 static void CheckTouchContact() {
@@ -159,15 +154,13 @@ static void CheckTouchPadInformation(int handle) {
     Require(info.touchPadInfo.resolution.y == kTouchPadHeight);
     Require(info.touchPadInfo.pixelDensity == 44.86f);
     Require(scePadGetControllerInformation(handle + 1, &info) == PAD_ERROR_INVALID_HANDLE);
+}
 
-    std::array<std::uint8_t, 0x2c> extended{};
-    extended.fill(0x5a);
-    Require(scePadGetExtControllerInformation(handle, extended.data()) == PAD_OK);
-    PadControllerInformation base{};
-    std::memcpy(&base, extended.data(), sizeof(base));
-    Require(base.touchPadInfo.resolution.x == kTouchPadWidth);
-    Require(base.touchPadInfo.resolution.y == kTouchPadHeight);
-    Require(base.touchPadInfo.pixelDensity == 44.86f);
+static void CheckExtControllerInformation(int handle) {
+    constexpr int notPermitted = static_cast<int>(0x80920101);
+    std::array<std::uint8_t, 256> extended{};
+    Require(scePadGetExtControllerInformation(handle, extended.data()) == notPermitted);
+    Require(scePadGetExtControllerInformation(handle + 1, extended.data()) == PAD_ERROR_INVALID_HANDLE);
 }
 
 static void CheckVirtualTouchContact() {
@@ -629,6 +622,7 @@ int main() {
     CheckVirtualTouchContact();
     CheckTouchPadInformation(handle);
     CheckStickDeadZones(handle);
+    CheckExtControllerInformation(handle);
     CheckPartialTrigger();
     CheckReadQueue(handle);
     CheckTapBetweenReads();
