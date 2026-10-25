@@ -181,9 +181,15 @@ class CheckCompileModeTests(unittest.TestCase):
             return ["-include", str(source)], "#ifndef INCLUDED_ONCE\n#define INCLUDED_ONCE\n", "#endif\n"
         self.check_modes(((),), configure=configure)
 
-    def test_missing_values_fail_before_a_syntax_flag_is_injected(self):
+    def test_missing_path_values_fail_before_a_syntax_flag_is_injected(self):
+        self.check_missing_values(("-I", "-L", "-include"))
+
+    def test_missing_language_and_output_values_fail_before_a_syntax_flag_is_injected(self):
+        self.check_missing_values(("-x", "-o", "-MF"))
+
+    def check_missing_values(self, options):
         for compiler in self.compilers():
-            for option in ("-I", "-L", "-include", "-x", "-o", "-MF"):
+            for option in options:
                 for field in ("arguments", "command"):
                     with self.subTest(compiler=compiler, option=option, field=field), tempfile.TemporaryDirectory(prefix="syntax missing ") as name:
                         root = Path(name).resolve()
