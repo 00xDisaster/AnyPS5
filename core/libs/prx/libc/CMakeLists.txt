@@ -115,6 +115,10 @@ target_include_directories(libc PRIVATE
 
 target_link_libraries(libc PRIVATE zarchive)
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(libc PRIVATE -ffp-contract=off)
+endif()
+
 if(BUILD_TESTING)
     add_test_executable(guest_update_env_tests ${LIBS_INCLUDE_DIR}/tests/GuestUpdateEnv.cpp)
     target_include_directories(guest_update_env_tests PRIVATE ${LIBS_INCLUDE_DIR})
