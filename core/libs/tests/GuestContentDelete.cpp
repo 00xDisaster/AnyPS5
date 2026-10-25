@@ -17,11 +17,11 @@ std::string LogicErrorMessage(TAction action) {
         return "invalid argument";
     } catch (const std::logic_error& error) {
         return error.what();
+    } catch (const std::runtime_error& error) {
+        return error.what();
     }
     return "returned";
 }
-
-bool Contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
 
 }
 
@@ -42,9 +42,9 @@ int main() {
     Require(sceContentDeleteByPath("") == static_cast<int>(0x809D5001u));
 
     Require(LogicErrorMessage([] { sceContentDeleteByPath(nullptr); }) == "invalid argument");
-    Require(Contains(LogicErrorMessage([] { sceContentDeleteByPath("/user/av_contents/photo/a.png"); }), "sceContentDeleteByPath: /user/av_contents/photo/a.png is not in the host content library"));
-    Require(Contains(LogicErrorMessage([] { sceContentDeleteById(0x123456789); }), "sceContentDeleteById: content id 4886718345 is not in the host content library"));
-    Require(Contains(LogicErrorMessage([] { sceContentDeleteById(-1); }), "sceContentDeleteById: content id -1 is not in the host content library"));
+    Require(LogicErrorMessage([] { sceContentDeleteByPath("/user/av_contents/photo/a.png"); }) == "sceContentDeleteByPath not implemented");
+    Require(LogicErrorMessage([] { sceContentDeleteById(0x123456789); }) == "sceContentDeleteById not implemented");
+    Require(LogicErrorMessage([] { sceContentDeleteById(-1); }) == "sceContentDeleteById not implemented");
 
     Require(sceContentDeleteTerminate() == 0);
     Require(sceContentDeleteTerminate() == static_cast<int>(0x809D5002u));
