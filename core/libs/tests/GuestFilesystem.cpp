@@ -634,25 +634,25 @@ int main() {
     Require(chflags_nid_postfix(file.string().c_str(), 0x200000) == -1 && *__error_nid_postfix() == 1);
     Require(ChflagsThrows(file, 0x2, "UF_IMMUTABLE"));
     Require(ChflagsThrows(file, 0x1000 | 0x40000, "UF_READONLY|SF_APPEND"));
-    const auto dangling = root / "dangling.link";
-    const auto pointing = root / "file.link";
+    const auto chflagsDangling = root / "dangling.link";
+    const auto chflagsPointing = root / "file.link";
 #ifdef _WIN32
-    const bool linked = CreateSymbolicLinkW(dangling.wstring().c_str(), L"missing.bin", SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0 &&
-        CreateSymbolicLinkW(pointing.wstring().c_str(), L"file.txt", SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
+    const bool chflagsLinked = CreateSymbolicLinkW(chflagsDangling.wstring().c_str(), L"missing.bin", SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0 &&
+        CreateSymbolicLinkW(chflagsPointing.wstring().c_str(), L"file.txt", SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
 #else
-    std::error_code linkError;
-    std::filesystem::create_symlink("missing.bin", dangling, linkError);
-    if (!linkError) std::filesystem::create_symlink("file.txt", pointing, linkError);
-    const bool linked = !linkError;
+    std::error_code chflagsLinkError;
+    std::filesystem::create_symlink("missing.bin", chflagsDangling, chflagsLinkError);
+    if (!chflagsLinkError) std::filesystem::create_symlink("file.txt", chflagsPointing, chflagsLinkError);
+    const bool chflagsLinked = !chflagsLinkError;
 #endif
-    if (linked) {
-        Require(chflags_nid_postfix(dangling.string().c_str(), 0) == -1 && *__error_nid_postfix() == 2);
-        Require(chflags_nid_postfix(pointing.string().c_str(), 0) == 0);
-        Require(chflags_nid_postfix((pointing.string() + "/").c_str(), 0) == -1 && *__error_nid_postfix() == 20);
-        Require(chflags_nid_postfix(pointing.string().c_str(), 0x20) == -1 && *__error_nid_postfix() == 45);
-        Require(unlink_nid_postfix(dangling.string().c_str()) == 0 && unlink_nid_postfix(pointing.string().c_str()) == 0);
+    if (chflagsLinked) {
+        Require(chflags_nid_postfix(chflagsDangling.string().c_str(), 0) == -1 && *__error_nid_postfix() == 2);
+        Require(chflags_nid_postfix(chflagsPointing.string().c_str(), 0) == 0);
+        Require(chflags_nid_postfix((chflagsPointing.string() + "/").c_str(), 0) == -1 && *__error_nid_postfix() == 20);
+        Require(chflags_nid_postfix(chflagsPointing.string().c_str(), 0x20) == -1 && *__error_nid_postfix() == 45);
+        Require(unlink_nid_postfix(chflagsDangling.string().c_str()) == 0 && unlink_nid_postfix(chflagsPointing.string().c_str()) == 0);
     } else {
-        unlink_nid_postfix(dangling.string().c_str());
+        unlink_nid_postfix(chflagsDangling.string().c_str());
         std::fprintf(stderr, "symbolic links unavailable: the chflags link cases not tested\n");
     }
     const int flagged = open_nid_postfix(file.string().c_str(), 0, 0);
