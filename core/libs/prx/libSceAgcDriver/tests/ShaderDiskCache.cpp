@@ -62,11 +62,19 @@ void setEnvironment(const char* name, const std::string& value) {
 #endif
 }
 
+void setPathEnvironment(const char* name, const std::filesystem::path& value) {
+#ifdef _WIN32
+    _wputenv_s(std::filesystem::path(name).wstring().c_str(), value.wstring().c_str());
+#else
+    setenv(name, value.c_str(), 1);
+#endif
+}
+
 #ifdef _WIN32
 void verifyHostStandardError() {
     const auto directory = std::filesystem::temp_directory_path() / ("aps5-shader-host-stderr-" + std::to_string(std::random_device{}()));
     setEnvironment("ANYPS5_NO_SHADER_CACHE", "0");
-    setEnvironment("ANYPS5_SHADER_CACHE_DIR", directory.string());
+    setPathEnvironment("ANYPS5_SHADER_CACHE_DIR", directory);
     int capture[2], guest[2];
     require(::_pipe(capture, 65536, _O_BINARY) == 0, "cannot create host capture");
     require(::_pipe(guest, 65536, _O_BINARY) == 0, "cannot create guest capture");
@@ -148,6 +156,7 @@ void requireSameArtifact(const CompiledShaderArtifact& left, const CompiledShade
     require(left.parameterExports == right.parameterExports, prefix + "parameter exports differ");
     require(left.stencilReferences == right.stencilReferences, prefix + "stencil reference set differs");
     require(left.stencilReplaySafe == right.stencilReplaySafe, prefix + "stencil replay proof differs");
+    require(left.bdaWrites == right.bdaWrites, prefix + "BDA write flag differs");
     require(left.stencilReferenceDword == right.stencilReferenceDword, prefix + "stencil replay push offset differs");
     require(left.fragmentParameters.size() == right.fragmentParameters.size(), prefix + "fragment parameter count differs");
     for (std::size_t i = 0; i < left.fragmentParameters.size(); ++i) {
@@ -259,6 +268,7 @@ RecompileResult sampleResult() {
     result.fragmentParameters = {{0, 1, true, false, true}, {2, 3, false, true}};
     result.stencilReferences = {0u, 17u, 255u};
     result.stencilReplaySafe = true;
+    result.bdaWrites = true;
     result.stencilReferenceDword = 23u;
     result.poisonedSrtReads = 3;
     result.shaderDataUserWords = {2u, 0xffffffffu, 9u};
@@ -322,6 +332,7 @@ CompiledVariant sampleVariant() {
     image.volumeArraySampleCompatible = true;
     image.flatLineCompatible = false;
     image.flatVolumeLineCompatible = false;
+    image.dimensionQueryOnly = false;
     image.foldTexelOffsetsOnly = true;
     image.remappedDepth1D = true;
     image.byElements = 4;
@@ -747,6 +758,8 @@ void verifyKeySensitivity() {
     changes("f32 denormal preservation", [](SampleRequest& sample) { sample.request.target.float32DenormPreserve = true; });
     changes("spanned waves", [](SampleRequest& sample) { sample.request.target.spannedWaves = true; });
     changes("robust buffer access 2", [](SampleRequest& sample) { sample.request.target.robustBufferAccess2 = true; });
+    changes("wave LDS memory barriers", [](SampleRequest& sample) { sample.request.target.waveLdsMemoryBarriers = true; });
+    changes("device-scope LDS memory barriers", [](SampleRequest& sample) { sample.request.target.deviceScopeLdsMemoryBarriers = true; });
     changes("the workgroup size limit", [](SampleRequest& sample) { sample.request.target.maxWorkgroupSize[2] = 128; });
     changes("the invocation limit", [](SampleRequest& sample) { sample.request.target.maxWorkgroupInvocations = 512; });
     changes("the shared memory limit", [](SampleRequest& sample) { sample.request.target.maxWorkgroupSharedMemoryBytes = 32768; });
@@ -1069,7 +1082,7 @@ void verifyLongHostPaths() {
     const auto extended = [](const auto& path) { return std::filesystem::path(L"\\\\?\\" + path.native()); };
     std::filesystem::create_directories(extended(directory));
     setEnvironment("ANYPS5_NO_SHADER_CACHE", "0");
-    setEnvironment("ANYPS5_SHADER_CACHE_DIR", directory.string());
+    setPathEnvironment("ANYPS5_SHADER_CACHE_DIR", directory);
     std::vector<std::filesystem::path> files;
     std::filesystem::path entries;
     struct Cleanup {
@@ -1864,7 +1877,7 @@ IrResourcePlan handBuiltPlan() {
     wide.SetImmediateU64(0x8000000000000001ull);
     material.dwords[3] = &wide;
     plan.descriptorSources = {buffer, table, heap, material};
-    plan.controlFlow = {{&condition, {1u, 2u}, {0u}, {}}, {nullptr, {2u}, {3u}, {0u}}, {nullptr, {}, {}, {}}};
+    plan.controlFlow = {{&condition, {1u, 2u}, {0u}, {}, {1u}}, {nullptr, {2u}, {3u}, {0u}, {0u, 1u}}, {nullptr, {}, {}, {}, {}}};
     plan.materializationSources = {0u, 2u};
     plan.srtReads = {{&readConst(4), 2u}, {&pointer, 1u}};
     plan.guardedSrtSlots = {1u};
@@ -1946,7 +1959,7 @@ bool samePlan(const IrResourcePlan& left, const IrResourcePlan& right) {
     for (std::size_t index = 0; index < left.controlFlow.size(); ++index) {
         const auto& a = left.controlFlow[index];
         const auto& b = right.controlFlow[index];
-        if (!sameValue(a.condition, b.condition) || a.successors != b.successors || a.sources != b.sources || a.images != b.images) return false;
+        if (!sameValue(a.condition, b.condition) || a.successors != b.successors || a.sources != b.sources || a.images != b.images || a.flatSlots != b.flatSlots) return false;
     }
     for (std::size_t index = 0; index < left.srtReads.size(); ++index) {
         if (!sameValue(left.srtReads[index].value, right.srtReads[index].value) || left.srtReads[index].flatOffset != right.srtReads[index].flatOffset) return false;
@@ -2114,6 +2127,36 @@ void verifyMalformedPlans() {
     unblocked.srtReads[0].value = &phi;
     bytes.clear();
     require(!ShaderDiskCache::EncodePlan(unblocked, bytes), "a phi without predecessor blocks was encoded");
+}
+
+void verifySharedPlans() {
+    auto fixture = planFixtures().front();
+    const auto request = fixture.Request(false);
+    const auto plan = GetResourcePlan(request);
+    const std::vector<std::byte> first{std::byte{0x5a}, std::byte{0x01}, std::byte{0x02}};
+    const std::vector<std::byte> second{std::byte{0x5a}, std::byte{0x01}, std::byte{0x03}};
+    for (const auto* key : {&first, &second}) {
+        const auto entry = ShaderDiskCache::EncodePlanEntry(*key, *plan);
+        require(WriteFileAtomically(ShaderDiskCache::EntryDirectory() / ShaderDiskCache::EntryName(*key), entry), "cannot write the shared plan entries");
+    }
+    constexpr std::uint64_t address = 0x7000u;
+    IrResourcePlan expected;
+    require(ShaderDiskCache::DecodePlan(encodedPlan(*plan), expected), "the shared plan fixture does not decode");
+    expected.shaderHash = address;
+    const auto hits = ShaderDiskCache::Totals().planHits;
+    auto a = ShaderDiskCache::LoadSharedPlan(first, address);
+    auto b = ShaderDiskCache::LoadSharedPlan(second, address);
+    require(a != nullptr && b != nullptr && ShaderDiskCache::Totals().planHits == hits + 2u, "the shared plan entries did not load");
+    require(a.get() == b.get(), "two plan entries with the same payload for one shader decoded into separate plans");
+    require(samePlan(*a, expected), "a shared plan differs from the stored plan");
+    const auto other = ShaderDiskCache::LoadSharedPlan(second, address + 0x100u);
+    require(other != nullptr && other.get() != a.get() && other->shaderHash == address + 0x100u && a->shaderHash == address, "a plan of another shader address was shared");
+    const std::weak_ptr<const IrResourcePlan> released = a;
+    a.reset();
+    b.reset();
+    require(released.expired(), "the shared plan table kept a plan no source uses");
+    const auto again = ShaderDiskCache::LoadSharedPlan(first, address);
+    require(again != nullptr && samePlan(*again, expected), "a released shared plan did not load again");
 }
 
 void verifyPlanRoundTrip() {
@@ -2451,6 +2494,14 @@ void verifyDefaultDirectory(const char* self) {
 
 int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string_view(argv[1]) == "--housekeeping-safety") {
+            const auto directory = ShaderDiskCache::EntryDirectory();
+            require(!directory.empty(), "the housekeeping fixture cache is disabled");
+            ShaderDiskCache::Shutdown();
+            require(ShaderDiskCache::Writers() == 0, "the housekeeping writer did not stop");
+            std::cout << "housekeeping version " << directory.filename().string() << '\n';
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--resource-plan-codec") {
             verifyResultRoundTrip();
             verifyEntryRoundTrip();
@@ -2487,7 +2538,7 @@ int main(int argc, char** argv) {
         std::filesystem::remove_all(directory);
         verifyDefaultDirectory(argv[0]);
         setEnvironment("ANYPS5_NO_SHADER_CACHE", "0");
-        setEnvironment("ANYPS5_SHADER_CACHE_DIR", directory.string());
+        setPathEnvironment("ANYPS5_SHADER_CACHE_DIR", directory);
         verifyAtomicReplacement(directory);
         verifyResultRoundTrip();
         verifyEntryRoundTrip();
@@ -2498,6 +2549,7 @@ int main(int argc, char** argv) {
         verifyFloatModeSerialization();
         verifyPlanRoundTrip();
         verifyPlanKey();
+        verifySharedPlans();
         verifyStore();
         verifyPersist();
         verifyAcrossProcesses(argv[0]);
