@@ -5,6 +5,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from nid_names import CPP_TOKEN
+
 PREFIXES = ("APS5_", "ANYPS5_")
 DOC = "docs/dev/ENVIRONMENT.md"
 ROOTS = ("core",)
@@ -94,11 +97,15 @@ def reads(roots, prefixes=PREFIXES):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as error:
                 raise ValueError(f"cannot read {path.as_posix()}: {error}") from error
+            matches = line_reads(text, prefixes)
+            if not matches:
+                continue
+            code = CPP_TOKEN.sub(lambda token: token.group() if token.group("code") else " " * len(token.group()), text)
             starts = [0] + [match.end() for match in re.finditer("\n", text)]
-            for reader, match in line_reads(text, prefixes):
+            for reader, match in matches:
                 number = bisect.bisect_right(starts, match.start())
-                start = max(text.rfind(token, 0, match.start()) for token in ";{}") + 1
-                end = text.find(";", match.end())
+                start = max(code.rfind(token, 0, match.start()) for token in ";{}") + 1
+                end = code.find(";", match.end())
                 window = text[start:end + 1] if end >= 0 else text[start:]
                 found.setdefault(match.group("name"), []).append(
                     (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))

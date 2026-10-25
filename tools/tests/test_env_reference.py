@@ -126,6 +126,22 @@ class EnvReferenceTests(unittest.TestCase):
         self.assertEqual(found["APS5_STILL_STRING"], [(source.as_posix(), 11, "string", "")])
         self.assertEqual(found["APS5_SHORT_DEFAULT"], [(source.as_posix(), 13, "string", "42")])
 
+    def test_statement_boundaries_ignore_comments_and_literals(self):
+        cases = (
+            ('auto value = atoi(/* ;{} */ std::getenv("APS5_VALUE"));', "integer", ""),
+            ('auto value = std::getenv("APS5_VALUE") /* ;{} */ != nullptr;', "presence", ""),
+            ("auto value = std::getenv(\"APS5_VALUE\") ? ';' : 99;", "string", "99"),
+            ('auto value = std::atoi((std::puts(R"tag(;{})tag"), std::getenv("APS5_VALUE")));', "integer", ""),
+            ('auto value = std::atoi((std::puts(";{}"), std::getenv("APS5_VALUE")));', "integer", ""),
+        )
+        root = self.fixture()
+        source = root / "core" / "Sample.cpp"
+        for text, kind, default in cases:
+            with self.subTest(source=text):
+                source.write_text(text + "\n", encoding="utf-8")
+                found = env_reference.reads([root / "core"])
+                self.assertEqual(found["APS5_VALUE"], [(source.as_posix(), 1, kind, default)])
+
     def test_whitespace_before_parentheses_preserves_names_kinds_and_defaults(self):
         root = self.fixture()
         source = root / "core" / "Sample.cpp"
