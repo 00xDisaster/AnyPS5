@@ -16,6 +16,7 @@
 #endif
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "SceTypes.hpp"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -257,10 +258,11 @@ void AppendStunAddressAttribute(std::vector<std::uint8_t>& packet, std::uint16_t
     packet.insert(packet.end(), addrBytes, addrBytes + 4);
 }
 
-void ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped) {
+using StunTxId = std::array<std::uint8_t, 12>;
+
+StunTxId ReceiveStunBindingRequest(TestSocket serverSocket, sockaddr_in& client) {
     Require(WaitReadable(serverSocket, 2000));
     std::uint8_t request[64] = {};
-    sockaddr_in client{};
 #ifdef _WIN32
     int clientLen = sizeof(client);
 #else
@@ -272,21 +274,38 @@ void ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, std::ui
     Require(request[0] == 0x00 && request[1] == 0x01 && request[2] == 0x00 && request[3] == 0x00);
     const std::uint32_t expectedCookie = htonl(0x2112A442u);
     Require(std::memcmp(request + 4, &expectedCookie, sizeof(expectedCookie)) == 0);
+    StunTxId txId{};
+    std::memcpy(txId.data(), request + 8, txId.size());
+    Require(txId != StunTxId{});
+    return txId;
+}
 
+void SendStunBindingResponse(TestSocket serverSocket, const sockaddr_in& client, const StunTxId& txId, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped) {
     const std::uint16_t effectivePort = mappedHostPort != 0 ? mappedHostPort : ntohs(client.sin_port);
     const std::uint32_t effectiveAddr = mappedAddr != 0 ? mappedAddr : client.sin_addr.s_addr;
-
     std::vector<std::uint8_t> response(20, 0);
     response[0] = 0x01;
     response[1] = 0x01;
-    std::memcpy(response.data() + 4, request + 4, 16);
+    const std::uint32_t cookie = htonl(0x2112A442u);
+    std::memcpy(response.data() + 4, &cookie, sizeof(cookie));
+    std::memcpy(response.data() + 8, txId.data(), txId.size());
     AppendStunAddressAttribute(response, xorMapped ? 0x0020 : 0x0001, effectiveAddr, effectivePort, xorMapped);
     const auto attrLen = static_cast<std::uint16_t>(response.size() - 20);
     response[2] = static_cast<std::uint8_t>(attrLen >> 8);
     response[3] = static_cast<std::uint8_t>(attrLen & 0xFF);
+#ifdef _WIN32
+    const int clientLen = sizeof(client);
+#else
+    const socklen_t clientLen = sizeof(client);
+#endif
     const auto sent = sendto(serverSocket, reinterpret_cast<const char*>(response.data()), static_cast<int>(response.size()), 0,
                              reinterpret_cast<const sockaddr*>(&client), clientLen);
     Require(sent == static_cast<int>(response.size()));
+}
+
+void RecordUniqueTransactionId(std::vector<StunTxId>& seen, const StunTxId& candidate) {
+    for (const auto& existing : seen) Require(existing != candidate);
+    seen.push_back(candidate);
 }
 
 void CheckNatDiscovery(in_addr address) {
@@ -294,6 +313,7 @@ void CheckNatDiscovery(in_addr address) {
     sockaddr_in server2Addr{};
     const TestSocket server1 = OpenTestUdpSocket(server1Addr);
     const TestSocket server2 = OpenTestUdpSocket(server2Addr);
+    std::vector<StunTxId> seenIds;
 
     NetCtlNatInfo natInfo{};
     natInfo.size = sizeof(natInfo);
@@ -307,35 +327,50 @@ void CheckNatDiscovery(in_addr address) {
     Require(natInfo.nat_type == 0);
     Require(natInfo.mapped_addr == 0);
     {
-        Require(WaitReadable(server1, 2000));
-        std::uint8_t drained[64] = {};
         sockaddr_in from{};
-#ifdef _WIN32
-        int fromLen = sizeof(from);
-#else
-        socklen_t fromLen = sizeof(from);
-#endif
-        Require(recvfrom(server1, reinterpret_cast<char*>(drained), sizeof(drained), 0, reinterpret_cast<sockaddr*>(&from), &fromLen) == 20);
+        RecordUniqueTransactionId(seenIds, ReceiveStunBindingRequest(server1, from));
     }
 
     const std::uint32_t externalIp = (ntohl(address.s_addr) == 0xCB00712Au) ? htonl(0xCB00712Bu) : htonl(0xCB00712Au);
+    const std::uint32_t spoofedIp = htonl(0xC0000201u);
+
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 30);
+    StunTxId mismatchedOnlyTx{};
+    std::thread mismatchOnlyWorker([&] {
+        sockaddr_in client{};
+        mismatchedOnlyTx = ReceiveStunBindingRequest(server1, client);
+        StunTxId badTx = mismatchedOnlyTx;
+        badTx[0] ^= 0xFFu;
+        SendStunBindingResponse(server1, client, badTx, spoofedIp, 54321, true);
+    });
+    natInfo = {sizeof(natInfo), 99, 99, 0xFFFFFFFFu};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    mismatchOnlyWorker.join();
+    RecordUniqueTransactionId(seenIds, mismatchedOnlyTx);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 1);
+    Require(natInfo.nat_type == 0);
+    Require(natInfo.mapped_addr == 0);
+
     const sockaddr_in bothServers[2] = {server1Addr, server2Addr};
     NetCtlSetStunServers_nid_no_patch(bothServers, 2, 40);
+    StunTxId droppedTx{};
+    StunTxId fallbackTx{};
     std::thread fallbackWorker([&] {
-        Require(WaitReadable(server1, 2000));
-        std::uint8_t dropped[64] = {};
-        sockaddr_in from{};
-#ifdef _WIN32
-        int fromLen = sizeof(from);
-#else
-        socklen_t fromLen = sizeof(from);
-#endif
-        Require(recvfrom(server1, reinterpret_cast<char*>(dropped), sizeof(dropped), 0, reinterpret_cast<sockaddr*>(&from), &fromLen) == 20);
-        ReplyStunBinding(server2, externalIp, 54321, true);
+        sockaddr_in droppedClient{};
+        droppedTx = ReceiveStunBindingRequest(server1, droppedClient);
+        sockaddr_in client{};
+        fallbackTx = ReceiveStunBindingRequest(server2, client);
+        StunTxId wrongTx = fallbackTx;
+        wrongTx[11] ^= 0xA5u;
+        SendStunBindingResponse(server2, client, wrongTx, spoofedIp, 54321, true);
+        SendStunBindingResponse(server2, client, fallbackTx, externalIp, 54321, true);
     });
     natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
     fallbackWorker.join();
+    RecordUniqueTransactionId(seenIds, droppedTx);
+    RecordUniqueTransactionId(seenIds, fallbackTx);
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
     Require(natInfo.nat_type == 0);
@@ -346,12 +381,16 @@ void CheckNatDiscovery(in_addr address) {
     Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 0 && cachedInfo.mapped_addr == externalIp);
 
     NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    StunTxId legacyTx{};
     std::thread legacyWorker([&] {
-        ReplyStunBinding(server1, address.s_addr, 0, false);
+        sockaddr_in client{};
+        legacyTx = ReceiveStunBindingRequest(server1, client);
+        SendStunBindingResponse(server1, client, legacyTx, address.s_addr, 0, false);
     });
     natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
     legacyWorker.join();
+    RecordUniqueTransactionId(seenIds, legacyTx);
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
     Require(natInfo.nat_type == 0);

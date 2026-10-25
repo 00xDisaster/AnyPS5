@@ -30,6 +30,7 @@
 #include <cstring>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/HostEntropy.hpp"
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -622,18 +623,13 @@ static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t siz
     return mapped.valid;
 }
 
-static std::atomic<std::uint64_t> g_stunTransactionCounter{1};
-
 static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, int timeoutMs, StunEndpoint& mapped) {
     std::uint8_t request[STUN_HEADER_SIZE] = {};
     request[0] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST >> 8);
     request[1] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST & 0xFF);
     const std::uint32_t cookie = htonl(STUN_MAGIC_COOKIE);
     std::memcpy(request + 4, &cookie, sizeof(cookie));
-    const std::uint64_t seq = g_stunTransactionCounter.fetch_add(1, std::memory_order_relaxed);
-    for (std::size_t i = 0; i < STUN_TRANSACTION_ID_SIZE; ++i) {
-        request[8 + i] = static_cast<std::uint8_t>((seq * 0x9E3779B97F4A7C15ull >> ((i % 8) * 8)) ^ (i * 0x3Du));
-    }
+    HostEntropy_nid_no_patch(request + 8, STUN_TRANSACTION_ID_SIZE);
     const auto sent = sendto(descriptor, reinterpret_cast<const char*>(request), sizeof(request), 0,
                              reinterpret_cast<const sockaddr*>(&server), sizeof(server));
     if (sent != static_cast<int>(sizeof(request))) return false;
