@@ -97,6 +97,33 @@ static void CheckOption(const Ngs2SystemOption& option, int expected, const std:
     Require(allocations == 0);
 }
 
+static void CheckUnsupportedSchedulers() {
+    for (std::size_t slot = 0; slot < 4; ++slot) {
+        auto option = Option();
+        option.job_scheduler_options[slot] = 0x1000;
+        Ngs2ContextBufferInfo query{};
+        bool rejected = false;
+        try { sceNgs2SystemQueryBufferSize(&option, &query); }
+        catch (const std::runtime_error&) { rejected = true; }
+        Require(rejected && query.host_buffer_size == 0);
+        std::vector<std::uint64_t> storage(4096);
+        Ngs2ContextBufferInfo buffer{};
+        buffer.host_buffer = storage.data();
+        buffer.host_buffer_size = storage.size() * sizeof(std::uint64_t);
+        constexpr std::uintptr_t sentinel = 0x5a5a;
+        auto handle = sentinel;
+        rejected = false;
+        try { sceNgs2SystemCreate(&option, &buffer, &handle); }
+        catch (const std::runtime_error&) { rejected = true; }
+        Require(rejected && handle == sentinel);
+        const Ngs2BufferAllocator allocator{CountedAllocate, CountedRelease, 0};
+        rejected = false;
+        try { sceNgs2SystemCreateWithAllocator(&option, &allocator, &handle); }
+        catch (const std::runtime_error&) { rejected = true; }
+        Require(rejected && handle == sentinel && allocations == 0);
+    }
+}
+
 static void CheckQueryBuffer(const Ngs2SystemOption* option, int expected, const char* label) {
     constexpr uintptr_t userData = 0x1234;
     Ngs2ContextBufferInfo query;
@@ -226,8 +253,7 @@ static void CheckSystemOption() {
 
     auto scheduled = Option();
     for (auto& character : scheduled.name) character = 'n';
-    for (auto& pointer : scheduled.job_scheduler_options) pointer = 0x1000;
-    CheckOption(scheduled, SCE_NGS2_OK, "a name and job scheduler options");
+    CheckOption(scheduled, SCE_NGS2_OK, "a non-terminated name");
 
     const auto invalidRate = Option(512, 256, 7000);
     Status(sceNgs2SystemQueryBufferSize(&invalidRate, nullptr), outputError, "invalid option took precedence over the null output");
@@ -314,6 +340,7 @@ int main() {
         CheckCreateArguments();
         CheckResetOption();
         CheckSystemOption();
+        CheckUnsupportedSchedulers();
         CheckSetGrainSamples();
         CheckSetSampleRate();
         std::cout << "NGS2 PS5 handle errors and validation precedence checked\n";

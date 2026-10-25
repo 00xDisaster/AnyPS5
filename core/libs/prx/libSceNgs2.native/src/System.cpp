@@ -241,6 +241,9 @@ static int CheckSystemOption(const Ngs2SystemOption* option, Ngs2SystemOption& c
     if (!ValidGrainSamples(option->num_grain_samples, option->max_grain_samples)) return SCE_NGS2_ERROR_INVALID_NUM_GRAIN_SAMPLES;
     if (!ValidSampleRate(option->sample_rate)) return SCE_NGS2_ERROR_INVALID_SAMPLE_RATE;
     if (option->max_voice_channels < 1 || option->max_voice_channels > MAX_VOICE_CHANNELS) return SCE_NGS2_ERROR_INVALID_NUM_CHANNELS;
+    if (std::any_of(std::begin(option->job_scheduler_options), std::end(option->job_scheduler_options), [](std::uintptr_t scheduler) { return scheduler != 0; })) {
+        throw std::runtime_error("NGS2: external job-manager scheduling is not implemented");
+    }
     checked = *option;
     return SCE_NGS2_OK;
 }
