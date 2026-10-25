@@ -10,6 +10,7 @@
 #include <map>
 #include <optional>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 
 namespace Cli {
@@ -155,16 +156,26 @@ void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std
         bool Self;
     };
     std::vector<Found> found;
-    for (auto entry = std::filesystem::recursive_directory_iterator(modules.Root, std::filesystem::directory_options::skip_permission_denied); entry != std::filesystem::recursive_directory_iterator(); ++entry) {
-        if (entry->is_directory()) {
-            if (std::any_of(modules.Directories.begin(), modules.Directories.end(), [&](const auto& directory) { return SameDirectory(directory, entry->path()); })) entry.disable_recursion_pending();
+    std::error_code error;
+    for (auto entry = std::filesystem::recursive_directory_iterator(modules.Root, std::filesystem::directory_options::skip_permission_denied, error); !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        const bool directory = entry->is_directory(error);
+        if (error) {
+            error.clear();
             continue;
         }
-        if (!entry->is_regular_file()) continue;
+        if (directory) {
+            if (std::any_of(modules.Directories.begin(), modules.Directories.end(), [&](const auto& scanned) { return std::filesystem::equivalent(scanned, entry->path(), error) && !error; })) entry.disable_recursion_pending();
+            error.clear();
+            continue;
+        }
         const auto filename = FoldedName(Io::Utf8Path(entry->path().filename()), foldCase);
         if (Domain::ModuleSuffix(filename).empty()) continue;
         const auto stem = stems.find(std::string(ModuleStem(filename)));
         if (stem == stems.end()) continue;
+        if (!entry->is_regular_file(error) || error) {
+            error.clear();
+            continue;
+        }
         const auto header = TryReadCandidateHeader(entry->path());
         if (!header || (!header->Self && !(header->Elf && header->Type == 0xfe18))) continue;
         for (const auto& name : stem->second) found.push_back({entry->path().lexically_relative(modules.Root), name, header->Self});

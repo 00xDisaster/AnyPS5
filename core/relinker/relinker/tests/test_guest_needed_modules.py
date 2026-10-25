@@ -162,6 +162,27 @@ def check_needed_outside(relinker, work):
         finally:
             (case / "needed.prx").chmod(0o644)
 
+    if os.name != "nt":
+        case = work / "outside-loops"
+        (case / "sce_module").mkdir(parents=True)
+        (case / "Media").mkdir()
+        (case / "Media" / "needed.prx").write_bytes(sce_module)
+        os.symlink("loop", case / "loop")
+        os.symlink("needed.prx", case / "needed.prx")
+        os.symlink("missing.prx", case / "Media" / "needed.sprx")
+        (case / "Media" / "Nested").mkdir()
+        os.symlink("..", case / "Media" / "Nested" / "needed.suprx")
+        expected = [message + "needed.prx at Media/needed.prx; add --module-dir Media"]
+        assert convert(case) == expected
+        if os.geteuid() != 0:
+            (case / "locked").mkdir()
+            (case / "locked" / "needed.prx").write_bytes(sce_module)
+            (case / "locked").chmod(0)
+            try:
+                assert convert(case) == expected
+            finally:
+                (case / "locked").chmod(0o755)
+
 
 def main():
     relinker = Path(sys.argv[1]).resolve()
