@@ -967,6 +967,16 @@ int main() {
     Require(!std::filesystem::exists(std::filesystem::symlink_status(root / "junction-full")));
     Require(std::filesystem::is_regular_file(fullJunctionTarget / "inside.txt"));
     Require(std::filesystem::remove(fullJunctionTarget / "inside.txt") && std::filesystem::remove(fullJunctionTarget));
+    { std::ofstream out(root / "symlink-target.bin"); out << 'x'; }
+    const int madeLink = symlink_nid_postfix("symlink-target.bin", (root / "symlink-file").string().c_str());
+    if (madeLink == 0) {
+        Require(unlinkat_nid_postfix(base, "symlink-file", 0) == 0);
+        Require(!std::filesystem::exists(std::filesystem::symlink_status(root / "symlink-file")));
+        Require(std::filesystem::is_regular_file(root / "symlink-target.bin"));
+        Require(std::filesystem::remove(root / "symlink-target.bin"));
+    } else {
+        Require(std::filesystem::remove(root / "symlink-target.bin"));
+    }
 #endif
     Require(unlinkat_nid_postfix(base, "nonempty/f.bin", 0) == 0 && !std::filesystem::exists(root / "nonempty" / "f.bin"));
     Require(unlinkat_nid_postfix(base, "nonempty", 0x800) == 0 && !std::filesystem::exists(root / "nonempty"));

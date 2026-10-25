@@ -829,7 +829,7 @@ int APS5_VABI unlinkat_nid_postfix(int fd, const char* path, int flag) {
         }
 #ifdef _WIN32
         const DWORD attributes = GetFileAttributesW(native.c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
             std::string junctionTarget;
             if (File::WindowsSymbolicLink::ReadJunction(native, junctionTarget, "unlinkat")) {
                 if (RemoveDirectoryW(native.c_str()) == 0) return static_cast<int>(Fail(GuestEperm));
