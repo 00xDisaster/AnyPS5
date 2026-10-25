@@ -172,6 +172,123 @@ static void CheckFegetenv() {
     Require(threw);
 }
 
+template<typename Bits>
+struct ModfCase { Bits input, fraction, integral; unsigned flags; };
+
+template<typename Float, typename Bits, std::size_t Count, typename Call>
+static void CheckModfCases(const ModfCase<Bits> (&cases)[Count], Call call) {
+    std::fenv_t saved;
+    std::fegetenv(&saved);
+    const auto savedCsr = _mm_getcsr();
+    int* error = __error_nid_postfix();
+    const int savedError = *error;
+    const int rounding[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        for (unsigned denorm = 0; denorm < 4; ++denorm) {
+            const unsigned control = 0x1f80u | (mode << 13u) | ((denorm & 1u) != 0 ? 0x40u : 0u) | ((denorm & 2u) != 0 ? 0x8000u : 0u);
+            for (const unsigned sticky : {0u, 5u, 32u}) {
+                for (const auto& item : cases) {
+                    std::fesetenv(FE_DFL_ENV);
+                    std::fesetround(rounding[mode]);
+                    std::uint32_t environment[7];
+                    asm volatile("fnstenv %0" : "=m"(environment));
+                    environment[1] = (environment[1] & ~63u) | sticky;
+                    asm volatile("fldenv %0" : : "m"(environment));
+                    _mm_setcsr(control | sticky);
+                    const auto beforeControl = X87ControlWord();
+                    *error = 97;
+                    Float integral = 77;
+                    const auto fraction = std::bit_cast<Bits>(call(std::bit_cast<Float>(item.input), &integral));
+                    const auto integralBits = std::bit_cast<Bits>(integral);
+                    const auto csr = _mm_getcsr();
+                    const auto x87Status = X87StatusWord();
+                    const auto x87Control = X87ControlWord();
+                    if (fraction != item.fraction || integralBits != item.integral || csr != (control | sticky | item.flags) || (x87Status & 63u) != sticky || x87Control != beforeControl || *error != 97) {
+                        std::fprintf(stderr, "modf width=%zu input=%llx round=%u denorm=%u sticky=%u fraction=%llx integral=%llx csr=%x x87=%x\n", sizeof(Float), static_cast<unsigned long long>(item.input), mode, denorm, sticky, static_cast<unsigned long long>(fraction), static_cast<unsigned long long>(integralBits), csr, x87Status);
+                        Require(false);
+                    }
+                }
+            }
+        }
+    }
+    std::fesetenv(&saved);
+    _mm_setcsr(savedCsr);
+    *error = savedError;
+}
+
+static void CheckModfDecomposition() {
+    constexpr ModfCase<std::uint64_t> doubles[] = {
+        {0x00000000ull, 0x00000000ull, 0x0000000000000000ull, 0u},
+        {0x8000000000000000ull, 0x8000000000000000ull, 0x8000000000000000ull, 0u},
+        {0x00000001ull, 0x00000001ull, 0x0000000000000000ull, 0u},
+        {0x8000000000000001ull, 0x8000000000000001ull, 0x8000000000000000ull, 0u},
+        {0xfffffffffffffull, 0xfffffffffffffull, 0x0000000000000000ull, 0u},
+        {0x800fffffffffffffull, 0x800fffffffffffffull, 0x8000000000000000ull, 0u},
+        {0x10000000000000ull, 0x10000000000000ull, 0x0000000000000000ull, 0u},
+        {0x8010000000000000ull, 0x8010000000000000ull, 0x8000000000000000ull, 0u},
+        {0x3fe0000000000000ull, 0x3fe0000000000000ull, 0x0000000000000000ull, 0u},
+        {0x3ff0000000000000ull, 0x00000000ull, 0x3ff0000000000000ull, 0u},
+        {0xbff0000000000000ull, 0x8000000000000000ull, 0xbff0000000000000ull, 0u},
+        {0x4028000000000000ull, 0x00000000ull, 0x4028000000000000ull, 0u},
+        {0x7fefffffffffffffull, 0x00000000ull, 0x7fefffffffffffffull, 0u},
+        {0xffefffffffffffffull, 0x8000000000000000ull, 0xffefffffffffffffull, 0u},
+        {0x7ff0000000000000ull, 0x00000000ull, 0x7ff0000000000000ull, 0u},
+        {0xfff0000000000000ull, 0x8000000000000000ull, 0xfff0000000000000ull, 0u},
+        {0x7ff0000000000001ull, 0x7ff0000000000001ull, 0x7ff0000000000001ull, 0u},
+        {0xfff0000000000001ull, 0xfff0000000000001ull, 0xfff0000000000001ull, 0u},
+        {0x7ff8000000001234ull, 0x7ff8000000001234ull, 0x7ff8000000001234ull, 0u},
+        {0xfff8000000001234ull, 0xfff8000000001234ull, 0xfff8000000001234ull, 0u},
+        {0x3ff4000000000000ull, 0x3fd0000000000000ull, 0x3ff0000000000000ull, 0u},
+        {0xbff4000000000000ull, 0xbfd0000000000000ull, 0xbff0000000000000ull, 0u},
+        {0x3ff8000000000000ull, 0x3fe0000000000000ull, 0x3ff0000000000000ull, 0u},
+        {0xbff8000000000000ull, 0xbfe0000000000000ull, 0xbff0000000000000ull, 0u},
+        {0x4006000000000000ull, 0x3fe8000000000000ull, 0x4000000000000000ull, 0u},
+        {0xc006000000000000ull, 0xbfe8000000000000ull, 0xc000000000000000ull, 0u},
+        {0x3fe8000000000000ull, 0x3fe8000000000000ull, 0x0000000000000000ull, 0u},
+        {0xbfe8000000000000ull, 0xbfe8000000000000ull, 0x8000000000000000ull, 0u},
+        {0x3fffffffffffffffull, 0x3feffffffffffffeull, 0x3ff0000000000000ull, 0u},
+        {0xbfffffffffffffffull, 0xbfeffffffffffffeull, 0xbff0000000000000ull, 0u},
+        {0x4320000000000001ull, 0x3fe0000000000000ull, 0x4320000000000000ull, 0u},
+        {0xc320000000000001ull, 0xbfe0000000000000ull, 0xc320000000000000ull, 0u},
+    };
+    constexpr ModfCase<std::uint32_t> floats[] = {
+        {0x00000000u, 0x00000000u, 0x00000000u, 0u},
+        {0x80000000u, 0x80000000u, 0x80000000u, 0u},
+        {0x00000001u, 0x00000001u, 0x00000000u, 0u},
+        {0x80000001u, 0x80000001u, 0x80000000u, 0u},
+        {0x007fffffu, 0x007fffffu, 0x00000000u, 0u},
+        {0x807fffffu, 0x807fffffu, 0x80000000u, 0u},
+        {0x00800000u, 0x00800000u, 0x00000000u, 0u},
+        {0x80800000u, 0x80800000u, 0x80000000u, 0u},
+        {0x3f000000u, 0x3f000000u, 0x00000000u, 0u},
+        {0x3f800000u, 0x00000000u, 0x3f800000u, 0u},
+        {0xbf800000u, 0x80000000u, 0xbf800000u, 0u},
+        {0x41400000u, 0x00000000u, 0x41400000u, 0u},
+        {0x7f7fffffu, 0x00000000u, 0x7f7fffffu, 0u},
+        {0xff7fffffu, 0x80000000u, 0xff7fffffu, 0u},
+        {0x7f800000u, 0x00000000u, 0x7f800000u, 0u},
+        {0xff800000u, 0x80000000u, 0xff800000u, 0u},
+        {0x7f800001u, 0x7f800001u, 0x7f800001u, 1u},
+        {0xff800001u, 0xff800001u, 0xff800001u, 1u},
+        {0x7fc01234u, 0x7fc01234u, 0x7fc01234u, 0u},
+        {0xffc01234u, 0xffc01234u, 0xffc01234u, 0u},
+        {0x3fa00000u, 0x3e800000u, 0x3f800000u, 0u},
+        {0xbfa00000u, 0xbe800000u, 0xbf800000u, 0u},
+        {0x3fc00000u, 0x3f000000u, 0x3f800000u, 0u},
+        {0xbfc00000u, 0xbf000000u, 0xbf800000u, 0u},
+        {0x40300000u, 0x3f400000u, 0x40000000u, 0u},
+        {0xc0300000u, 0xbf400000u, 0xc0000000u, 0u},
+        {0x3f400000u, 0x3f400000u, 0x00000000u, 0u},
+        {0xbf400000u, 0xbf400000u, 0x80000000u, 0u},
+        {0x3fffffffu, 0x3f7ffffeu, 0x3f800000u, 0u},
+        {0xbfffffffu, 0xbf7ffffeu, 0xbf800000u, 0u},
+        {0x4a800001u, 0x3f000000u, 0x4a800000u, 0u},
+        {0xca800001u, 0xbf000000u, 0xca800000u, 0u},
+    };
+    CheckModfCases<double>(doubles, modf_nid_postfix);
+    CheckModfCases<float>(floats, modff_nid_postfix);
+}
+
 static bool ExtendedBits(long double value, std::uint64_t mantissa, std::uint16_t signExponent) {
     unsigned char bytes[sizeof(long double)]{};
     std::memcpy(bytes, &value, sizeof(value));
@@ -1704,6 +1821,7 @@ int main() {
     Require(*__error_nid_postfix() == 34);
     Require(strtold_nid_postfix("1.0000000000000000001!", &end) > 1.L && *end == '!');
     CheckNanConversions();
+    CheckModfDecomposition();
     Require(fmodf_nid_postfix(5.5f, 2.f) == 1.5f);
     Require(fmodf_nid_postfix(-5.5f, 2.f) == -1.5f);
     Require(std::signbit(fmodf_nid_postfix(-4.f, 2.f)));

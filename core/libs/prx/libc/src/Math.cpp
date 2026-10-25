@@ -1338,8 +1338,43 @@ double APS5_VABI nan_nid_postfix(const char* tagp) {
     return std::bit_cast<double>(0x7ff8000000000000ull);
 }
 
-double APS5_VABI modf_nid_postfix(double x, double* integral) { return std::modf(x, integral); }
-float APS5_VABI modff_nid_postfix(float x, float* integral) { return std::modf(x, integral); }
+double APS5_VABI modf_nid_postfix(double x, double* integral) {
+    const auto bits = std::bit_cast<std::uint64_t>(x);
+    const auto exponent = (bits >> 52u) & 0x7ffull;
+    const auto zero = std::bit_cast<double>(bits & 0x8000000000000000ull);
+    if (exponent < 1023u) {
+        *integral = zero;
+        return x;
+    }
+    if (exponent >= 1075u) {
+        *integral = x;
+        return exponent == 0x7ffu && (bits & 0xfffffffffffffull) != 0 ? x : zero;
+    }
+    const auto mask = (std::uint64_t{1} << (1075u - exponent)) - 1u;
+    *integral = std::bit_cast<double>(bits & ~mask);
+    return (bits & mask) == 0 ? zero : x - *integral;
+}
+float APS5_VABI modff_nid_postfix(float x, float* integral) {
+    const auto bits = std::bit_cast<std::uint32_t>(x);
+    const auto exponent = (bits >> 23u) & 0xffu;
+    const auto zero = std::bit_cast<float>(bits & 0x80000000u);
+    if (exponent < 127u) {
+        *integral = zero;
+        return x;
+    }
+    if (exponent >= 150u) {
+        *integral = x;
+        if (exponent == 0xffu && (bits & 0x7fffffu) != 0) {
+            volatile int unordered = _mm_ucomieq_ss(_mm_set_ss(x), _mm_setzero_ps());
+            (void)unordered;
+            return x;
+        }
+        return zero;
+    }
+    const auto mask = (std::uint32_t{1} << (150u - exponent)) - 1u;
+    *integral = std::bit_cast<float>(bits & ~mask);
+    return (bits & mask) == 0 ? zero : x - *integral;
+}
 double APS5_VABI tanh_nid_postfix(double x) {
     static volatile double tiny = 1.0e-300;
     const double huge = 1.0e300;
