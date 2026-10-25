@@ -1,3 +1,4 @@
+#include "prx/libSceHttpCache/libSceHttpCache.hpp"
 #include <array>
 #include <cerrno>
 #include <cstdint>
@@ -16,44 +17,6 @@
 #include <vector>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
-
-struct HttpCacheHeader {
-    const char* name;
-    const char* value;
-};
-
-struct HttpCacheRequest {
-    std::uint32_t method;
-    std::uint32_t reserved;
-    const char* url;
-    std::size_t headerCount;
-    const HttpCacheHeader* headers;
-};
-
-struct HttpCacheResponseHeader {
-    std::uint32_t statusCode;
-    std::uint32_t reserved;
-    std::size_t headerCount;
-    const HttpCacheHeader* headers;
-};
-
-struct HttpCacheResponse {
-    std::uint32_t statusCode;
-    std::uint32_t reserved;
-    std::size_t headerCount;
-    const HttpCacheHeader* headers;
-    std::uint64_t contentLength;
-};
-
-struct HttpCacheQuotaEntry {
-    const char* name;
-    std::uint64_t size;
-};
-
-struct HttpCacheQuota {
-    std::size_t count;
-    const HttpCacheQuotaEntry* entries;
-};
 
 static_assert(sizeof(HttpCacheHeader) == 16);
 static_assert(sizeof(HttpCacheRequest) == 32);
