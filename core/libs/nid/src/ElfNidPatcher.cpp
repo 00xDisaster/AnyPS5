@@ -400,7 +400,19 @@ void ElfNidPatcher::PatchNids(std::vector<std::uint8_t>& elf, const std::string&
             throw std::runtime_error("unsupported .gnu.version_d section: symbol version definitions cannot be preserved");
     }
 
-    if (options.executable && dynSymOffset == 0u && !hasDynamic) return;
+    if (options.executable && dynSymOffset == 0u && !hasDynamic) {
+        if (ehdr.e_phnum) {
+            if (!ehdr.e_phoff || ehdr.e_phentsize != sizeof(Elf64_Phdr) || ehdr.e_phnum == 0xffffu)
+                throw std::runtime_error("unsupported ELF program header layout");
+            RequireElfRange(elf, ehdr.e_phoff, std::uint64_t{ehdr.e_phnum} * sizeof(Elf64_Phdr), "program headers");
+            for (std::uint16_t index = 0u; index < ehdr.e_phnum; ++index) {
+                const auto segment = Read<Elf64_Phdr>(elf, ehdr.e_phoff + index * sizeof(Elf64_Phdr));
+                if (segment.p_type == 2u)
+                    throw std::runtime_error("unsupported ELF PT_DYNAMIC without a .dynsym section");
+            }
+        }
+        return;
+    }
     if (dynSymOffset == 0u) throw std::runtime_error("no .dynsym section");
 
     const std::size_t symCount = dynSymSize / sizeof(Elf64_Sym);

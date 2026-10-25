@@ -351,6 +351,31 @@ class ExecutableImportTests(unittest.TestCase):
             result = subprocess.run([str(PATCHER), "--exec", str(path)], capture_output=True, text=True, timeout=20)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_elf_without_sections_rejects_dynamic_segment_without_writing(self):
+        image = self.elf()
+        struct.pack_into("<Q", image, 40, 0)
+        struct.pack_into("<HH", image, 60, 0, 0)
+        for flags in ([], ["--only-sce"]):
+            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "program"
+                path.write_bytes(image)
+                result = subprocess.run([str(PATCHER), "--exec", *flags, str(path)], capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("PT_DYNAMIC without a .dynsym section", result.stderr)
+                self.assertEqual(path.read_bytes(), image)
+
+    def test_elf_without_sections_or_dynamic_segment_is_unchanged(self):
+        image = self.elf()
+        struct.pack_into("<Q", image, 40, 0)
+        struct.pack_into("<HH", image, 60, 0, 0)
+        struct.pack_into("<H", image, 56, 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "program"
+            path.write_bytes(image)
+            result = subprocess.run([str(PATCHER), "--exec", str(path)], capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(path.read_bytes(), image)
+
     def test_elf_short_imports_grow_without_overwriting_bss(self):
         from test_symbol_versions import sections
         self.names = ["a", "b", "c", "d"]
