@@ -99,7 +99,7 @@ if(ANYPS5_ENABLE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address)
     add_compile_definitions(ANYPS5_ENABLE_ASAN=1)
-elseif(NOT APPLE)
+elseif(NOT APPLE AND NOT ANYPS5_ENABLE_TSAN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
 endif()
 
