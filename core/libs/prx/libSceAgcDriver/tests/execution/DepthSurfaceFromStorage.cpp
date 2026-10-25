@@ -1,5 +1,6 @@
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/GuestArena.hpp"
@@ -19,10 +20,19 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+namespace AgcDriver {
+
+struct VulkanDeviceTestAccess {
+    static Graphics::Context ContextOf(const VulkanDevice& device) { return device.graphicsContext(); }
+};
+
+}
 
 namespace {
 
@@ -99,13 +109,13 @@ std::uint64_t Address(const std::uint8_t* plane) {
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(plane));
 }
 
-std::array<std::uint32_t, 8> StorageView(std::uint64_t address, std::uint32_t format, std::uint32_t layers) {
+std::array<std::uint32_t, 8> StorageView(std::uint64_t address, std::uint32_t format, std::uint32_t layers, std::uint32_t baseLevel = 0, std::uint32_t lastLevel = 0) {
     return {
         static_cast<std::uint32_t>(address >> 8u),
         static_cast<std::uint32_t>((address >> 40u) & 0xffu) | (format << 20u) | (((Width - 1u) & 3u) << 30u),
         ((Width - 1u) >> 2u) | ((Height - 1u) << 14u),
-        0xfacu | (TileDepth64KB << 20u) | ((layers > 1u ? Type2DArray : Type2D) << 28u),
-        layers - 1u, 0u, 0u, 0u,
+        0xfacu | (baseLevel << 12u) | (lastLevel << 16u) | (TileDepth64KB << 20u) | ((layers > 1u ? Type2DArray : Type2D) << 28u),
+        layers - 1u, lastLevel << 4u, 0u, 0u,
     };
 }
 
@@ -119,9 +129,9 @@ void Fill(std::uint8_t* plane, VkFormat format) {
     for (std::size_t offset = 0; offset < PlaneBytes; offset += sizeof(quarter)) std::memcpy(plane + offset, &quarter, sizeof(quarter));
 }
 
-void StoreRow(AgcDriver::VulkanDevice& device, std::uint8_t* plane, VkFormat format, std::uint32_t layers) {
+void StoreRow(AgcDriver::VulkanDevice& device, std::uint8_t* plane, VkFormat format, std::uint32_t layers, std::uint32_t level = 0) {
     std::vector<std::uint32_t> userData(16, 0u);
-    const auto view = StorageView(Address(plane), format == VK_FORMAT_D16_UNORM ? Format16Unorm : Format32Float, layers);
+    const auto view = StorageView(Address(plane), format == VK_FORMAT_D16_UNORM ? Format16Unorm : Format32Float, layers, level, level);
     std::copy(view.begin(), view.end(), userData.begin() + 4);
     const std::span<const std::uint32_t> code = layers > 1u ? std::span<const std::uint32_t>(StoreRowLayerCode) : std::span<const std::uint32_t>(StoreRowCode);
     const std::array<ShaderRecompiler::MemoryRegion, 1> memory{{{reinterpret_cast<std::uintptr_t>(code.data()), std::as_bytes(code)}}};
@@ -163,6 +173,28 @@ void NewSurfaceCase(AgcDriver::VulkanDevice& device, const DepthFastClearHarness
     RequireCount(DepthFastClearHarness::Draw(device, shaders, Plane(plane, format), {}), RowPasses, what);
 }
 
+void PendingChainCase(AgcDriver::VulkanDevice& device, const DepthFastClearHarness::Shaders& shaders, std::uint8_t* plane) {
+    Fill(plane, VK_FORMAT_D32_SFLOAT);
+    StoreRow(device, plane, VK_FORMAT_D32_SFLOAT, 1, 1);
+    AgcDriver::Graphics::StorageTexture::FlushPending(Address(plane), PlaneBytes, nullptr, "test");
+    device.WaitIdle();
+    Require(AgcDriver::Graphics::StorageTexture::FindLive(Address(plane), PlaneBytes) != nullptr, "the two-level chain's storage image is not held after its first write was flushed");
+    static_cast<void>(DepthFastClearHarness::Draw(device, shaders, Plane(plane, VK_FORMAT_D32_SFLOAT), {}));
+    Require(AgcDriver::Graphics::DepthSurfaceAt(Address(plane)), "the drawn depth surface is not live");
+    StoreRow(device, plane, VK_FORMAT_D32_SFLOAT, 1, 1);
+    Require(AgcDriver::Graphics::StorageTexture::FindPending(Address(plane), 1) != nullptr, "level 1 of a two-level chain over the depth plane is not pending in a storage image");
+    const auto words = StorageView(Address(plane), Format32Float, 1, 0, 1);
+    const auto resource = AgcDriver::Graphics::DecodeTextureResource(words);
+    std::shared_ptr<AgcDriver::Graphics::Texture> texture;
+    try {
+        texture = AgcDriver::Graphics::DepthSurfaceTexture(AgcDriver::VulkanDeviceTestAccess::ContextOf(device), words, resource, {});
+    } catch (const std::runtime_error& error) {
+        Require(false, std::string("a two-level view of a depth plane that a pending storage write covers was refused: ") + error.what());
+    }
+    Require(texture == nullptr, "a two-level view of a depth plane that a pending storage write covers was served from the depth plane");
+    Require(!AgcDriver::Graphics::DepthSurfaceAt(Address(plane)), "a pending storage write over the depth plane, then a two-level view: the depth surface stayed live");
+}
+
 }
 
 int main() {
@@ -190,6 +222,7 @@ int main() {
         StoreRow(*device, stenciled, VK_FORMAT_D32_SFLOAT, 1);
         RequireCount(DepthFastClearHarness::Draw(*device, shaders, depthStencil, {}), RowPasses, "a new D32S8 depth surface over a pending R32F storage write");
         RequireCount(DepthFastClearHarness::Draw(*device, shaders, depthStencil, {.depthTest = false, .stencilTest = true, .stencil = equalZero}), Covered, "the stencil plane of a new D32S8 depth surface that took a storage write, tested EQUAL to its clear value 0");
+        PendingChainCase(*device, shaders, block.Plane(8));
 
         if (!failures.empty()) {
             std::string text;
