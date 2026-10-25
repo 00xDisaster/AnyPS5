@@ -1,0 +1,5 @@
+# libSceIcu technical debt
+
+### Functional
+
+- [Invariant character and version helpers](../../../core/libs/prx/libSceIcu/Version.cpp) are unverified on the console. `u_charsToUChars`, `u_UCharsToChars`, `u_versionFromString`, `u_versionFromUString` and `u_versionToString` follow ICU 68.2 [uinvchar.cpp](https://github.com/unicode-org/icu/blob/release-68-2/icu4c/source/common/uinvchar.cpp) and [putil.cpp](https://github.com/unicode-org/icu/blob/release-68-2/icu4c/source/common/putil.cpp), unchanged from 65.1 to 78.1; the [PS5 3.20 export table](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceIcu.c) has `uloc_openAvailableByType` (ICU 65) and lacks `ubrk_clone` (ICU 69). Version parts are parsed with the guest `strtoul` and truncated to eight bits; `u_versionToString` keeps ICU's dropped zero tens digit (105 is written as `15`). A null buffer with a positive conversion length throws where ICU dereferences it. Closes when: compared with the console.
