@@ -571,6 +571,13 @@ std::shared_ptr<Socket> Find(int descriptor) {
     const auto found = sockets.find(descriptor);
     return found != sockets.end() ? found->second : nullptr;
 }
+std::vector<int> DescriptorsOf(const std::shared_ptr<Socket>& socket) {
+    std::lock_guard lock(socketsMutex);
+    std::vector<int> descriptors;
+    for (const auto& [descriptor, entry] : sockets)
+        if (entry == socket) descriptors.push_back(descriptor);
+    return descriptors;
+}
 constexpr short GuestPollReadable = 0x1 | 0x40;
 constexpr short GuestPollWritable = 0x4;
 constexpr short GuestPollVnodeReady = GuestPollReadable | GuestPollWritable;
@@ -1413,7 +1420,8 @@ int APS5_VABI shutdown_nid_postfix(int descriptor, int how) {
         if (how != 1) socket->receiveShut = true;
         if (how != 0) socket->sendShut = true;
     }
-    if (how != 1) EqueueDescriptorReadShut(descriptor);
+    if (how != 1)
+        for (const int alias : DescriptorsOf(socket)) EqueueDescriptorReadShut(alias);
     return unconnected ? Fail(57) : 0;
 }
 int APS5_VABI getsockname_nid_postfix(int descriptor, void* address, std::uint32_t* length) {
