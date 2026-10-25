@@ -1,3 +1,4 @@
+#include "prx/libScePosixForWebKit/libScePosixForWebKit.hpp"
 #include "prx/libScePosixForWebKit/GuestResolver.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
@@ -7,10 +8,6 @@
 #include <cstring>
 #include <limits>
 
-extern "C" {
-int APS5_VABI getaddrinfo_nid_postfix(const char*, const char*, const GuestResolver::AddressInfo*, GuestResolver::AddressInfo**);
-void APS5_VABI freeaddrinfo_nid_postfix(GuestResolver::AddressInfo*);
-}
 
 namespace {
 
