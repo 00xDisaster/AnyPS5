@@ -84,12 +84,18 @@ int main() {
         Require(Efault(setitimer_nid_postfix(0, zeroTimerValue, badTimer)));
         *__error_nid_postfix() = 0;
         Require(Efault(setitimer_nid_postfix(0, badTimer, timerValid)));
+        *__error_nid_postfix() = 0;
+        Require(Efault(getitimer_nid_postfix(1, badTimer)));
+        *__error_nid_postfix() = 0;
+        Require(Efault(setitimer_nid_postfix(1, zeroTimerValue, badTimer)));
         Require(sceKernelGettimeofday(badTime) == KernelEfault);
         Require(sceKernelGettimezone(badZone) == KernelEfault);
     }
     Require(gettimeofday_nid_postfix(timeValid, zoneValid) == 0);
     Require(getitimer_nid_postfix(0, timerValid) == 0);
     Require(setitimer_nid_postfix(0, zeroTimerValue, timerValid) == 0);
+    Require(getitimer_nid_postfix(1, timerValid) == 0);
+    Require(setitimer_nid_postfix(1, zeroTimerValue, timerValid) == 0);
     GuestItimerval armed{};
     armed.value.tv_sec = 3600;
     *__error_nid_postfix() = 0;
