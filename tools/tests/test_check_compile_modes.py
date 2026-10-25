@@ -110,17 +110,6 @@ class CheckCompileModeTests(unittest.TestCase):
     def test_trailing_preprocessing_mode_still_checks_syntax(self):
         self.check_modes((("-E",),), trailing=True)
 
-    def test_nested_response_modes_preserve_mode_named_include_directories(self):
-        def configure(root, build, source):
-            directory = build / "-E"
-            directory.mkdir()
-            (directory / "nested_header.h").write_text("#define FROM_RESPONSE 1\n", encoding="utf-8")
-            (build / "inner.rsp").write_text("-I -E", encoding="utf-8")
-            response = build / "outer flags.rsp"
-            response.write_text("@inner.rsp -E -P", encoding="utf-8")
-            return ["@" + str(response)], '#include "nested_header.h"\n#ifndef FROM_RESPONSE\n#error include lost\n#endif\n', ""
-        self.check_modes(((),), configure=configure)
-
     def test_comment_output_modes_still_check_syntax(self):
         self.check_modes((("-Werror", "-E", "-C"), ("-Werror", "-E", "-CC")))
 
@@ -163,12 +152,51 @@ class CheckCompileModeTests(unittest.TestCase):
                     if expected:
                         self.assertIn("positional_syntax_error", result.stderr)
 
+    def check_forwarded_options(self, variants):
+        compiler = self.compilers(("clang",))[0]
+        for flags in variants:
+            for field in ("arguments", "command"):
+                for text in ("int value;\n", "int forwarded_syntax_error = ;\n"):
+                    with self.subTest(flags=flags, field=field, text=text), tempfile.TemporaryDirectory(prefix="syntax forwarded ") as name:
+                        root = Path(name).resolve()
+                        build = root / "build"
+                        build.mkdir()
+                        source = root / "unit.c"
+                        source.write_text(text, encoding="utf-8")
+                        object_file, dependency_file = build / "unit.o", build / "unit.d"
+                        object_file.write_bytes(b"existing object output\n")
+                        dependency_file.write_bytes(b"existing dependency output\n")
+                        arguments = [compiler, *flags, "-c", str(source), "-o", str(object_file), "-MF", str(dependency_file)]
+                        result = self.run_tool(root, build, source, arguments, field)
+                        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                        self.assertIn("unsupported forwarded compiler option", result.stderr)
+
+    def test_forwarded_clang_actions_are_rejected(self):
+        self.check_forwarded_options((("-Xclang", "-E"), ("-Xclang=-E",), ("-Xclang", "-emit-obj")))
+
+    def test_forwarded_preprocessor_actions_are_rejected(self):
+        self.check_forwarded_options((("-Xpreprocessor", "-E"), ("-Xpreprocessor", "-M")))
+
+    def test_comma_forwarded_preprocessor_actions_are_rejected(self):
+        self.check_forwarded_options((("-Wp,-E",), ("-Wp,-E,-P",)))
+
     def test_include_directory_values_can_look_like_modes(self):
         def configure(root, build, source):
             directory = build / "-E"
             directory.mkdir()
             (directory / "only_here.h").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
             return ["-I", "-E"], '#include "only_here.h"\n#ifndef FROM_INCLUDE\n#error include lost\n#endif\n', ""
+        self.check_modes(((),), configure=configure)
+
+    def test_forwarded_macro_options_are_preserved(self):
+        self.check_modes((("-Wp,-DOTHER=1,-UUNUSED",),))
+
+    def test_forwarded_include_operands_can_look_like_modes(self):
+        def configure(root, build, source):
+            directory = build / "-E"
+            directory.mkdir()
+            (directory / "forwarded.h").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
+            return ["-Wp,-I,-E"], '#include "forwarded.h"\n#ifndef FROM_INCLUDE\n#error include lost\n#endif\n', ""
         self.check_modes(((),), configure=configure)
 
     def test_library_directory_values_can_look_like_modes(self):
@@ -236,6 +264,18 @@ class CheckCompileModeTests(unittest.TestCase):
                 result = self.run_tool(root, build, source, arguments, field)
                 self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
                 self.assertIn("unknown operand count", result.stderr)
+
+
+    def test_nested_response_modes_preserve_mode_named_include_directories(self):
+        def configure(root, build, source):
+            directory = build / "-E"
+            directory.mkdir()
+            (directory / "nested_header.h").write_text("#define FROM_RESPONSE 1\n", encoding="utf-8")
+            (build / "inner.rsp").write_text("-I -E", encoding="utf-8")
+            response = build / "outer flags.rsp"
+            response.write_text("@inner.rsp -E -P", encoding="utf-8")
+            return ["@" + str(response)], '#include "nested_header.h"\n#ifndef FROM_RESPONSE\n#error include lost\n#endif\n', ""
+        self.check_modes(((),), configure=configure)
 
 
 if __name__ == "__main__":

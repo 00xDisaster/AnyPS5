@@ -233,6 +233,17 @@ def preprocessor_arguments(argument):
     return "-Wp," + ",".join(kept) if kept else None
 
 
+def validate_preprocessor_arguments(argument):
+    options = iter(argument[4:].split(","))
+    for option in options:
+        if option in ("-D", "-U", "-I", "-F", "-include", "--include", "-imacros", "--imacros",
+                      "-isystem", "-iquote", "-idirafter", "-isysroot"):
+            if not next(options, None):
+                raise ValueError(f"missing operand for {option} in {argument}")
+        elif not (option.startswith(("-D", "-U", "-I", "-F")) and len(option) > 2):
+            raise ValueError(f"unsupported forwarded compiler option {option} in {argument}")
+
+
 def syntax_arguments(arguments, directory, source):
     validate_arguments(arguments)
     if any(argument.startswith("@") for argument in arguments[1:]):
@@ -255,6 +266,8 @@ def syntax_arguments(arguments, directory, source):
             trimmed.append(argument)
             index += 1
             continue
+        if not positional and (argument in ("-Xclang", "-Xpreprocessor") or argument.startswith(("-Xclang=", "-Xpreprocessor="))):
+            raise ValueError(f"unsupported forwarded compiler option {argument}")
         if not positional and argument in (*DROP_WITH_VALUE, *WITH_VALUE):
             if index + 1 == len(arguments):
                 raise ValueError(f"missing operand for {argument}")
@@ -264,6 +277,7 @@ def syntax_arguments(arguments, directory, source):
             continue
         if not positional and argument.startswith("-Wp,"):
             if forwarded := preprocessor_arguments(argument):
+                validate_preprocessor_arguments(forwarded)
                 trimmed.append(forwarded)
             index += 1
             continue
