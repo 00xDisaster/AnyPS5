@@ -259,6 +259,8 @@ int APS5_VABI sceVideoOutUnregisterBuffers(int handle, int setIndex) try {
     if (!cfg->groups[setIndex].occupied) {
         throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_INDEX");
     }
+    const auto shown = cfg->flipStatus.currentBuffer;
+    if (shown >= 0 && shown < VIDEO_OUT_BUFFER_NUM_MAX && cfg->buffers[shown].groupIndex == setIndex) return VIDEO_OUT_ERROR_RESOURCE_BUSY;
     for (int i = 0; i < VIDEO_OUT_BUFFER_NUM_MAX; ++i) {
         if (cfg->buffers[i].groupIndex == setIndex && cfg->bufferPending[i] != 0) throw std::runtime_error("VideoOut: cannot unregister a buffer with a pending flip");
     }
