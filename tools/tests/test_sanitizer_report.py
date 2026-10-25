@@ -148,6 +148,47 @@ class SanitizerReportTests(unittest.TestCase):
         text, _ = sanitizer_report.summarize("ASan", {"fiber": "failed"}, {"fiber": "stack switch"})
         self.assertNotIn("Listed as known but", text)
 
+    def test_first_report_prefers_the_summary_then_the_error_then_a_runtime_error(self):
+        asan = ("==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60d0\n"
+                "READ of size 16\n"
+                "SUMMARY: AddressSanitizer: heap-buffer-overflow (/build/tests/x+0x12) in Inspect\n")
+        self.assertEqual(sanitizer_report.first_report(asan),
+                         "SUMMARY: AddressSanitizer: heap-buffer-overflow (/build/tests/x+0x12) in Inspect")
+        self.assertEqual(sanitizer_report.first_report("==7==ERROR: LeakSanitizer: detected memory leaks\n"),
+                         "ERROR: LeakSanitizer: detected memory leaks")
+        self.assertEqual(sanitizer_report.first_report("WARNING: ThreadSanitizer: data race (pid=9)\n"),
+                         "WARNING: ThreadSanitizer: data race (pid=9)")
+        self.assertEqual(sanitizer_report.first_report("start\n/src/Copy.cpp:35:16: runtime error: null pointer passed as argument 2\n"),
+                         "/src/Copy.cpp:35:16: runtime error: null pointer passed as argument 2")
+        self.assertEqual(sanitizer_report.first_report("FAIL: plain assertion\n"), "")
+
+    def test_first_report_is_shortened(self):
+        report = sanitizer_report.first_report("SUMMARY: AddressSanitizer: " + "x" * 400)
+        self.assertEqual(len(report), sanitizer_report.REPORT_LENGTH)
+        self.assertTrue(report.endswith("..."))
+
+    def test_failed_tests_show_their_first_report(self):
+        junit = self.write(suite(
+            case("overread", "fail", '<failure message=""/><system-out>SUMMARY: AddressSanitizer: heap-buffer-overflow in A|B</system-out>'),
+            case("plain", "fail", '<failure message=""/><system-out>FAIL: assertion</system-out>'),
+            case("ub", "fail", '<failure message=""/><system-err>/a.cpp:1:2: runtime error: shift exponent 64</system-err>'),
+        ))
+        self.assertEqual(sanitizer_report.reports(junit), {
+            "overread": "SUMMARY: AddressSanitizer: heap-buffer-overflow in A|B",
+            "ub": "/a.cpp:1:2: runtime error: shift exponent 64",
+        })
+        code, stdout, _ = self.run_main(junit)
+        self.assertEqual(code, 1)
+        self.assertIn("| Failed test | First sanitizer report |\n| - | - |\n"
+                      "| `overread` | SUMMARY: AddressSanitizer: heap-buffer-overflow in A\\|B |\n"
+                      "| `plain` |  |\n"
+                      "| `ub` | /a.cpp:1:2: runtime error: shift exponent 64 |\n", stdout)
+
+    def test_failed_tests_without_reports_keep_the_single_column_table(self):
+        code, stdout, _ = self.run_main(self.write(suite(case("plain", "fail", '<failure message=""/><system-out>FAIL</system-out>'))))
+        self.assertEqual(code, 1)
+        self.assertIn("| Failed test |\n| - |\n| `plain` |\n", stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
