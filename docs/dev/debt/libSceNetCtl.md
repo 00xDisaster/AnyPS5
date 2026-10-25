@@ -1,9 +1,5 @@
 # libSceNetCtl technical debt
 
-### Functional
-
-- [sceNetCtlGetNatInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - answers from the host IPv4 interface: reports STUN status OK (2), NAT type 2 (moderate), and the host's IPv4 address as the mapped address when connected, or `SCE_NET_CTL_ERROR_NOT_CONNECTED` (`0x80412108`) when no interface is available. Actual STUN server discovery against PlayStation network infrastructure is not performed.
-
 ### Unknown function info
 
 - [sceNetCtlScanIpcInt](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - argument registers and IPC transfer directions are recovered for the info, connection, scan, NAT, bandwidth and Wi-Fi queries. The connection configuration is 1464 bytes, scan options 88, BSSID output 96, scan info 112, IPv6 info 256, internal NAT info 196, bandwidth info 32, bandwidth-estimation info 28 and Wi-Fi info 48. Their field semantics still require the receiving service; incomplete declarations preserve this gap. Scan queries transfer a six-byte BSSID and use a 64-bit in/out buffer size.
@@ -22,3 +18,4 @@
 - [sceNetCtlGetInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) finds the host's default route in `/proc/net/route` on Linux and, on macOS, in the routing table read with `sysctl(NET_RT_FLAGS, RTF_GATEWAY)`, where an interface-scoped default route ranks after the unscoped one
 - [sceNetCtlGetIfStat](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) throws on macOS: an unprivileged process reads the interface byte counters (`getifaddrs` and `sysctl(NET_RT_IFLIST2)` alike) reduced to their low 32 bits, so a total would wrap every 4 GiB
 - [Host interface cache](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - on Windows, `sceNetCtlGetState`, `sceNetCtlGetStateV6`, `sceNetCtlCheckCallback`, `sceNetCtlGetIfStat` and `sceNetCtlGetInfo` reuse the last host interface query until `NotifyUnicastIpAddressChange`, `NotifyIpInterfaceChange` or `NotifyRouteChange2` reports a change, instead of calling `GetAdaptersAddresses` on every call. A DNS server change with no address, interface or route change is seen only at the next such change. If the notifications cannot be registered, every call queries the host as before.
+- [sceNetCtlGetNatInfo](../../../core/libs/prx/libSceNetCtl/Export.cpp) (libSceNetCtl) - performs RFC 5389 STUN binding probes from the active host IPv4 interface against `stun.playstation.net` and fallback public STUN servers (`stun.cloudflare.com`, `stun.l.google.com`, `stun1.l.google.com`) instead of reading cached state from the console's background `netctl` service. Reports NAT type 1 when the mapped IPv4 endpoint matches the local socket, NAT type 2 when a second STUN endpoint reports the same mapped address and port, NAT type 3 when the second endpoint reports a different mapping, and STUN status 1 (`FAILED`) with NAT type 0 when STUN discovery or classification does not complete.

@@ -6,13 +6,13 @@
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
 #ifdef __APPLE__
 #include <net/if.h>
 #include <net/route.h>
-#include <vector>
 #endif
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "SceTypes.hpp"
@@ -23,6 +23,8 @@
 #include <cstring>
 #include <initializer_list>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 #ifdef __APPLE__
 struct NetCtlDefaultRoute {
@@ -38,6 +40,7 @@ extern "C" {
 #ifdef __APPLE__
 std::size_t NetCtlDefaultRoutes_nid_no_patch(const char*, std::size_t, NetCtlDefaultRoute*, std::size_t);
 #endif
+void NetCtlSetStunServers_nid_no_patch(const sockaddr_in*, std::size_t, int);
 
 }
 
@@ -197,6 +200,193 @@ bool Binds(in_addr address) {
     return bound;
 }
 
+#ifdef _WIN32
+using TestSocket = SOCKET;
+constexpr TestSocket kInvalidSocket = INVALID_SOCKET;
+void CloseTestSocket(TestSocket descriptor) { closesocket(descriptor); }
+#else
+using TestSocket = int;
+constexpr TestSocket kInvalidSocket = -1;
+void CloseTestSocket(TestSocket descriptor) { close(descriptor); }
+#endif
+
+TestSocket OpenTestUdpSocket(sockaddr_in& bound) {
+    const TestSocket descriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Require(descriptor != kInvalidSocket);
+    sockaddr_in local{};
+    local.sin_family = AF_INET;
+    local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    local.sin_port = 0;
+    Require(bind(descriptor, reinterpret_cast<const sockaddr*>(&local), sizeof(local)) == 0);
+#ifdef _WIN32
+    int length = sizeof(bound);
+#else
+    socklen_t length = sizeof(bound);
+#endif
+    Require(getsockname(descriptor, reinterpret_cast<sockaddr*>(&bound), &length) == 0);
+    return descriptor;
+}
+
+bool WaitReadable(TestSocket descriptor, long timeoutMs) {
+    fd_set readSet;
+    FD_ZERO(&readSet);
+    FD_SET(descriptor, &readSet);
+    timeval tv{};
+    tv.tv_sec = timeoutMs / 1000;
+    tv.tv_usec = (timeoutMs % 1000) * 1000;
+#ifdef _WIN32
+    return select(0, &readSet, nullptr, nullptr, &tv) > 0;
+#else
+    return select(descriptor + 1, &readSet, nullptr, nullptr, &tv) > 0;
+#endif
+}
+
+void AppendStunAddressAttribute(std::vector<std::uint8_t>& packet, std::uint16_t attrType, std::uint32_t address, std::uint16_t hostPort, bool xorMask) {
+    constexpr std::uint32_t kCookie = 0x2112A442u;
+    const std::uint16_t wirePort = xorMask ? static_cast<std::uint16_t>(hostPort ^ static_cast<std::uint16_t>(kCookie >> 16)) : hostPort;
+    const std::uint32_t wireAddr = xorMask ? (address ^ htonl(kCookie)) : address;
+    packet.push_back(static_cast<std::uint8_t>(attrType >> 8));
+    packet.push_back(static_cast<std::uint8_t>(attrType & 0xFF));
+    packet.push_back(0x00);
+    packet.push_back(0x08);
+    packet.push_back(0x00);
+    packet.push_back(0x01);
+    packet.push_back(static_cast<std::uint8_t>(wirePort >> 8));
+    packet.push_back(static_cast<std::uint8_t>(wirePort & 0xFF));
+    const auto* addrBytes = reinterpret_cast<const std::uint8_t*>(&wireAddr);
+    packet.insert(packet.end(), addrBytes, addrBytes + 4);
+}
+
+sockaddr_in ReplyStunBinding(TestSocket serverSocket, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped, const sockaddr_in* otherServer = nullptr) {
+    Require(WaitReadable(serverSocket, 2000));
+    std::uint8_t request[64] = {};
+    sockaddr_in client{};
+#ifdef _WIN32
+    int clientLen = sizeof(client);
+#else
+    socklen_t clientLen = sizeof(client);
+#endif
+    const auto received = recvfrom(serverSocket, reinterpret_cast<char*>(request), sizeof(request), 0,
+                                   reinterpret_cast<sockaddr*>(&client), &clientLen);
+    Require(received == 20);
+    Require(request[0] == 0x00 && request[1] == 0x01 && request[2] == 0x00 && request[3] == 0x00);
+    const std::uint32_t expectedCookie = htonl(0x2112A442u);
+    Require(std::memcmp(request + 4, &expectedCookie, sizeof(expectedCookie)) == 0);
+
+    const std::uint16_t effectivePort = mappedHostPort != 0 ? mappedHostPort : ntohs(client.sin_port);
+    const std::uint32_t effectiveAddr = mappedAddr != 0 ? mappedAddr : client.sin_addr.s_addr;
+
+    std::vector<std::uint8_t> response(20, 0);
+    response[0] = 0x01;
+    response[1] = 0x01;
+    std::memcpy(response.data() + 4, request + 4, 16);
+    AppendStunAddressAttribute(response, xorMapped ? 0x0020 : 0x0001, effectiveAddr, effectivePort, xorMapped);
+    if (otherServer) {
+        AppendStunAddressAttribute(response, 0x802b, otherServer->sin_addr.s_addr, ntohs(otherServer->sin_port), false);
+    }
+    const auto attrLen = static_cast<std::uint16_t>(response.size() - 20);
+    response[2] = static_cast<std::uint8_t>(attrLen >> 8);
+    response[3] = static_cast<std::uint8_t>(attrLen & 0xFF);
+    const auto sent = sendto(serverSocket, reinterpret_cast<const char*>(response.data()), static_cast<int>(response.size()), 0,
+                             reinterpret_cast<const sockaddr*>(&client), clientLen);
+    Require(sent == static_cast<int>(response.size()));
+    return client;
+}
+
+void CheckNatDiscovery(in_addr address) {
+    sockaddr_in server1Addr{};
+    sockaddr_in server2Addr{};
+    const TestSocket server1 = OpenTestUdpSocket(server1Addr);
+    const TestSocket server2 = OpenTestUdpSocket(server2Addr);
+
+    NetCtlNatInfo natInfo{};
+    natInfo.size = sizeof(natInfo);
+    natInfo.stun_status = 99;
+    natInfo.nat_type = 99;
+    natInfo.mapped_addr = 0xFFFFFFFFu;
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 20);
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 1);
+    Require(natInfo.nat_type == 0);
+    Require(natInfo.mapped_addr == 0);
+    {
+        Require(WaitReadable(server1, 2000));
+        std::uint8_t drained[64] = {};
+        sockaddr_in from{};
+#ifdef _WIN32
+        int fromLen = sizeof(from);
+#else
+        socklen_t fromLen = sizeof(from);
+#endif
+        Require(recvfrom(server1, reinterpret_cast<char*>(drained), sizeof(drained), 0, reinterpret_cast<sockaddr*>(&from), &fromLen) == 20);
+    }
+
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    std::thread openWorker([&] {
+        ReplyStunBinding(server1, address.s_addr, 0, true);
+    });
+    natInfo = {sizeof(natInfo), 0, 0, 0};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    openWorker.join();
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 1);
+    Require(natInfo.mapped_addr == address.s_addr);
+
+    const std::uint32_t externalIp = (ntohl(address.s_addr) == 0xCB00712Au) ? htonl(0xCB00712Bu) : htonl(0xCB00712Au);
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    std::thread incompleteWorker([&] {
+        ReplyStunBinding(server1, externalIp, 54321, true);
+    });
+    natInfo = {sizeof(natInfo), 99, 99, 0xFFFFFFFFu};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    incompleteWorker.join();
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 1);
+    Require(natInfo.nat_type == 0);
+    Require(natInfo.mapped_addr == 0);
+
+    const sockaddr_in bothServers[2] = {server1Addr, server2Addr};
+    NetCtlSetStunServers_nid_no_patch(bothServers, 2, 1000);
+    std::thread type2Worker([&] {
+        const auto firstClient = ReplyStunBinding(server1, externalIp, 54321, true);
+        const auto secondClient = ReplyStunBinding(server2, externalIp, 54321, true);
+        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
+        Require(firstClient.sin_port == secondClient.sin_port);
+    });
+    natInfo = {sizeof(natInfo), 0, 0, 0};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    type2Worker.join();
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 2);
+    Require(natInfo.mapped_addr == externalIp);
+
+    NetCtlNatInfo cachedInfo{sizeof(cachedInfo), 0, 0, 0};
+    Require(sceNetCtlGetNatInfo(&cachedInfo) == 0);
+    Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 2 && cachedInfo.mapped_addr == externalIp);
+
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    std::thread type3Worker([&] {
+        const auto firstClient = ReplyStunBinding(server1, externalIp, 54321, false, &server2Addr);
+        const auto secondClient = ReplyStunBinding(server2, externalIp, 54322, false);
+        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
+        Require(firstClient.sin_port == secondClient.sin_port);
+    });
+    natInfo = {sizeof(natInfo), 0, 0, 0};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    type3Worker.join();
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 3);
+    Require(natInfo.mapped_addr == externalIp);
+
+    NetCtlSetStunServers_nid_no_patch(nullptr, 0, 0);
+    CloseTestSocket(server1);
+    CloseTestSocket(server2);
+}
+
 }
 
 #ifdef __APPLE__
@@ -348,13 +538,5 @@ int main() {
         natInfo.size = size;
         Require(sceNetCtlGetNatInfo(&natInfo) == static_cast<int>(0x80412111));
     }
-    natInfo.size = sizeof(natInfo);
-    natInfo.stun_status = 0;
-    natInfo.nat_type = 0;
-    natInfo.mapped_addr = 0;
-    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    Require(natInfo.size == sizeof(natInfo));
-    Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 2);
-    Require(natInfo.mapped_addr == address.s_addr);
+    CheckNatDiscovery(address);
 }
