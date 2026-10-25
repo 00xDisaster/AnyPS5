@@ -1,3 +1,4 @@
+#include "prx/libSceCesCs/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -5,32 +6,6 @@
 #include <cstring>
 #include <initializer_list>
 #include <iterator>
-
-extern "C" {
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileAscii(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileAsciiWithKatakana(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileBs4730(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileGbT1988(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileGbT1988Tilde0x7e(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileJisX0201(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileJisX0201Katakana(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileJisX0201Roman(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileJisX0201RomanTilde0x7e(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileJisX0201Tilde0x7e(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileKsX1003(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileKsX1003Tilde0x7e(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileIso8859_1(void);
-const std::uint8_t* APS5_VABI sceCesRefersUcsProfileCp1252(void);
-int APS5_VABI sceCesSbcToUtf8(const std::uint8_t*, std::uint8_t, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf8ToSbc(const std::uint8_t*, std::uint32_t, std::uint32_t*, const std::uint8_t*, std::uint8_t*);
-int APS5_VABI sceCesSbcToUcs2(const std::uint8_t*, std::uint8_t, std::uint16_t*);
-int APS5_VABI sceCesUcs2ToSbc(std::uint16_t, const std::uint8_t*, std::uint8_t*);
-int APS5_VABI sceCesSbcToUtf32(const std::uint8_t*, std::uint8_t, std::uint32_t*);
-int APS5_VABI sceCesUtf32ToSbc(std::uint32_t, const std::uint8_t*, std::uint8_t*);
-int APS5_VABI sceCesMbcsUcsContextInit(void*, const void*);
-int APS5_VABI sceCesMbcsStrToUtf8Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf8StrToMbcsStr(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-}
 
 namespace {
 
