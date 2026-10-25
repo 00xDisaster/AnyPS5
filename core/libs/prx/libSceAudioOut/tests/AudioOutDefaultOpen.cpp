@@ -10,6 +10,8 @@ namespace {
 constexpr SDL_AudioDeviceID device = 7;
 const char* driver = "wasapi";
 int outputDevices = 0;
+bool endpointAbsent = false;
+int probes = 0;
 int opened = 0;
 int closed = 0;
 
@@ -19,6 +21,10 @@ void Require(bool value, const char* message) {
 }
 
 int InitializeSdlAudio_nid_no_patch() { return 0; }
+bool WasapiDefaultOutputAbsent_nid_no_patch() {
+    ++probes;
+    return endpointAbsent;
+}
 extern "C" Uint32 SDLCALL SDL_WasInit(Uint32) { return SDL_INIT_AUDIO; }
 extern "C" int SDLCALL SDL_GetNumAudioDevices(int) { return outputDevices; }
 extern "C" const char* SDLCALL SDL_GetAudioDeviceName(int, int) { return "Main speakers"; }
@@ -45,9 +51,13 @@ int main(int argc, char** argv) {
         if (mode == "zero_default") {
             driver = "alsa";
             outputDevices = 0;
+        } else if (mode == "wasapi_zero_default") {
+            driver = "wasapi";
+            outputDevices = 0;
         } else if (mode == "no_endpoint") {
             driver = "wasapi";
             outputDevices = 0;
+            endpointAbsent = true;
             expectOpen = false;
         } else if (mode == "positive") {
             driver = "wasapi";
@@ -63,6 +73,8 @@ int main(int argc, char** argv) {
         Require(opened == (expectOpen ? 1 : 0), expectOpen ? "the default output was not opened" : "the default output was opened with no WASAPI endpoint");
         Require(sceAudioOutClose(handle) == 0, "the main port did not close");
         Require(closed == opened, "the default output was not closed with its port");
+        Require(probes == (driver == std::string_view("wasapi") && outputDevices == 0 ? 1 : 0), "the default endpoint was probed outside an empty WASAPI list");
+        probes = 0;
         Require(SdlAudioReportsNoOutputEndpoint(driver, outputDevices) == !expectOpen, "the no-endpoint predicate disagrees with the mode");
         Require(!SdlAudioReportsNoOutputEndpoint(nullptr, 0), "a missing driver name skipped the default open");
         std::puts("default output open tests passed");
