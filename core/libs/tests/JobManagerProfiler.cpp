@@ -1,3 +1,7 @@
+#include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
+#include "prx/libSceJobManager/libSceJobManager.hpp"
+#include "prx/libSceAgcDriver/libSceAgcDriver.hpp"
+#include "prx/libSceAgc/libSceAgc.hpp"
 #include "SceTypes.hpp"
 #include "prx/libSceAgcDriver/tests/execution/VulkanTestDevice.hpp"
 #include <array>
@@ -12,36 +16,6 @@
 #include <thread>
 #include <vector>
 
-struct ConfigParams;
-using JobEntry = void (APS5_VABI*)(void*, std::uint32_t);
-
-struct ISequence {
-    APS5_VABI virtual int Dispatch(JobEntry, void*, std::uint32_t, const char*) = 0;
-    APS5_VABI virtual int SyncPoint() = 0;
-    APS5_VABI virtual int Wait() = 0;
-    APS5_VABI virtual void CompleteDestructor() = 0;
-    APS5_VABI virtual void DeletingDestructor() = 0;
-    APS5_VABI virtual int DispatchCompute(const void*, void*, std::int32_t, std::int32_t, std::int32_t, const char*) = 0;
-};
-
-struct ISequenceFactory {
-    APS5_VABI virtual int Create(ISequence**, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, const char*) = 0;
-    APS5_VABI virtual int Destroy(ISequence*) = 0;
-    APS5_VABI virtual void CompleteDestructor() = 0;
-    APS5_VABI virtual void DeletingDestructor() = 0;
-    APS5_VABI virtual int CreateCompute(ISequence**, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, const char*) = 0;
-    APS5_VABI virtual int DestroyCompute(ISequence*) = 0;
-};
-
-extern "C" {
-void APS5_VABI _ZN3sce3Job10JobManagerC1Ev(void*);
-int APS5_VABI _ZN3sce3Job10JobManager10initializeEPvmjjjmPKNS1_12ConfigParamsE(void*, void*, std::uint64_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint64_t, const ConfigParams*);
-int APS5_VABI _ZN3sce3Job10JobManager8shutdownEv(void*);
-ISequenceFactory* APS5_VABI _ZN3sce3Job10JobManager34getUnifiedSequenceFactoryInterfaceENS1_8PriorityE(void*, std::uint32_t);
-int APS5_VABI sceAgcDriverSubmitAcb(std::uint32_t, const Packet*);
-std::uint32_t* APS5_VABI sceAgcAcbWaitRegMem(CommandBuffer*, std::uint8_t, std::uint8_t, std::uint8_t, const volatile void*, std::uint64_t, std::uint64_t, std::uint32_t);
-void AgcDriverShutdown_nid_postfix();
-}
 
 namespace {
 
