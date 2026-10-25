@@ -167,6 +167,9 @@ void KernelEqueuePrivate::MeasureFiles(std::unique_lock<std::mutex>& lock) {
     if (files.empty()) {
         return;
     }
+    for (const auto& [file, owner] : files) {
+        m_measuring.push_back(file);
+    }
     lock.unlock();
     std::vector<UnreadFile> measured;
     measured.reserve(files.size());
@@ -176,7 +179,9 @@ void KernelEqueuePrivate::MeasureFiles(std::unique_lock<std::mutex>& lock) {
     lock.lock();
     for (std::size_t i = 0; i < files.size(); ++i) {
         *static_cast<UnreadFile*>(files[i].second.get()) = measured[i];
+        m_measuring.erase(std::find(m_measuring.begin(), m_measuring.end(), files[i].first));
     }
+    m_measured.notify_all();
 }
 
 void KernelEqueuePrivate::WakePollers() {
@@ -582,6 +587,7 @@ void KernelEqueuePrivate::RemoveDescriptorEvents(uintptr_t ident) {
     if (removed) {
         WakePollers();
     }
+    m_measured.wait(lock, [&] { return std::find(m_measuring.begin(), m_measuring.end(), static_cast<int>(ident)) == m_measuring.end(); });
 }
 
 KernelEqueueRef EqueuePin_nid_postfix(KernelEqueue eq) {
