@@ -502,6 +502,26 @@ void CheckEmbeddedDataTables() {
     Require(tablesWhirlpool[0].Begin == TextAddress + 32, "Whirlpool table start was incorrect");
 }
 
+void CheckDecodedPaddingSuffix() {
+    Bytes text(0x38, 0x90);
+    text[0] = 0x48;
+    text[1] = 0x8d;
+    text[2] = 0x05;
+    SetDisplacement(text, 3, 7, TextAddress + 0x10);
+    text[7] = 0xc3;
+    for (std::size_t i = 8; i < 0x10; ++i) text[i] = 0xcc;
+    static constexpr std::uint8_t suffix[]{0x0f, 0x78, 0xcc, 0xb8, 0x09, 0x00, 0x00, 0x00, 0x0f, 0x05, 0x00, 0x01, 0x90};
+    std::memcpy(text.data() + 0x10, suffix, sizeof(suffix));
+    text[0x30] = 0xc3;
+    const std::vector<std::pair<VirtualAddress, VirtualAddress>> functions{
+        {TextAddress, TextAddress + 8},
+        {TextAddress + 0x30, TextAddress + 0x38}
+    };
+    const auto tables = Relinker::FindRelativeJumpTables(text, TextAddress, functions);
+    Require(tables.size() == 1, "Expected one decoded data table before a padding-suffixed syscall");
+    Require(tables[0].Begin == TextAddress + 0x10 && tables[0].End == TextAddress + 0x12, "Mask extended over the syscall after a decoded padding suffix");
+}
+
 void CheckLargeZeroGaps() {
     constexpr std::size_t stride = 0x10000;
     constexpr std::size_t count = 32;
@@ -562,6 +582,7 @@ int main() {
         CheckHighVirtualAddress();
         CheckRelativeJumpTables();
         CheckEmbeddedDataTables();
+        CheckDecodedPaddingSuffix();
         CheckLargeZeroGaps();
         std::cout << "Control-flow graph tests passed\n";
         return 0;

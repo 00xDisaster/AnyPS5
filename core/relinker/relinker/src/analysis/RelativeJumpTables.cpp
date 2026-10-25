@@ -155,7 +155,7 @@ public:
             const auto next = pos + info.Length;
             const bool isSyscall = IsForbiddenSyscallInstruction(code, pos, info);
             syscalls[pos] = isSyscall || syscalls[next];
-            if (!padding[next]) {
+            if (trailing[next] != Trailing::Padding) {
                 trailing[pos] = trailing[next];
                 continue;
             }
