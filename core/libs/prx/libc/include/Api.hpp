@@ -975,6 +975,8 @@ long long APS5_VABI wcstol_nid_postfix(const char16_t* str, char16_t** endptr, i
 long long APS5_VABI wcstoimax_nid_postfix(const char16_t* str, char16_t** endptr, int base);
 unsigned long long APS5_VABI wcstoumax_nid_postfix(const char16_t* str, char16_t** endptr, int base);
 std::uint64_t APS5_VABI _WStoul_nid_postfix(const char16_t* str, char16_t** endptr, int base);
+int APS5_VABI _Stopfx_nid_postfix(const char** cursor, char** end);
+int APS5_VABI _WStopfx_nid_postfix(const char16_t** cursor, char16_t** end);
 int APS5_VABI wcscoll_nid_postfix(const char16_t* first, const char16_t* second);
 size_t APS5_VABI wcsxfrm_nid_postfix(char16_t* destination, const char16_t* source, size_t count);
 size_t APS5_VABI strxfrm_nid_postfix(char* destination, const char* source, size_t count);

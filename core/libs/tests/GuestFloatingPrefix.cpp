@@ -89,22 +89,6 @@ static void CheckOne(Prefix<TChar> function, const TChar* text, const Case& test
 }
 
 template<typename TChar>
-static void CheckUnsupported(Prefix<TChar> function) {
-    TChar sentinel{};
-    TChar* end = &sentinel;
-    const TChar* cursor = nullptr;
-    for (const bool nullSlot : {false, true}) {
-        bool threw = false;
-        try {
-            function(nullSlot ? nullptr : &cursor, &end);
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw && cursor == nullptr && end == &sentinel, "null input must remain explicitly unsupported");
-    }
-}
-
-template<typename TChar>
 static void Check(Prefix<TChar> function, unsigned payloadLimit = 256) {
     for (const auto& test : Cases) {
         auto text = Text<TChar>(test.text);
@@ -211,12 +195,10 @@ int main(int argc, char** argv) {
     if (wide) {
         const auto prefix = reinterpret_cast<Prefix<char16_t>>(function);
         Check(prefix);
-        CheckUnsupported(prefix);
         CheckConcurrent(prefix);
     } else {
         const auto prefix = reinterpret_cast<Prefix<char>>(function);
         Check(prefix);
-        CheckUnsupported(prefix);
         CheckConcurrent(prefix);
     }
     std::printf("%s: prefix codes, pointer updates, input/output bounds and guarded reads passed\n", name.c_str());

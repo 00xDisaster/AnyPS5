@@ -1,13 +1,5 @@
 #include "prx/libc/include/General.hpp"
-
-extern "C" {
-int APS5_VABI isspace_nid_postfix(int);
-int APS5_VABI isalnum_nid_postfix(int);
-int APS5_VABI isxdigit_nid_postfix(int);
-int APS5_VABI iswspace_nid_postfix(std::uint32_t);
-int APS5_VABI iswalnum_nid_postfix(std::uint32_t);
-int APS5_VABI iswxdigit_nid_postfix(std::uint32_t);
-}
+#include "prx/libc/include/Api.hpp"
 
 namespace {
 
