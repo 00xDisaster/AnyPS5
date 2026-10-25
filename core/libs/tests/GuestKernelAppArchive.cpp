@@ -1,6 +1,6 @@
 #include "prx/libkernel/include/Api.hpp"
-#include "prx/libkernel/File/include/File.hpp"
 #include "prx/libc/include/Api.hpp"
+#include "prx/libSceLibcInternal/include/Api.hpp"
 #include "AppArchiveFixture.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
@@ -26,6 +26,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <typeinfo>
 #include <vector>
@@ -448,18 +449,33 @@ void NativeDirectoryIdentity(const std::filesystem::path& root) {
     std::filesystem::rename(original, renamed);
     std::filesystem::create_directory(original);
     { std::ofstream file(original / "replacement-entry"); file << "new"; }
+#ifdef _WIN32
+    auto expectedPath = renamed;
+    auto expectedNative = expectedPath.native();
+    if (expectedNative.size() >= 2 && expectedNative[1] == L':') {
+        if (expectedNative[0] >= L'A' && expectedNative[0] <= L'Z') expectedNative[0] += L'a' - L'A';
+        else if (expectedNative[0] >= L'a' && expectedNative[0] <= L'z') expectedNative[0] -= L'a' - L'A';
+        expectedPath = expectedNative;
+    }
+#else
+    const auto expectedPath = renamed;
+#endif
     FileStat after{};
     Check(sceKernelFstat(fd, &after) == 0 && after.st_ino == before.st_ino);
     const auto path = File::DirectoryDescriptorPath(fd);
-    Check(path && *path == renamed);
+    Check(path.has_value());
+    std::error_code pathError;
+    Check(std::filesystem::equivalent(*path, expectedPath, pathError) && !pathError);
+    std::error_code replacementError;
+    Check(!std::filesystem::equivalent(*path, original, replacementError) && !replacementError);
     std::array<char, 512> entries{};
     const int bytes = sceKernelGetdents(fd, entries.data(), static_cast<int>(entries.size()));
     Check(bytes > 0);
     const std::string listing(entries.data(), static_cast<std::size_t>(bytes));
     Check(listing.find("original-entry") != std::string::npos && listing.find("replacement-entry") == std::string::npos);
-    Check(sceKernelFchmod(fd, 0700) != SCE_KERNEL_ERROR_EISDIR);
-    Check(sceKernelFutimes(fd, nullptr) != SCE_KERNEL_ERROR_EISDIR);
-    Check(sceKernelFsync(fd) != SCE_KERNEL_ERROR_EISDIR);
+    Check(sceKernelFchmod(fd, 0700) == 0);
+    Check(sceKernelFutimes(fd, nullptr) == 0);
+    Check(sceKernelFsync(fd) == 0);
     KernelStatfs fileSystem{};
     Check(_fstatfs_nid_postfix(fd, &fileSystem) == 0);
     Check(sceKernelClose(fd) == 0);

@@ -203,10 +203,8 @@ static int NativeUtimes(const std::filesystem::path& path, const KernelTimeval* 
     return result;
 }
 static int NativeFutimes(int descriptor, const KernelTimeval* times) {
-    if (File::IsVirtualDirectoryDescriptor(descriptor)) {
-        const auto directory = File::DirectoryDescriptorPath(descriptor);
-        return directory ? NativeUtimes(*directory, times) : (errno = ENOENT, -1);
-    }
+    if (const auto directory = File::DirectoryDescriptorPath(descriptor)) return NativeUtimes(*directory, times);
+
     const auto original = reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor));
     if (original == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
     if (GetFileType(original) != FILE_TYPE_DISK) { errno = EINVAL; return -1; }
@@ -222,9 +220,7 @@ static int NativeFutimes(int descriptor, const KernelTimeval* times) {
 static int NativeSync(int descriptor) {
     constexpr DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
     HANDLE handle = INVALID_HANDLE_VALUE;
-    if (File::IsVirtualDirectoryDescriptor(descriptor)) {
-        const auto directory = File::DirectoryDescriptorPath(descriptor);
-        if (!directory) { errno = ENOENT; return -1; }
+    if (const auto directory = File::DirectoryDescriptorPath(descriptor)) {
         handle = CreateFileW(directory->c_str(), GENERIC_WRITE, share, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     } else {
         const int previous = errno;
