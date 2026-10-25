@@ -18,6 +18,19 @@ The output is x86-64: Linux ELF by default, Windows PE with `--windows` or Mach-
 
 Use a separate build directory for the full build.
 
+## Fuzzing
+
+`ANYPS5_BUILD_FUZZERS` builds `relinker_conversion_fuzzer`, a libFuzzer target that runs the whole conversion on its input, as the web converter does. It requires `ANYPS5_RELINKER_ONLY`, Clang on Linux and the compiler-rt sanitizer runtimes (`libclang-rt-18-dev` on Ubuntu 24.04). Every target is built with AddressSanitizer and UndefinedBehaviorSanitizer, without `-fsanitize=function`: that check reads a signature before the target of every indirect call and faults on the generated code the codegen tests call. The first input byte selects the target system (modulo 3: Linux, Windows, macOS), bit 2 `--to-intel` and the byte shifted right by 3, modulo 3, the `unused-filter` level; the remaining bytes are the executable. A conversion that throws a `std::exception` is a rejected input; a sanitizer report, an abort or a timeout is a finding.
+
+```sh
+cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DANYPS5_RELINKER_ONLY=ON -DANYPS5_BUILD_FUZZERS=ON -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-fuzz --target relinker_conversion_fuzzer
+python3 tools/relinker_fuzz_seeds.py build-fuzz/fuzz-corpus
+build-fuzz/tests/relinker_conversion_fuzzer build-fuzz/fuzz-corpus -fork=2 -max_total_time=1200 -timeout=20
+```
+
+`relinker_fuzz_seeds.py` writes the executables built by the relinker's Python tests as seeds, one per target system. With `BUILD_TESTING=ON`, CTest runs 20000 inputs from an empty corpus as `relinker_conversion_fuzzer`. Findings are written to the working directory as `crash-*`, `timeout-*` or `oom-*`; reproduce one with `build-fuzz/tests/relinker_conversion_fuzzer <file>`.
+
 ## Full build
 
 ```sh
