@@ -376,12 +376,10 @@ int APS5_VABI sceNpManagerIntAddSigninStateCallback(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntAuthGetAuthorizationCode(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntAuthGetIdToken(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntCheckNpAvailability(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -495,12 +493,10 @@ int APS5_VABI sceNpManagerIntGetAuthServerErrorFlag(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetAuthorizationCode(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetAuthorizationCodeWithPsnoUri(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetClientCredentialAccessToken(void) {
     NotImplemented_nid_no_patch(__func__);

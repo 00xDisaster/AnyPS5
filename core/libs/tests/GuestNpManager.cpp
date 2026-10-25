@@ -327,6 +327,24 @@ void CheckManagerIntUserLookups() {
     Require(sceNpGetUserIdByOnlineId(&onlineId, &userId) == SignedOut && userId == 0x5a5a5a5a, "the public twin answers the same while signed out");
 }
 
+void CheckManagerIntAuthorization() {
+    const int live = sceNpManagerIntCreateRequest();
+    const int deleted = sceNpManagerIntCreateRequest();
+    Require(live > 0 && deleted > live && sceNpManagerIntDeleteRequest(deleted) == 0, "NpManagerInt requests for the authorization calls");
+    for (const int request : {live, deleted, 0x7fffffff}) {
+        SentinelBuffer parameter;
+        SentinelBuffer code;
+        int issuer = 0x5a5a5a5a;
+        Require(CallWith(sceNpManagerIntAuthGetAuthorizationCode, request, parameter.bytes, code.bytes, &issuer) == SignedOut && code.Untouched() && parameter.Untouched() && issuer == 0x5a5a5a5a, "sceNpManagerIntAuthGetAuthorizationCode must report NP as signed out and write nothing");
+        Require(CallWith(sceNpManagerIntAuthGetIdToken, request, parameter.bytes, code.bytes) == SignedOut && code.Untouched() && parameter.Untouched(), "sceNpManagerIntAuthGetIdToken must report NP as signed out and write nothing");
+        Require(CallWith(sceNpManagerIntGetAuthorizationCode, request, parameter.bytes, code.bytes, &issuer) == SignedOut && code.Untouched() && parameter.Untouched() && issuer == 0x5a5a5a5a, "sceNpManagerIntGetAuthorizationCode must report NP as signed out and write nothing");
+        Require(CallWith(sceNpManagerIntGetAuthorizationCodeWithPsnoUri, request, parameter.bytes, code.bytes, &issuer) == SignedOut && code.Untouched() && parameter.Untouched() && issuer == 0x5a5a5a5a, "sceNpManagerIntGetAuthorizationCodeWithPsnoUri must report NP as signed out and write nothing");
+    }
+    Require(sceNpManagerIntAuthGetAuthorizationCode() == SignedOut && sceNpManagerIntAuthGetIdToken() == SignedOut && sceNpManagerIntGetAuthorizationCode() == SignedOut && sceNpManagerIntGetAuthorizationCodeWithPsnoUri() == SignedOut, "the authorization calls without arguments");
+    Require(sceNpManagerIntAbortRequest(live) == 0 && sceNpManagerIntDeleteRequest(live) == 0, "the authorization calls leave a live request live");
+    Require(sceNpManagerIntDeleteRequest(deleted) == RequestNotFound, "the authorization calls leave a deleted request deleted");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -490,6 +508,7 @@ int main() {
     CheckIdMapperAccountIdLookups();
     CheckManagerIntProfileGetters();
     CheckManagerIntUserLookups();
+    CheckManagerIntAuthorization();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));
