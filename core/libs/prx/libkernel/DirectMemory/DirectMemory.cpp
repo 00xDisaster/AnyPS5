@@ -1360,20 +1360,15 @@ int DoMprotect(const void* addr, size_t len, int prot) {
 #ifdef _WIN32
         if (nativeProtection != PROT_NONE && hostStack) CommitReservedPages(insidePointer, insideBytes);
         const bool protectedPages = mprotect(insidePointer, insideBytes, nativeProtection) == 0;
+#elif defined(__APPLE__)
+        const int error = GuestWriteWatch::GuestWriteWatchProtect_nid_postfix(insidePointer, insideBytes, nativeProtection);
+        if (error != 0) errno = error;
+        const bool protectedPages = error == 0;
 #else
-#ifdef __APPLE__
-        const auto protectInside = [&] {
-            const int error = GuestWriteWatch::GuestWriteWatchProtect_nid_postfix(insidePointer, insideBytes, nativeProtection);
-            errno = error;
-            return error == 0;
-        };
-#else
-        const auto protectInside = [&] { return mprotect(insidePointer, insideBytes, nativeProtection) == 0; };
-#endif
-        bool protectedPages = protectInside();
+        bool protectedPages = mprotect(insidePointer, insideBytes, nativeProtection) == 0;
         if (!protectedPages && errno == ENOMEM) {
             MapUnmappedPages(insidePointer, static_cast<std::size_t>((stackEnd & ~hostPageMask) - inside));
-            protectedPages = protectInside();
+            protectedPages = mprotect(insidePointer, insideBytes, nativeProtection) == 0;
         }
 #endif
         if (!protectedPages) throw std::system_error(errno, std::generic_category(), "mprotect failed");

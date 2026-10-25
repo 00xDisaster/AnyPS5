@@ -539,8 +539,9 @@ void GuestAllocationsGuestPages_nid_postfix(std::uintptr_t address, std::size_t 
         auto& found = *static_cast<Search*>(data);
         for (unsigned index = 0; index < image->dlpi_phnum; ++index) {
             const auto& header = image->dlpi_phdr[index];
-            const auto start = static_cast<std::uintptr_t>(image->dlpi_addr + header.p_vaddr);
-            const auto finish = (start + header.p_memsz + found.hostPage - 1) & ~(found.hostPage - 1);
+            const auto segment = static_cast<std::uintptr_t>(image->dlpi_addr + header.p_vaddr);
+            const auto start = segment & ~(found.hostPage - 1);
+            const auto finish = (segment + header.p_memsz + found.hostPage - 1) & ~(found.hostPage - 1);
             if (header.p_type == PT_LOAD && found.address >= start && found.address < finish) {
                 found.bias = static_cast<std::uintptr_t>(image->dlpi_addr);
                 return 1;
