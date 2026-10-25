@@ -402,7 +402,9 @@ class Check:
         sections = dict(zip(SECTION.findall(body), SECTION.split(body)[2::2]))
         for name in ("What", "Tested", "Checklist"):
             if name not in sections:
-                self.report("pr-template", "", 0, f"add the '### {name}' heading of the template")
+                found = re.search(rf"^[ \t]*#+[ \t]*{name}[ \t]*$", body, re.M | re.I)
+                hint = f"; found '{found.group(0).strip()}'" if found else ""
+                self.report("pr-template", "", 0, f"add the '### {name}' heading of the template{hint}")
             elif not sections[name].strip():
                 self.report("pr-template", "", 0, f"fill the '### {name}' section")
         checklist = sections.get("Checklist", "")
