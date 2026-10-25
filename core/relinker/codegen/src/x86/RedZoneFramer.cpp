@@ -330,7 +330,7 @@ void frameSegment(
             if (use.RspBased && use.RspDisp < 0) redZone = true;
             if (reason != nullptr) continue;
             if (code[insn.Info.OpcodeOffset] == 0xc9 || code[insn.Info.OpcodeOffset] == 0xc8) { reason = "leave or enter"; continue; }
-            if (pushed.empty() && allocation == 0 && pushesOrPops(code, insn)) { reason = "push or pop in a leaf without pushes"; continue; }
+            if (!rbpPrologue && pushed.empty() && allocation == 0 && pushesOrPops(code, insn)) { reason = "push or pop in a leaf without pushes"; continue; }
             if (rbpPrologue) {
                 if (use.UsesRsp) { reason = "other use of rsp"; continue; }
             } else {

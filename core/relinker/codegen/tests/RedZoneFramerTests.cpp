@@ -313,6 +313,26 @@ void widensShortProloguesAndExits() {
     require(displacements.size() == 1 && displacements[0].Offset == 0x40 + PushRbx.size() + StoreBelowRsp.size() + 4 && displacements[0].Bytes == std::vector<std::uint8_t>{0x00}, "the load between the widened sites was not moved in place");
 }
 
+void widensAShortFramePointerPrologue() {
+    const std::vector<std::uint8_t> framePrologue{0x55, 0x48, 0x89, 0xe5};
+    const std::vector<std::uint8_t> popRbpExit{0x5d, 0xc3};
+    std::vector<std::uint8_t> body = StoreBelowPushes;
+    append(body, LoadBelowPushes);
+    const auto input = image({framelessLeaf(framePrologue, body, popRbpExit)});
+    Codegen::RedZoneFrameReport report;
+    std::vector<Codegen::RedZoneDisplacement> displacements;
+    const auto sites = Codegen::FrameRedZoneFunctions(input.bytes, input.segments, input.functions, {}, report, displacements);
+    require(report.Framed == 1 && report.FramedWithoutFramePointer == 0 && report.WidenedPrologues == 1 && report.WidenedExits == 1 && report.WidenedOperands == 0 && sites.size() == 2 && displacements.empty(), "a frame-pointer leaf without other pushes was not framed by widening its 4-byte prologue and 2-byte exit");
+    std::vector<std::uint8_t> entryBody = framePrologue;
+    append(entryBody, {0x48, 0x8d, 0x64, 0x24, 0x80});
+    append(entryBody, StoreBelowPushes);
+    require(sites[0].OriginalBytes.size() == framePrologue.size() + StoreBelowPushes.size() && sites[0].Body == stubBody(entryBody), "the store through rbp was not copied unchanged after rsp is lowered by the whole red zone");
+    std::vector<std::uint8_t> exitBody = LoadBelowPushes;
+    append(exitBody, {0x48, 0x8d, 0xa4, 0x24, 0x80, 0x00, 0x00, 0x00});
+    append(exitBody, popRbpExit);
+    require(sites[1].OriginalBytes.size() == LoadBelowPushes.size() + popRbpExit.size() && sites[1].Body == stubBody(exitBody), "the load through rbp was not copied unchanged ahead of raising rsp and popping rbp");
+}
+
 void framesLeavesWithoutPushes() {
     std::vector<std::uint8_t> body = StoreBelowRsp;
     append(body, LoadBelowRsp);
@@ -676,6 +696,7 @@ int main() {
         skipsShortOperandsAtRspWhoseWidenedStubCoversABranchTarget();
         skipsLeavesWithOperandsThatCannotMove();
         widensShortProloguesAndExits();
+        widensAShortFramePointerPrologue();
         framesLeavesWithoutPushes();
         skipsFragmentsThatPopWithoutPushing();
         skipsWideningOverBranchTargets();

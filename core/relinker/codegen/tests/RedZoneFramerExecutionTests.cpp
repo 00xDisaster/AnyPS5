@@ -139,6 +139,11 @@ std::vector<Leaf> widenedLeaves() {
             0x48, 0x03, 0x44, 0x24, 0xf0, 0x48, 0x01, 0xd8, 0xff, 0xc9, 0x75, 0xf4,
             0x48, 0x01, 0xd8, 0x5b, 0xc3,
         }, 8 * (kA + kB) + kB},
+        {"frame-pointer leaf without other pushes spilling below rbp", {
+            0x55, 0x48, 0x89, 0xe5, 0x48, 0x89, 0x7d, 0xf0, 0x48, 0x89, 0x75, 0xf8, 0x31, 0xc0, 0xb9, 0x08, 0x00, 0x00, 0x00,
+            0x48, 0x03, 0x45, 0xf0, 0x48, 0x03, 0x45, 0xf8, 0xff, 0xc9, 0x75, 0xf4,
+            0x48, 0x03, 0x45, 0xf0, 0x5d, 0xc3,
+        }, 8 * (kA + kB) + kA},
     };
 }
 
@@ -284,7 +289,7 @@ int main() {
         const auto backward = runLeaves(backwardStubbedLeaves());
         require(backward.OperandStubs == 2 && backward.StubbedOperands == 3 && backward.MovedOperands == 5, "the leaves comparing at rsp before a branch were framed with " + std::to_string(backward.OperandStubs) + " operand stubs carrying " + std::to_string(backward.StubbedOperands) + " rsp operands and " + std::to_string(backward.MovedOperands) + " moved in place, not 2 carrying 3 and 5");
         const auto widened = runLeaves(widenedLeaves());
-        require(widened.WidenedPrologues == 2 && widened.WidenedExits == 2 && widened.WidenedOperands == 3, "the leaves with short prologues and exits were framed with " + std::to_string(widened.WidenedPrologues) + " widened prologues, " + std::to_string(widened.WidenedExits) + " widened exits and " + std::to_string(widened.WidenedOperands) + " rsp operands in them, not 2, 2 and 3");
+        require(widened.WidenedPrologues == 3 && widened.WidenedExits == 3 && widened.WidenedOperands == 3, "the leaves with short prologues and exits were framed with " + std::to_string(widened.WidenedPrologues) + " widened prologues, " + std::to_string(widened.WidenedExits) + " widened exits and " + std::to_string(widened.WidenedOperands) + " rsp operands in them, not 3, 3 and 3");
         std::cout << "red-zone framer execution tests passed\n";
         return 0;
     } catch (const std::exception& error) {
