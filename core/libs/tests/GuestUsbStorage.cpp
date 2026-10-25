@@ -134,6 +134,24 @@ std::string SecondLine(const FakeHost& host) {
     return MountLine("8_33", "/", host.secondMount, "ro,relatime", "exfat");
 }
 
+constexpr std::uint64_t FirstVolumeSize = 61530439680ull;
+constexpr std::uint64_t SecondVolumeSize = 31914983424ull;
+
+std::string Utf8(const std::filesystem::path& path) {
+    const auto text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
+void Inject(const FakeHost& host, bool first, bool second) {
+    static const UsbStorageTestVolume none{};
+    const auto firstRoot = Utf8(host.firstMount);
+    const auto secondRoot = Utf8(host.secondMount);
+    std::vector<UsbStorageTestVolume> volumes;
+    if (first) volumes.push_back({"first", firstRoot.c_str(), FirstVolumeSize, 0x0781, 0x5581, 0x0100, "SanDisk", "Ultra Fit", "4C530001", false, false});
+    if (second) volumes.push_back({"second", secondRoot.c_str(), SecondVolumeSize, 0x090c, 0x1000, 0x1100, "Samsung", "Flash Drive", "", true, true});
+    SetUsbStorageHostVolumesForTest_nid_no_patch(volumes.empty() ? &none : volumes.data(), volumes.size());
+}
+
 FakeHost CreateHost() {
     FakeHost host;
     host.root = std::filesystem::temp_directory_path() / ("anyps5_usb_storage_" + std::to_string(std::random_device{}()));
@@ -141,9 +159,12 @@ FakeHost CreateHost() {
     host.sys = host.root / "sys";
     host.firstMount = host.root / "media" / "USB DRIVE";
     host.secondMount = host.root / "media" / "second";
-    std::filesystem::create_directories(host.sys / "dev" / "block");
-    WriteMounts(host, "");
-    SetUsbStorageHostRootsForTest_nid_no_patch(host.mountInfo.string().c_str(), host.sys.string().c_str());
+    WriteFile(host.firstMount / "song.txt", "song");
+    WriteFile(host.firstMount / ".hidden", "hidden");
+    std::filesystem::create_directories(host.firstMount / "Music");
+    WriteFile(host.secondMount / "Readme.txt", "readme");
+    WriteFile(host.root / "media" / "efi" / "boot.efi", "efi");
+    Inject(host, false, false);
     return host;
 }
 
@@ -154,7 +175,8 @@ bool Link(const FakeHost& host, std::string_view device, const std::filesystem::
     return !error;
 }
 
-bool CreateDevices(const FakeHost& host) {
+bool CreateSysfs(const FakeHost& host) {
+    std::filesystem::create_directories(host.sys / "dev" / "block");
     if (!Link(host, "0_0", host.sys / "devices" / "probe")) return false;
     const auto controller = host.sys / "devices" / "pci0000_00" / "0000_00_14.0" / "usb1";
     const auto first = controller / "1-1";
@@ -177,11 +199,6 @@ bool CreateDevices(const FakeHost& host) {
     const auto sata = host.sys / "devices" / "pci0000_00" / "0000_00_17.0" / "ata1" / "host0" / "target0_0_0" / "0_0_0_0";
     WriteFile(sata / "vendor", "ATA     \n");
     WriteFile(sata / "model", "Disk            \n");
-    WriteFile(host.firstMount / "song.txt", "song");
-    WriteFile(host.firstMount / ".hidden", "hidden");
-    std::filesystem::create_directories(host.firstMount / "Music");
-    WriteFile(host.secondMount / "Readme.txt", "readme");
-    WriteFile(host.root / "media" / "efi" / "boot.efi", "efi");
     return Link(host, "8_17", firstScsi / "block" / "sdb" / "sdb1") && Link(host, "8_33", secondScsi / "block" / "sdc" / "sdc1") &&
            Link(host, "8_1", sata / "block" / "sda" / "sda1") && Link(host, "8_49", firstScsi / "block" / "sdd" / "sdd1");
 }
@@ -336,7 +353,7 @@ void TestDeviceInfo(const FakeHost& host) {
     std::uint32_t devices[UsbStorage::MaxDevices]{};
     std::int32_t count = -1;
     Require(sceUsbStorageGetDeviceList(devices, &count) == 0, "get the device list with a device");
-    Require(count == 1 && devices[0] == 0, "only the mounted FAT volume of a USB mass-storage device is listed");
+    Require(count == 1 && devices[0] == 0, "the attached volume is listed as device 0");
 
     UsbStorageDeviceInfo info;
     std::memset(&info, 0x5a, sizeof(info));
@@ -347,9 +364,7 @@ void TestDeviceInfo(const FakeHost& host) {
     Require(std::string_view(info.serialNumber) == "4C530001" && info.serialNumberLength == 8, "the device info holds the serial number");
     Require(info.flags == UsbStorage::FatFlag, "the device info flags a writable FAT volume");
     Require(info.reserved == 0 && info.padding[0] == 0 && info.padding[1] == 0, "the device info cleared its unknown fields");
-    std::error_code error;
-    const auto capacity = std::filesystem::space(host.firstMount, error).capacity;
-    Require(!error && info.volumeSize == capacity, "the volume size is the capacity of the mounted file system");
+    Require(info.volumeSize == FirstVolumeSize, "the device info holds the volume size");
     Require(sceUsbStorageGetDeviceInfo(1, &info) == UsbStorage::DeviceNotFound, "get device info of an absent device");
 
     char mountPoint[UsbStorage::MountPointSize];
@@ -360,6 +375,7 @@ void TestDeviceInfo(const FakeHost& host) {
     exists = 1;
     Require(sceUsbStorageIsExist(1, "/mnt/usb1", &exists) == true && exists == 0, "device 1 does not exist");
     const auto resolved = ResolvePath_nid_no_patch("/mnt/usb0/song.txt");
+    std::error_code error;
     Require(std::filesystem::equivalent(resolved, host.firstMount / "song.txt", error), "the mount point resolves to the host volume");
 }
 
@@ -445,8 +461,7 @@ void TestDeviceGetdents() {
 }
 
 void TestDevices(const FakeHost& host) {
-    WriteMounts(host, FirstLine(host) + MountLine("8_1", "/", host.root / "media" / "efi", "rw", "vfat") +
-                          MountLine("8_49", "/", host.root / "media", "rw", "ext4") + MountLine("8_17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
+    Inject(host, true, false);
     Require(sceUsbStorageInit(nullptr) == 0, "initialize with a device");
     TestDeviceInfo(host);
     TestDeviceMaps();
@@ -461,12 +476,12 @@ void TestDevices(const FakeHost& host) {
 }
 
 void TestHotplug(const FakeHost& host) {
-    WriteMounts(host, FirstLine(host));
+    Inject(host, true, false);
     Require(sceUsbStorageInit(nullptr) == 0, "initialize for hotplug");
     Require(sceUsbStorageRegisterCallback(UsbStorage::MountEvent, &Record, &g_mountTag) == 0, "register the mount recorder");
     Require(sceUsbStorageRegisterCallback(UsbStorage::UnmountEvent, &Record, &g_unmountTag) == 0, "register the unmount recorder");
 
-    WriteMounts(host, FirstLine(host) + SecondLine(host));
+    Inject(host, true, true);
     auto recorded = NextEvent(0);
     Require(recorded.event.event == 1 && recorded.event.device == 1 && recorded.userData == &g_mountTag, "a mounted device raises a mount event");
     Require(recorded.event.flags == (UsbStorage::ExFatFlag | UsbStorage::ReadOnlyFlag), "the mount event flags a read-only exFAT volume");
@@ -474,7 +489,7 @@ void TestHotplug(const FakeHost& host) {
     Require(sceUsbStorageGetDeviceInfo(1, &info) == 0 && info.vendorId == 0x090c && info.bcdDevice == 0x1100, "the mounted device is listed");
     Require(info.serialNumber[0] == '\0' && info.serialNumberLength == 0 && std::string_view(info.product) == "Flash Drive", "a device without a serial number reports an empty one");
 
-    WriteMounts(host, SecondLine(host));
+    Inject(host, false, true);
     recorded = NextEvent(1);
     Require(recorded.event.event == 2 && recorded.event.device == 0 && recorded.userData == &g_unmountTag, "a removed device raises an unmount event");
     Require(recorded.event.flags == UsbStorage::FatFlag, "the unmount event flags the removed volume");
@@ -482,7 +497,7 @@ void TestHotplug(const FakeHost& host) {
     std::int32_t count = -1;
     Require(sceUsbStorageGetDeviceList(devices, &count) == 0 && count == 1 && devices[0] == 1, "the remaining device keeps its id");
 
-    WriteMounts(host, FirstLine(host) + SecondLine(host));
+    Inject(host, true, true);
     recorded = NextEvent(2);
     Require(recorded.event.event == 1 && recorded.event.device == 0, "a device mounted again takes the lowest free id");
     Require(sceUsbStorageUnregisterCallback(UsbStorage::MountEvent, &Record) == 0, "unregister the mount recorder");
@@ -490,6 +505,29 @@ void TestHotplug(const FakeHost& host) {
     Require(sceUsbStorageTerm() == 0, "terminate after hotplug");
     std::lock_guard lock(Events().mutex);
     Require(Events().events.size() == 3, "hotplug raised no other event");
+}
+
+void TestSysfsScan(const FakeHost& host) {
+    WriteMounts(host, FirstLine(host) + SecondLine(host) + MountLine("8_1", "/", host.root / "media" / "efi", "rw", "vfat") +
+                          MountLine("8_49", "/", host.root / "media", "rw", "ext4") + MountLine("8_17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
+    SetUsbStorageHostRootsForTest_nid_no_patch(Utf8(host.mountInfo).c_str(), Utf8(host.sys).c_str());
+    Require(sceUsbStorageInit(nullptr) == 0, "initialize over the fake sysfs");
+    std::uint32_t devices[UsbStorage::MaxDevices]{};
+    std::int32_t count = -1;
+    Require(sceUsbStorageGetDeviceList(devices, &count) == 0 && count == 2 && devices[0] == 0 && devices[1] == 1,
+            "only the whole FAT and exFAT volumes of USB mass-storage devices are listed");
+    UsbStorageDeviceInfo info{};
+    Require(sceUsbStorageGetDeviceInfo(0, &info) == 0, "get the info of the scanned FAT volume");
+    Require(info.vendorId == 0x0781 && info.productId == 0x5581 && info.bcdDevice == 0x0100, "the scan reads the USB ids and release");
+    Require(std::string_view(info.vendor) == "SanDisk" && std::string_view(info.product) == "Ultra Fit", "the scan reads the SCSI strings without trailing spaces");
+    Require(std::string_view(info.serialNumber) == "4C530001" && info.flags == UsbStorage::FatFlag, "the scan reads the serial number and a writable FAT volume");
+    std::error_code error;
+    const auto capacity = std::filesystem::space(host.firstMount, error).capacity;
+    Require(!error && info.volumeSize == capacity, "the scanned volume size is the capacity of the mounted file system");
+    Require(sceUsbStorageGetDeviceInfo(1, &info) == 0, "get the info of the scanned exFAT volume");
+    Require(info.vendorId == 0x090c && std::string_view(info.product) == "Flash Drive" && info.serialNumberLength == 0, "the scan reads a device without a serial number");
+    Require(info.flags == (UsbStorage::ExFatFlag | UsbStorage::ReadOnlyFlag), "the scan reads a read-only exFAT mount");
+    Require(sceUsbStorageTerm() == 0, "terminate over the fake sysfs");
 }
 
 }
@@ -503,13 +541,14 @@ int main() {
     TestMapRequests();
     TestGetdents();
     TestThrowingExports();
-    if (CreateDevices(host)) {
-        TestDevices(host);
-        TestHotplug(host);
+    TestDevices(host);
+    TestHotplug(host);
+    if (CreateSysfs(host)) {
+        TestSysfsScan(host);
     } else {
-        std::printf("USBSTORAGE: directory symbolic links are unavailable, the device cases are skipped\n");
+        std::printf("USBSTORAGE: directory symbolic links are unavailable, the sysfs scan is not exercised\n");
     }
-    SetUsbStorageHostRootsForTest_nid_no_patch(nullptr, nullptr);
+    SetUsbStorageHostVolumesForTest_nid_no_patch(nullptr, 0);
     std::error_code error;
     std::filesystem::remove_all(host.root, error);
     return 0;

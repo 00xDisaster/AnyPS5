@@ -17,6 +17,7 @@ namespace {
 
 std::mutex rootsMutex;
 std::optional<std::pair<std::filesystem::path, std::filesystem::path>> testRoots;
+std::optional<std::vector<HostVolume>> testVolumes;
 
 std::filesystem::path Utf8Path(std::string_view text) {
     return std::filesystem::path(std::u8string(text.begin(), text.end()));
@@ -148,6 +149,7 @@ std::vector<HostVolume> ScanHostVolumes() {
     std::optional<std::pair<std::filesystem::path, std::filesystem::path>> roots;
     {
         std::lock_guard lock(rootsMutex);
+        if (testVolumes) return *testVolumes;
         roots = testRoots;
     }
     if (roots) return ScanSysfsVolumes(roots->first, roots->second);
@@ -164,9 +166,37 @@ std::vector<HostVolume> ScanHostVolumes() {
 
 extern "C" void SetUsbStorageHostRootsForTest_nid_no_patch(const char* mountInfo, const char* sysRoot) {
     std::lock_guard lock(UsbStorage::rootsMutex);
+    UsbStorage::testVolumes.reset();
     if (mountInfo == nullptr || sysRoot == nullptr) {
         UsbStorage::testRoots.reset();
         return;
     }
     UsbStorage::testRoots.emplace(UsbStorage::Utf8Path(mountInfo), UsbStorage::Utf8Path(sysRoot));
+}
+
+extern "C" void SetUsbStorageHostVolumesForTest_nid_no_patch(const UsbStorageTestVolume* volumes, std::size_t count) {
+    std::lock_guard lock(UsbStorage::rootsMutex);
+    UsbStorage::testRoots.reset();
+    if (volumes == nullptr) {
+        UsbStorage::testVolumes.reset();
+        return;
+    }
+    const auto text = [](const char* value) { return value == nullptr ? std::string() : std::string(value); };
+    std::vector<UsbStorage::HostVolume> copies;
+    for (std::size_t i = 0; i < count; ++i) {
+        UsbStorage::HostVolume volume;
+        volume.key = text(volumes[i].key);
+        volume.root = UsbStorage::Utf8Path(text(volumes[i].root));
+        volume.volumeSize = volumes[i].volumeSize;
+        volume.vendorId = volumes[i].vendorId;
+        volume.productId = volumes[i].productId;
+        volume.bcdDevice = volumes[i].bcdDevice;
+        volume.vendor = text(volumes[i].vendor);
+        volume.product = text(volumes[i].product);
+        volume.serialNumber = text(volumes[i].serialNumber);
+        volume.readOnly = volumes[i].readOnly;
+        volume.fileSystem = volumes[i].exFat ? UsbStorage::FileSystem::ExFat : UsbStorage::FileSystem::Fat;
+        copies.push_back(std::move(volume));
+    }
+    UsbStorage::testVolumes = std::move(copies);
 }
