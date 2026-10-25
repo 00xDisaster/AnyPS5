@@ -33,7 +33,7 @@ void InstallProcessParameters() {
     const std::uint32_t magic = 0x4942524f;
     std::memcpy(process.data(), &size, sizeof(size));
     std::memcpy(process.data() + 8, &magic, sizeof(magic));
-    if (!ProcessParametersFixture::Install(process.data(), process.size())) std::abort();
+    Require(ProcessParametersFixture::Install(process.data(), process.size()));
 }
 
 void SetCompiledSdkVersion(std::uint32_t version) {
@@ -72,6 +72,9 @@ void RequireNotInit(std::int32_t handle) {
     Require(sceMoveGetExtensionPortInfo(handle, buffer.bytes) == kNotInit);
     Require(sceMoveReadStateLatest(handle, buffer.bytes) == kNotInit);
     Require(sceMoveReadStateRecent(handle, 0, buffer.bytes, &count) == kNotInit);
+    SetCompiledSdkVersion(kLastSdkAllowingNullData);
+    Require(sceMoveReadStateRecent(handle, 0, nullptr, &count) == kNotInit);
+    SetCompiledSdkVersion(kFirstSdkRequiringData);
     Require(sceMoveSetVibration(handle, 0xFF) == kNotInit);
     Require(sceMoveSetLightSphere(handle, 0xFF, 0, 0) == kNotInit);
     Require(sceMoveResetLightSphere(handle) == kNotInit);
