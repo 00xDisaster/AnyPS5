@@ -845,6 +845,16 @@ if(BUILD_TESTING)
         set_tests_properties(guest_generic_category PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
+    add_test_executable(guest_future_category_tests ${LIBS_INCLUDE_DIR}/tests/GuestFutureCategory.cpp)
+    target_include_directories(guest_future_category_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_future_category_tests PRIVATE libc)
+    configure_windows_unwind(guest_future_category_tests)
+    add_test(NAME guest_future_category COMMAND guest_future_category_tests)
+    set_tests_properties(guest_future_category PROPERTIES TIMEOUT 10)
+    if(WIN32)
+        set_tests_properties(guest_future_category PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
     add_test(NAME guest_new_handler COMMAND guest_new_handler_tests)
     if(WIN32)
         set_tests_properties(guest_new_handler PROPERTIES ENVIRONMENT_MODIFICATION

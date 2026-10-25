@@ -98,6 +98,8 @@ struct ErrorCode { int reserved; int value; const CategoryObject* category; };
 
 struct SystemErrorObject { ExceptionObject base; ErrorCode code; };
 
+struct FutureErrorObject { const void* vtable; GuestLocale::String message; ErrorCode code; };
+
 }
 
 extern "C" {
@@ -1150,6 +1152,11 @@ const char* APS5_VABI _ZSt13_Syserror_mapi_nid_postfix(int value);
 const LibcException::CategoryObject* APS5_VABI _ZSt16generic_categoryv_nid_postfix();
 const LibcException::CategoryObject* APS5_VABI _ZSt15system_categoryv_nid_postfix();
 GuestLocale::String* APS5_VABI _ZNKSt23_Generic_error_category7messageEi_nid_postfix( GuestLocale::String* result, const LibcException::CategoryObject* self, int value);
+const LibcException::CategoryObject* APS5_VABI _ZSt15future_categoryv_nid_postfix();
+LibcException::ErrorCode APS5_VABI _ZNKSt14error_category23default_error_conditionEi_nid_postfix(const LibcException::CategoryObject* self, int value);
+bool APS5_VABI _ZNKSt14error_category10equivalentEiRKSt15error_condition_nid_postfix(const LibcException::CategoryObject* self, int value, const LibcException::ErrorCode* condition);
+bool APS5_VABI _ZNKSt14error_category10equivalentERKSt10error_codei_nid_postfix(const LibcException::CategoryObject* self, const LibcException::ErrorCode* code, int value);
+void APS5_VABI _ZNSt14error_categoryD2Ev_nid_postfix(LibcException::CategoryObject* self);
 void APS5_VABI _ZNSt9exceptionD1Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt9exceptionD2Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt9exceptionD0Ev_nid_postfix(LibcException::ExceptionObject* self);
@@ -1251,6 +1258,7 @@ void APS5_VABI _ZNSt12length_errorC1ERKS__nid_postfix(LibcException::ExceptionOb
 void APS5_VABI _ZNSt12length_errorC2ERKS__nid_postfix(LibcException::ExceptionObject* self, const LibcException::ExceptionObject* source);
 LibcException::ExceptionObject* APS5_VABI _ZNSt12length_erroraSERKS__nid_postfix(LibcException::ExceptionObject* self, const LibcException::ExceptionObject* source);
 void APS5_VABI _ZNSt12system_errorD1Ev_nid_postfix(LibcException::ExceptionObject* self);
+void APS5_VABI _ZNSt12future_errorD1Ev_nid_postfix(LibcException::FutureErrorObject* self);
 void APS5_VABI _ZNSt12system_errorD2Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt12system_errorD0Ev_nid_postfix(LibcException::ExceptionObject* self);
 const char* APS5_VABI _ZNKSt12system_error4whatEv_nid_postfix(const LibcException::ExceptionObject* self);
@@ -1295,6 +1303,8 @@ int APS5_VABI dl_iterate_phdr_nid_postfix(int (*callback)(dl_phdr_info*, std::si
 [[noreturn]] void APS5_VABI _ZSt16_Throw_Cpp_errori_nid_postfix(int code);
 [[noreturn]] void APS5_VABI _Thrd_exit_nid_postfix(int code);
 [[noreturn]] void APS5_VABI _ZSt17rethrow_exceptionNSt15__exception_ptr13exception_ptrE_nid_postfix(GuestExceptionPointerArgument exception);
+[[noreturn]] void APS5_VABI _ZSt19_Throw_future_errorRKSt10error_code_nid_postfix(const LibcException::ErrorCode* code);
+[[noreturn]] void APS5_VABI _ZSt25_Rethrow_future_exceptionSt13exception_ptr_nid_postfix(GuestExceptionPointerArgument exception);
 [[noreturn]] void APS5_VABI _ZSt9terminatev_nid_postfix();
 [[noreturn]] void APS5_VABI __cxa_call_terminate_nid_postfix(void* exception);
 [[noreturn]] void APS5_VABI __cxa_pure_virtual_nid_postfix();
