@@ -1,3 +1,4 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
 #include <array>
 #include <cstdint>
 #include <type_traits>

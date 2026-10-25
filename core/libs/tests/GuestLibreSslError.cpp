@@ -1,16 +1,10 @@
+#include "prx/libSceLibreSsl/include/Api.hpp"
+#include "prx/libSceLibreSsl/include/Error.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
-
-extern "C" {
-std::uint64_t APS5_VABI ERR_get_error_nid_postfix();
-std::uint64_t APS5_VABI ERR_peek_error_nid_postfix();
-void APS5_VABI ERR_clear_error_nid_postfix();
-void APS5_VABI ERR_remove_thread_state_nid_postfix(const void*);
-void LibreSslPutError_nid_no_patch(int library, int function, int reason);
-}
 
 static void Require(bool value, const char* what) {
     if (value) return;
