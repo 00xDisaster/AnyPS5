@@ -15,11 +15,6 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#elif defined(__APPLE__)
-#include "prx/libc/include/specifics/linux/ElfTypes.hpp"
-#include <mach-o/dyld.h>
-#include <mach-o/loader.h>
-#include <unistd.h>
 #else
 #include <cerrno>
 #include <cstring>
@@ -36,6 +31,9 @@
 #endif
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include "prx/libc/include/specifics/linux/ElfTypes.hpp"
 #endif
 
 namespace GuestAllocations {
@@ -534,14 +532,16 @@ void GuestAllocationsGuestPages_nid_postfix(std::uintptr_t address, std::size_t 
 #ifdef __APPLE__
     struct Search {
         std::uintptr_t address;
+        std::uintptr_t hostPage;
         std::uintptr_t bias;
-    } search{address, 0};
+    } search{address, static_cast<std::uintptr_t>(::sysconf(_SC_PAGESIZE)), 0};
     dl_iterate_phdr([](dl_phdr_info* image, std::size_t, void* data) {
         auto& found = *static_cast<Search*>(data);
         for (unsigned index = 0; index < image->dlpi_phnum; ++index) {
             const auto& header = image->dlpi_phdr[index];
             const auto start = static_cast<std::uintptr_t>(image->dlpi_addr + header.p_vaddr);
-            if (header.p_type == PT_LOAD && found.address >= start && found.address - start < header.p_memsz) {
+            const auto finish = (start + header.p_memsz + found.hostPage - 1) & ~(found.hostPage - 1);
+            if (header.p_type == PT_LOAD && found.address >= start && found.address < finish) {
                 found.bias = static_cast<std::uintptr_t>(image->dlpi_addr);
                 return 1;
             }
@@ -555,23 +555,18 @@ void GuestAllocationsGuestPages_nid_postfix(std::uintptr_t address, std::size_t 
     *end = bias + ((address + bytes - bias + mask) & ~mask);
 }
 
-void GuestAllocationsTrimToRegistered_nid_postfix(void*, const void** pointer, std::size_t* bytes) {
+void GuestAllocationsTrimToRegistered_nid_postfix(void*, std::size_t page, const void** pointer, std::size_t* bytes) {
 #ifdef __APPLE__
-    constexpr std::uint64_t guestPage = 0x4000;
     auto start = reinterpret_cast<std::uintptr_t>(*pointer);
-    auto end = start + *bytes;
+    const auto end = start + *bytes;
     const auto& ranges = registry().ranges;
     const auto following = ranges.upper_bound(start);
     const bool startCovered = following != ranges.begin() && std::prev(following)->first + std::prev(following)->second->bytes > start;
-    if (!startCovered && following != ranges.end() && following->first < end && following->first - start < guestPage) start = following->first;
-    const auto beyond = ranges.lower_bound(end);
-    if (beyond != ranges.begin()) {
-        const auto finish = std::prev(beyond)->first + std::prev(beyond)->second->bytes;
-        if (finish < end && finish > start && end - finish < guestPage) end = finish;
-    }
+    if (!startCovered && following != ranges.end() && following->first < end && following->first - start < page) start = following->first;
     *pointer = reinterpret_cast<const void*>(start);
     *bytes = end - start;
 #else
+    static_cast<void>(page);
     static_cast<void>(pointer);
     static_cast<void>(bytes);
 #endif

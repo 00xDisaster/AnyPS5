@@ -1398,7 +1398,7 @@ int DoMprotect(const void* addr, size_t len, int prot) {
         if (!image.guestModule) throw std::invalid_argument("Memory protection of a foreign image is not supported");
         mutation.RegisterImage(reinterpret_cast<const void*>(image.base));
     }
-    mutation.TrimToRegistered(pointer, bytes);
+    mutation.TrimToRegistered(PS5_PAGE_SIZE, pointer, bytes);
 #endif
     std::vector<std::pair<const void*, std::size_t>> spans;
     mutation.ForRegistered(pointer, bytes, [&](const void* span, std::size_t spanBytes) { spans.emplace_back(span, spanBytes); });
@@ -1406,9 +1406,11 @@ int DoMprotect(const void* addr, size_t len, int prot) {
     for (const auto& [span, spanBytes] : spans) mutation.RequireUnpinned(span, spanBytes);
     for (const auto& [span, spanBytes] : spans) {
         mutation.Protect(span, spanBytes, (prot & 3) != 0, (prot & 2) != 0, (prot & GuestProtGpuReadWrite) != 0, [&] {
-            if (mprotect(const_cast<void*>(span), spanBytes, nativeProtection) != 0) throw std::system_error(errno, std::generic_category(), "mprotect failed");
 #ifdef __APPLE__
-            GuestWriteWatch::GuestWriteWatchProtectionChanged_nid_postfix(span, spanBytes, nativeProtection);
+            if (const int error = GuestWriteWatch::GuestWriteWatchProtect_nid_postfix(const_cast<void*>(span), spanBytes, nativeProtection); error != 0)
+                throw std::system_error(error, std::generic_category(), "mprotect failed");
+#else
+            if (mprotect(const_cast<void*>(span), spanBytes, nativeProtection) != 0) throw std::system_error(errno, std::generic_category(), "mprotect failed");
 #endif
         });
         RecordProtection(span, spanBytes, prot);
