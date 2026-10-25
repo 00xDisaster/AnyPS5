@@ -120,7 +120,7 @@ static void TestStop(bool custom, bool commands, std::uint32_t event, unsigned o
         if (replay && grain == 0) Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
     }
     Require(state.sent && sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
     ++completedCases;
 }
 

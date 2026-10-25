@@ -130,7 +130,7 @@ static std::uintptr_t ActivationVoice(std::uintptr_t system, ActivationState& st
     Ngs2ContextBufferInfo query{};
     Require(sceNgs2RackQueryBufferSize(id, &common, &query) == SCE_NGS2_OK);
     const auto buffer = Buffer(query);
-    Require(sceNgs2RackCreate(system, id, &common, &buffer, &state.rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, id, &common, &buffer, &state.rack) == SCE_NGS2_OK);
     state.system = system;
     state.voice = Voice(state.rack);
     if (!sampler) Control(state.voice, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0});
@@ -254,7 +254,7 @@ static void TestActivation(Activation mode, unsigned order, bool handler = true,
     if (mode == Activation::Cycle) Require(peer.guards == 1);
     Require(state.setups == 1);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 int main(int argc, char** argv) {

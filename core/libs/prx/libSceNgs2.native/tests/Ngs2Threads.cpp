@@ -129,7 +129,7 @@ static std::uintptr_t ThreadVoice(std::uintptr_t system, ThreadControl& state, s
     Ngs2ContextBufferInfo query{};
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &query) == SCE_NGS2_OK);
     const auto buffer = Buffer(query);
-    const int result = sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &buffer, &rack);
+    const int result = TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &buffer, &rack);
     if (state.destroyOnSetup) {
         Require(result == SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE && rack == 0);
         return 0;
@@ -203,7 +203,7 @@ static void TestSerialization(bool failure) {
     Require(sceNgs2RackDestroy(peerRack, nullptr) == SCE_NGS2_OK);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     Require(state.cleanups == 1 && peerState.cleanups == 1);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 static void TestDestruction(bool destroySystem) {
@@ -226,9 +226,13 @@ static void TestDestruction(bool destroySystem) {
     control.join();
     destroy.join();
     Require(!state.active.load());
-    if (!destroySystem) Require(state.cleanups == 1);
+    if (destroySystem) {
+        Require(state.cleanups == 0);
+        Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+    }
+    Require(state.cleanups == 1);
     if (!destroySystem) Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 static void TestRenderWait(bool crossSystem) {
@@ -264,7 +268,7 @@ static void TestRenderWait(bool crossSystem) {
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     if (crossSystem) Require(sceNgs2SystemDestroy(peerSystem, nullptr) == SCE_NGS2_OK);
     Require(state.cleanups == 1 && peerState.cleanups == 1);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 static void TestLifecycle(bool crossSystem, bool inlineHandoff, bool destroyOnSetup, bool destroyOnCleanup) {
@@ -303,7 +307,7 @@ static void TestLifecycle(bool crossSystem, bool inlineHandoff, bool destroyOnSe
     if (crossSystem && !destroyOnSetup && !destroyOnCleanup)
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     Require(peerState.cleanups == 1);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 static void TestSystemCleanupHandoff() {
@@ -321,11 +325,13 @@ static void TestSystemCleanupHandoff() {
     state.system = system;
     state.peer = peer;
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    Require(state.cleanups == 0 && peerState.calls == 0);
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
     Require(state.cleanups == 1 && peerState.calls == 1 && peerState.before[0] == 1.0f);
     Require(ThreadValue(peer, 0.5f) == SCE_NGS2_OK && peerState.before[1] == 6.0f);
     Require(sceNgs2RackDestroy(peerRack, nullptr) == SCE_NGS2_OK && peerState.cleanups == 1);
     Require(sceNgs2SystemDestroy(peerSystem, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 struct LifecycleOrder {
@@ -441,7 +447,7 @@ static void TestLifecycleOrder(unsigned failure) {
         if (failure >= 3) {
             const Ngs2BufferAllocator allocator{LifecycleAllocate, LifecycleRelease, reinterpret_cast<std::uintptr_t>(&order)};
             result = sceNgs2RackCreateWithAllocator(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &allocator, &rack);
-        } else result = sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &buffer, &rack);
+        } else result = TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &buffer, &rack);
         Require(failure != 3);
     } catch (const std::runtime_error& error) {
         Require(failure == 3 && std::string(error.what()) == "setup failure");
@@ -478,16 +484,85 @@ static void TestLifecycleOrder(unsigned failure) {
     if (failure >= 3) Require(order.allocations == 1 && order.releases == 1);
     Require(sceNgs2RackDestroy(peerRack, nullptr) == SCE_NGS2_OK && peerState.cleanups == 1);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
+}
+
+static void TestSystemOwnership() {
+    const auto firstBuffer = usedBuffers;
+    const auto system = ThreadSystem();
+    const auto master = Mastering(system, 2);
+    ThreadControl state;
+    state.park = false;
+    std::uintptr_t rack = 0;
+    const auto voice = ThreadVoice(system, state, rack);
+    Require(ThreadValue(voice, 2.0f) == SCE_NGS2_OK);
+    Patch(voice, master);
+    Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::array<float, 128> audio{};
+    const Ngs2RenderBufferInfo output{audio.data(), sizeof(audio), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 2};
+    Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+    for (float value : audio) Require(value == 0.5f);
+    Ngs2ContextBufferInfo released{};
+    Require(sceNgs2SystemDestroy(system, &released) == SCE_NGS2_OK && state.cleanups == 0);
+    Require(released.host_buffer != nullptr && released.host_buffer_size != 0);
+    std::memset(released.host_buffer, 0xda, released.host_buffer_size);
+    std::uintptr_t found = 0, owner = 0;
+    std::uint32_t index = 99, flags = 99;
+    Require(sceNgs2RackGetVoiceHandle(rack, 0, &found) == SCE_NGS2_OK && found == voice);
+    Require(sceNgs2VoiceGetOwner(voice, &owner, &index) == SCE_NGS2_OK && owner == rack && index == 0);
+    Require(sceNgs2VoiceGetStateFlags(voice, &flags) == SCE_NGS2_OK && flags == 3);
+    Ngs2VoicePortInfo port{};
+    Require(sceNgs2VoiceGetPortInfo(voice, 0, &port, sizeof(port)) == SCE_NGS2_OK && port.dest_handle == master);
+    Require(ThreadValue(voice, 0.75f) == SCE_NGS2_OK && state.before[1] == 4.0f);
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK && state.cleanups == 1);
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_ERROR_INVALID_RACK_HANDLE && state.cleanups == 1);
+    flags = 99;
+    Require(sceNgs2VoiceGetStateFlags(voice, &flags) == SCE_NGS2_ERROR_INVALID_VOICE_HANDLE && flags == 99);
+    Require(sceNgs2VoiceGetOwner(master, &owner, &index) == SCE_NGS2_OK);
+    Require(sceNgs2RackDestroy(owner, nullptr) == SCE_NGS2_OK);
+    ResetBuffers(firstBuffer);
+}
+
+static void TestDetachedSampler() {
+    const auto firstBuffer = usedBuffers;
+    const auto system = ThreadSystem();
+    const auto master = Mastering(system, 2);
+    const auto rack = CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER);
+    const auto voice = Voice(rack);
+    Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 2, 48000, 0, 0, 0}});
+    std::array<std::int16_t, 512> pcm{};
+    pcm.fill(4096);
+    const Ngs2WaveformBlock block{0, sizeof(pcm), 0, 0, pcm.size() / 2, 0, 0};
+    Control(voice, SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS, Ngs2SamplerVoiceWaveformBlocksParam{{}, pcm.data(), 0, 1, &block});
+    Patch(voice, master);
+    Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::array<float, 128> audio{};
+    const Ngs2RenderBufferInfo output{audio.data(), sizeof(audio), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 2};
+    Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+    Ngs2SamplerVoiceState before{}, after{};
+    Require(sceNgs2VoiceGetState(voice, &before.voice_state, sizeof(before)) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2VoiceGetState(voice, &after.voice_state, sizeof(after)) == SCE_NGS2_OK);
+    Require(after.voice_state.state_flags == before.voice_state.state_flags && after.num_decoded_samples == before.num_decoded_samples);
+    Require(after.decoded_data_size == before.decoded_data_size && after.waveform_data == before.waveform_data);
+    Event(voice, SCE_NGS2_VOICE_EVENT_STOP_IMM);
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+    ResetBuffers(firstBuffer);
 }
 
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "ownership") {
+        TestSystemOwnership();
+        TestSystemCleanupHandoff();
+        TestDetachedSampler();
+        std::puts("NGS2 detached rack ownership: 3 scenarios passed");
+        return 0;
+    }
     if (argc > 1 && std::string(argv[1]) == "lifecycle-guards") {
         TestLifecycleOrder(3);
         TestLifecycleOrder(4);
         TestLifecycleOrder(5);
-        TestSystemCleanupHandoff();
-        std::puts("NGS2 lifecycle failure cleanup: 4 host scenarios passed");
+        std::puts("NGS2 lifecycle failure cleanup: 3 host scenarios passed");
         return 0;
     }
     if (argc > 1) {

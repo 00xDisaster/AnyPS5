@@ -259,7 +259,11 @@ static void TestRackOptions() {
     const float gain = 0.5f;
     Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 0, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain)});
     Require(calls.controls == 1);
-    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK && calls.cleanupVoices.empty());
+    std::uintptr_t owner = 0;
+    std::uint32_t index = 99;
+    Require(sceNgs2VoiceGetOwner(voice, &owner, &index) == SCE_NGS2_OK);
+    Require(sceNgs2RackDestroy(owner, nullptr) == SCE_NGS2_OK);
     Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 1}));
 }
 

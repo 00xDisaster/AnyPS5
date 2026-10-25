@@ -73,7 +73,7 @@ static void TestErrorsAndInfo() {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_SUBMIXER, &named.rack_option, &namedQuery) == SCE_NGS2_OK);
     const auto namedBuffer = Buffer(namedQuery);
     uintptr_t namedRack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_SUBMIXER, &named.rack_option, &namedBuffer, &namedRack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_SUBMIXER, &named.rack_option, &namedBuffer, &namedRack) == SCE_NGS2_OK);
     Ngs2RackInfo namedInfo{};
     Require(sceNgs2RackGetInfo(namedRack, &namedInfo, sizeof(namedInfo)) == SCE_NGS2_OK);
     Require(namedInfo.name[0] == 'n' && namedInfo.name[62] == 'n' && namedInfo.name[63] == '\0');
@@ -710,7 +710,7 @@ static std::vector<float> RenderReverb(const ReverbCase& reverbCase, std::uint32
         all.insert(all.end(), out.begin(), out.end());
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
     return all;
 }
 
@@ -803,7 +803,7 @@ static std::vector<float> RenderReverbChannels(std::uint32_t inputs, std::uint32
         all.insert(all.end(), out.begin(), out.end());
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
     return all;
 }
 
@@ -1086,7 +1086,7 @@ static uintptr_t MasteringRack(uintptr_t system, std::uint32_t voices) {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_MASTERING, &option.rack_option, &query) == SCE_NGS2_OK);
     const auto buffer = Buffer(query);
     uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_MASTERING, &option.rack_option, &buffer, &rack) == SCE_NGS2_OK && rack != 0);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_MASTERING, &option.rack_option, &buffer, &rack) == SCE_NGS2_OK && rack != 0);
     return rack;
 }
 
@@ -1497,7 +1497,7 @@ static std::vector<float> MixFrame(std::uint32_t sourceChannels, std::uint32_t s
     const Ngs2RenderBufferInfo info{out.data(), out.size() * sizeof(float), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, destChannels};
     Require(sceNgs2SystemRender(system, &info, 1) == SCE_NGS2_OK);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
     return std::vector<float>(out.begin() + 3 * destChannels, out.begin() + 4 * destChannels);
 }
 
@@ -1730,7 +1730,8 @@ static void TestAllocator() {
     Require(sceNgs2RackCreateWithAllocator(system, SCE_NGS2_RACK_ID_MASTERING, nullptr, &allocator, &master) == SCE_NGS2_OK && allocations == 3);
     Ngs2ContextBufferInfo released{};
     Require(sceNgs2RackDestroy(sampler, &released) == SCE_NGS2_OK && allocations == 2 && released.host_buffer == nullptr);
-    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK && allocations == 0);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK && allocations == 1);
+    Require(sceNgs2RackDestroy(master, nullptr) == SCE_NGS2_OK && allocations == 0);
     Require(sceNgs2RackDestroy(master, nullptr) == SCE_NGS2_ERROR_INVALID_RACK_HANDLE);
 }
 

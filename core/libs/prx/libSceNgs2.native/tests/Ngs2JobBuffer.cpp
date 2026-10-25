@@ -225,7 +225,7 @@ static void TestBuffer(Update update, bool custom, bool commands, unsigned order
             Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT, Ngs2CustomVoicePitchShiftParam{{}, -1200, 0, 0, 0});
     }
     Require(state.tick == grains && sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 int main() {

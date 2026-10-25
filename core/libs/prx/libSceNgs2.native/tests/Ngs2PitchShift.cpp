@@ -44,7 +44,7 @@ static void TestPitchShift(std::uint32_t moduleIndex, bool checkBypassRejection 
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &query) == SCE_NGS2_OK);
     const auto storage = Buffer(query);
     std::uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &storage, &rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER, &common, &storage, &rack) == SCE_NGS2_OK);
     const auto voice = Voice(rack);
     const auto setup = [&] {
         Control(voice, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0, 0});
@@ -141,7 +141,7 @@ static void TestPitchShift(std::uint32_t moduleIndex, bool checkBypassRejection 
         for (const float sample : samples) Require(sample == 0.0f);
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 int main() {

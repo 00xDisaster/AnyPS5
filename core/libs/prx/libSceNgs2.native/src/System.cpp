@@ -170,7 +170,14 @@ Ngs2System* Ngs2FindSystem(Ngs2Handle handle) {
     return found == systems.end() || (*found)->destroying ? nullptr : *found;
 }
 
+std::vector<Ngs2Rack*>& Ngs2DetachedRacks() {
+    static auto* const racks = new std::vector<Ngs2Rack*>();
+    return *racks;
+}
+
 Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
+    for (auto* rack : Ngs2DetachedRacks())
+        if (!rack->destroying && reinterpret_cast<Ngs2Handle>(rack) == handle) return rack;
     for (auto* system : Systems()) {
         if (system->destroying) continue;
         for (auto* rack : system->racks) {
@@ -181,6 +188,11 @@ Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
 }
 
 Ngs2Voice* Ngs2FindVoice(Ngs2Handle handle) {
+    for (auto* rack : Ngs2DetachedRacks()) {
+        if (rack->destroying) continue;
+        for (auto& voice : rack->voices)
+            if (reinterpret_cast<Ngs2Handle>(&voice) == handle) return &voice;
+    }
     for (auto* system : Systems()) {
         if (system->destroying) continue;
         for (auto* rack : system->racks) {
@@ -400,21 +412,21 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
         system = Ngs2FindSystem(system_handle);
     }
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    auto& detached = Ngs2DetachedRacks();
+    detached.reserve(detached.size() + system->racks.size());
     system->destroying = true;
-    try {
-        while (!system->racks.empty()) {
-            const int result = Ngs2DestroyRack(*system->racks.back(), nullptr);
-            if (result != SCE_NGS2_OK) {
-                system->destroying = false;
-                Ngs2NotifyWaiters();
-                return result;
+    for (auto* rack : system->racks) {
+        for (auto& voice : rack->voices) {
+            for (auto& port : voice.ports) {
+                if (port.dest != nullptr) port.detachedDest = reinterpret_cast<Ngs2Handle>(port.dest);
+                port.dest = nullptr;
             }
         }
-    } catch (...) {
-        system->destroying = false;
-        Ngs2NotifyWaiters();
-        throw;
+        rack->system = nullptr;
+        detached.push_back(rack);
     }
+    system->racks.clear();
+    Ngs2NotifyWaiters();
     std::erase(Systems(), system);
     {
         std::lock_guard locks(SystemLockMutex());

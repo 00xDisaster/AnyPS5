@@ -78,7 +78,7 @@ static void TestSampler(const Case& test) {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == SCE_NGS2_OK);
     const auto storage = Buffer(query);
     std::uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &storage, &rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &storage, &rack) == SCE_NGS2_OK);
     const auto voice = Voice(rack);
     Control(voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP,
             Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 2, test.rate, 0, 0, 0}});
@@ -124,7 +124,7 @@ static void TestSampler(const Case& test) {
         }
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 struct Stream {
@@ -176,7 +176,7 @@ static void TestStreaming(std::uint32_t mode, std::uint32_t capacity = 2) {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == SCE_NGS2_OK);
     const auto storage = Buffer(query);
     std::uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &storage, &rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &storage, &rack) == SCE_NGS2_OK);
     Stream stream{Voice(rack), std::vector<std::int16_t>(1280), mode};
     for (std::uint32_t i = 0; i < stream.pcm.size(); ++i) stream.pcm[i] = static_cast<std::int16_t>((i / 128 + 1) * 1000);
     Control(stream.voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP,
@@ -225,7 +225,7 @@ static void TestStreaming(std::uint32_t mode, std::uint32_t capacity = 2) {
     option.max_waveform_blocks = 0;
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == static_cast<int>(0x804A8053u));
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 struct CallbackOrder {
@@ -294,7 +294,7 @@ static std::uintptr_t CallbackRack(std::uintptr_t system, bool custom) {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &rackOption, &query) == SCE_NGS2_OK);
     const auto storage = Buffer(query);
     std::uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &rackOption, &storage, &rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &rackOption, &storage, &rack) == SCE_NGS2_OK);
     return rack;
 }
 
@@ -466,7 +466,7 @@ static void TestParallelJobs(bool deferredFlush, bool builtin = false, bool fail
         for (auto sample : samples) Require(sample == 3.0f / 16.0f);
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 struct SamplerPublication {
@@ -520,7 +520,7 @@ static void TestSamplerPublication() {
         }
     }
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint32_t mode, bool mixed = false, bool scheduled = false, bool immediate = false) {
@@ -574,7 +574,7 @@ static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint3
     Require(order.events.empty());
     for (auto sample : samples) Require(sample == 0.0f);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 int main() {

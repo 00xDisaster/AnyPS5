@@ -135,7 +135,7 @@ static std::uintptr_t CreateFx(std::uintptr_t system, Family family, FxCalls& ca
     Require(sceNgs2RackQueryBufferSize(id, &common, &query) == SCE_NGS2_OK);
     const auto buffer = Buffer(query);
     std::uintptr_t rack = 0;
-    Require(sceNgs2RackCreate(system, id, &common, &buffer, &rack) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, id, &common, &buffer, &rack) == SCE_NGS2_OK);
     const auto voice = Voice(rack);
     if (!sampler) Control(voice, SCE_NGS2_CUSTOM_SUBMIXER_VOICE_PARAM_SETUP, Ngs2CustomSubmixerVoiceSetupParam{{}, 2, 2, 0});
     if (family == Family::Custom)
@@ -255,7 +255,7 @@ static void TestFx(Family family, std::uint32_t event, unsigned order, bool comm
         if (controlMode == 2) Require(original.before[2] == 0.5f);
     }
     Require(update.tick == 8 && sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
-    usedBuffers = firstBuffer;
+    ResetBuffers(firstBuffer);
 }
 
 int main() {

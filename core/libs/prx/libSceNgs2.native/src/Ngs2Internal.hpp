@@ -87,6 +87,7 @@ struct Ngs2Filter {
 
 struct Ngs2Port {
     Ngs2Voice* dest = nullptr;
+    Ngs2Handle detachedDest = 0;
     float volume = 1.0f;
     std::int32_t matrix = -1;
     std::vector<float> rampFrom;
@@ -292,6 +293,7 @@ const TParam& ParamAs(const Ngs2VoiceParamHeader& param) {
     return reinterpret_cast<const TParam&>(param);
 }
 
+std::vector<Ngs2Rack*>& Ngs2DetachedRacks();
 Ngs2Rack* Ngs2FindRack(Ngs2Handle handle);
 Ngs2Voice* Ngs2FindVoice(Ngs2Handle handle);
 void* Ngs2Place(const Ngs2ContextBufferInfo* bufferInfo, std::size_t size, std::size_t alignment);

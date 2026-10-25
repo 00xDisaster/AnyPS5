@@ -39,12 +39,12 @@ struct Ngs2ControlFrame {
     explicit Ngs2ControlFrame(Ngs2Voice& value) : voice(value), previous(currentControl) {
         currentControl = this;
         voice.controlOwner = std::this_thread::get_id();
-        ++voice.rack->system->controlCallbacks;
+        if (voice.rack->system != nullptr) ++voice.rack->system->controlCallbacks;
     }
     ~Ngs2ControlFrame() {
         currentControl = previous;
         voice.controlOwner = {};
-        --voice.rack->system->controlCallbacks;
+        if (voice.rack->system != nullptr) --voice.rack->system->controlCallbacks;
         Ngs2NotifyWaiters();
     }
     Ngs2ControlFrame(const Ngs2ControlFrame&) = delete;
@@ -75,7 +75,7 @@ public:
         if (voice == nullptr) return;
         CheckControlReentry(*voice);
         ++voice->rack->voiceAccesses;
-        ++voice->rack->system->voiceAccesses;
+        if (voice->rack->system != nullptr) ++voice->rack->system->voiceAccesses;
         try {
             while (voice->controlOwner != std::thread::id{}) Ngs2WaitOnce();
         } catch (...) {
@@ -89,7 +89,7 @@ public:
 private:
     void release() {
         --voice->rack->voiceAccesses;
-        --voice->rack->system->voiceAccesses;
+        if (voice->rack->system != nullptr) --voice->rack->system->voiceAccesses;
         Ngs2NotifyWaiters();
     }
 };
@@ -191,7 +191,7 @@ static void PublishPendingEvent(Ngs2Voice& voice, const Ngs2PendingControl& cont
 }
 
 static bool DeferringControls(const Ngs2Voice& voice) {
-    return voice.rack->system->processingVoices || voice.rack->system->jobsExecuting || !voice.pendingControls.empty();
+    return (voice.rack->system != nullptr && (voice.rack->system->processingVoices || voice.rack->system->jobsExecuting)) || !voice.pendingControls.empty();
 }
 
 static void EnqueueControl(Ngs2Voice& voice, Ngs2PendingControl control) {
@@ -438,6 +438,7 @@ static void Patch(Ngs2Voice& voice, const Ngs2VoicePatchParam& patch) {
     if (patch.dest_input_id != 0) throw std::runtime_error("NGS2: voice input " + std::to_string(patch.dest_input_id) + " is not implemented");
     if (patch.dest_handle == 0) {
         port.dest = nullptr;
+        port.detachedDest = 0;
         return;
     }
     auto* dest = Ngs2FindVoice(patch.dest_handle);
@@ -450,6 +451,7 @@ static void Patch(Ngs2Voice& voice, const Ngs2VoicePatchParam& patch) {
         APS5_INVALID_ARG_EX;
     }
     port.dest = dest;
+    port.detachedDest = 0;
 }
 
 static void ApplyCommonParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
@@ -606,6 +608,7 @@ void Ngs2SetFilter(Ngs2Voice& voice, const Ngs2SamplerVoiceFilterParam& param) {
     if (!std::isfinite(param.frequency) || param.frequency < 0.0f || !std::isfinite(param.q) || param.q <= 0.0f || !std::isfinite(param.level) || param.level < 0.0f) {
         APS5_INVALID_ARG_EX;
     }
+    if (voice.rack->system == nullptr) throw std::runtime_error("NGS2: filter coefficients for a detached rack are not implemented");
     const double rate = voice.rack->system->option.sample_rate;
     filter.enabled = true;
     filter.bypassMask = param.channel_mask;
@@ -842,7 +845,7 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
             if (state_size != sizeof(Ngs2SamplerVoiceState)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
             auto& sampler = *reinterpret_cast<Ngs2SamplerVoiceState*>(state);
             if (voice.pendingPlay) { sampler = {}; sampler.voice_state.state_flags = SCE_NGS2_VOICE_STATE_FLAG_INUSE; return SCE_NGS2_OK; }
-            if (voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0) {
+            if (voice.rack->system != nullptr && voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0) {
                 sampler = voice.publishedSampler;
                 return SCE_NGS2_OK;
             }
@@ -875,8 +878,8 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
             if (voice.pendingPlay) { sampler = {}; sampler.voice_state.state_flags = SCE_NGS2_VOICE_STATE_FLAG_INUSE; return SCE_NGS2_OK; }
             sampler = {};
             sampler.voice_state.state_flags = voice.stateFlags;
-            if (voice.rack->system->renderDepth == 0 && voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
-            sampler.num_decoded_samples = voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0
+            if ((voice.rack->system == nullptr || voice.rack->system->renderDepth == 0) && voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
+            sampler.num_decoded_samples = voice.rack->system != nullptr && voice.rack->system->renderDepth != 0 && voice.rack->system->jobManagers[0].handle != 0
                 ? voice.publishedSampler.num_decoded_samples : voice.decodedSamples;
             return SCE_NGS2_OK;
         }
@@ -908,7 +911,7 @@ int APS5_VABI sceNgs2VoiceGetPortInfo(uintptr_t voice_handle, uint32_t port, Ngs
     *info = {};
     info->matrix_id = matrix;
     info->volume = volume;
-    info->dest_handle = reinterpret_cast<Ngs2Handle>(source.dest);
+    info->dest_handle = source.dest == nullptr ? source.detachedDest : reinterpret_cast<Ngs2Handle>(source.dest);
     return SCE_NGS2_OK;
 }
 
