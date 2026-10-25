@@ -217,6 +217,9 @@ static void CheckAioProcessingOwnership(bool fail) {
         Check(sceKernelAioWaitRequest(pending, &waited, nullptr) == 0);
         waiterDone.store(true);
     });
+    const auto waiterDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (AioProcessingWaitersForTest_nid_no_patch() == 0 && std::chrono::steady_clock::now() < waiterDeadline) std::this_thread::yield();
+    Check(AioProcessingWaitersForTest_nid_no_patch() == 1);
     const auto concurrent = SubmitEmptyAio();
     Check(!waiterDone.load() && result.state == 7 && submittedId == -7);
     {
@@ -228,6 +231,7 @@ static void CheckAioProcessingOwnership(bool fail) {
     waiter.join();
     GuestArena::GuestArenaSetHostReadHook_nid_no_patch(nullptr);
     Check(waiterDone.load() && submitFailed == fail);
+    Check(AioProcessingWaitersForTest_nid_no_patch() == 0);
     if (fail) {
         Check(waited == SCE_KERNEL_ERROR_ESRCH && submittedId == -7 && result.state == 7);
     } else {
