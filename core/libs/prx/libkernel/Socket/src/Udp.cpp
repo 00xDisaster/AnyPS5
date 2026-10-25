@@ -42,6 +42,7 @@
 #include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/File/include/RandomDevice.hpp"
 #include "prx/libkernel/File/include/SharedMemory.hpp"
+#include "prx/libkernel/Time/include/Time.hpp"
 #include "prx/libkernel/Time/include/TimedWait.hpp"
 #include "prx/libkernel/Socket/include/SocketPoll.hpp"
 #include "prx/libkernel/Socket/include/SocketConnect.hpp"
@@ -1599,6 +1600,31 @@ static bool WriteGuest(void* destination, const void* source, std::size_t bytes)
     return true;
 #endif
 }
+static std::vector<unsigned char> ArrivalTimestamps(const Socket& socket, int keptFlags) {
+    std::vector<unsigned char> records;
+    if (socket.type != 2 || (socket.family != 2 && socket.family != 28)) return records;
+    const bool binary = socket.family == 2 && (keptFlags & 0x2000) != 0;
+    const bool micro = (keptFlags & 0x400) != 0;
+    if (!binary && !micro) return records;
+    KernelTimespec now{};
+    if (clock_gettime_nid_postfix(0, &now) != 0) throw std::runtime_error("recvmsg: reading CLOCK_REALTIME for the arrival time failed");
+    const auto append = [&records](int type, std::int64_t seconds, std::uint64_t fraction) {
+        constexpr std::uint32_t length = 32;
+        constexpr int level = 0xffff;
+        const auto at = records.size();
+        records.resize(at + length);
+        std::memcpy(records.data() + at, &length, sizeof(length));
+        std::memcpy(records.data() + at + 4, &level, sizeof(level));
+        std::memcpy(records.data() + at + 8, &type, sizeof(type));
+        std::memcpy(records.data() + at + 16, &seconds, sizeof(seconds));
+        std::memcpy(records.data() + at + 24, &fraction, sizeof(fraction));
+    };
+    const auto seconds = static_cast<std::int64_t>(now.tv_sec);
+    const auto nanoseconds = static_cast<std::uint64_t>(now.tv_nsec);
+    if (binary) append(4, seconds, nanoseconds * 18446744073ull);
+    if (micro) append(2, seconds, nanoseconds / 1000);
+    return records;
+}
 std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message, int flags) {
     GuestMsghdr header{};
     if (!message || !ReadGuest(&header, message, sizeof(header))) return Fail(14);
@@ -1621,6 +1647,7 @@ std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message,
     sockaddr_storage native{};
     socklen_t size = 0;
     std::int64_t received = 0;
+    std::vector<unsigned char> stamps;
     if (total != 0 || socket->type == 1 || ReadableNow(*socket)) {
         size = sizeof(native);
         if (const int waited = WaitForTransfer(*socket, false, flags)) return Fail(waited);
@@ -1633,6 +1660,14 @@ std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message,
 #else
             return Fail(NativeError());
 #endif
+        }
+        if (header.control) {
+            int keptFlags = 0;
+            {
+                std::lock_guard lock(socket->modeMutex);
+                keptFlags = socket->options.keptFlags;
+            }
+            stamps = ArrivalTimestamps(*socket, keptFlags);
         }
     }
     header.flags = flags;
@@ -1659,7 +1694,11 @@ std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message,
         if (!WriteGuest(header.name, address, header.nameLength)) return Fail(14);
         if (!WriteGuest(&message->nameLength, &header.nameLength, sizeof(header.nameLength))) return Fail(14);
     }
-    header.controlLength = 0;
+    const std::size_t controlCapacity = header.controlLength;
+    const std::size_t copied = std::min(stamps.size(), controlCapacity);
+    if (copied != 0 && !WriteGuest(header.control, stamps.data(), copied)) return Fail(14);
+    if (copied < stamps.size() && controlCapacity != 0) header.flags |= 0x20;
+    header.controlLength = static_cast<std::uint32_t>(copied);
     constexpr auto results = offsetof(GuestMsghdr, controlLength);
     if (!WriteGuest(reinterpret_cast<char*>(message) + results, reinterpret_cast<const char*>(&header) + results, sizeof(header) - results)) return Fail(14);
     return received;
