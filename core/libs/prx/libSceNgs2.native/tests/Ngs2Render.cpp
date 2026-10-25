@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <iterator>
 #include <numbers>
 #include <stdexcept>
@@ -978,10 +979,11 @@ static void TestMasteringGain() {
 }
 
 static void TestMasteringGainClampedLikePs5() {
-    const auto chain = [](std::uint32_t channels, std::uint32_t grains, uintptr_t& master) {
+    std::deque<std::vector<std::int16_t>> waveforms;
+    const auto chain = [&waveforms](std::uint32_t channels, std::uint32_t grains, uintptr_t& master) {
         const auto system = CreateSystem();
         master = Mastering(system, channels);
-        const std::vector<std::int16_t> pcm(Grain * grains, 16384);
+        const auto& pcm = waveforms.emplace_back(Grain * grains, 16384);
         const auto source = Sampler(system, pcm, 0);
         const std::vector<float> levels(channels, 1.0f);
         Control(source, SCE_NGS2_VOICE_PARAM_MATRIX_LEVELS, Ngs2VoiceMatrixLevelsParam{{}, 0, channels, levels.data()});
