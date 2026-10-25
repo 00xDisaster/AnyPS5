@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <typeinfo>
 
 struct TypeRecord { const void* const* vtable; const char* name; const TypeRecord* base; };
 struct Vtable { std::ptrdiff_t offset; const TypeRecord* type; const void* destroy; const void* deleteObject; const char* (APS5_VABI *what)(const LibcException::ExceptionObject*); };
@@ -22,12 +23,12 @@ int main() {
     const auto& table = _ZTVSt20bad_array_new_length_nid_postfix;
     Require(table.offset == 0 && table.type == &type && table.what != nullptr);
 
-    bool thrown = false;
+    const std::type_info* caught = nullptr;
     try {
         _ZSt6_ThrowRKSt20bad_array_new_length_nid_postfix(nullptr);
     } catch (...) {
-        thrown = true;
+        caught = __cxa_current_exception_type_nid_postfix();
     }
-    Require(thrown);
+    Require(caught != nullptr && caught->name() != nullptr && std::strcmp(caught->name(), type.name) == 0);
     return 0;
 }
