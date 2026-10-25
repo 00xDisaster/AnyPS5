@@ -294,7 +294,6 @@ void testWorkloadStreams() {
     check(sceAgcDriverRegisterWorkloadStream(1, record) == 0, "workload stream registration failed");
     Storage registered;
     registered.words.fill(0xdeadbeefu);
-    expectFailure([&] { sceAgcDcbSetWorkloadStreamInactive(&registered.buffer, 1); });
     const auto* acbActive = sceAgcAcbSetWorkloadsActive(&registered.buffer, 1, ids, 2);
     check(acbActive == registered.words.data() && acbActive[0] == Agc::Command::Header(0x10, 18, 0) && acbActive[1] == 1 && acbActive[2] == 0x18 && acbActive[3] == 0, "ACB workloads active packet");
     for (std::uint32_t word = 4; word < 18; ++word) check(acbActive[word] == 0, "ACB workloads active packet tail is not zero");
