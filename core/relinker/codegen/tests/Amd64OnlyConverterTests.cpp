@@ -2120,6 +2120,7 @@ void scalarCompareExecution() {
     }
     munmap(code, 4096);
 }
+
 void rdpidExecution() {
     const auto matcher = Codegen::MakeAmd64OnlyInstructionMatcher(Codegen::Amd64OnlyTarget::Rosetta);
     const Bytes site = {0xF3, 0x0F, 0xC7, 0xF8};
@@ -2203,7 +2204,6 @@ void clwbExecution() {
     require(address == reinterpret_cast<std::uint64_t>(line), "CLWB replacement changed its address register");
     require(kept == 0x5A5A5A5A5A5A5A5Aull, "CLWB replacement changed an unrelated register");
     require(carry == 1, "CLWB replacement changed the flags");
-}
 }
 #else
 void reciprocalExecution() {}
