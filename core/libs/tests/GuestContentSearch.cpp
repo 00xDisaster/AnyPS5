@@ -3,10 +3,21 @@
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
 void Require(bool value) { if (!value) std::abort(); }
+
+template <typename TAction>
+bool NotImplemented(TAction action, const std::string& name) {
+    try {
+        action();
+    } catch (const std::runtime_error& error) {
+        return error.what() == name + " not implemented";
+    }
+    return false;
+}
 
 template <typename TAction>
 bool ThrowsRuntimeError(TAction action) {
@@ -122,12 +133,12 @@ int main() {
     Require(sceContentSearchGetTotalContentSize(&columnSet, 0, &size, &updateId) == ErrorInvalidArgument);
     Require(count == -1 && updateId == -1);
 
-    Require(Throws([&] { sceContentSearchOpenMetadata("/data/photo.jpg", &metadataId); }));
-    Require(Throws([&] { sceContentSearchOpenMetadataByContentId(1, &metadataId); }));
+    Require(NotImplemented([&] { sceContentSearchOpenMetadata("/data/photo.jpg", &metadataId); }, "sceContentSearchOpenMetadata"));
+    Require(NotImplemented([&] { sceContentSearchOpenMetadataByContentId(1, &metadataId); }, "sceContentSearchOpenMetadataByContentId"));
     Require(metadataId == -1);
     Require(sceContentSearchCloseMetadata(1) == ErrorInvalidArgument);
-    Require(Throws([&] { sceContentSearchGetMetadataFieldInfo(1, "title", &metadataType, &fieldSize); }));
-    Require(Throws([&] { sceContentSearchGetMetadataValue(1, "title", &value); }));
+    Require(NotImplemented([&] { sceContentSearchGetMetadataFieldInfo(1, "title", &metadataType, &fieldSize); }, "sceContentSearchGetMetadataFieldInfo"));
+    Require(NotImplemented([&] { sceContentSearchGetMetadataValue(1, "title", &value); }, "sceContentSearchGetMetadataValue"));
     Require(metadataType == -1 && fieldSize == -1 && value.size == -1);
 
     Require(sceContentSearchTerm() == 0);
