@@ -2,8 +2,8 @@
 
 ### Unknown function info
 
-- [sceHttpCacheSystemSendStatistics and sceHttpCacheSystemTerm](../../../core/libs/prx/libSceHttpCache/Export.cpp): the supplied implementations return zero without reading arguments. No callers have yet established whether their public prototypes include unused arguments.
-- [`sceHttpCacheClearCacheInfo` and `sceHttpCacheRemoveTag`](../../../core/libs/prx/libSceHttpCache/Export.cpp): signatures unverified; parameterless declarations that throw through `NotImplemented_nid_no_patch`. [`sceHttpCacheDebugSetUrl`](../../../core/libs/prx/libSceHttpCache/Export.cpp) returns 0 without reading arguments, as the firmware does, so its arguments are unknown. The pointer types of [`sceHttpCacheClearAllUserTags`](../../../core/libs/prx/libSceHttpCache/Export.cpp) (a list of at most 20 entries, taken as user ids) and [`sceHttpCacheRegisterCacheInfoUrl`](../../../core/libs/prx/libSceHttpCache/Export.cpp) are inferred from the checks.
+- [sceHttpCacheDebugSetUrl, sceHttpCacheSystemSendStatistics and sceHttpCacheSystemTerm](../../../core/libs/prx/libSceHttpCache/Export.cpp): the supplied implementations return zero without reading arguments. No callers have yet established whether their public prototypes include unused arguments.
+- [`sceHttpCacheClearCacheInfo` and `sceHttpCacheRemoveTag`](../../../core/libs/prx/libSceHttpCache/Export.cpp): signatures unverified; parameterless declarations that throw through `NotImplemented_nid_no_patch`. The pointer types of [`sceHttpCacheClearAllUserTags`](../../../core/libs/prx/libSceHttpCache/Export.cpp) (a list of at most 20 entries, taken as user ids) and [`sceHttpCacheRegisterCacheInfoUrl`](../../../core/libs/prx/libSceHttpCache/Export.cpp) are inferred from the checks.
 
 ### Functional
 
