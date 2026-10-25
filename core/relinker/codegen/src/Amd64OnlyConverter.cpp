@@ -103,6 +103,7 @@ private:
 
     [[nodiscard]] std::uint64_t _address(const std::size_t index) const { return _ph.MappedAddress + _matches[index].Offset; }
     [[nodiscard]] std::uint64_t _end(const std::size_t index) const { return _address(index) + _matches[index].Length; }
+    [[nodiscard]] static std::int64_t _distance(const std::uint64_t to, const std::uint64_t from) { return static_cast<std::int64_t>(to - from); }
     [[nodiscard]] std::span<const std::uint8_t> _bytes(const std::size_t index) const { return {_seg.data() + _matches[index].Offset, _matches[index].Length}; }
     [[nodiscard]] DecodedInstructionInfo _info(const std::size_t index) const { return _decoder.DecodeInstruction(_seg.data() + _matches[index].Offset, _matches[index].Length); }
 
@@ -166,7 +167,7 @@ private:
             if (head == 0 && _end(last) - _address(start) >= kJmpRel32.Size)
                 head = static_cast<std::size_t>(_end(last) - _address(start));
             const auto island = _address(start) + head;
-            const auto reach = static_cast<std::int64_t>(island) - static_cast<std::int64_t>(_address(index) + kShortJumpSize);
+            const auto reach = _distance(island, _address(index) + kShortJumpSize);
             if (head != 0 && (reach < std::numeric_limits<std::int8_t>::min() || reach > std::numeric_limits<std::int8_t>::max()))
                 return std::nullopt;
             if (head != 0 && _end(last) >= island + kJmpRel32.Size) {
