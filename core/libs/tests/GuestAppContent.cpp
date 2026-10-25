@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <array>
+#include <stdexcept>
 #include "ProcessParametersFixture.hpp"
 
 static constexpr int ErrorParameter = static_cast<int>(0x80D90002);
@@ -16,6 +17,15 @@ static constexpr int ErrorDrmNoEntitlement = static_cast<int>(0x80D90007);
 static constexpr int ErrorBusy = static_cast<int>(0x80D90003);
 static constexpr int ErrorNotMounted = static_cast<int>(0x80D90004);
 static void Require(bool value) { if (!value) std::abort(); }
+
+template <typename Call> static bool Throws(Call call) {
+    try {
+        call();
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+    return false;
+}
 
 int main() {
     static std::array<std::byte, 64> process{};
@@ -37,6 +47,15 @@ int main() {
     Require(sceAppContentAddcontDelete(0, nullptr) == notInitialized);
     Require(sceAppContentAddcontEnqueueDownload(0, nullptr) == notInitialized);
     Require(sceAppContentGetAddcontDownloadProgress(0, nullptr, nullptr) == notInitialized);
+    Require(sceAppContentAddcontEnqueueDownloadByEntitlemetId(nullptr) == notInitialized);
+    Require(sceAppContentAddcontEnqueueDownloadSp(0, nullptr) == notInitialized);
+    Require(sceAppContentAddcontMountByEntitlemetId(nullptr, nullptr) == notInitialized);
+    Require(sceAppContentAddcontShrink(0, nullptr) == notInitialized);
+    Require(sceAppContentGetAddcontInfoByEntitlementId(nullptr, nullptr) == notInitialized);
+    Require(sceAppContentGetAddcontInfoListByIroTag(0, nullptr, 0, nullptr) == notInitialized);
+    std::uint32_t pftFlag = 0x5a5a5a5a;
+    Require(sceAppContentGetPftFlag(&pftFlag) == notInitialized);
+    Require(pftFlag == 0x5a5a5a5a);
     const auto original = std::filesystem::current_path();
     const auto directory = original / ("appcontent-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Require(std::filesystem::create_directory(directory));
@@ -192,6 +211,29 @@ int main() {
     Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
     Require(sceAppContentGetAddcontInfo(0, nullptr, reinterpret_cast<AppContentAddcontInfo*>(info)) == ErrorParameter);
     Require(sceAppContentGetAddcontInfo(0, &label, nullptr) == ErrorParameter);
+    const char entitlementId[] = "UP0000-PPSA00000_00-ADDCONT000000001";
+    Require(sceAppContentAddcontEnqueueDownloadByEntitlemetId(entitlementId) == ErrorNotFound);
+    Require(sceAppContentAddcontEnqueueDownloadByEntitlemetId(nullptr) == ErrorParameter);
+    Require(sceAppContentAddcontEnqueueDownloadSp(0, &label) == ErrorNotFound);
+    Require(sceAppContentAddcontEnqueueDownloadSp(7, &label) == ErrorNotFound);
+    Require(sceAppContentAddcontEnqueueDownloadSp(0, nullptr) == ErrorParameter);
+    Require(sceAppContentAddcontShrink(0, &label) == ErrorNotFound);
+    Require(sceAppContentAddcontShrink(7, &label) == ErrorNotFound);
+    Require(sceAppContentAddcontShrink(0, nullptr) == ErrorParameter);
+    std::memset(&mountPoint, 0x5a, sizeof(mountPoint));
+    Require(sceAppContentAddcontMountByEntitlemetId(entitlementId, &mountPoint) == ErrorNotFound);
+    Require(std::memcmp(&mountPoint, &untouched, sizeof(mountPoint)) == 0);
+    Require(sceAppContentAddcontMountByEntitlemetId(nullptr, &mountPoint) == ErrorParameter);
+    Require(sceAppContentAddcontMountByEntitlemetId(entitlementId, nullptr) == ErrorParameter);
+    Require(std::memcmp(&mountPoint, &untouched, sizeof(mountPoint)) == 0);
+    Require(sceAppContentGetAddcontInfoByEntitlementId(entitlementId, reinterpret_cast<AppContentAddcontInfo*>(info)) == ErrorDrmNoEntitlement);
+    Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
+    Require(sceAppContentGetAddcontInfoByEntitlementId(nullptr, reinterpret_cast<AppContentAddcontInfo*>(info)) == ErrorParameter);
+    Require(sceAppContentGetAddcontInfoByEntitlementId(entitlementId, nullptr) == ErrorParameter);
+    Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
+    Require(sceAppContentGetPftFlag(&pftFlag) == 0);
+    Require(pftFlag == 0);
+    Require(sceAppContentGetPftFlag(nullptr) == ErrorParameter);
 
     for (const std::uint32_t version : {0x014fffffu, 0x01500000u, 0x034fffffu, 0x03500000u}) {
         std::memcpy(process.data() + 16, &version, sizeof(version));
@@ -205,6 +247,13 @@ int main() {
             Require(sceAppContentAddcontEnqueueDownload(0, &label) == earlyError);
             Require(sceAppContentAddcontDelete(0, &label) == lateError);
             Require(sceAppContentGetAddcontDownloadProgress(0, &label, progress) == lateError);
+            if (version >= 0x03500000) {
+                Require(sceAppContentAddcontEnqueueDownloadSp(0, &label) == ErrorParameter);
+                Require(sceAppContentAddcontShrink(0, &label) == ErrorParameter);
+            } else {
+                Require(Throws([&] { sceAppContentAddcontEnqueueDownloadSp(0, &label); }));
+                Require(Throws([&] { sceAppContentAddcontShrink(0, &label); }));
+            }
             Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
             Require(std::memcmp(progress, progressBefore, sizeof(progress)) == 0);
             padding = 0;
@@ -228,6 +277,17 @@ int main() {
     Require(sceAppContentGetAddcontInfoList(0, nullptr, 0, nullptr) == ErrorParameter);
     Require(sceAppContentGetAddcontInfoList(0, reinterpret_cast<AppContentAddcontInfo*>(info), 0, nullptr) == ErrorParameter);
     Require(sceAppContentGetAddcontInfoList(0, nullptr, 1, nullptr) == ErrorParameter);
+    hitNum = 0x5a5a5a5a;
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, nullptr, 0, &hitNum) == 0);
+    Require(hitNum == 0);
+    hitNum = 0x5a5a5a5a;
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, reinterpret_cast<AppContentAddcontInfo*>(info), 1, &hitNum) == 0);
+    Require(hitNum == 0);
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, reinterpret_cast<AppContentAddcontInfo*>(info), 1, nullptr) == 0);
+    Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, nullptr, 0, nullptr) == ErrorParameter);
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, reinterpret_cast<AppContentAddcontInfo*>(info), 0, nullptr) == ErrorParameter);
+    Require(sceAppContentGetAddcontInfoListByIroTag(1, nullptr, 1, nullptr) == ErrorParameter);
     std::filesystem::current_path(original);
     std::filesystem::remove_all(directory);
 }
