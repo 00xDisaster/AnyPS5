@@ -36,8 +36,6 @@
 #include <unistd.h>
 #endif
 
-extern "C" int APS5_VABI sceKernelFsync(int fd);
-
 namespace {
 
 constexpr int GuestEintr = 4;
