@@ -1,4 +1,5 @@
 import argparse
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -6,6 +7,12 @@ from pathlib import Path
 FAILED_STATUSES = ("fail", "notrun")
 SKIPPED_STATUSES = ("disabled",)
 SANITIZERS = ("address", "undefined", "thread")
+REPORT_LINES = (
+    re.compile(r"SUMMARY: \w+Sanitizer: .*"),
+    re.compile(r"(?:ERROR|WARNING): \w+Sanitizer: .*"),
+    re.compile(r"(?:\S+ )?runtime error: .*"),
+)
+REPORT_LENGTH = 200
 
 
 def results(path):
@@ -24,6 +31,23 @@ def results(path):
         else:
             outcome = "passed"
         found[name] = outcome
+    return found
+
+
+def first_report(output):
+    for pattern in REPORT_LINES:
+        if match := pattern.search(output):
+            line = " ".join(match.group(0).split())
+            return line if len(line) <= REPORT_LENGTH else line[:REPORT_LENGTH - 3] + "..."
+    return ""
+
+
+def reports(path):
+    found = {}
+    for case in ET.parse(path).getroot().iter("testcase"):
+        output = "\n".join(case.findtext(channel) or "" for channel in ("system-out", "system-err"))
+        if report := first_report(output):
+            found[case.get("name")] = report
     return found
 
 
@@ -52,15 +76,18 @@ def cell(text):
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def summarize(title, found, known=None):
-    known = known or {}
+def summarize(title, found, known=None, details=None):
+    known, details = known or {}, details or {}
     counts = {outcome: sum(1 for value in found.values() if value == outcome) for outcome in ("passed", "skipped", "failed")}
     failed = sorted(name for name, outcome in found.items() if outcome == "failed" and name not in known)
     expected = sorted(name for name, outcome in found.items() if outcome == "failed" and name in known)
     tally = f"{counts['failed']} failed" + (f" ({len(expected)} known)" if expected else "")
     lines = [f"### {title}", "",
              f"{len(found)} tests: {counts['passed']} passed, {counts['skipped']} skipped, {tally}.", ""]
-    if failed:
+    if failed and any(name in details for name in failed):
+        lines += ["| Failed test | First sanitizer report |", "| - | - |"]
+        lines += [f"| `{name}` | {cell(details.get(name, ''))} |" for name in failed] + [""]
+    elif failed:
         lines += ["| Failed test |", "| - |"] + [f"| `{name}` |" for name in failed] + [""]
     if expected:
         lines += ["| Known failure | Reason |", "| - | - |"] + [f"| `{name}` | {cell(known[name])} |" for name in expected] + [""]
@@ -90,7 +117,7 @@ def main(argv=None):
         parser.error("--known needs at least one --sanitizer")
     try:
         known = load_known(args.known, args.sanitizer) if args.known else {}
-        text, failing = summarize(args.title, results(args.junit), known)
+        text, failing = summarize(args.title, results(args.junit), known, reports(args.junit))
     except (OSError, ET.ParseError, ValueError) as error:
         print(f"sanitizer_report: {error}", file=sys.stderr)
         return 2
