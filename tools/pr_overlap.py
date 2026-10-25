@@ -21,6 +21,7 @@ PLAIN_DEPENDS = re.compile(r'Depends on[ \t]+(#\d+\b(?:(?:[ \t]*,[ \t]*(?:and[ \
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))?", re.M)
 MARKER = "<!-- pr-overlap -->"
 FETCH_REFS = 100
+PROGRESS_EVERY = 100
 _REPO_ROOTS = {}
 
 
@@ -78,6 +79,10 @@ def depends_on(body):
     match = next((match for match in DEPENDS.finditer(body) if match.group(1).strip()), None) or PLAIN_DEPENDS.search(body)
     return {int(n) for n in re.findall(r"#(\d+)", match.group(1))} if match else set()
 
+def progress(message):
+    print(f"pr_overlap: {message}", file=sys.stderr, flush=True)
+
+
 def open_prs(base):
     query = urlencode({"state": "open", "base": base, "per_page": 100})
     out = gh("api", "--paginate", f"repos/{REPO}/pulls?{query}")
@@ -106,6 +111,7 @@ def open_prs(base):
             "author": pr["user"]["login"],
             "depends": depends_on(pr["body"]),
         }
+    progress(f"{len(prs)} open pull requests against {base}")
     return prs
 
 
@@ -113,6 +119,7 @@ def fetch(base, prs):
     refspecs = [f"+refs/heads/{base}:refs/pr/base"] + [f"+{pr['sha']}:{pr['ref']}" for pr in prs.values()]
     for start in range(0, len(refspecs), FETCH_REFS):
         git("fetch", "--no-tags", "-q", f"https://github.com/{REPO}.git", *refspecs[start:start + FETCH_REFS])
+        progress(f"fetched {min(start + FETCH_REFS, len(refspecs)) - 1}/{len(prs)} pull request heads")
 
 
 def merge(*args):
