@@ -77,7 +77,11 @@ inline bool FrameInfoThrows(const Ngs2WaveformFormat& format) {
     return threw;
 }
 
+#if defined(NGS2_TEST_GRAIN)
+inline constexpr std::uint32_t Grain = NGS2_TEST_GRAIN;
+#else
 inline constexpr std::uint32_t Grain = 8;
+#endif
 
 template <typename TSignal>
 inline float SamplerReference(std::uint32_t frame, float pitch, TSignal signal) {

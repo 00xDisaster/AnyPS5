@@ -268,14 +268,14 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
     } renderingScope{voice.rendering};
     voice.samples.assign(static_cast<std::size_t>(grain) * voice.InputChannels(), 0.0f);
     voice.hasSamples = false;
-    const bool pitchShiftActive = (Ngs2HasPitchShift(voice) || voice.IsSampler()) &&
-        (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop);
+    const bool pitchShiftActive = (Ngs2HasPitchShift(voice) || voice.IsSampler() || voice.IsMixer()) &&
+        (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop || voice.outputTransition == Ngs2VoiceTransition::Kill);
     const bool frozenSampler = voice.IsSampler() && voice.state == Ngs2PlayState::Paused &&
         (voice.stateFlags & (SCE_NGS2_VOICE_STATE_FLAG_PAUSED | SCE_NGS2_VOICE_STATE_FLAG_PLAYING)) ==
         (SCE_NGS2_VOICE_STATE_FLAG_PAUSED | SCE_NGS2_VOICE_STATE_FLAG_PLAYING);
-    if ((voice.state == Ngs2PlayState::Playing || pitchShiftActive) && !frozenSampler && voice.channels != 0) {
+    if ((voice.state == Ngs2PlayState::Playing || pitchShiftActive) && voice.channels != 0) {
         if (voice.rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || voice.rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) {
-            RenderSampler(voice, grain, systemRate);
+            if (!frozenSampler && voice.outputTransition != Ngs2VoiceTransition::Kill) RenderSampler(voice, grain, systemRate);
         } else {
             MixInputs(voice, voices, grain, systemRate);
         }
@@ -314,7 +314,7 @@ static void APS5_VABI RunRenderJob(void* context, std::uint32_t index) {
 
 static bool ScheduledVoice(const Ngs2Voice& voice) {
     return voice.channels != 0 && (voice.state == Ngs2PlayState::Playing ||
-        ((voice.IsSampler() || Ngs2HasPitchShift(voice)) && (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop)));
+        ((voice.IsSampler() || voice.IsMixer() || Ngs2HasPitchShift(voice)) && (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop || voice.outputTransition == Ngs2VoiceTransition::Kill)));
 }
 
 static void RenderScheduled(Ngs2System& system, const std::vector<Ngs2Voice*>& voices, std::uint32_t grain) {
@@ -468,7 +468,7 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
     std::vector<std::vector<float>> mixes(numBufferInfo);
     for (auto* voice : voices) {
         RenderVoice(*voice, voices, grain, system.option.sample_rate);
-        if ((voice->rack->rackId != SCE_NGS2_RACK_ID_MASTERING && voice->rack->rackId != SCE_NGS2_RACK_ID_CUSTOM_MASTERING) || !voice->hasSamples) continue;
+        if ((voice->rack->rackId != SCE_NGS2_RACK_ID_MASTERING && voice->rack->rackId != SCE_NGS2_RACK_ID_CUSTOM_MASTERING) || !voice->hasSamples || voice->KilledForRender()) continue;
         auto& mix = OutputMix(mixes, bufferInfo, numBufferInfo, *voice, grain);
         const std::uint32_t outputChannels = bufferInfo[voice->outputId].num_channels;
         for (std::uint32_t channel = 0; channel < voice->channels; channel++) {
@@ -487,7 +487,7 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
             if (voice->state == Ngs2PlayState::Stopped) voice->state = Ngs2PlayState::Empty;
             const bool wasPaused = (voice->stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
             voice->stateFlags = static_cast<std::uint32_t>(voice->state);
-            if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
+            if (wasPaused && voice->state == Ngs2PlayState::Paused && voice->IsSampler()) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
             if (voice->state == Ngs2PlayState::Playing && voice->IsSampler() && voice->samplerStarved && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
             Ngs2PublishSamplerState(*voice);
         }

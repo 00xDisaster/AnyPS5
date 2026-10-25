@@ -34,7 +34,7 @@ struct Ngs2PitchShift {
     std::uint32_t initializedChannels = 0;
 };
 
-enum class Ngs2VoiceTransition { None, Pause, Resume, Stop };
+enum class Ngs2VoiceTransition { None, Pause, Resume, Stop, Kill };
 
 struct Ngs2Voice;
 bool Ngs2HasPitchShift(const Ngs2Voice& voice);

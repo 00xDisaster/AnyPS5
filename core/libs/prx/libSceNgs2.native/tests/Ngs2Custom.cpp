@@ -14,6 +14,7 @@ struct Calls {
     std::vector<std::uint32_t> processFlags;
     std::vector<int> order;
     int processResult = SCE_NGS2_OK;
+    unsigned controls = 0;
 };
 static Calls calls;
 
@@ -55,6 +56,7 @@ static std::int32_t APS5_VABI Offset(Ngs2UserFx2ProcessContext* context) {
 }
 
 static std::int32_t APS5_VABI ControlHandler(Ngs2UserFx2ControlContext*) {
+    ++calls.controls;
     return SCE_NGS2_OK;
 }
 
@@ -177,15 +179,15 @@ static void TestUserFxChain() {
 
     auto out = Render(system);
     for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == (i < 3 ? 0.0f : 0.5f) && out[i * 2 + 1] == (i < 3 ? 0.25f : 0.75f));
-    Require(calls.processFlags == (std::vector<std::uint32_t>{1}) && calls.order == (std::vector<int>{0, 1}));
+    Require(calls.processFlags == (std::vector<std::uint32_t>{3}) && calls.order == (std::vector<int>{0, 1}));
 
     const float gain = 0.5f;
     Control(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 0, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain)});
     out = Render(system);
     for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.25f && out[i * 2 + 1] == 0.5f);
-    Require(calls.processFlags == (std::vector<std::uint32_t>{1, 2}));
+    Require(calls.processFlags == (std::vector<std::uint32_t>{3, 2}));
     out = Render(system);
-    Require(calls.processFlags == (std::vector<std::uint32_t>{1, 2, 0}));
+    Require(calls.processFlags == (std::vector<std::uint32_t>{3, 2, 0}));
 
     Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 0, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain) - 1}));
     Require(ControlThrows<std::invalid_argument>(custom, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 2, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain)}));
@@ -252,7 +254,8 @@ static void TestRackOptions() {
     withControl.control_handler = ControlHandler;
     const auto voice = Voice(CustomRack(system, RackOption(&withControl, 1)));
     const float gain = 0.5f;
-    Require(ControlThrows<std::runtime_error>(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 0, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain)}));
+    Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2 | 0, Ngs2CustomVoiceUserFx2Param{{}, &gain, sizeof(gain)});
+    Require(calls.controls == 1);
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 1}));
 }
@@ -616,7 +619,7 @@ static void TestCustomLegacyUserFx(std::uint32_t moduleIndex) {
             Ngs2CustomVoiceUserFxParam{{}, ProcessLegacy, reinterpret_cast<std::uintptr_t>(&state), 123, 456});
 
     auto out = Render(system);
-    Require(state.calls == 1 && state.flags == 1);
+    Require(state.calls == 1 && state.flags == 3);
     for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.25f && out[i * 2 + 1] == 0.5f);
 
     out = Render(system);
@@ -658,7 +661,7 @@ static void TestCustomLegacyUserFx(std::uint32_t moduleIndex) {
     Control(voiceNullOpt, 0x40001900 | moduleIndex,
             Ngs2CustomVoiceUserFxParam{{}, ProcessLegacy, reinterpret_cast<std::uintptr_t>(&state2), 123, 456});
     out = Render(system);
-    Require(state2.calls == 1 && state2.flags == 1);
+    Require(state2.calls == 1 && state2.flags == 3);
     for (std::uint32_t i = 0; i < Grain; i++) Require(out[i * 2] == 0.125f && out[i * 2 + 1] == 0.75f);
 
     Require(sceNgs2RackDestroy(rackNullOpt, nullptr) == SCE_NGS2_OK);

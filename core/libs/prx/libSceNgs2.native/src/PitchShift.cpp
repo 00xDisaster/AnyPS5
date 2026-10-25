@@ -241,7 +241,11 @@ void Ngs2ProcessPitchShift(Ngs2Voice& voice, std::size_t module, std::uint32_t g
 }
 
 void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain) {
-    if (!Ngs2HasPitchShift(voice) && !voice.IsSampler()) return;
+    if (voice.IsMastering()) {
+        voice.outputTransition = Ngs2VoiceTransition::None;
+        return;
+    }
+    if (!Ngs2HasPitchShift(voice) && !voice.IsSampler() && !voice.IsMixer()) return;
     const auto transition = voice.outputTransition;
     const bool paused = voice.state == Ngs2PlayState::Paused || (voice.stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
     if (transition == Ngs2VoiceTransition::None && !paused) return;
@@ -256,7 +260,7 @@ void Ngs2ApplyVoiceGain(Ngs2Voice& voice, std::uint32_t grain) {
                 if (i < 64) gain = static_cast<float>(i) / 64.0f;
             } else if (transition == Ngs2VoiceTransition::Stop) {
                 gain = i < 64 ? 1.0f - static_cast<float>(i) / 64.0f : 0.0f;
-            } else if (paused) {
+            } else if (transition == Ngs2VoiceTransition::Kill || paused) {
                 gain = 0.0f;
             }
             samples[i] *= gain;

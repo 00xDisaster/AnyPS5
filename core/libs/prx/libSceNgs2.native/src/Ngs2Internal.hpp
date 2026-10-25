@@ -94,6 +94,7 @@ struct Ngs2Port {
 
 struct Ngs2UserFx2 {
     std::vector<std::uint8_t> param;
+    std::vector<std::uint8_t> controlParam;
     std::vector<std::uint8_t> work;
     std::vector<std::uint8_t> state;
     std::uint32_t flags = 0;
@@ -120,8 +121,13 @@ struct Ngs2MatrixControl {
     std::vector<float> levels;
 };
 
+struct Ngs2UserFxControl {
+    std::uint32_t index;
+    std::vector<std::uint8_t> param;
+};
+
 using Ngs2PendingControl = std::variant<std::uint32_t, Ngs2VoicePortVolumeParam, Ngs2VoicePortMatrixParam,
-    Ngs2MatrixControl, Ngs2SamplerVoicePitchParam, Ngs2MasteringVoiceGainParam, Ngs2CustomVoicePitchShiftParam>;
+    Ngs2MatrixControl, Ngs2SamplerVoicePitchParam, Ngs2MasteringVoiceGainParam, Ngs2CustomVoicePitchShiftParam, Ngs2SubmixerVoiceUserFxParam, Ngs2CustomVoiceUserFxParam, Ngs2UserFxControl>;
 
 struct Ngs2Voice {
     Ngs2Rack* rack = nullptr;
@@ -185,6 +191,9 @@ struct Ngs2Voice {
     void KillForRender(bool killed) { std::atomic_ref<bool>(killCurrent).store(killed, std::memory_order_relaxed); }
     void ResetSetup();
     bool IsSampler() const;
+    bool IsMixer() const;
+    bool IsMastering() const;
+    std::uint32_t UserFxFlags(std::uint32_t flags) const;
     const std::uint8_t* WaveformData() const;
     std::uint32_t InputChannels() const { return inputChannels != 0 ? inputChannels : channels; }
 };

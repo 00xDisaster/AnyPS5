@@ -182,7 +182,7 @@ static void SetupCustomSubmixer(Ngs2Voice& voice, const Ngs2CustomSubmixerVoiceS
 static void SetUserFxParam(Ngs2Voice& voice, std::uint32_t index, const Ngs2CustomVoiceUserFx2Param& param) {
     if (index >= voice.userFx.size()) APS5_INVALID_ARG_EX;
     const auto& module = voice.rack->userFx[index];
-    if (module.control_handler != nullptr) throw std::runtime_error("NGS2: the UserFx2 control handler is not implemented");
+    if (module.control_handler != nullptr) throw std::runtime_error("NGS2: UserFx2 control handlers require immediate dispatch");
     auto& fx = voice.userFx[index];
     if (param.data_size != fx.param.size() || (param.data == nullptr && param.data_size != 0)) APS5_INVALID_ARG_EX;
     if (param.data_size != 0) std::memcpy(fx.param.data(), param.data, param.data_size);
@@ -197,7 +197,7 @@ static void SetCustomUserFxParam(Ngs2Voice& voice, std::uint32_t index, const Ng
     auto& fx = voice.customUserFx[index];
     fx.handler = param.handler;
     fx.data = {param.user_data0, param.user_data1, param.user_data2};
-    fx.flags = 1;
+    fx.flags |= 2;
 }
 
 static void SetGainParam(Ngs2Voice& voice, std::uint32_t index, const Ngs2CustomVoiceGainParam& param) {
@@ -299,20 +299,20 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
         if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_GAIN) {
             ProcessGain(voice, voice.customGain[m], channels, grain);
         } else if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) {
-            if (!voice.hasSamples) continue;
             auto& fx = voice.userFx[m];
             const auto& module = voice.rack->userFx[m];
             if (module.process_handler == nullptr) continue;
             Ngs2UserFx2ProcessContext context{channels.data(), voice.rack->userFxCommon[m].data(), fx.param.data(), fx.work.data(), fx.state.data(),
-                                              module.user_data, fx.flags, voice.channels, voice.channels, grain, sampleRate, 0, {}};
+                                              module.user_data, voice.UserFxFlags(fx.flags), voice.channels, voice.channels, grain, sampleRate, 0, {}};
             const int result = module.process_handler(&context);
             if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 process handler failed with " + std::to_string(result));
             fx.flags = 0;
+            voice.hasSamples = std::any_of(voice.samples.begin(), voice.samples.end(), [](float sample) { return sample != 0.0f; });
         } else if (voice.rack->customModuleIds[m] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX) {
             if (m < voice.customUserFx.size() && voice.customUserFx[m].handler != nullptr) {
                 auto& fx = voice.customUserFx[m];
                 Ngs2UserFxProcessContext context{channels.data(), fx.data[0], fx.data[1], fx.data[2],
-                                                 fx.flags, voice.channels, grain, sampleRate};
+                                                 voice.UserFxFlags(fx.flags), voice.channels, grain, sampleRate};
                 const int result = fx.handler(&context);
                 if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx process handler failed with " + std::to_string(result));
                 fx.flags = 0;
@@ -327,7 +327,7 @@ void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_
     std::array<float*, NGS2_MAX_CHANNELS> channels{};
     for (std::uint32_t c = 0; c < voice.channels; ++c) channels[c] = voice.samples.data() + static_cast<std::size_t>(c) * grain;
     Ngs2UserFxProcessContext context{channels.data(), voice.userFxData[0], voice.userFxData[1], voice.userFxData[2],
-                                    voice.userFxFlags, voice.channels, grain, sampleRate};
+                                    voice.UserFxFlags(voice.userFxFlags), voice.channels, grain, sampleRate};
     const int result = voice.userFxHandler(&context);
     if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx process handler failed with " + std::to_string(result));
     voice.userFxFlags = 0;

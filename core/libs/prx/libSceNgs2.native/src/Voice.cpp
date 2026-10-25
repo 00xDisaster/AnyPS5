@@ -34,24 +34,42 @@ bool Ngs2Voice::IsSampler() const {
     return rack != nullptr && (rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER);
 }
 
+bool Ngs2Voice::IsMixer() const {
+    return rack != nullptr && (rack->rackId == SCE_NGS2_RACK_ID_SUBMIXER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER ||
+        rack->rackId == SCE_NGS2_RACK_ID_MASTERING || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING);
+}
+
+bool Ngs2Voice::IsMastering() const {
+    return rack != nullptr && (rack->rackId == SCE_NGS2_RACK_ID_MASTERING || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING);
+}
+
+std::uint32_t Ngs2Voice::UserFxFlags(std::uint32_t flags) const {
+    if (outputTransition == Ngs2VoiceTransition::Stop) flags |= 8;
+    else if (outputTransition == Ngs2VoiceTransition::Kill) flags |= 32;
+    else if (state == Ngs2PlayState::Paused && outputTransition != Ngs2VoiceTransition::Pause) flags |= 4;
+    return flags;
+}
+
 void Ngs2Voice::SetEvent(std::uint32_t eventId) {
     switch (eventId) {
         case SCE_NGS2_VOICE_EVENT_PLAY:
             if (state == Ngs2PlayState::Empty || state == Ngs2PlayState::Stopped) {
                 if (IsSampler()) Ngs2ReplaySampler(*this);
-                if (Ngs2HasPitchShift(*this) || IsSampler()) {
+                if (Ngs2HasPitchShift(*this) || IsSampler() || IsMixer()) {
                     Ngs2RestartPitchShift(*this);
                     outputTransition = Ngs2VoiceTransition::None;
                 }
                 state = Ngs2PlayState::Playing;
                 stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_INUSE;
-                if (userFxHandler) userFxFlags = 1;
+                if (userFxHandler) userFxFlags |= 3;
+                for (auto& fx : customUserFx) if (fx.handler) fx.flags |= 3;
+                for (auto& fx : userFx) fx.flags |= 3;
             }
             break;
         case SCE_NGS2_VOICE_EVENT_STOP:
             if (state == Ngs2PlayState::Playing || state == Ngs2PlayState::Paused) {
                 state = Ngs2PlayState::Stopped;
-                if (Ngs2HasPitchShift(*this) || IsSampler()) outputTransition = Ngs2VoiceTransition::Stop;
+                if (Ngs2HasPitchShift(*this) || IsSampler() || IsMixer()) outputTransition = Ngs2VoiceTransition::Stop;
             }
             break;
         case SCE_NGS2_VOICE_EVENT_STOP_IMM:
@@ -64,13 +82,13 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
         case SCE_NGS2_VOICE_EVENT_PAUSE:
             if (state == Ngs2PlayState::Playing) {
                 state = Ngs2PlayState::Paused;
-                if (Ngs2HasPitchShift(*this) || IsSampler()) outputTransition = Ngs2VoiceTransition::Pause;
+                if (Ngs2HasPitchShift(*this) || IsSampler() || IsMixer()) outputTransition = Ngs2VoiceTransition::Pause;
             }
             break;
         case SCE_NGS2_VOICE_EVENT_RESUME:
             if (state == Ngs2PlayState::Paused) {
                 state = Ngs2PlayState::Playing;
-                if (Ngs2HasPitchShift(*this) || IsSampler()) outputTransition = Ngs2VoiceTransition::Resume;
+                if (Ngs2HasPitchShift(*this) || IsSampler() || IsMixer()) outputTransition = Ngs2VoiceTransition::Resume;
             }
             break;
         default: throw std::invalid_argument("NGS2: unknown voice event " + Ngs2Hex(eventId));
@@ -78,9 +96,7 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
 }
 
 static void ValidateDeferredEvent(const Ngs2Voice& voice, std::uint32_t event) {
-    if (!voice.IsSampler() || std::any_of(voice.rack->customModuleIds.begin(), voice.rack->customModuleIds.end(), [](auto module) {
-            return module == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX || module == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2;
-        })) throw std::runtime_error("NGS2: deferred events for this voice configuration are not implemented");
+    if (!voice.IsSampler() && !voice.IsMixer()) throw std::runtime_error("NGS2: deferred events for this voice configuration are not implemented");
     switch (event) {
         case SCE_NGS2_VOICE_EVENT_PLAY:
         case SCE_NGS2_VOICE_EVENT_STOP:
@@ -100,7 +116,7 @@ static void PublishPendingEvent(Ngs2Voice& voice, const Ngs2PendingControl& cont
         if (Ngs2HasPitchShift(voice)) voice.KillForRender(false);
     } else if (*event == SCE_NGS2_VOICE_EVENT_KILL) {
         voice.pendingPlay = false;
-        voice.KillForRender(true);
+        if (!voice.IsMastering()) voice.KillForRender(true);
     }
 }
 
@@ -186,6 +202,22 @@ static Ngs2MatrixControl CaptureMatrixControl(const Ngs2Voice& voice, std::uint3
     return result;
 }
 
+static int ControlUserFx2(Ngs2Voice& voice, std::uint32_t index, const Ngs2CustomVoiceUserFx2Param& value) {
+    auto& fx = voice.userFx[index];
+    const auto& module = voice.rack->userFx[index];
+    if (value.data == nullptr && value.data_size != 0) APS5_INVALID_ARG_EX;
+    if (fx.controlParam.size() != fx.param.size()) fx.controlParam = fx.param;
+    Ngs2UserFx2ControlContext context{value.data, value.data_size, voice.rack->userFxCommon[index].data(), fx.controlParam.data(), module.user_data, {}};
+    const int result = module.control_handler(&context);
+    if (result < 0) return result;
+    if (DeferringControls(voice)) EnqueueControl(voice, Ngs2UserFxControl{index, fx.controlParam});
+    else {
+        std::copy(fx.controlParam.begin(), fx.controlParam.end(), fx.param.begin());
+        fx.flags |= 2;
+    }
+    return SCE_NGS2_OK;
+}
+
 static Ngs2PendingControl CaptureParamControl(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
     if (param.id == SCE_NGS2_VOICE_PARAM_EVENT) {
         const auto event = ParamAs<Ngs2VoiceEventParam>(param).event_id;
@@ -223,6 +255,26 @@ static Ngs2PendingControl CaptureParamControl(Ngs2Voice& voice, const Ngs2VoiceP
         const auto index = param.id & 0x1fu;
         if (index >= voice.customPitchShift.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT) APS5_INVALID_ARG_EX;
         return ParamAs<Ngs2CustomVoicePitchShiftParam>(param);
+    }
+    if (voice.rack->rackId == SCE_NGS2_RACK_ID_SUBMIXER && param.id == SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX)
+        return ParamAs<Ngs2SubmixerVoiceUserFxParam>(param);
+    if (voice.rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER && (param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX) {
+        const auto index = param.id & 0x1fu;
+        if (index >= voice.customUserFx.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_USER_FX) APS5_INVALID_ARG_EX;
+        return ParamAs<Ngs2CustomVoiceUserFxParam>(param);
+    }
+    if ((param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
+        const auto index = param.id & 0x1fu;
+        if (index >= voice.userFx.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) APS5_INVALID_ARG_EX;
+        if (voice.rack->userFx[index].control_handler != nullptr) throw std::runtime_error("NGS2: UserFx2 control handlers require immediate dispatch");
+        const auto& value = ParamAs<Ngs2CustomVoiceUserFx2Param>(param);
+        if (value.data_size != voice.userFx[index].param.size() || (value.data == nullptr && value.data_size != 0)) APS5_INVALID_ARG_EX;
+        Ngs2UserFxControl result{index, {}};
+        if (value.data_size != 0) {
+            const auto* data = static_cast<const std::uint8_t*>(value.data);
+            result.param.assign(data, data + value.data_size);
+        }
+        return result;
     }
     throw std::runtime_error("NGS2: this buffered voice parameter is not implemented");
 }
@@ -270,9 +322,19 @@ void Ngs2Voice::ApplyPendingControls() {
         else if constexpr (std::is_same_v<TValue, Ngs2MatrixControl>) matrices[value.index] = std::move(value.levels);
         else if constexpr (std::is_same_v<TValue, Ngs2SamplerVoicePitchParam>) pitch = value.ratio;
         else if constexpr (std::is_same_v<TValue, Ngs2MasteringVoiceGainParam>) { fbwLevel = value.fbw_level; lfeLevel = value.lfe_level; }
-        else Ngs2ApplyCustomParam(*this, value.header);
+        else if constexpr (std::is_same_v<TValue, Ngs2SubmixerVoiceUserFxParam>) {
+            userFxHandler = value.handler;
+            userFxData = {value.user_data0, value.user_data1, value.user_data2};
+            userFxFlags = value.handler ? 2 : 0;
+        } else if constexpr (std::is_same_v<TValue, Ngs2UserFxControl>) {
+            std::copy(value.param.begin(), value.param.end(), userFx[value.index].param.begin());
+            userFx[value.index].flags |= 2;
+        } else Ngs2ApplyCustomParam(*this, value.header);
     }, control);
-    if (kill) SetEvent(SCE_NGS2_VOICE_EVENT_KILL);
+    if (kill) {
+        SetEvent(SCE_NGS2_VOICE_EVENT_KILL);
+        outputTransition = Ngs2VoiceTransition::Kill;
+    }
     else {
         if (restart) {
             if (state != Ngs2PlayState::Empty) state = Ngs2PlayState::Stopped;
@@ -551,7 +613,7 @@ static void ApplyParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
                 const auto& fx = ParamAs<Ngs2SubmixerVoiceUserFxParam>(param);
                 voice.userFxHandler = fx.handler;
                 voice.userFxData = {fx.user_data0, fx.user_data1, fx.user_data2};
-                voice.userFxFlags = fx.handler ? 1 : 0;
+                voice.userFxFlags = fx.handler ? voice.userFxFlags | 2u : 0;
                 return;
             }
             if (param.id != SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP) break;
@@ -613,6 +675,15 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
     for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
+        if ((param->id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
+            const auto index = param->id & 0x1fu;
+            if (index < voice.userFx.size() && voice.rack->customModuleIds[index] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2 && voice.rack->userFx[index].control_handler != nullptr) {
+                const int result = ControlUserFx2(voice, index, ParamAs<Ngs2CustomVoiceUserFx2Param>(*param));
+                if (result < 0) return result;
+                if (param->next == 0) break;
+                continue;
+            }
+        }
         if (DeferringControls(voice) && param->id != SCE_NGS2_VOICE_PARAM_CALLBACK) {
             EnqueueControl(voice, CaptureParamControl(voice, *param));
             if (param->next == 0) break;
