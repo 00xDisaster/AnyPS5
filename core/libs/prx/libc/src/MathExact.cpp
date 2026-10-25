@@ -367,15 +367,6 @@ short APS5_VABI _LDtest_nid_postfix(const long double* value) { return TestExten
 short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale) {
     if (value == nullptr) throw std::invalid_argument("_LExp: null value");
     const long double x = *value;
-    if (x < -29490.0L || y == 0.0L) {
-        *value = 0.0L;
-        return Zero;
-    }
-    if (x > 29490.0L) {
-        *value = std::numeric_limits<long double>::infinity();
-        RaiseLibcError(FE_OVERFLOW);
-        return Infinite;
-    }
     if (std::isnan(x)) {
         *value = x;
         return NotANumber;
@@ -383,6 +374,19 @@ short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale
     if (std::isnan(y)) {
         *value = y;
         return NotANumber;
+    }
+    if (y == 0.0L) {
+        *value = 0.0L;
+        return Zero;
+    }
+    if (x < -29490.0L) {
+        *value = 0.0L;
+        return Zero;
+    }
+    if (x > 29490.0L) {
+        *value = std::numeric_limits<long double>::infinity();
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
     }
     if (std::isinf(y)) {
         *value = y;
