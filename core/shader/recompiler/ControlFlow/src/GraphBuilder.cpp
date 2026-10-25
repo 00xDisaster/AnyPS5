@@ -1139,7 +1139,7 @@ std::vector<BasicBlock> GraphBuilder::splitIntoBlocks(const RdnaProgram& program
                     labels.insert(nextProgramCounter);
                 }
             }
-        } else if (instruction.op == RdnaOpcode::SEndpgm) {
+        } else if (instruction.op == RdnaOpcode::SEndpgm || instruction.op == RdnaOpcode::SCodeEnd) {
             labels.insert(followingProgramCounter);
         }
     }
@@ -1185,7 +1185,7 @@ void GraphBuilder::linkBlocks(std::vector<BasicBlock>& blocks, const RdnaProgram
         const auto& last = program.instructions[block.instructionEnd - 1u];
         const std::uint32_t nextProgramCounter = instructionEndProgramCounter(last);
 
-        if (last.op == RdnaOpcode::SEndpgm) {
+        if (last.op == RdnaOpcode::SEndpgm || last.op == RdnaOpcode::SCodeEnd) {
             block.terminator.kind = TerminatorKind::Return;
         } else if (last.op == RdnaOpcode::SSetpcB64) {
             std::uint32_t target = 0;
