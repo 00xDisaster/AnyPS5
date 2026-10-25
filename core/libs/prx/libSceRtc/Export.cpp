@@ -481,12 +481,13 @@ int APS5_VABI sceRtcGetTime_t(const RtcDateTime* time, int64_t* seconds) {
 }
 
 int APS5_VABI sceRtcSetTime_t(RtcDateTime* time, int64_t seconds) {
-    if (!time) return SCE_RTC_ERROR_INVALID_POINTER;
     if (rangeChecked()) {
         if (seconds < 0) return SCE_RTC_ERROR_INVALID_VALUE;
+        if (!time) return SCE_RTC_ERROR_INVALID_POINTER;
         *time = fromTick(UNIX_EPOCH_TICK + static_cast<std::uint64_t>(seconds) * TICKS_PER_SECOND);
         return 0;
     }
+    if (!time) return SCE_RTC_ERROR_INVALID_POINTER;
     *time = fromTick(UNIX_EPOCH_TICK + static_cast<std::uint64_t>(static_cast<std::uint32_t>(seconds)) * TICKS_PER_SECOND);
     return 0;
 }
