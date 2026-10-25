@@ -18,6 +18,7 @@ constexpr int Stream = 1;
 constexpr int SocketCloseOnExec = 0x10000000;
 constexpr int GuestEbadf = 9;
 constexpr int GuestEinval = 22;
+constexpr int GuestEopnotsupp = 45;
 
 void Require(bool condition, const char* what) {
     if (condition) return;
@@ -55,12 +56,11 @@ int main() {
     Require(minimumDup >= plain + 4 && fcntl_nid_postfix(minimumDup, GetDescriptorFlags) == 0, "F_DUPFD must honor the minimum and clear FD_CLOEXEC");
     Require(fcntl_nid_postfix(plain, GetDescriptorFlags) == CloseOnExec, "F_DUPFD must leave the flag of the original");
     Require(fcntl_nid_postfix(plain, SetDescriptorFlags, 0) == 0, "F_SETFD 0 must clear FD_CLOEXEC");
-    const int cloexecDup = fcntl_nid_postfix(plain, DuplicateDescriptorCloseOnExec, minimumDup + 1);
-    Require(cloexecDup >= minimumDup + 1 && fcntl_nid_postfix(cloexecDup, GetDescriptorFlags) == CloseOnExec, "F_DUPFD_CLOEXEC must honor the minimum and set FD_CLOEXEC");
+    Require(fcntl_nid_postfix(plain, DuplicateDescriptorCloseOnExec, minimumDup + 1) == -1 && *__error_nid_postfix() == GuestEopnotsupp, "F_DUPFD_CLOEXEC must fail with EOPNOTSUPP");
     Require(fcntl_nid_postfix(plain, GetDescriptorFlags) == 0, "F_DUPFD_CLOEXEC must leave the flag of the original");
     Require(fcntl_nid_postfix(plain, DuplicateDescriptor, -1) == -1 && *__error_nid_postfix() == GuestEinval, "F_DUPFD with a negative minimum must fail with EINVAL");
-    Require(fcntl_nid_postfix(plain, DuplicateDescriptorCloseOnExec, -1) == -1 && *__error_nid_postfix() == GuestEinval, "F_DUPFD_CLOEXEC with a negative minimum must fail with EINVAL");
-    Require(close_nid_postfix(cloexecDup) == 0 && close_nid_postfix(minimumDup) == 0, "close failed");
+    Require(fcntl_nid_postfix(plain, DuplicateDescriptorCloseOnExec, -1) == -1 && *__error_nid_postfix() == GuestEopnotsupp, "F_DUPFD_CLOEXEC with a negative minimum must fail with EOPNOTSUPP");
+    Require(close_nid_postfix(minimumDup) == 0, "close failed");
 
     const int dup2Target = socket_nid_postfix(2, Stream, 0);
     Require(dup2Target >= 0, "socket failed");

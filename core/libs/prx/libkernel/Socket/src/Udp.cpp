@@ -656,7 +656,7 @@ bool GuestSockets::PipeReady(int descriptor, short events, short& revents) {
 #endif
 
 namespace {
-int DuplicateSocket_nid_no_patch(int descriptor, int minimum, bool closeOnExec) {
+int DuplicateSocket_nid_no_patch(int descriptor, int minimum) {
     if (minimum < 0) return Fail(22);
     std::lock_guard lock(socketsMutex);
     const auto found = sockets.find(descriptor);
@@ -665,8 +665,7 @@ int DuplicateSocket_nid_no_patch(int descriptor, int minimum, bool closeOnExec) 
     if (duplicate < 0) return -1;
     try {
         sockets.insert_or_assign(duplicate, found->second);
-        if (closeOnExec) closeOnExecDescriptors.insert(duplicate);
-        else closeOnExecDescriptors.erase(duplicate);
+        closeOnExecDescriptors.erase(duplicate);
     } catch (const std::bad_alloc&) {
         sockets.erase(duplicate);
         ReleaseNumber(duplicate);
@@ -677,7 +676,7 @@ int DuplicateSocket_nid_no_patch(int descriptor, int minimum, bool closeOnExec) 
 }
 
 int GuestSockets::Duplicate(int descriptor) {
-    return DuplicateSocket_nid_no_patch(descriptor, 0, false);
+    return DuplicateSocket_nid_no_patch(descriptor, 0);
 }
 
 int GuestSockets::DuplicateTo(int descriptor, int target) {
@@ -1096,7 +1095,8 @@ int APS5_VABI fcntl_nid_postfix(int descriptor, int command, ...) {
         }
         return File::Fcntl(descriptor, command, argument);
     }
-    if (command == 0 || command == 17) return DuplicateSocket_nid_no_patch(descriptor, static_cast<int>(argument), command == 17);
+    if (command == 0) return DuplicateSocket_nid_no_patch(descriptor, static_cast<int>(argument));
+    if (command == 17) return Fail(45);
     if (command == 10 || command == 18) {
         const int duplicate = dup2_nid_postfix(descriptor, static_cast<int>(argument));
         if (duplicate >= 0 && command == 18) fcntl_nid_postfix(duplicate, 2, 1);
