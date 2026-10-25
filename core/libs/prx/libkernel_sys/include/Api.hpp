@@ -536,7 +536,7 @@ int APS5_VABI scePthreadSingle(void);
 int APS5_VABI scePthreadSuspend(void);
 int APS5_VABI scePthreadSuspendAll(void);
 int APS5_VABI scePthreadTimedjoin(void);
-int APS5_VABI sched_setscheduler_nid_postfix(void);
+int APS5_VABI sched_setscheduler_nid_postfix(int pid, int policy, const KernelSchedParam* param);
 int APS5_VABI sem_setname_nid_postfix(void);
 int APS5_VABI set_phys_fmem_limit_nid_postfix(void);
 int APS5_VABI setlogin_nid_postfix(const char* name);
