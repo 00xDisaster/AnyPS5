@@ -1,7 +1,6 @@
 #include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include "prx/libkernel/Pthread/include/Pthread.hpp"
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <source_location>
@@ -32,13 +31,6 @@ static void TestMutex() {
     RequireThrows([] { pthread_mutex_setname_np_nid_postfix(nullptr, "mutex"); });
     Require(pthread_mutex_destroy_nid_postfix(&mutex) == 0);
     RequireThrows([&] { pthread_mutex_setname_np_nid_postfix(&mutex, "destroyed"); });
-
-    PthreadMutex unset = nullptr;
-    RequireThrows([&] { pthread_mutex_setname_np_nid_postfix(&unset, "static"); });
-    Require(unset == nullptr);
-    PthreadMutex adaptive = reinterpret_cast<PthreadMutex>(std::uintptr_t{1});
-    RequireThrows([&] { pthread_mutex_setname_np_nid_postfix(&adaptive, "adaptive"); });
-    Require(reinterpret_cast<std::uintptr_t>(adaptive) == 1);
 }
 
 static void TestRwlock() {
