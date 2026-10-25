@@ -931,6 +931,11 @@ bool GuestSockets::Ready(int descriptor, bool write, std::int64_t* data, bool* e
         }
         socket = found->second;
     }
+    if (!write && ReceiveShut(*socket) && !Listening(*socket)) {
+        *data = 0;
+        *eof = true;
+        return true;
+    }
 #ifdef _WIN32
     WSAPOLLFD entry{socket->value, static_cast<SHORT>(write ? POLLWRNORM : POLLRDNORM), 0};
     if (WSAPoll(&entry, 1, 0) <= 0) return false;
@@ -958,7 +963,7 @@ bool GuestSockets::Ready(int descriptor, bool write, std::int64_t* data, bool* e
 #endif
     } else if (Listening(*socket)) {
         *data = ListenQueueLength(socket->value);
-    } else if (!ReceiveShut(*socket)) {
+    } else {
 #ifdef _WIN32
         unsigned long available = 0;
         if (ioctlsocket(socket->value, FIONREAD, &available) == 0) *data = static_cast<std::int64_t>(available);
@@ -1403,9 +1408,12 @@ int APS5_VABI shutdown_nid_postfix(int descriptor, int how) {
     socklen_t size = sizeof(peer);
     const bool unconnected = socket->type == 2 && ::getpeername(socket->value, reinterpret_cast<sockaddr*>(&peer), &size) != 0;
     if (::shutdown(socket->value, how) && !unconnected && !AlreadyShut(socket->value, how)) return Fail(NativeError());
-    std::lock_guard lock(socket->modeMutex);
-    if (how != 1) socket->receiveShut = true;
-    if (how != 0) socket->sendShut = true;
+    {
+        std::lock_guard lock(socket->modeMutex);
+        if (how != 1) socket->receiveShut = true;
+        if (how != 0) socket->sendShut = true;
+    }
+    if (how != 1) EqueueDescriptorReadShut(descriptor);
     return unconnected ? Fail(57) : 0;
 }
 int APS5_VABI getsockname_nid_postfix(int descriptor, void* address, std::uint32_t* length) {
