@@ -71,7 +71,8 @@ jobs:
         with:
           path: build/externals
           key: ffmpeg-sanitizers-${{ runner.os }}-${{ steps.submodules.outputs.ffmpeg }}
-      - run: cmake -S . -B build $CONFIGURE "-DCMAKE_C_FLAGS=$SANITIZER_FLAGS" "-DCMAKE_CXX_FLAGS=$SANITIZER_FLAGS" "-DANYPS5_AGC_EXECUTION_TESTS=F16ToF32Unpack;F64FmaSubnormals;RegistrationPrepareShutdown"
+      - id: configure
+        run: cmake -S . -B build $CONFIGURE "-DCMAKE_C_FLAGS=$SANITIZER_FLAGS" "-DCMAKE_CXX_FLAGS=$SANITIZER_FLAGS" "-DANYPS5_AGC_EXECUTION_TESTS=F16ToF32Unpack;F64FmaSubnormals;RegistrationPrepareShutdown"
       - if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         continue-on-error: true
@@ -81,19 +82,21 @@ jobs:
       - name: Check that every test executable is registered with ctest
         run: python3 tools/check_test_registration.py build
       - name: Build, keeping on after a target fails so its tests report as not run
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         continue-on-error: true
         run: cmake --build build -- -k 0
-      - continue-on-error: true
+      - if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
+        continue-on-error: true
         run: cmake --build build --target libs -- -k 0
       - name: Run every test under ASan and UBSan
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         working-directory: build
         env:
           ASAN_OPTIONS: 'detect_leaks=0:'
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --output-on-failure --timeout 300 --parallel 4 --output-log ctest.log --output-junit ctest.xml || true
       - name: Summarize the sanitizer findings
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         run: >-
           python3 tools/sanitizer_report.py build/ctest.xml --title "ASan and UBSan"
           --known .github/sanitizer-known-failures.txt --sanitizer address --sanitizer undefined
