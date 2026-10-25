@@ -1382,6 +1382,7 @@ std::int64_t APS5_VABI _ZNSt8__sce_v216_Xtime_get_ticksEv_nid_postfix();
 const char* APS5_VABI _ZNSt8__sce_v213_Syserror_mapEi_nid_postfix(int value);
 int APS5_VABI feupdateenv_nid_postfix(const GuestFloatingPointEnvironment* environment);
 int APS5_VABI feholdexcept_nid_postfix(GuestFloatingPointEnvironment* environment);
+extern const GuestFloatingPointEnvironment __fe_dfl_env_nid_postfix;
 void APS5_VABI srandomdev_nid_postfix();
 
 double APS5_VABI _Stodx_nid_postfix(const char* text, char** end, std::int64_t pten, int* error);
