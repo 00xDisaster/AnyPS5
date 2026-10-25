@@ -16,6 +16,7 @@ constexpr int Aborted = static_cast<int>(0x80550707u);
 constexpr int InsufficientArgument = static_cast<int>(0x8055070Cu);
 constexpr int InvalidId = static_cast<int>(0x8055070Eu);
 constexpr int InvalidType = static_cast<int>(0x80550711u);
+constexpr int LookupSynchronousRequest = static_cast<int>(0x80550307u);
 constexpr int PollFinished = 0;
 constexpr int PollRunning = 1;
 constexpr int WordFilterTitleCtxBase = 0x01000000;
@@ -172,16 +173,20 @@ void CheckLookupAsync() {
     Require(sceNpLookupSetTimeout(async, 0, 1000000, 10000000, 10000000, 10000000) == 0, "sceNpLookupSetTimeout", "a request timeout was refused");
     int result = 7;
     Require(sceNpLookupPollAsync(async + 100, &result) == InvalidId, "sceNpLookupPollAsync", "an unknown request was taken");
-    Require(sceNpLookupPollAsync(async, nullptr) == PollRunning, "sceNpLookupPollAsync", "an unstarted request was not running");
+    Require(sceNpLookupPollAsync(async, nullptr) == InvalidArgument, "sceNpLookupPollAsync", "a null result was taken");
+    Require(sceNpLookupPollAsync(async + 100, nullptr) == InvalidArgument, "sceNpLookupPollAsync", "an unknown request was checked before a null result");
+    Require(sceNpLookupWaitAsync(async, nullptr) == InvalidArgument, "sceNpLookupWaitAsync", "a null result was taken");
+    Require(sceNpLookupPollAsync(async, &result) == PollRunning && result == 7, "sceNpLookupPollAsync", "an unstarted request was not running");
     Require(WaitInThread("sceNpLookupWaitAsync", sceNpLookupWaitAsync, async, &result, StartLookup) == 0 && result == SignedOut, "sceNpLookupWaitAsync", "waiting did not end with SIGNED_OUT when the lookup started");
-    Require(sceNpLookupPollAsync(async, nullptr) == PollFinished, "sceNpLookupPollAsync", "a null result was refused on a finished request");
+    Require(sceNpLookupPollAsync(async, nullptr) == InvalidArgument, "sceNpLookupPollAsync", "a null result was taken on a finished request");
     result = 7;
     Require(sceNpLookupPollAsync(async, &result) == PollFinished && result == SignedOut, "sceNpLookupPollAsync", "the request did not finish with SIGNED_OUT");
 
     const int sync = sceNpLookupCreateRequest(context);
     StartLookup(sync);
     result = 7;
-    Require(sceNpLookupWaitAsync(sync, &result) == 0 && result == SignedOut, "sceNpLookupWaitAsync", "a finished synchronous request was not returned");
+    Require(sceNpLookupWaitAsync(sync, &result) == LookupSynchronousRequest && result == 7, "sceNpLookupWaitAsync", "a synchronous request was not refused with 0x80550307");
+    Require(sceNpLookupPollAsync(sync, &result) == LookupSynchronousRequest && result == 7, "sceNpLookupPollAsync", "a synchronous request was not refused with 0x80550307");
 
     const int aborted = sceNpLookupCreateAsyncRequest(context, asyncParam);
     Require(sceNpLookupAbortRequest(aborted + 100) == InvalidId, "sceNpLookupAbortRequest", "an unknown request was taken");

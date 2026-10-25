@@ -17,6 +17,7 @@ static constexpr int SCE_NP_COMMUNITY_ERROR_ABORTED = static_cast<int>(0x8055070
 static constexpr int SCE_NP_COMMUNITY_ERROR_INSUFFICIENT_ARGUMENT = static_cast<int>(0x8055070C);
 static constexpr int SCE_NP_COMMUNITY_ERROR_INVALID_ID = static_cast<int>(0x8055070E);
 static constexpr int SCE_NP_COMMUNITY_ERROR_INVALID_TYPE = static_cast<int>(0x80550711);
+static constexpr int SCE_NP_LOOKUP_ERROR_SYNCHRONOUS_REQUEST = static_cast<int>(0x80550307);
 static constexpr int POLL_FINISHED = 0;
 static constexpr int POLL_RUNNING = 1;
 static constexpr std::size_t MAX_TITLE_CONTEXTS = 32;
@@ -110,25 +111,29 @@ int AbortRequest(Service& service, int reqId) {
     return 0;
 }
 
-int PollAsync(Service& service, int reqId, int* result, bool asyncOnly) {
+int PollAsync(Service& service, int reqId, int* result, int synchronousError) {
+    if (!result) return SCE_NP_COMMUNITY_ERROR_INVALID_ARGUMENT;
     std::lock_guard lock(service.mutex);
     const auto request = service.requests.find(reqId);
-    if (request == service.requests.end() || (asyncOnly && !request->second.async)) return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+    if (request == service.requests.end()) return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+    if (!request->second.async) return synchronousError;
     if (!request->second.finished) return POLL_RUNNING;
-    if (result) *result = request->second.result;
+    *result = request->second.result;
     return POLL_FINISHED;
 }
 
-int WaitAsync(Service& service, int reqId, int* result, bool asyncOnly) {
+int WaitAsync(Service& service, int reqId, int* result, int synchronousError) {
+    if (!result) return SCE_NP_COMMUNITY_ERROR_INVALID_ARGUMENT;
     std::unique_lock lock(service.mutex);
     auto request = service.requests.find(reqId);
-    if (request == service.requests.end() || (asyncOnly && !request->second.async)) return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+    if (request == service.requests.end()) return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
+    if (!request->second.async) return synchronousError;
     service.finished.wait(lock, [&] {
         request = service.requests.find(reqId);
         return request == service.requests.end() || request->second.finished;
     });
     if (request == service.requests.end()) return SCE_NP_COMMUNITY_ERROR_INVALID_ID;
-    if (result) *result = request->second.result;
+    *result = request->second.result;
     return 0;
 }
 
@@ -498,7 +503,7 @@ int APS5_VABI sceNpLookupNpId(int reqId, const NpOnlineId* onlineId, void* npId,
 }
 
 int APS5_VABI sceNpLookupPollAsync(int reqId, int* result) {
-    return PollAsync(lookup, reqId, result, false);
+    return PollAsync(lookup, reqId, result, SCE_NP_LOOKUP_ERROR_SYNCHRONOUS_REQUEST);
 }
 
 int APS5_VABI sceNpLookupSetTimeout(int id, int resolveRetry, std::uint32_t resolveTimeout, std::uint32_t connTimeout, std::uint32_t sendTimeout, std::uint32_t recvTimeout) {
@@ -506,7 +511,7 @@ int APS5_VABI sceNpLookupSetTimeout(int id, int resolveRetry, std::uint32_t reso
 }
 
 int APS5_VABI sceNpLookupWaitAsync(int reqId, int* result) {
-    return WaitAsync(lookup, reqId, result, false);
+    return WaitAsync(lookup, reqId, result, SCE_NP_LOOKUP_ERROR_SYNCHRONOUS_REQUEST);
 }
 
 int APS5_VABI sceNpWordFilterAbortRequest(int reqId) {
@@ -542,8 +547,7 @@ int APS5_VABI sceNpWordFilterDeleteTitleCtx(int titleCtxId) {
 }
 
 int APS5_VABI sceNpWordFilterPollAsync(int reqId, int* result) {
-    if (!result) return SCE_NP_COMMUNITY_ERROR_INVALID_ARGUMENT;
-    return PollAsync(wordFilter, reqId, result, true);
+    return PollAsync(wordFilter, reqId, result, SCE_NP_COMMUNITY_ERROR_INVALID_ID);
 }
 
 int APS5_VABI sceNpWordFilterSanitizeComment(int reqId, const char* comment, char* sanitizedComment, void* option) {
@@ -558,8 +562,7 @@ int APS5_VABI sceNpWordFilterSetTimeout(int id, int resolveRetry, std::uint32_t 
 }
 
 int APS5_VABI sceNpWordFilterWaitAsync(int reqId, int* result) {
-    if (!result) return SCE_NP_COMMUNITY_ERROR_INVALID_ARGUMENT;
-    return WaitAsync(wordFilter, reqId, result, true);
+    return WaitAsync(wordFilter, reqId, result, SCE_NP_COMMUNITY_ERROR_INVALID_ID);
 }
 
 }
