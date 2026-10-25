@@ -1,32 +1,10 @@
+#include "prx/libSceJobManager/libSceJobManager.hpp"
 #include "SceTypes.hpp"
 #include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-
-struct ConfigParams;
-using JobEntry = void (APS5_VABI*)(void*, std::uint32_t);
-
-struct Sequence {
-    APS5_VABI virtual int Dispatch(JobEntry, void*, std::uint32_t, const char*) = 0;
-    APS5_VABI virtual int SyncPoint() = 0;
-    APS5_VABI virtual int Wait() = 0;
-};
-
-struct SequenceFactory {
-    APS5_VABI virtual int Create(Sequence**, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, const char*) = 0;
-    APS5_VABI virtual int Destroy(Sequence*) = 0;
-};
-
-extern "C" {
-void APS5_VABI _ZN3sce3Job10JobManagerC1Ev(void*);
-void APS5_VABI _ZN3sce3Job10JobManagerD1Ev(void*);
-int APS5_VABI _ZN3sce3Job10JobManager10initializeEPvmjjjmPKNS1_12ConfigParamsE(void*, void*, std::uint64_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint64_t, const ConfigParams*);
-int APS5_VABI _ZN3sce3Job10JobManager10initializeEPvmjjPKNS1_12ConfigParamsE(void*, void*, std::uint64_t, std::uint32_t, std::uint32_t, const ConfigParams*);
-int APS5_VABI _ZN3sce3Job10JobManager8shutdownEv(void*);
-SequenceFactory* APS5_VABI _ZN3sce3Job10JobManager27getSequenceFactoryInterfaceENS1_8PriorityE(void*, std::uint32_t);
-}
 
 namespace {
 
@@ -90,7 +68,7 @@ int main() {
                 Require(Initialize(unified, workArea.data()) == static_cast<int>(0x81581020u));
                 Require(registrationCalls == before + 1);
                 auto* factory = _ZN3sce3Job10JobManager27getSequenceFactoryInterfaceENS1_8PriorityE(manager.data(), 0);
-                Sequence* sequence = nullptr;
+                ISequence* sequence = nullptr;
                 Require(factory->Create(&sequence, 3, 1, 0, 1, nullptr) == 0);
                 jobs = 0;
                 Require(sequence->Dispatch(Count, nullptr, 3, nullptr) == 0);
