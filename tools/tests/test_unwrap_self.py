@@ -532,6 +532,53 @@ class UnwrapTest(unittest.TestCase):
                     self.assertEqual(header[2] - headers[0][2], delta)
                     self.assertEqual(data[header[2]:header[2] + header[5]], payload[delta:delta + header[5]])
 
+    def test_recorded_overlaps_use_the_same_region_for_constraints_and_output(self):
+        payload = bytes(0x30 + (index * 7) % 0x40 for index in range(0x200))
+        prefix = bytes(0x41 + index % 20 for index in range(0x50))
+        cases = [
+            ([(PT_LOAD, 5, 0x2040, 0x11040, 0xC0, PAGE),
+              (PT_LOAD, 6, 0x2000, 0x20000, 0x200, PAGE),
+              (PT_TLS, 4, 0x2120, 0x20120, 0x20, 0x100)],
+             [(0x800, 0x900, 0xC0), (0x100800, 0x800, 0x200), (0x200800, 0x920, 0x20)],
+             {0x800: payload}, [payload[0x100:0x1C0], payload, payload[0x120:0x140]]),
+            ([(PT_LOAD, 5, 0x2040, 0x11040, 0xC0, PAGE),
+              (PT_LOAD, 6, 0x2000, 0x20000, 0x100, 0x10),
+              (PT_TLS, 4, 0x2080, 0x11080, 0x20, 0x100),
+              (PT_LOAD, 4, 0x5000, 0x30000, 0x50, 0x10)],
+             [(0x800, 0x840, 0xC0), (0x100800, 0x800, 0x100),
+              (0x200800, 0x880, 0x20), (0x300800, 0x700, 0x50)],
+             {0x800: payload[:0x100], 0x700: prefix},
+             [payload[0x40:0x100], payload[:0x100], payload[0x80:0xA0], prefix]),
+        ]
+        for segments, records, payloads, expected in cases:
+            with self.subTest(segments=segments):
+                container = build_container(segments, records, payloads)
+                result, output = self.convert(container)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                data, headers = read_program_headers(output)
+                for header, segment, block in zip(headers, segments, expected):
+                    self.assertEqual(header[7], segment[5])
+                    self.assertEqual(header[2] % header[7], header[3] % header[7])
+                    self.assertEqual(data[header[2]:header[2] + header[5]], block)
+                self.assertEqual((Path(self.directory) / "input.self").read_bytes(), container)
+
+    def test_inferred_overlaps_apply_stronger_alignment_to_the_host(self):
+        payload = b"overlapping load payload\0" * 16
+        segments = [(PT_LOAD, 5, 0x1000, 0x1000, 0x100, 0x100),
+                    (PT_LOAD, 6, 0x1080, 0x3080, 0x100, 0x100),
+                    (PT_TLS, 4, 0x1090, 0x3090, 0x10, PAGE)]
+        container = build_container(segments, [], {0x1000: payload})
+        result, output = self.convert(container)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data, headers = read_program_headers(output)
+        for header, segment, delta in zip(headers, segments, (0, 0x80, 0x90)):
+            self.assertEqual(header[7], segment[5])
+            self.assertEqual(header[2] % header[7], header[3] % header[7])
+            self.assertEqual(data[header[2]:header[2] + header[5]], payload[delta:delta + header[5]])
+        host, tls = headers[1:]
+        self.assertEqual(tls[2] - host[2], tls[3] - host[3])
+        self.assertEqual((Path(self.directory) / "input.self").read_bytes(), container)
+
     def test_overlapping_load_sources_keep_each_load_alignment(self):
         payload = b"shared load payload\0" * 16
         for delta, size in ((0, len(payload)), (0, 0x80), (0x40, 0x80)):

@@ -274,6 +274,8 @@ def unwrap(path, output, verbose=False):
             regions.append({"old": header["source"], "size": header["size"],
                             "vaddr": header["vaddr"], "align": header["align"]})
 
+    regions.sort(key=lambda region: region["old"])
+
     def output_region(header):
         host = header if header["type"] == PT_LOAD else header["host"]
         region = load_regions.get(host["index"]) if host is not None else None
@@ -295,7 +297,6 @@ def unwrap(path, output, verbose=False):
             region["align"] = alignment
             region["vaddr"] = address
 
-    regions.sort(key=lambda region: region["old"])
     program_offset = struct.unpack_from("<Q", elf_header, 0x20)[0]
     cursor = max(FIRST_REGION, program_offset + len(headers) * 56)
     padding = 0
