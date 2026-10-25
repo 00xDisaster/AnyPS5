@@ -500,11 +500,10 @@ int Fcntl(int fd, int command, std::intptr_t argument) {
             if (!Classify(fd, "fcntl")) return Fail(GuestEbadf);
             return Fail(GuestEopnotsupp);
         case DuplicateToCommand:
-        case DuplicateToCloseOnExec: {
-            const int duplicate = dup2_nid_postfix(fd, static_cast<int>(argument));
-            if (duplicate >= 0 && command == DuplicateToCloseOnExec) SetCloseOnExec(duplicate, true);
-            return duplicate;
-        }
+            return dup2_nid_postfix(fd, static_cast<int>(argument));
+        case DuplicateToCloseOnExec:
+            if (fd < 0 || !Classify(fd, "fcntl")) return Fail(GuestEbadf);
+            return DuplicateFrom(fd, 0);
         case GetDescriptorFlags: {
             if (!Classify(fd, "fcntl")) return Fail(GuestEbadf);
             std::lock_guard lock(g_mutex);

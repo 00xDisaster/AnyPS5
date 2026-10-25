@@ -1097,11 +1097,8 @@ int APS5_VABI fcntl_nid_postfix(int descriptor, int command, ...) {
     }
     if (command == 0) return DuplicateSocket_nid_no_patch(descriptor, static_cast<int>(argument));
     if (command == 17) return Fail(45);
-    if (command == 10 || command == 18) {
-        const int duplicate = dup2_nid_postfix(descriptor, static_cast<int>(argument));
-        if (duplicate >= 0 && command == 18) fcntl_nid_postfix(duplicate, 2, 1);
-        return duplicate;
-    }
+    if (command == 10) return dup2_nid_postfix(descriptor, static_cast<int>(argument));
+    if (command == 18) return DuplicateSocket_nid_no_patch(descriptor, 0);
     const auto socket = Lookup(descriptor);
     if (!socket) return -1;
     std::lock_guard lock(socket->modeMutex);

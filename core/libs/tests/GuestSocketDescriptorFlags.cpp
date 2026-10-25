@@ -71,13 +71,14 @@ int main() {
     Require(fcntl_nid_postfix(plain, Duplicate2Descriptor, plain) == plain && fcntl_nid_postfix(plain, GetDescriptorFlags) == CloseOnExec, "F_DUP2FD onto the same descriptor must preserve FD_CLOEXEC");
     Require(fcntl_nid_postfix(plain, SetDescriptorFlags, 0) == 0, "F_SETFD 0 must clear FD_CLOEXEC");
     Require(fcntl_nid_postfix(plain, Duplicate2Descriptor, plain) == plain && fcntl_nid_postfix(plain, GetDescriptorFlags) == 0, "F_DUP2FD onto the same descriptor must preserve a cleared flag");
-    Require(fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, dup2Target) == dup2Target, "F_DUP2FD_CLOEXEC onto another socket must return the target");
-    Require(fcntl_nid_postfix(dup2Target, GetDescriptorFlags) == CloseOnExec, "F_DUP2FD_CLOEXEC must set FD_CLOEXEC on the target");
-    Require(fcntl_nid_postfix(plain, GetDescriptorFlags) == 0, "F_DUP2FD_CLOEXEC must leave the flag of the original");
-    Require(fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, plain) == plain && fcntl_nid_postfix(plain, GetDescriptorFlags) == CloseOnExec, "F_DUP2FD_CLOEXEC onto the same descriptor must set FD_CLOEXEC");
-    Require(fcntl_nid_postfix(plain, SetDescriptorFlags, 0) == 0, "F_SETFD 0 must clear FD_CLOEXEC");
+    for (const int target : {dup2Target, plain, -1}) {
+        const int copy = fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, target);
+        Require(copy >= 0 && copy != target && copy != plain, "F_DUP2FD_CLOEXEC must ignore the target and return a new descriptor");
+        Require(fcntl_nid_postfix(copy, GetDescriptorFlags) == 0, "F_DUP2FD_CLOEXEC must not set FD_CLOEXEC");
+        Require(close_nid_postfix(copy) == 0, "close failed");
+    }
+    Require(fcntl_nid_postfix(dup2Target, GetDescriptorFlags) == 0 && fcntl_nid_postfix(plain, GetDescriptorFlags) == 0, "F_DUP2FD_CLOEXEC must leave the target and the original alone");
     Require(fcntl_nid_postfix(plain, Duplicate2Descriptor, -1) == -1 && *__error_nid_postfix() == GuestEbadf, "F_DUP2FD with a negative target must fail with EBADF");
-    Require(fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, -1) == -1 && *__error_nid_postfix() == GuestEbadf, "F_DUP2FD_CLOEXEC with a negative target must fail with EBADF");
     Require(close_nid_postfix(dup2Target) == 0, "close failed");
 
     int pipeDescriptors[2] = {-1, -1};
@@ -87,8 +88,9 @@ int main() {
     Require(fcntl_nid_postfix(plain, Duplicate2Descriptor, pipeDescriptors[0]) == pipeDescriptors[0], "F_DUP2FD onto a pipe must return the target");
     Require(fcntl_nid_postfix(pipeDescriptors[0], GetDescriptorFlags) == 0, "F_DUP2FD onto a pipe must clear FD_CLOEXEC");
     Require(fcntl_nid_postfix(plain, SetDescriptorFlags, 0) == 0, "F_SETFD 0 must clear FD_CLOEXEC");
-    Require(fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, pipeDescriptors[1]) == pipeDescriptors[1], "F_DUP2FD_CLOEXEC onto a pipe must return the target");
-    Require(fcntl_nid_postfix(pipeDescriptors[1], GetDescriptorFlags) == CloseOnExec, "F_DUP2FD_CLOEXEC onto a pipe must set FD_CLOEXEC");
+    const int pipeCopy = fcntl_nid_postfix(plain, Duplicate2DescriptorCloseOnExec, pipeDescriptors[1]);
+    Require(pipeCopy >= 0 && pipeCopy != pipeDescriptors[1] && fcntl_nid_postfix(pipeCopy, GetDescriptorFlags) == 0, "F_DUP2FD_CLOEXEC must leave a pipe target alone");
+    Require(close_nid_postfix(pipeCopy) == 0 && fcntl_nid_postfix(pipeDescriptors[1], GetDescriptorFlags) == 0, "close failed");
     Require(close_nid_postfix(pipeDescriptors[0]) == 0 && close_nid_postfix(pipeDescriptors[1]) == 0, "close failed");
 
     const int marked = socket_nid_postfix(2, Stream | SocketCloseOnExec, 0);

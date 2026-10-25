@@ -132,11 +132,17 @@ static void SocketsKeepTheirPath() {
     Require(sceKernelFcntl(socket, GetDescriptorFlags) == 0);
     Require(fcntl_nid_postfix(socket, Duplicate2Command, closing) == closing);
     Require(sceKernelFcntl(closing, GetDescriptorFlags) == 0);
-    Require(sceKernelFcntl(socket, Duplicate2CloseOnExec, closing) == closing);
-    Require(sceKernelFcntl(closing, GetDescriptorFlags) == 1);
+    for (const int target : {closing, socket, -1, -2}) {
+        const int copy = sceKernelFcntl(socket, Duplicate2CloseOnExec, target);
+        Require(copy >= 0 && copy != target && copy != socket && copy != closing);
+        Require(sceKernelFcntl(copy, GetDescriptorFlags) == 0 && sceKernelFcntl(copy, GetFlags) == ReadWrite);
+        Require(close_nid_postfix(copy) == 0);
+        const int posix = fcntl_nid_postfix(socket, Duplicate2CloseOnExec, target);
+        Require(posix >= 0 && posix != target && posix != socket && close_nid_postfix(posix) == 0);
+    }
+    Require(sceKernelFcntl(closing, GetDescriptorFlags) == 0);
     Require(sceKernelFcntl(socket, GetDescriptorFlags) == 0);
-    Require(sceKernelFcntl(socket, Duplicate2CloseOnExec, socket) == socket);
-    Require(sceKernelFcntl(socket, GetDescriptorFlags) == 1);
+    Require(sceKernelFcntl(socket, SetDescriptorFlags, 1) == 0);
     Require(sceKernelFcntl(socket, Duplicate2Command, socket) == socket);
     Require(sceKernelFcntl(socket, GetDescriptorFlags) == 1);
     Require(sceKernelFcntl(socket, SetDescriptorFlags, 0) == 0);
@@ -146,9 +152,13 @@ static void SocketsKeepTheirPath() {
     Require(fcntl_nid_postfix(socket, Duplicate2Command, pipe[0]) == pipe[0]);
     Require(sceKernelFcntl(pipe[0], GetFlags) == ReadWrite);
     Require(sceKernelFcntl(pipe[0], GetDescriptorFlags) == 0);
-    Require(sceKernelFcntl(socket, Duplicate2CloseOnExec, pipe[1]) == pipe[1]);
-    Require(sceKernelFcntl(pipe[1], GetFlags) == ReadWrite);
-    Require(sceKernelFcntl(pipe[1], GetDescriptorFlags) == 1);
+    const int pipeCopy = sceKernelFcntl(socket, Duplicate2CloseOnExec, pipe[1]);
+    Require(pipeCopy >= 0 && pipeCopy != pipe[1] && sceKernelFcntl(pipeCopy, GetDescriptorFlags) == 0 && close_nid_postfix(pipeCopy) == 0);
+    Require(sceKernelFcntl(pipe[1], GetDescriptorFlags) == 0);
+    for (const int end : pipe) {
+        const int copy = fcntl_nid_postfix(end, Duplicate2CloseOnExec, 300);
+        Require(copy >= 0 && copy != end && copy != 300 && fcntl_nid_postfix(copy, GetDescriptorFlags) == 0 && close_nid_postfix(copy) == 0);
+    }
     for (const int end : pipe) RequireFailure(fcntl_nid_postfix(end, DuplicateCloseOnExec, 0), GuestEopnotsupp);
     Require(close_nid_postfix(pipe[0]) == 0 && close_nid_postfix(pipe[1]) == 0);
     const int shared = shm_open_nid_postfix(reinterpret_cast<const char*>(1), ReadWrite, 0600);
@@ -164,19 +174,22 @@ static void SocketsKeepTheirPath() {
     Require(file == random);
     char byte = 0;
     Require(sceKernelRead(file, &byte, 1) == 0);
-    Require(sceKernelFcntl(socket, Duplicate2CloseOnExec, file) == file);
-    Require(sceKernelFcntl(file, GetFlags) == ReadWrite);
-    Require(sceKernelFcntl(file, GetDescriptorFlags) == 1);
+    const int fileCopy = sceKernelFcntl(file, Duplicate2CloseOnExec, 300);
+    Require(fileCopy >= 0 && fileCopy != file && fileCopy != 300);
+    Require(sceKernelFcntl(fileCopy, GetDescriptorFlags) == 0 && sceKernelFcntl(fileCopy, GetFlags) == ReadWrite);
+    Require(sceKernelLseek(file, 1, 0) == 1 && sceKernelLseek(fileCopy, 0, 1) == 1);
+    Require(close_nid_postfix(fileCopy) == 0);
+    RequireFailure(fcntl_nid_postfix(-1, Duplicate2CloseOnExec, 300), GuestEbadf);
+    RequireFailure(fcntl_nid_postfix(9999, Duplicate2CloseOnExec, 300), GuestEbadf);
+    Require(sceKernelFcntl(9999, Duplicate2CloseOnExec, 300) == SceEbadf);
     Require(close_nid_postfix(file) == 0);
     std::remove("kernel_fcntl_socket_dup2.bin");
     RequireFailure(fcntl_nid_postfix(socket, DuplicateCommand, -1), GuestEinval);
     RequireFailure(fcntl_nid_postfix(socket, DuplicateCloseOnExec, -1), GuestEopnotsupp);
     RequireFailure(fcntl_nid_postfix(socket, Duplicate2Command, -1), GuestEbadf);
-    RequireFailure(fcntl_nid_postfix(socket, Duplicate2CloseOnExec, -1), GuestEbadf);
     Require(sceKernelFcntl(socket, DuplicateCommand, -1) == SceEinval);
     Require(sceKernelFcntl(socket, DuplicateCloseOnExec, -1) == SceEnotsup);
     Require(sceKernelFcntl(socket, Duplicate2Command, -1) == SceEbadf);
-    Require(sceKernelFcntl(socket, Duplicate2CloseOnExec, -1) == SceEbadf);
     Require(sceKernelFcntl(socket, SetFlags, 0x8000) == SceEnotsup);
     Require(sceKernelFcntl(socket, GetFlags) == ReadWrite);
     Require(sceKernelFcntl(socket, 5) == SceEinval);
