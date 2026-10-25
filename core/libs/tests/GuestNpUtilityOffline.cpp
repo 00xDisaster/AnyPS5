@@ -116,11 +116,25 @@ void CheckWordFilter() {
     Require(sceNpLookupDeleteTitleCtx(context) == InvalidId, "sceNpLookupDeleteTitleCtx", "a word filter context was found among the lookup contexts");
 }
 
+void CheckBandwidthTestInitStart() {
+    Require(sceNpBandwidthTestInitStart() == SignedOut, "sceNpBandwidthTestInitStart", "starting a test while signed out did not return SIGNED_OUT");
+    Require(sceNpBandwidthTestInitStart() == sceNpBandwidthTestInitStartDownload(nullptr), "sceNpBandwidthTestInitStart", "the answer differs from sceNpBandwidthTestInitStartDownload");
+    Require(sceNpBandwidthTestInitStart() == sceNpBandwidthTestInitStartUpload(nullptr), "sceNpBandwidthTestInitStart", "the answer differs from sceNpBandwidthTestInitStartUpload");
+}
+
+void CheckBandwidthTestShutdownWithDetailedInfo() {
+    constexpr int npInvalidArgument = static_cast<int>(0x80550003u);
+    Require(sceNpBandwidthTestShutdownWithDetailedInfo() == npInvalidArgument, "sceNpBandwidthTestShutdownWithDetailedInfo", "shutting down a test that never started did not return INVALID_ARGUMENT");
+    Require(sceNpBandwidthTestShutdownWithDetailedInfo() == sceNpBandwidthTestShutdown(0, nullptr), "sceNpBandwidthTestShutdownWithDetailedInfo", "the answer differs from sceNpBandwidthTestShutdown");
+}
+
 }
 
 int main() {
     std::memset(selfNpId, 0, sizeof(selfNpId));
     std::strcpy(reinterpret_cast<char*>(selfNpId), "player_1");
+    CheckBandwidthTestInitStart();
+    CheckBandwidthTestShutdownWithDetailedInfo();
     CheckLookup();
     CheckWordFilter();
     if (failures != 0) return 1;
