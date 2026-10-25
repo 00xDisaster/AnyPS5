@@ -34,6 +34,8 @@ def results(path):
         else:
             outcome = "passed"
         found[name] = outcome
+    if not found:
+        raise ValueError(f"{path}: the report lists no tests")
     return found
 
 
