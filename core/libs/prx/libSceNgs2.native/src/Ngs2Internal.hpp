@@ -219,6 +219,7 @@ struct Ngs2Rack {
     std::vector<Ngs2Voice> voices;
     std::vector<Ngs2CustomUserFx2ModuleOption> userFx;
     std::vector<std::vector<std::uint8_t>> userFxCommon;
+    std::vector<std::vector<std::uint8_t>> userFxParam;
     std::vector<std::uint32_t> customModuleIds;
     std::vector<Ngs2CustomModuleInfo> customModules;
     std::thread::id lockOwner{};
@@ -242,6 +243,7 @@ struct Ngs2System {
     std::uint32_t renderDepth = 0;
     bool jobsExecuting = false;
     bool processingVoices = false;
+    bool destroying = false;
     std::uint32_t voiceAccesses = 0;
     std::uint32_t controlCallbacks = 0;
     std::uintptr_t userData = 0;
@@ -302,7 +304,7 @@ void Ngs2RestartAtrac9(Ngs2Voice& voice);
 bool Ngs2FinishBlock(Ngs2Voice& voice);
 void Ngs2BindSamplerBlock(Ngs2Voice& voice, bool restartDecoder);
 int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option, std::uint32_t maxInputs);
-void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option);
+int Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option);
 void Ngs2PrepareSampler(Ngs2Voice& voice);
 void Ngs2RestartSampler(Ngs2Voice& voice);
 void Ngs2ReplaySampler(Ngs2Voice& voice);

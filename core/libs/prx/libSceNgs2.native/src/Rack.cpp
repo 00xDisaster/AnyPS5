@@ -129,6 +129,9 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
     if (system != nullptr && system->jobsExecuting) throw std::runtime_error("NGS2: creating racks from active job handlers is not implemented");
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     auto* rack = new (Ngs2Place(&bufferInfo, sizeof(Ngs2Rack), alignof(Ngs2Rack))) Ngs2Rack{};
+    const auto systemUid = system->uid;
+    const auto discard = [](Ngs2Rack* value) { std::destroy_at(value); };
+    std::unique_ptr<Ngs2Rack, decltype(discard)> pending(rack, discard);
     rack->system = system;
     rack->rackId = rackId;
     rack->maxChannels = RackMaxChannels(rackId, options);
@@ -153,9 +156,14 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
         voice.ports.resize(options.common.max_ports);
         voice.matrices.resize(options.common.max_matrices);
     }
-    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) Ngs2SetupUserFx(*rack, options.customSampler.custom_rack_option);
-    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER || rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING) Ngs2SetupUserFx(*rack, options.customSubmixer.custom_rack_option);
+    int setup = SCE_NGS2_OK;
+    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) setup = Ngs2SetupUserFx(*rack, options.customSampler.custom_rack_option);
+    if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER || rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING) setup = Ngs2SetupUserFx(*rack, options.customSubmixer.custom_rack_option);
+    if (setup < 0) return setup;
+    system = Ngs2FindSystem(systemHandle);
+    if (system == nullptr || system->uid != systemUid) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     system->racks.push_back(rack);
+    pending.release();
     *handle = reinterpret_cast<Ngs2Handle>(rack);
     return SCE_NGS2_OK;
 }
@@ -163,13 +171,6 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
 int Ngs2DestroyRack(Ngs2Rack& rack, Ngs2ContextBufferInfo* outBufferInfo) {
     if (rack.lockDepth != 0) Ngs2LeaveExclusive(rack.lockDepth);
     rack.destroying = true;
-    try {
-        Ngs2CleanupUserFx(rack);
-    } catch (...) {
-        rack.destroying = false;
-        Ngs2NotifyWaiters();
-        throw;
-    }
     auto& racks = rack.system->racks;
     std::erase(racks, &rack);
     Ngs2NotifyWaiters();
@@ -180,8 +181,16 @@ int Ngs2DestroyRack(Ngs2Rack& rack, Ngs2ContextBufferInfo* outBufferInfo) {
             }
         }
     }
+    rack.system = nullptr;
     const auto bufferInfo = rack.bufferInfo;
     const auto allocator = rack.allocator;
+    try {
+        Ngs2CleanupUserFx(rack);
+    } catch (...) {
+        std::destroy_at(&rack);
+        Ngs2ReleaseBuffer(allocator, bufferInfo, outBufferInfo);
+        throw;
+    }
     std::destroy_at(&rack);
     return Ngs2ReleaseBuffer(allocator, bufferInfo, outBufferInfo);
 }
@@ -224,7 +233,15 @@ int APS5_VABI sceNgs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t r
     bufferInfo.user_data = allocator->user_data;
     const int result = allocator->alloc_handler(&bufferInfo);
     if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the allocator handler failed with " + std::to_string(result));
-    return CreateRack(system_handle, rack_id, options, bufferInfo, *allocator, handle);
+    int created;
+    try {
+        created = CreateRack(system_handle, rack_id, options, bufferInfo, *allocator, handle);
+    } catch (...) {
+        Ngs2ReleaseBuffer(*allocator, bufferInfo, nullptr);
+        throw;
+    }
+    if (created != SCE_NGS2_OK) Ngs2ReleaseBuffer(*allocator, bufferInfo, nullptr);
+    return created;
 }
 
 int APS5_VABI sceNgs2RackDestroy(uintptr_t rack_handle, Ngs2ContextBufferInfo* buffer_info) {

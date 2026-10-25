@@ -167,11 +167,12 @@ static void ReleaseSystemLock(SystemLockState& state) {
 Ngs2System* Ngs2FindSystem(Ngs2Handle handle) {
     auto& systems = Systems();
     const auto found = std::find(systems.begin(), systems.end(), reinterpret_cast<Ngs2System*>(handle));
-    return found == systems.end() ? nullptr : *found;
+    return found == systems.end() || (*found)->destroying ? nullptr : *found;
 }
 
 Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
     for (auto* system : Systems()) {
+        if (system->destroying) continue;
         for (auto* rack : system->racks) {
             if (!rack->destroying && reinterpret_cast<Ngs2Handle>(rack) == handle) return rack;
         }
@@ -181,6 +182,7 @@ Ngs2Rack* Ngs2FindRack(Ngs2Handle handle) {
 
 Ngs2Voice* Ngs2FindVoice(Ngs2Handle handle) {
     for (auto* system : Systems()) {
+        if (system->destroying) continue;
         for (auto* rack : system->racks) {
             if (rack->destroying) continue;
             for (auto& voice : rack->voices) {
@@ -398,9 +400,20 @@ int APS5_VABI sceNgs2SystemDestroy(uintptr_t system_handle, Ngs2ContextBufferInf
         system = Ngs2FindSystem(system_handle);
     }
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
-    while (!system->racks.empty()) {
-        const int result = Ngs2DestroyRack(*system->racks.back(), nullptr);
-        if (result != SCE_NGS2_OK) return result;
+    system->destroying = true;
+    try {
+        while (!system->racks.empty()) {
+            const int result = Ngs2DestroyRack(*system->racks.back(), nullptr);
+            if (result != SCE_NGS2_OK) {
+                system->destroying = false;
+                Ngs2NotifyWaiters();
+                return result;
+            }
+        }
+    } catch (...) {
+        system->destroying = false;
+        Ngs2NotifyWaiters();
+        throw;
     }
     std::erase(Systems(), system);
     {

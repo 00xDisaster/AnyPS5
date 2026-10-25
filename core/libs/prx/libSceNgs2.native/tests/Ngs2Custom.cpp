@@ -210,7 +210,7 @@ static void TestUserFxChain() {
     calls.processResult = SCE_NGS2_OK;
 
     Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
-    Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 0, 1, 1}));
+    Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 1, 0, 1}));
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 

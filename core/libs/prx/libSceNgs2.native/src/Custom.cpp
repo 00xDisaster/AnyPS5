@@ -111,17 +111,18 @@ int Ngs2CheckCustomRack(std::uint32_t rackId, const Ngs2CustomRackOption& option
 
 static Ngs2UserFx2SetupContext UserFxContext(Ngs2Rack& rack, std::size_t module, std::uint32_t voiceIndex) {
     auto& fx = rack.voices[voiceIndex].userFx[module];
-    return {rack.userFxCommon[module].data(), fx.param.data(), fx.work.data(), rack.userFx[module].user_data,
+    return {rack.userFxCommon[module].data(), rack.userFxParam[module].data(), fx.work.data(), rack.userFx[module].user_data,
             static_cast<std::uint32_t>(rack.voices.size()), voiceIndex, {}};
 }
 
-void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
+int Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
     const bool hasPitchShift = std::any_of(option.module, option.module + option.num_modules,
         [](const auto& module) { return module.module_id == SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT; });
     rack.customModuleIds.resize(option.num_modules);
     rack.customModules.resize(option.num_modules);
     rack.userFx.resize(option.num_modules);
     rack.userFxCommon.resize(option.num_modules);
+    rack.userFxParam.resize(option.num_modules);
     for (auto& voice : rack.voices) {
         voice.userFx.resize(option.num_modules);
         voice.customUserFx.resize(option.num_modules);
@@ -140,6 +141,7 @@ void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
             const auto& module = *reinterpret_cast<const Ngs2CustomUserFx2ModuleOption*>(option.module[m].option);
             rack.userFx[m] = module;
             rack.userFxCommon[m].resize(module.common_size);
+            rack.userFxParam[m].resize(module.param_size);
             for (std::uint32_t i = 0; i < rack.voices.size(); i++) {
                 auto& fx = rack.voices[i].userFx[m];
                 fx.param.resize(module.param_size);
@@ -148,9 +150,17 @@ void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
                 fx.flags = USER_FX2_FLAG_FIRST_PROCESS;
                 if (module.setup_handler != nullptr) {
                     auto context = UserFxContext(rack, m, i);
-                    const int result = module.setup_handler(&context);
-                    if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 setup handler failed with " + std::to_string(result));
+                    int result;
+                    {
+                        const Ngs2Unlocked unlocked;
+                        result = module.setup_handler(&context);
+                    }
+                    if (result < 0) return result;
                 }
+            }
+            for (auto& voice : rack.voices) {
+                auto& fx = voice.userFx[m];
+                fx.param = rack.userFxParam[m];
                 fx.initialParam = fx.param;
             }
         } else if (option.module[m].module_id == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX) {
@@ -159,16 +169,21 @@ void Ngs2SetupUserFx(Ngs2Rack& rack, const Ngs2CustomRackOption& option) {
             }
         }
     }
+    return SCE_NGS2_OK;
 }
 
 void Ngs2CleanupUserFx(Ngs2Rack& rack) {
-    for (std::uint32_t i = 0; i < rack.voices.size(); i++) {
-        for (std::size_t m = 0; m < rack.userFx.size(); m++) {
-            if (rack.customModuleIds[m] != SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) continue;
-            if (rack.userFx[m].cleanup_handler == nullptr) continue;
+    for (std::size_t m = 0; m < rack.userFx.size(); m++) {
+        if (rack.customModuleIds[m] != SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2) continue;
+        if (rack.userFx[m].cleanup_handler == nullptr) continue;
+        for (std::uint32_t i = 0; i < rack.voices.size(); i++) {
             auto context = UserFxContext(rack, m, i);
-            const int result = rack.userFx[m].cleanup_handler(&context);
-            if (result != SCE_NGS2_OK) throw std::runtime_error("NGS2: the UserFx2 cleanup handler failed with " + std::to_string(result));
+            int result;
+            {
+                const Ngs2Unlocked unlocked;
+                result = rack.userFx[m].cleanup_handler(&context);
+            }
+            if (result < 0) break;
         }
     }
 }
