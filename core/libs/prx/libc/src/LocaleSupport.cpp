@@ -285,12 +285,35 @@ void APS5_VABI NumPutMethodUnsupported() {
     NotImplemented_nid_no_patch("num_put<char>::do_put");
 }
 
-void APS5_VABI TimePutMethodUnsupported() {
-    NotImplemented_nid_no_patch("time_put<char>::do_put");
+void PutCharacter(GuestLocale::OutputIterator& out, char character) {
+    GuestLocale::Streambuf* buffer = out.buffer;
+    if (buffer == nullptr) {
+        out.failed = true;
+        return;
+    }
+    char* next = *buffer->putNext;
+    if (next != nullptr && static_cast<std::int32_t>(static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(*buffer->putEnd) - reinterpret_cast<std::uintptr_t>(next))) > 0) {
+        *buffer->putNext = next + 1;
+        *next = character;
+        return;
+    }
+    if (buffer->vtable->overflow(buffer, static_cast<unsigned char>(character)) == -1) out.failed = true;
+}
+
+GuestLocale::OutputIterator APS5_VABI TimePutDoPut(const GuestLocale::Facet*, GuestLocale::OutputIterator out, GuestLocale::IosBase*, char, const GuestTm* time, char format, char modifier) {
+    const char pattern[] = {'!', '%', modifier != 0 ? modifier : format, modifier != 0 ? format : '\0', '\0'};
+    std::string text;
+    std::size_t length = 0;
+    for (std::size_t size = 16; length == 0; size *= 2) {
+        text.resize(size);
+        length = strftime_nid_postfix(text.data(), size, pattern, time);
+    }
+    for (std::size_t index = 1; index < length; ++index) PutCharacter(out, text[index]);
+    return out;
 }
 
 const GuestLocale::UnsupportedMethodsVtable g_numPutVtable{{DestroyCollate, DeleteCollate, RetainFacet, ReleaseFacet}, {NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported, NumPutMethodUnsupported}};
-const GuestLocale::UnsupportedMethodsVtable g_timePutVtable{{DestroyCollate, DeleteCollate, RetainFacet, ReleaseFacet}, {TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported, TimePutMethodUnsupported}};
+const GuestLocale::TimePutVtable g_timePutVtable{{DestroyCollate, DeleteCollate, RetainFacet, ReleaseFacet}, TimePutDoPut};
 
 constexpr std::size_t GuestTimePutFacetSize = 0xb8;
 

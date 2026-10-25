@@ -5,6 +5,8 @@
 #include <cstdint>
 #include "general/VabiMacros.hpp"
 
+struct GuestTm;
+
 namespace GuestLocale {
 
 struct LocinfoStorage {
@@ -106,6 +108,36 @@ struct IosBase {
     Implementation** locale;
 };
 
+struct Streambuf;
+
+struct StreambufVtable {
+    const void* reserved[4];
+    int (APS5_VABI *overflow)(Streambuf* self, int character);
+};
+
+struct Streambuf {
+    const StreambufVtable* vtable;
+    const void* reserved[7];
+    char** putNext;
+    const void* reservedCounts[3];
+    char** putEnd;
+};
+
+struct OutputIterator {
+    bool failed;
+    Streambuf* buffer;
+};
+
+struct TimePutVtable {
+    FacetVtable facet;
+    OutputIterator (APS5_VABI *put)(const Facet* self, OutputIterator out, IosBase* stream, char fill, const GuestTm* time, char format, char modifier);
+};
+
+static_assert(offsetof(StreambufVtable, overflow) == 0x20);
+static_assert(offsetof(Streambuf, putNext) == 0x40);
+static_assert(offsetof(Streambuf, putEnd) == 0x60);
+static_assert(sizeof(OutputIterator) == 0x10);
+static_assert(offsetof(TimePutVtable, put) == 0x20);
 static_assert(sizeof(Facet) == 0x10);
 static_assert(offsetof(Implementation, facets) == 0x10);
 static_assert(offsetof(Implementation, facetCount) == 0x18);

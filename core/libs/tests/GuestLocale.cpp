@@ -10,6 +10,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <thread>
+#include <string>
 #include <vector>
 
 extern "C" {
@@ -290,6 +291,64 @@ static void CheckWideNumPutVtableObject() {
     }
 }
 
+struct TestStreambuf {
+    GuestLocale::Streambuf buffer;
+    std::string accepted;
+    int offered;
+    int capacity;
+};
+
+int APS5_VABI TestOverflow(GuestLocale::Streambuf* self, int character) {
+    auto* stream = reinterpret_cast<TestStreambuf*>(self);
+    ++stream->offered;
+    if (static_cast<int>(stream->accepted.size()) >= stream->capacity) return -1;
+    stream->accepted += static_cast<char>(character);
+    return character;
+}
+
+const GuestLocale::StreambufVtable g_testStreambufVtable{{}, TestOverflow};
+
+static void CheckTimePut() {
+    const GuestLocale::Implementation* locale = _ZSt21_sceLibcClassicLocale_nid_postfix;
+    GuestLocale::Facet* facet = nullptr;
+    Require(_ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(&facet, &locale) == 5);
+    const auto put = reinterpret_cast<const GuestLocale::TimePutVtable*>(facet->vtable)->put;
+    GuestTm time{};
+    time.tm_year = 126;
+    time.tm_mon = 9;
+    time.tm_mday = 2;
+    time.tm_hour = 13;
+    time.tm_min = 5;
+    time.tm_sec = 9;
+    time.tm_wday = 5;
+    time.tm_yday = 274;
+    char storage[8];
+    char* next = storage;
+    char* end = storage + sizeof(storage);
+    TestStreambuf stream{{&g_testStreambufVtable, {}, &next, {}, &end}, {}, 0, 100};
+    GuestLocale::OutputIterator out = put(facet, {false, &stream.buffer}, nullptr, '*', &time, 'Y', 0);
+    Require(!out.failed && out.buffer == &stream.buffer && next == storage + 4 && std::memcmp(storage, "2026", 4) == 0 && stream.offered == 0);
+    out = put(facet, out, nullptr, '*', &time, 'c', 0);
+    Require(!out.failed && next == end && std::memcmp(storage + 4, "Fri ", 4) == 0 && stream.accepted == "Oct  2 13:05:09 2026");
+    stream.accepted.clear();
+    out = put(facet, out, nullptr, '*', &time, 'Y', 'E');
+    out = put(facet, out, nullptr, '*', &time, 'y', 'O');
+    out = put(facet, out, nullptr, '*', &time, '\0', 0);
+    out = put(facet, out, nullptr, '*', &time, 'k', 0);
+    Require(!out.failed && stream.accepted == "202626%%k");
+    stream.capacity = static_cast<int>(stream.accepted.size()) + 1;
+    stream.offered = 0;
+    out = put(facet, out, nullptr, '*', &time, 'T', 0);
+    Require(out.failed && stream.offered == 8 && stream.accepted == "202626%%k1");
+    next = nullptr;
+    stream.offered = 0;
+    out = put(facet, {false, &stream.buffer}, nullptr, '*', &time, 'H', 0);
+    Require(out.failed && stream.offered == 2);
+    out = put(facet, {false, nullptr}, nullptr, '*', &time, 'H', 0);
+    Require(out.failed && out.buffer == nullptr);
+    facet->vtable->deleteObject(facet);
+}
+
 static void CheckFacetGetcat() {
     const GuestLocale::Implementation* locale = _ZSt21_sceLibcClassicLocale_nid_postfix;
     GuestLocale::Facet* codecvt = nullptr;
@@ -361,6 +420,7 @@ int main() {
     _Locksyslock_nid_postfix();
     _Unlocksyslock_nid_postfix();
     _Unlocksyslock_nid_postfix();
+    CheckTimePut();
 
     std::cout << "Guest locale checks passed\n";
 }
