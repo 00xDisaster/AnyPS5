@@ -56,6 +56,7 @@ void APS5_VABI FT_Outline_Reverse_nid_postfix(FreeType::GuestOutline* outline);
 int APS5_VABI FT_Request_Size_nid_postfix(FreeType::GuestFaceRec* face, const FreeType::GuestSizeRequestRec* request);
 
 void APS5_VABI FT_Bitmap_New_nid_postfix(FreeType::GuestBitmap* bitmap);
+void APS5_VABI FT_Bitmap_Init_nid_postfix(FreeType::GuestBitmap* bitmap);
 int APS5_VABI FT_Bitmap_Copy_nid_postfix(FreeType::GuestLibrary* library, const FreeType::GuestBitmap* source, FreeType::GuestBitmap* target);
 int APS5_VABI FT_Bitmap_Convert_nid_postfix(FreeType::GuestLibrary* library, const FreeType::GuestBitmap* source, FreeType::GuestBitmap* target, std::int32_t alignment);
 int APS5_VABI FT_Bitmap_Done_nid_postfix(FreeType::GuestLibrary* library, FreeType::GuestBitmap* bitmap);

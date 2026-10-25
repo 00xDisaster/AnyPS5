@@ -1,4 +1,5 @@
 #include "FontFixture.hpp"
+#include "prx/libSceFreeType/include/Api.hpp"
 #include "prx/libSceFreeType/include/GuestObjects.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 
@@ -10,10 +11,6 @@
 #include <vector>
 
 using namespace FreeType;
-
-extern "C" {
-void APS5_VABI FT_Bitmap_Init_nid_postfix(GuestBitmap*);
-}
 
 static void Check(bool value, int line) {
     if (!value) {
