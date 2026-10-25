@@ -315,6 +315,18 @@ void CheckManagerIntProfileGetters() {
     Require(sceNpManagerIntDeleteRequest(deleted) == RequestNotFound, "the profile getters leave a deleted request deleted");
 }
 
+void CheckManagerIntUserLookups() {
+    NpOnlineId onlineId{};
+    std::memcpy(onlineId.data, "player", 6);
+    NpId npId{};
+    npId.online_id = onlineId;
+    int userId = 0x5a5a5a5a;
+    Require(CallWith(sceNpManagerIntGetUserIdByOnlineId, &onlineId, &userId) == SignedOut && userId == 0x5a5a5a5a, "sceNpManagerIntGetUserIdByOnlineId must report NP as signed out and write nothing");
+    Require(CallWith(sceNpManagerIntGetUserIdByNpId, &npId, &userId) == SignedOut && userId == 0x5a5a5a5a, "sceNpManagerIntGetUserIdByNpId must report NP as signed out and write nothing");
+    Require(sceNpManagerIntGetUserIdByOnlineId() == SignedOut && sceNpManagerIntGetUserIdByNpId() == SignedOut, "the user lookups without arguments");
+    Require(sceNpGetUserIdByOnlineId(&onlineId, &userId) == SignedOut && userId == 0x5a5a5a5a, "the public twin answers the same while signed out");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -477,6 +489,7 @@ int main() {
     CheckManagerIntRequestLifecycle();
     CheckIdMapperAccountIdLookups();
     CheckManagerIntProfileGetters();
+    CheckManagerIntUserLookups();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));
