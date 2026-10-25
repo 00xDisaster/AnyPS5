@@ -180,6 +180,10 @@ static void CheckLongDoubleExpOverflowRounding() {
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = -30000.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L && !std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = -30000.0L;
     Require(_LExp_nid_postfix(&result, -1.0L, 0) == 0 && result == 0.0L && std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
