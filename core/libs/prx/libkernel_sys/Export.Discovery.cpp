@@ -2042,9 +2042,8 @@ int APS5_VABI sceKernelVirtualQueryAll(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelWaitCommandBufferCompletion(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+int APS5_VABI sceKernelWaitCommandBufferCompletion(std::uint32_t id) {
+    return AmmSubmitted_nid_no_patch(id) ? 0 : SCE_KERNEL_ERROR_ESRCH;
 }
 
 int APS5_VABI sceKernelWriteEventQueueOnCompletionCommand(void) {

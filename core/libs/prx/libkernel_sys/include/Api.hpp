@@ -472,7 +472,7 @@ int APS5_VABI sceKernelTitleWorkdaroundIsEnabled(void);
 int APS5_VABI sceKernelTraceMemoryTypeProtect(void);
 int APS5_VABI sceKernelTriggerEport(void);
 int APS5_VABI sceKernelVirtualQueryAll(void);
-int APS5_VABI sceKernelWaitCommandBufferCompletion(void);
+int APS5_VABI sceKernelWaitCommandBufferCompletion(std::uint32_t id);
 int APS5_VABI sceKernelWriteEventQueueOnCompletionCommand(void);
 int APS5_VABI sceKernelWriteMapCommand(void* dst, std::uint64_t address, std::uint64_t size, std::uint64_t type, std::uint64_t protection, std::uint64_t* outSize);
 int APS5_VABI sceKernelWriteMapCommand2(void);

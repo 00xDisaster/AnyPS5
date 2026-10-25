@@ -280,6 +280,31 @@ void CheckAmmWriteCommands() {
     Require(untouched == ~std::uint64_t{0});
 }
 
+void CheckAmmWaitCompletion() {
+    constexpr std::uint64_t page = 0x4000;
+    constexpr std::int32_t cpuReadWrite = 0x03;
+    std::uint64_t start = 0;
+    std::uint64_t end = 0;
+    std::uint64_t multimapStart = 0;
+    std::uint64_t multimapEnd = 0;
+    Require(sceAmprAmmGetVirtualAddressRanges(&start, &end, &multimapStart, &multimapEnd) == 0);
+    std::int64_t pool = -1;
+    Require(sceAmprAmmGiveDirectMemory(0, static_cast<std::int64_t>(sceKernelGetDirectMemorySize()), 2 * page, page, 1, &pool) == 0);
+    const std::uint64_t target = start + 0x400000;
+    std::array<std::uint8_t, 64> commands{};
+    std::uint64_t bytes = 0;
+    Require(sceKernelWriteMapCommand(commands.data(), target, page, 0, cpuReadWrite, &bytes) == 0);
+    std::uint32_t id = 0;
+    Require(sceAmprAmmSubmitCommandBuffer3(commands.data(), static_cast<std::uint32_t>(bytes), 0, &id) == 0 && id != 0);
+    Require(sceKernelWaitCommandBufferCompletion(id) == 0);
+    auto* mapped = reinterpret_cast<volatile std::uint8_t*>(target);
+    *mapped = 0x5A;
+    Require(*mapped == 0x5A);
+    Require(sceKernelWaitCommandBufferCompletion(id) == 0);
+    Require(sceKernelWaitCommandBufferCompletion(0) == SCE_KERNEL_ERROR_ESRCH);
+    Require(sceKernelWaitCommandBufferCompletion(id + 1) == SCE_KERNEL_ERROR_ESRCH && sceAmprAmmWaitCommandBufferCompletion(id + 1) == SCE_KERNEL_ERROR_ESRCH);
+}
+
 void CheckPathconf(const std::filesystem::path& root, const std::string& file) {
     const auto directory = root.generic_string();
     for (const auto& path : {file, directory}) {
@@ -470,6 +495,7 @@ int main() {
     Require(umask_nid_postfix(022) == 07777);
     CheckCondattrClock();
     CheckAmmWriteCommands();
+    CheckAmmWaitCompletion();
     const auto root = std::filesystem::path("anyps5-kernel-sys-test-" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     Require(std::filesystem::create_directory(root));
