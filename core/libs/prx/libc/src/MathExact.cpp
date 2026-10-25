@@ -67,6 +67,12 @@ void RaiseLibcError(int exceptions) {
     errno = range ? ERANGE : EDOM;
 }
 
+short OverflowScaled(long double& value, long double multiplier) {
+    value = std::scalbnl(multiplier, std::numeric_limits<long double>::max_exponent + 1);
+    RaiseLibcError(FE_OVERFLOW);
+    return std::isinf(value) ? Infinite : Finite;
+}
+
 short ScaleExtended(long double& value, long long exponent) {
     const ExtendedBits parts = Bits(value);
     const std::uint16_t sign = parts.signExponent & 0x8000;
@@ -82,8 +88,14 @@ short ScaleExtended(long double& value, long long exponent) {
     const std::uint64_t mantissa = parts.mantissa << shift;
     biased += exponent - shift;
     if (biased >= 0x7fff) {
-        value = JoinExtended(1ull << 63, static_cast<std::uint16_t>(sign | 0x7fff));
-        return Infinite;
+        const bool negative = sign != 0;
+        const int mode = std::fegetround();
+        const bool toInfinity = mode == FE_UPWARD ? !negative : mode == FE_DOWNWARD ? negative : mode == FE_TOWARDZERO ? false : true;
+        value = toInfinity
+            ? JoinExtended(1ull << 63, static_cast<std::uint16_t>(sign | 0x7fff))
+            : JoinExtended(~0ull, static_cast<std::uint16_t>(sign | 0x7ffe));
+        RaiseLibcError(FE_OVERFLOW);
+        return toInfinity ? Infinite : Finite;
     }
     if (biased > 0) {
         value = JoinExtended(mantissa, static_cast<std::uint16_t>(sign | biased));
@@ -112,13 +124,13 @@ short ScaleExtended(long double& value, long long exponent) {
     }
     if (roundUp) ++kept;
     value = JoinExtended(kept, static_cast<std::uint16_t>(sign | (kept >> 63)));
-    return kept == 0 ? Zero : Finite;
+    return TestExtended(Bits(value));
 }
 
 short FinishExpScale(long double& value, long long exponent) {
     const short result = ScaleExtended(value, exponent);
     if (result == Infinite) RaiseLibcError(FE_OVERFLOW);
-    if (result == Zero) RaiseLibcError(FE_UNDERFLOW);
+    if (result == Zero || result == Denormal) RaiseLibcError(FE_UNDERFLOW);
     return result;
 }
 
@@ -133,13 +145,12 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
     constexpr long double q0 = 0x8.45a5963c196b530p-17L;
     constexpr long double q1 = 0xf.83a71f722cba3c4p-10L;
     if (x < -29490.0L) {
-        x = 0.0L;
+        x = std::copysign(0.0L, multiplier);
+        RaiseLibcError(FE_UNDERFLOW);
         return Zero;
     }
     if (x > 29490.0L) {
-        x = std::numeric_limits<long double>::infinity();
-        RaiseLibcError(FE_OVERFLOW);
-        return Infinite;
+        return OverflowScaled(x, multiplier);
     }
     if (scale == 0 && x == 1.0L) {
         x = 0xa.df85458a2bb4a9bp-2L * multiplier;
@@ -380,13 +391,12 @@ short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale
         return Zero;
     }
     if (x < -29490.0L) {
-        *value = 0.0L;
+        *value = std::copysign(0.0L, y);
+        RaiseLibcError(FE_UNDERFLOW);
         return Zero;
     }
     if (x > 29490.0L) {
-        *value = std::numeric_limits<long double>::infinity();
-        RaiseLibcError(FE_OVERFLOW);
-        return Infinite;
+        return OverflowScaled(*value, y);
     }
     if (std::isinf(y)) {
         *value = y;

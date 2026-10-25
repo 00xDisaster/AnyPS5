@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <source_location>
 
 static void Require(bool value, std::source_location location = std::source_location::current()) {
@@ -138,6 +139,55 @@ static void CheckRoundingModes() {
     Require(std::fesetround(saved) == 0);
 }
 
+static void CheckLongDoubleExpOverflowRounding() {
+    struct Case {
+        int mode;
+        long double multiplier;
+        bool infinity;
+    };
+    const Case cases[] = {
+        {FE_TONEAREST, 1.0L, true},
+        {FE_TONEAREST, -1.0L, true},
+        {FE_TOWARDZERO, 1.0L, false},
+        {FE_TOWARDZERO, -1.0L, false},
+        {FE_DOWNWARD, 1.0L, false},
+        {FE_DOWNWARD, -1.0L, true},
+        {FE_UPWARD, 1.0L, true},
+        {FE_UPWARD, -1.0L, false},
+    };
+    const long double maximum = std::numeric_limits<long double>::max();
+    const int saved = std::fegetround();
+    for (const auto& test : cases) {
+        Require(std::fesetround(test.mode) == 0);
+        errno = 0;
+        std::feclearexcept(FE_ALL_EXCEPT);
+        long double result = 1.0L;
+        const short kind = _LExp_nid_postfix(&result, test.multiplier, 16384);
+        const long double expected = test.infinity
+            ? std::copysign(std::numeric_limits<long double>::infinity(), test.multiplier)
+            : std::copysign(maximum, test.multiplier);
+        Require(SameBits(result, expected));
+        Require(kind == (test.infinity ? 1 : -1));
+        Require(errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0);
+    }
+    Require(std::fesetround(FE_TOWARDZERO) == 0);
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    long double result = 30000.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == -1 && SameBits(result, maximum) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0);
+    result = 30000.0L;
+    Require(_LExp_nid_postfix(&result, -1.0L, 0) == -1 && SameBits(result, -maximum) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0);
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = -30000.0L;
+    Require(_LExp_nid_postfix(&result, -1.0L, 0) == 0 && result == 0.0L && std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, 1.0L, -16400) == -2 && __fpclassifyl_nid_postfix(result) == -2 && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    Require(std::fesetround(saved) == 0);
+}
+
 static void CheckClassification() {
     const long double pseudoDenormal = Extended(0x0000, 0x8000000000000000ull);
     Require(_LDtest_nid_postfix(&pseudoDenormal) == -1 && __fpclassifyl_nid_postfix(pseudoDenormal) == -2);
@@ -229,6 +279,7 @@ int main() {
     CheckErrno();
     CheckConsoleQuirks();
     CheckRoundingModes();
+    CheckLongDoubleExpOverflowRounding();
     CheckClassification();
     CheckLongDoubleExp();
     return 0;
