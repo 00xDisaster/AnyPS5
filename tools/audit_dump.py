@@ -75,14 +75,24 @@ def convert(relinker, source, output, extra, windows):
     return subprocess.run(command, capture_output=True, text=True)
 
 
+def comparison_path(path):
+    resolved = path.resolve()
+    drive = resolved.drive
+    if drive.casefold().startswith("\\\\?\\unc\\"):
+        return type(resolved)("\\\\" + str(resolved)[8:])
+    if len(drive) == 6 and drive.startswith("\\\\?\\") and drive.endswith(":"):
+        return type(resolved)(str(resolved)[4:])
+    return resolved
+
+
 def report_overlaps_dump(report, dump):
-    destination = report.resolve()
-    dump_path = dump.resolve()
-    if report.absolute().is_relative_to(dump.absolute()) or destination.is_relative_to(dump_path) or report.parent.resolve().is_relative_to(dump_path):
+    destination = comparison_path(report)
+    dump_path = comparison_path(dump)
+    if report.absolute().is_relative_to(dump.absolute()) or destination.is_relative_to(dump_path) or comparison_path(report.parent).is_relative_to(dump_path):
         return True
     exists = report.exists()
     for path in dump.rglob("*"):
-        if path.is_symlink() and path.is_dir() and destination.is_relative_to(path.resolve()):
+        if path.is_symlink() and path.is_dir() and destination.is_relative_to(comparison_path(path)):
             return True
         if exists and path.is_file() and report.samefile(path):
             return True
@@ -104,7 +114,7 @@ def main(argv=None):
     relinker = Path(args.relinker).resolve()
     if not relinker.is_file():
         parser.error(f"{args.relinker}: no such relinker")
-    dump_path = dump.resolve()
+    dump_path = comparison_path(dump)
     if args.json:
         report = Path(args.json)
         try:
@@ -117,7 +127,7 @@ def main(argv=None):
         work = Path(args.work) if args.work else Path(temporary)
         source, output = work / "source", work / "output"
         for generated in (source, output):
-            generated_path = generated.resolve()
+            generated_path = comparison_path(generated)
             if dump_path.is_relative_to(generated_path) or generated_path.is_relative_to(dump_path):
                 parser.error(f"{generated}: work directory overlaps the input dump")
         for generated in (source, output):

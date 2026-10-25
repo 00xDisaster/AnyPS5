@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -223,6 +223,26 @@ class AuditDumpTests(unittest.TestCase):
                 except OSError:
                     self.skipTest("symbolic links unavailable")
                 self.assert_report_rejected(link / "new.json" if directory else link)
+
+    def test_windows_resolved_path_spellings_protect_missing_reports(self):
+        for normal, extended in (
+            (PureWindowsPath("C:/dump"), PureWindowsPath("//?/C:/dump")),
+            (PureWindowsPath("//server/share/dump"), PureWindowsPath("//?/UNC/server/share/dump")),
+        ):
+            for report_root, dump_root in ((normal, extended), (extended, normal)):
+                with self.subTest(report_root=report_root, dump_root=dump_root):
+                    dump = mock.Mock()
+                    dump.resolve.return_value = dump_root
+                    dump.absolute.return_value = normal
+                    dump.rglob.return_value = ()
+                    report = mock.Mock()
+                    report.resolve.return_value = report_root / "not-created.json"
+                    report.absolute.return_value = normal.parent / "outside-report.json"
+                    report.parent.resolve.return_value = normal.parent
+                    report.exists.return_value = False
+                    self.assertTrue(audit_dump.report_overlaps_dump(report, dump))
+                    report.resolve.return_value = report_root.parent / "outside-report.json"
+                    self.assertFalse(audit_dump.report_overlaps_dump(report, dump))
 
     def test_json_output_hardlink_aliases_of_dump_files_are_rejected(self):
         self.module("Media/Plugins/libfmod.prx")
