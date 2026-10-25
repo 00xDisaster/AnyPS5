@@ -127,6 +127,21 @@ std::vector<Leaf> backwardStubbedLeaves() {
     };
 }
 
+std::vector<Leaf> widenedLeaves() {
+    return {
+        {"leaf without pushes spilling 0x10 below rsp and adding a spill before its ret", {
+            0x48, 0x89, 0x7c, 0x24, 0xf0, 0x48, 0x89, 0x74, 0x24, 0xf8, 0x31, 0xc0, 0xb9, 0x08, 0x00, 0x00, 0x00,
+            0x48, 0x03, 0x44, 0x24, 0xf0, 0x48, 0x03, 0x44, 0x24, 0xf8, 0xff, 0xc9, 0x75, 0xf2,
+            0x48, 0x03, 0x44, 0x24, 0xf0, 0xc3,
+        }, 8 * (kA + kB) + kA},
+        {"leaf pushing only rbx, spilling below rsp and adding rbx before its pop", {
+            0x53, 0x48, 0x89, 0x7c, 0x24, 0xf0, 0x48, 0x89, 0xf3, 0x31, 0xc0, 0xb9, 0x08, 0x00, 0x00, 0x00,
+            0x48, 0x03, 0x44, 0x24, 0xf0, 0x48, 0x01, 0xd8, 0xff, 0xc9, 0x75, 0xf4,
+            0x48, 0x01, 0xd8, 0x5b, 0xc3,
+        }, 8 * (kA + kB) + kB},
+    };
+}
+
 void writeRel32(std::uint8_t* at, const std::uint64_t target, const std::uint64_t next) {
     const auto displacement = static_cast<std::int64_t>(target) - static_cast<std::int64_t>(next);
     require(displacement >= std::numeric_limits<std::int32_t>::min() && displacement <= std::numeric_limits<std::int32_t>::max(), "a stub jump is out of rel32 range");
@@ -268,6 +283,8 @@ int main() {
         require(stubbed.OperandStubs == 3 && stubbed.StubbedOperands == 5, "the leaves were framed with " + std::to_string(stubbed.OperandStubs) + " operand stubs carrying " + std::to_string(stubbed.StubbedOperands) + " rsp operands, not 3 carrying 5");
         const auto backward = runLeaves(backwardStubbedLeaves());
         require(backward.OperandStubs == 2 && backward.StubbedOperands == 3 && backward.MovedOperands == 5, "the leaves comparing at rsp before a branch were framed with " + std::to_string(backward.OperandStubs) + " operand stubs carrying " + std::to_string(backward.StubbedOperands) + " rsp operands and " + std::to_string(backward.MovedOperands) + " moved in place, not 2 carrying 3 and 5");
+        const auto widened = runLeaves(widenedLeaves());
+        require(widened.WidenedPrologues == 2 && widened.WidenedExits == 2 && widened.WidenedOperands == 3, "the leaves with short prologues and exits were framed with " + std::to_string(widened.WidenedPrologues) + " widened prologues, " + std::to_string(widened.WidenedExits) + " widened exits and " + std::to_string(widened.WidenedOperands) + " rsp operands in them, not 2, 2 and 3");
         std::cout << "red-zone framer execution tests passed\n";
         return 0;
     } catch (const std::exception& error) {
