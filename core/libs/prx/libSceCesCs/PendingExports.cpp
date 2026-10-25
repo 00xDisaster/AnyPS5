@@ -1,3 +1,4 @@
+#include "prx/libSceCesCs/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 
 extern "C" {
@@ -253,16 +254,6 @@ int APS5_VABI sceCesUcs2ToMbc(void) {
 }
 
 int APS5_VABI sceCesUcsProfileInitEucJis2004(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceCesUcsProfileInitGb18030_2000(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceCesUcsProfileInitGb18030_2005(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

@@ -264,6 +264,8 @@ struct AddressCopy {
     std::uint64_t end;
     std::uint64_t committed;
     const char* reason;
+    bool heap = false;
+    bool overBudget = false;
 };
 std::string AddressCopyOverflow(std::vector<AddressCopy> copies, std::uint64_t limit);
 
@@ -509,6 +511,7 @@ private:
     bool prepared = false;
     bool uploaded = false;
     bool committed = false;
+    mutable std::uint64_t directWritesGeneration = 0;
 };
 
 }
