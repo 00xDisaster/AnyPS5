@@ -1899,7 +1899,7 @@ int APS5_VABI poll_nid_postfix(GuestPollDescriptor* descriptors, std::uint32_t c
 }
 }
 
-bool GuestSockets::ReadGuest(void* destination, const void* source, std::size_t bytes) {
+extern "C" bool GuestSocketReadGuest_nid_no_patch(void* destination, const void* source, std::size_t bytes) {
     return ::ReadGuest(destination, source, bytes);
 }
 
