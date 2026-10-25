@@ -54,7 +54,7 @@ jobs:
       - name: Install the build and test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build libx11-dev libxext-dev libasound2-dev libpulse-dev mesa-vulkan-drivers
+          sudo apt-get install -y --no-install-recommends ninja-build libx11-dev libxext-dev libxrandr-dev libasound2-dev libpulse-dev mesa-vulkan-drivers
       - name: Free disk space for the sanitizer build
         run: |
           df -h /
