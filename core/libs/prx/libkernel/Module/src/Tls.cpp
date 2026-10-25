@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -11,11 +12,6 @@
 #endif
 
 namespace {
-
-struct TlsIndex {
-    std::uint64_t module;
-    std::uint64_t offset;
-};
 
 #ifdef _WIN32
 constexpr std::size_t ThreadLocalStoragePointerOffset = 0x58;
@@ -29,7 +25,7 @@ extern "C" void* __tls_get_addr(void* index);
 
 extern "C" {
 
-void* APS5_VABI __tls_get_addr_nid_postfix(const TlsIndex* index) {
+void* APS5_VABI __tls_get_addr_nid_postfix(const KernelTlsIndex* index) {
     if (index == nullptr || index->module == 0) throw std::invalid_argument("__tls_get_addr: null TLS index or module");
 #if defined(_WIN32)
     const auto slot = *reinterpret_cast<const DWORD*>(static_cast<std::uintptr_t>(index->module));
@@ -37,7 +33,7 @@ void* APS5_VABI __tls_get_addr_nid_postfix(const TlsIndex* index) {
     if (blocks == nullptr || blocks[slot] == nullptr) throw std::logic_error("__tls_get_addr: thread has no TLS block for the module");
     return blocks[slot] + index->offset;
 #elif defined(__linux__)
-    TlsIndex host = *index;
+    KernelTlsIndex host = *index;
     return __tls_get_addr(&host);
 #else
     NotImplemented_nid_no_patch("__tls_get_addr on this host");

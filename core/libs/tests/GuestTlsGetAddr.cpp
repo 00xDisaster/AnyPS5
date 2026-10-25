@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
@@ -10,17 +11,6 @@
 #include <link.h>
 #endif
 
-namespace {
-
-struct TlsIndex {
-    std::uint64_t module;
-    std::uint64_t offset;
-};
-
-}
-
-extern "C" void* APS5_VABI __tls_get_addr_nid_postfix(const TlsIndex* index);
-
 #if defined(_WIN32)
 extern "C" ULONG _tls_index;
 
@@ -29,7 +19,7 @@ namespace {
 using Cell = char;
 constexpr Cell Initial = 0;
 
-TlsIndex CellIndex() { return {reinterpret_cast<std::uintptr_t>(&_tls_index), 0}; }
+KernelTlsIndex CellIndex() { return {reinterpret_cast<std::uintptr_t>(&_tls_index), 0}; }
 
 Cell* ThreadCell() {
     auto* blocks = *reinterpret_cast<char***>(reinterpret_cast<char*>(NtCurrentTeb()) + 0x58);
@@ -59,7 +49,7 @@ Module MainModule() {
     return module;
 }
 
-TlsIndex CellIndex() {
+KernelTlsIndex CellIndex() {
     const auto module = MainModule();
     return {module.id, static_cast<std::uint64_t>(reinterpret_cast<char*>(&Value) - static_cast<char*>(module.data))};
 }
