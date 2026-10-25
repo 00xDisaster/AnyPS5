@@ -333,7 +333,7 @@ void RunUnmappedGapTests() {
 void RunVanishedPageReadTests() {
 #ifdef _WIN32
     namespace GuestMemory = AgcDriver::GuestMemory;
-    if (!GuestArena::GuestArenaAvailable_nid_postfix()) return;
+    Require(GuestArena::GuestArenaAvailable_nid_postfix(), "released-page read fixture needs the guest arena");
     constexpr std::size_t page = 4096;
     constexpr std::uint32_t ReadWriteProtection = 0x04;
     auto* block = static_cast<std::byte*>(GuestArena::GuestArenaAllocate_nid_postfix(2 * page, page));

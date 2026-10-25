@@ -8,6 +8,7 @@
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
+#include "prx/libc/include/HostThreadLocal.hpp"
 #include "prx/libc/include/HostThreadSlot.hpp"
 #include <mutex>
 #include <array>
@@ -2581,7 +2582,9 @@ void copyCommittedBytes(std::byte* destination, std::uint64_t source, std::size_
 bool equalsCommittedBytes(std::uint64_t address, const std::byte* expected, std::size_t bytes) {
 #ifdef _WIN32
     constexpr std::size_t ChunkBytes = 64 * PageBytes;
-    thread_local std::vector<std::byte> current(ChunkBytes);
+    struct CompareChunkStorage {};
+    auto& current = HostThreadLocal<std::vector<std::byte>, CompareChunkStorage>();
+    if (current.size() < ChunkBytes) current.resize(ChunkBytes);
     for (std::size_t done = 0; done < bytes; done += ChunkBytes) {
         const auto count = std::min(ChunkBytes, bytes - done);
         bool equal = true;
