@@ -1,4 +1,5 @@
 #include "prx/libc/include/Api.hpp"
+#include "prx/libc/include/General.hpp"
 #include "prx/libkernel/Time/include/Time.hpp"
 #include "prx/libkernel/include/Api.hpp"
 
@@ -6,6 +7,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
+#include <stdexcept>
+#ifdef __linux__
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 static void Check(bool value, int line) {
     if (!value) {
@@ -21,6 +31,34 @@ static constexpr int KernelEfault = static_cast<int>(0x8002000Eu);
 static bool Efault(int result) {
     return result == -1 && *__error_nid_postfix() == GuestEfault;
 }
+
+#ifdef __linux__
+static void RequireNonEfaultFailureThrows() {
+    const pid_t child = fork();
+    Require(child >= 0);
+    if (child == 0) {
+        sock_filter filter[] = {
+            BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+            BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_process_vm_readv, 0, 1),
+            BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+            BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        };
+        sock_fprog program{static_cast<unsigned short>(sizeof(filter) / sizeof(filter[0])), filter};
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 || prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) != 0) _exit(2);
+        char source[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        char destination[8] = {};
+        try {
+            GuestCopyIn_nid_no_patch(destination, source, sizeof(source));
+        } catch (const std::runtime_error&) {
+            _exit(destination[0] == 0 ? 0 : 3);
+        }
+        _exit(1);
+    }
+    int status = 0;
+    Require(waitpid(child, &status, 0) == child);
+    Require(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+#endif
 
 int main() {
     alignas(8) unsigned char valid[512]{};
@@ -61,4 +99,7 @@ int main() {
     Require(setitimer_nid_postfix(0, zeroTimerValue, nullptr) == 0);
     Require(sceKernelGettimeofday(timeValid) == 0);
     Require(sceKernelGettimezone(zoneValid) == 0);
+#ifdef __linux__
+    RequireNonEfaultFailureThrows();
+#endif
 }

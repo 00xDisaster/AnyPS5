@@ -858,8 +858,7 @@ extern "C" bool GuestCopyIn_nid_no_patch(void* destination, const void* source, 
     const ssize_t copied = ::process_vm_readv(::getpid(), &local, 1, &remote, 1, 0);
     if (copied < 0) {
         if (errno == EFAULT) return false;
-        std::memcpy(destination, source, bytes);
-        return true;
+        throw std::runtime_error("GuestCopyIn: process_vm_readv failed with errno " + std::to_string(errno));
     }
     return static_cast<std::size_t>(copied) == bytes;
 #elif defined(__APPLE__)
