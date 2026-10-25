@@ -1,3 +1,6 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
+#include "prx/libSceLibcInternal/include/Api.hpp"
 #include "prx/libc/include/general/AsmMacros.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libkernel/System/include/UserContext.hpp"
@@ -10,12 +13,6 @@
 using ContextEntry = void (APS5_VABI*)();
 
 extern "C" {
-[[gnu::returns_twice]] int APS5_VABI getcontext_nid_postfix(UserUcontext* context);
-[[gnu::returns_twice]] int APS5_VABI swapcontext_nid_postfix(UserUcontext* saved, const UserUcontext* next);
-void APS5_VABI makecontext_nid_postfix(UserUcontext* context, ContextEntry entry, int count, ...);
-int APS5_VABI sigprocmask_nid_postfix(int how, const void* set, void* previousSet);
-int* APS5_VABI __error_nid_postfix();
-
 int APS5_VABI SwapKeepingRegisters(UserUcontext* saved, const UserUcontext* next);
 int APS5_VABI SwapClobberingRegisters(UserUcontext* saved, const UserUcontext* next);
 }
