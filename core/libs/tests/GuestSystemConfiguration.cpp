@@ -528,20 +528,9 @@ static void CheckVersionLimits() {
     Require(sysKernelGetUpdVersion_nid_postfix(&update.version) == 0 && update.version == 0 && update.after == 0xaaaaaaaau);
     Require(sysKernelGetUpdVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
 
-    struct {
-        std::uint32_t mode;
-        std::uint32_t after;
-    } modeState{0xaaaaaaaau, 0xaaaaaaaau};
-    Require(sysKernelGetManufacturingMode_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
-    Require(sysKernelGetManufacturingMode_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
-
-    modeState = {0xaaaaaaaau, 0xaaaaaaaau};
-    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
-    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
-
-    modeState = {0xaaaaaaaau, 0xaaaaaaaau};
-    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix(&modeState.mode) == 0 && modeState.mode == 0 && modeState.after == 0xaaaaaaaau);
-    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+    Require(sysKernelGetManufacturingMode_nid_postfix() == 0 && *__error_nid_postfix() == 13);
+    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix() == 0 && *__error_nid_postfix() == 13);
+    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix() == 0 && *__error_nid_postfix() == 13);
 }
 static void CheckSystemSwVersion() {
     *__error_nid_postfix() = 13;

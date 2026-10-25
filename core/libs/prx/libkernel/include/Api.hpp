@@ -801,8 +801,8 @@ int APS5_VABI sceKernelGetSystemExVersion(char* first, char* second);
 int APS5_VABI sysKernelGetLowerLimitSysexVersion_nid_postfix(char* version);
 int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(std::uint32_t* version);
 int APS5_VABI sysKernelGetUpdVersion_nid_postfix(std::uint32_t* version);
-int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(std::uint32_t* mode);
-int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(std::uint32_t* mode);
-int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(std::uint32_t* mode);
+int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(void);
+int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(void);
+int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(void);
 
 }
