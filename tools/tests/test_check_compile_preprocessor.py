@@ -79,10 +79,10 @@ class CheckCompilePreprocessorTests(unittest.TestCase):
                                ("-Wp,--include,-MD,--write-dependencies,unit.d", "-Wp,--include,-MD")):
             with self.subTest(flag=flag):
                 self.assertEqual(check_compile.syntax_arguments(["cc", flag, str(source)], Path.cwd(), source),
-                                 ["cc", expected, "-fsyntax-only", str(source)])
+                                 ["cc", "-fsyntax-only", expected, str(source)])
         flag = "-Wp,-unknown-option"
         self.assertEqual(check_compile.syntax_arguments(["cc", flag, str(source)], Path.cwd(), source),
-                         ["cc", flag, "-fsyntax-only", str(source)])
+                         ["cc", "-fsyntax-only", flag, str(source)])
 
     def test_missing_dependency_values_are_rejected(self):
         source = Path("unit.c").resolve()
