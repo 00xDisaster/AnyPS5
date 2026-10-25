@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -30,6 +31,15 @@ void Check(bool condition, const std::string& what) {
     if (condition) return;
     std::fprintf(stderr, "savedata convert check failed: %s\n", what.c_str());
     ++failures;
+}
+
+bool Throws(const SaveDataConvert* convert) {
+    try {
+        sceSaveDataConvert(convert);
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+    return false;
 }
 
 int Convert(const char* data, std::size_t size) {
@@ -59,9 +69,9 @@ int main() {
 
     float progress = 0.0f;
     Check(sceSaveDataGetConvertProgress(&progress) == SaveDataErrorNotInitialized, "query before initialize fails with not initialized");
-    Check(sceSaveDataConvert(nullptr) == SaveDataErrorParameter, "null convert pointer is rejected");
+    Check(Throws(nullptr), "null convert pointer throws");
     SaveDataConvert nullDir{};
-    Check(sceSaveDataConvert(&nullDir) == SaveDataErrorParameter, "null dir_name is rejected");
+    Check(Throws(&nullDir), "null dir_name throws");
     Check(sceSaveDataInitialize3(nullptr) == 0, "SaveData initializes");
     Check(sceSaveDataGetConvertProgress(&progress) == 0, "get convert progress succeeds");
     Check(progress == 0.0f, "convert progress reports 0.0f initially");
