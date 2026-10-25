@@ -5,8 +5,6 @@
 #include <cstdint>
 #include <cstring>
 
-extern "C" int APS5_VABI SetSignalMaskCatching_nid_no_patch(const GuestSignalSet* set, GuestSignalSet* previousSet);
-
 namespace {
 
 constexpr int SetMask = 3;
