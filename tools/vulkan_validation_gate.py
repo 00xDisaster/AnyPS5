@@ -77,10 +77,16 @@ def artifact_hashes(build, tests, runtime):
         command = test.get("command") or []
         if not command or not Path(command[0]).is_file():
             raise GateError(f"{test['name']}: selected command is not an existing executable")
+        working = next((Path(prop["value"]) for prop in test.get("properties", [])
+                        if prop["name"] == "WORKING_DIRECTORY"), Path("."))
+        if not working.is_absolute():
+            working = build / working
         for argument in command:
             value = argument.partition("=")[2] if argument.startswith("-D") else argument
             path = Path(value)
-            if path.is_absolute() and path.is_file():
+            if not path.is_absolute():
+                path = working / path
+            if path.is_file():
                 paths.add(path.resolve())
     for relative in runtime:
         path = (build / relative).resolve()

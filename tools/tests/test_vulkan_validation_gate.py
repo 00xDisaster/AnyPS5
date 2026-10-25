@@ -70,6 +70,26 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
             self.assertFalse(output.exists())
 
+    def test_relative_command_files_follow_the_test_working_directory(self):
+        for mode in ("default", "absolute", "relative"):
+            for definition in (False, True):
+                with self.subTest(mode=mode, definition=definition), tempfile.TemporaryDirectory() as directory:
+                    build = Path(directory).resolve()
+                    working = build if mode == "default" else build / "working directory"
+                    working.mkdir(exist_ok=True)
+                    script = working / "probe.py"
+                    script.write_text("original", encoding="utf-8")
+                    argument = "-DINPUT=probe.py" if definition else "probe.py"
+                    properties = [] if mode == "default" else [{
+                        "name": "WORKING_DIRECTORY",
+                        "value": str(working if mode == "absolute" else working.relative_to(build)),
+                    }]
+                    tests = [{"name": "probe", "command": [sys.executable, argument], "properties": properties}]
+                    before = gate.artifact_hashes(build, tests, [])
+                    self.assertIn(str(script.resolve()), before)
+                    script.write_text("changed", encoding="utf-8")
+                    self.assertNotEqual(before, gate.artifact_hashes(build, tests, []))
+
 
 @unittest.skipUnless(os.name == "posix" and shutil.which("cmake") and shutil.which("ninja") and shutil.which("ctest"), "requires POSIX, CMake, Ninja and CTest")
 class FixtureTests(unittest.TestCase):
@@ -168,6 +188,23 @@ class IntegrationTests(FixtureTests):
 
 
 class AttributionTests(FixtureTests):
+    def test_relative_script_mutation_invalidates_successful_ctest_results(self):
+        baseline, candidate = self.source("base"), self.source("head", "mutate")
+        cmake = candidate[0] / "CMakeLists.txt"
+        text = cmake.read_text(encoding="utf-8")
+        absolute = 'add_test(NAME probe COMMAND "' + sys.executable + '" "${CMAKE_BINARY_DIR}/probe.py")'
+        self.assertIn(absolute, text)
+        cmake.write_text(text.replace(absolute, 'add_test(NAME probe COMMAND "' + sys.executable + '" probe.py)'), encoding="utf-8")
+        subprocess.run(["git", "-C", str(candidate[0]), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgSign=false", "commit", "-qam", "relative fixture"], check=True)
+        candidate = candidate[0], gate.git(candidate[0], "rev-parse", "HEAD")
+        code, report = self.execute(baseline, candidate, "--repeat", "1")
+        self.assertTrue(all(iteration["returncode"] == 0 for iteration in report["iterations"]), report)
+        self.assertEqual(report["builds"]["candidate"]["tests"][0]["command"][1], "probe.py")
+        self.assertNotEqual((self.root / "evidence/candidate/build/probe.py").read_bytes(), (candidate[0] / "probe.py").read_bytes())
+        self.assertEqual(code, 2, report)
+        self.assertIn("artifacts changed", report["error"])
+
     def test_different_selected_names_stop_before_iterations(self):
         code, report = self.execute(self.source("base"), self.source("head", test="other"))
         self.assertEqual(code, 2, report)
