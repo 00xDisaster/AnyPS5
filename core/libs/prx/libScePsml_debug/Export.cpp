@@ -169,16 +169,16 @@ std::int32_t APS5_VABI scePsmlMfsrGetSharedResourcesInitRequirement(MfsrRequirem
 
 std::int32_t APS5_VABI scePsmlMfsrCreateSharedResources(void** sharedResources, const MfsrSharedResourcesParam* param) {
  if (!g_mfsrInitialized) return SCE_PSML_ERROR_NOT_INITIALIZED;
- {
-  std::lock_guard lock(g_mfsrMutex);
-  for (const auto& [handle, object] : g_mfsrObjects) {
-   if (object->kind == MfsrObjectKind::SharedResources) return SCE_PSML_ERROR_SHARED_RESOURCES_BUSY;
-  }
+ std::lock_guard lock(g_mfsrMutex);
+ for (const auto& [handle, object] : g_mfsrObjects) {
+  if (object->kind == MfsrObjectKind::SharedResources) return SCE_PSML_ERROR_SHARED_RESOURCES_BUSY;
  }
  RequireMfsr(sharedResources != nullptr && param != nullptr, __func__, "null handle or parameter");
  if (param->type != 0) return SCE_PSML_ERROR_UNSUPPORTED_TYPE;
  RequireBlocks(param->blocks, param->blockCount, MfsrSharedBlockCount, __func__);
- *sharedResources = CreateMfsrObject(MfsrObjectKind::SharedResources, nullptr, __func__);
+ auto* object = new MfsrObject{MfsrObjectKind::SharedResources, nullptr, 0, 0};
+ g_mfsrObjects.emplace(object, object);
+ *sharedResources = object;
  return 0;
 }
 

@@ -1,8 +1,11 @@
 #include "prx/libScePsml_debug/libScePsml_debug.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -68,6 +71,22 @@ void Mfsr1OnBaseConsole() {
     Require(scePsmlMfsrInit() == unsupportedConsole);
     Require(scePsmlMfsrInit() == unsupportedConsole);
     SetupBeforeInit();
+}
+
+void ConcurrentCreatesUninitialized() {
+    std::atomic<int> errors{0};
+    std::vector<std::thread> pool;
+    for (int i = 0; i < 8; ++i) {
+        pool.emplace_back([&] {
+            for (int round = 0; round < 64; ++round) {
+                MfsrSharedResourcesParam sharedParam{};
+                void* handle = reinterpret_cast<void*>(static_cast<std::uintptr_t>(0xdeadbeef));
+                if (scePsmlMfsrCreateSharedResources(&handle, &sharedParam) != kErrNotInitialized || handle != reinterpret_cast<void*>(static_cast<std::uintptr_t>(0xdeadbeef))) ++errors;
+            }
+        });
+    }
+    for (auto& worker : pool) worker.join();
+    Require(errors == 0);
 }
 
 void Mfsr2OnBaseConsole() {
@@ -154,4 +173,5 @@ int main() {
     SetupBeforeInit();
     Mfsr1OnBaseConsole();
     Mfsr2OnBaseConsole();
+    ConcurrentCreatesUninitialized();
 }
