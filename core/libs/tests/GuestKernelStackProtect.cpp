@@ -14,6 +14,8 @@
 #endif
 #include <windows.h>
 #elif defined(__APPLE__)
+#include <climits>
+#include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 #include <sys/mman.h>
@@ -515,7 +517,13 @@ static bool ChildPasses(const char* mode, bool unlimitedStack) {
     if (child == 0) {
         rlimit limit{};
         if (unlimitedStack && getrlimit(RLIMIT_STACK, &limit) == 0) limit.rlim_cur = RLIM_INFINITY;
+#ifdef __APPLE__
+        char path[PATH_MAX];
+        std::uint32_t size = sizeof(path);
+        if (_NSGetExecutablePath(path, &size) == 0 && (!unlimitedStack || setrlimit(RLIMIT_STACK, &limit) == 0)) execl(path, path, mode, static_cast<char*>(nullptr));
+#else
         if (!unlimitedStack || setrlimit(RLIMIT_STACK, &limit) == 0) execl("/proc/self/exe", "/proc/self/exe", mode, static_cast<char*>(nullptr));
+#endif
         std::_Exit(127);
     }
     int status = 0;
