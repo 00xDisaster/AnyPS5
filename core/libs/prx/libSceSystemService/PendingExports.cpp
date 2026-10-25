@@ -1,4 +1,5 @@
 #include "prx/libSceSystemService/include/SystemService.hpp"
+#include "prx/libSceSystemService/SystemService.hpp"
 #include "prx/libc/include/General.hpp"
 
 namespace {
@@ -350,8 +351,8 @@ bool APS5_VABI sceLncUtilIsShellUiFgAndGameBgCpuMode() {
 }
 
 int APS5_VABI sceLncUtilIsSpeculativeLaunch(std::int32_t appId, bool* speculative) {
+    if (speculative == nullptr) return LNC_UTIL_ERROR_INVALID_ARGUMENT;
     if (appId != sceSystemServiceGetAppIdOfRunningBigApp()) NotImplemented_nid_no_patch("sceLncUtilIsSpeculativeLaunch: application other than the running title");
-    if (speculative == nullptr) NotImplemented_nid_no_patch("sceLncUtilIsSpeculativeLaunch: null output");
     *speculative = false;
     return 0;
 }

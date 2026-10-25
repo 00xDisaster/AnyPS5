@@ -1,4 +1,5 @@
 #include "prx/libSceSystemService/include/SystemService.hpp"
+#include "prx/libSceSystemService/SystemService.hpp"
 #include "SceTypes.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -45,16 +46,25 @@ bool GetAppIdThrows(const char* titleId) {
     return Throws([&] { static_cast<void>(sceSystemServiceGetAppId(titleId)); }) && Throws([&] { static_cast<void>(sceLncUtilGetAppId(titleId)); });
 }
 
+bool GetAppIdRejects(const char* titleId) {
+    return sceSystemServiceGetAppId(titleId) == SYSTEM_SERVICE_INVALID_TITLE_APP_ID && sceLncUtilGetAppId(titleId) == SYSTEM_SERVICE_INVALID_TITLE_APP_ID;
+}
+
 bool IsAppLaunchedThrows(const char* titleId) {
     bool launched = false;
     return Throws([&] { static_cast<void>(sceLncUtilIsAppLaunched(titleId, &launched)); }) && !launched;
+}
+
+bool IsAppLaunchedRejects(const char* titleId) {
+    bool launched = false;
+    return sceLncUtilIsAppLaunched(titleId, &launched) == LNC_UTIL_ERROR_INVALID_ARGUMENT && !launched && sceLncUtilIsAppLaunched(titleId, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT;
 }
 
 void CheckRunningTitleLookups(const char* titleId, int runningAppId) {
     Require(sceLncUtilGetAppId(titleId) == runningAppId);
     bool launched = false;
     Require(sceLncUtilIsAppLaunched(titleId, &launched) == 0 && launched);
-    Require(Throws([&] { static_cast<void>(sceLncUtilIsAppLaunched(titleId, nullptr)); }));
+    Require(sceLncUtilIsAppLaunched(titleId, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
 }
 
 bool GetAppTitleIdThrows(int appId, GuardedBuffer& buffer) {
@@ -81,8 +91,8 @@ void CheckNullBuffers(int runningAppId) {
     Require(Throws([&] { static_cast<void>(sceSystemServiceGetAppTitleId(runningAppId, nullptr)); }));
     Require(Throws([&] { static_cast<void>(sceLncUtilGetAppTitleId(runningAppId, nullptr)); }));
     Require(Throws([&] { static_cast<void>(sceSystemServiceGetAppTitleId(runningAppId + 1, nullptr)); }));
-    Require(GetAppIdThrows(nullptr));
-    Require(IsAppLaunchedThrows(nullptr));
+    Require(GetAppIdRejects(nullptr));
+    Require(IsAppLaunchedRejects(nullptr));
 }
 
 void CheckKnownTitle(int runningAppId) {
@@ -90,10 +100,16 @@ void CheckKnownTitle(int runningAppId) {
     Require(runningAppId >= 0);
     Require(sceSystemServiceGetAppId("PPSA00000") == runningAppId);
     Require(sceSystemServiceGetAppId("PPSA00000") == runningAppId);
-    const char* const otherTitles[] = {"PPSA00001", "PPSA00010", "ppsa00000", "PPSA0000", "PPSA000000", "PPSA00000 ", " PPSA00000", "CUSA00000", ""};
+    const char* const otherTitles[] = {"PPSA00001", "PPSA00010", "ppsa00000", "CUSA00000"};
     for (const char* other : otherTitles) {
         Require(GetAppIdThrows(other));
         Require(IsAppLaunchedThrows(other));
+        Require(sceLncUtilIsAppLaunched(other, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    }
+    const char* const malformedTitles[] = {"PPSA0000", "PPSA000000", "PPSA00000 ", " PPSA00000", ""};
+    for (const char* malformed : malformedTitles) {
+        Require(GetAppIdRejects(malformed));
+        Require(IsAppLaunchedRejects(malformed));
     }
     CheckRunningTitleLookups("PPSA00000", runningAppId);
 
@@ -119,10 +135,10 @@ void CheckKnownTitle(int runningAppId) {
 }
 
 void CheckLongTitle(int runningAppId) {
-    Require(sceSystemServiceGetAppId("PPSA000000") == runningAppId);
-    CheckRunningTitleLookups("PPSA000000", runningAppId);
+    Require(GetAppIdRejects("PPSA000000"));
+    Require(IsAppLaunchedRejects("PPSA000000"));
     Require(GetAppIdThrows("PPSA00000"));
-    Require(GetAppIdThrows("PPSA0000000"));
+    Require(GetAppIdRejects("PPSA0000000"));
     Require(IsAppLaunchedThrows("PPSA00000"));
     GuardedBuffer buffer;
     Require(GetAppTitleIdThrows(runningAppId, buffer));
@@ -131,8 +147,9 @@ void CheckLongTitle(int runningAppId) {
 
 void CheckMissingMetadata(int runningAppId) {
     Require(GetAppIdThrows("PPSA00000"));
-    Require(GetAppIdThrows(nullptr));
+    Require(GetAppIdRejects(nullptr));
     Require(IsAppLaunchedThrows("PPSA00000"));
+    Require(IsAppLaunchedRejects(nullptr));
     GuardedBuffer buffer;
     Require(GetAppTitleIdThrows(runningAppId, buffer));
     Require(LncGetAppTitleIdThrows(static_cast<std::uint32_t>(runningAppId), buffer));

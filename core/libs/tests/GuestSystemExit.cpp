@@ -328,9 +328,14 @@ int main(int argc, char** argv) {
         sceSystemServiceLoadExec("exit", nullptr);
         return 2;
     }
+    Require(sceSystemServiceLoadExec(nullptr, nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
+    Require(sceSystemServiceLoadExec("", nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
+    Require(sceLncUtilLoadExec(nullptr, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    bool emptyRejected = false;
+    try { sceLncUtilLoadExec("", nullptr); }
+    catch (const std::runtime_error&) { emptyRejected = true; }
+    Require(emptyRejected);
     for (const auto loadExec : {sceSystemServiceLoadExec, sceLncUtilLoadExec}) {
-        Require(loadExec(nullptr, nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
-        Require(loadExec("", nullptr) == SYSTEM_SERVICE_ERROR_PARAMETER);
         for (const char* path : {"/app0/another.bin", "/data/eboot.bin", "/app0/../eboot.bin", "/app0//eboot.bin"}) {
             bool rejected = false;
             try { loadExec(path, nullptr); }

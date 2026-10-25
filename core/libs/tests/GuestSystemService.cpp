@@ -54,34 +54,36 @@ void TestBigAppList(TList list) {
     std::int32_t appIds[2] = {Sentinel, Sentinel};
     std::uint32_t count = 0xdeadbeefu;
     Require(Throws([&] { return list(appIds, 0, &count); }));
-    Require(Throws([&] { return list(nullptr, 2, &count); }));
-    Require(Throws([&] { return list(appIds, 2, nullptr); }));
+    Require(list(nullptr, 2, &count) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    Require(list(appIds, 2, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    Require(list(nullptr, 0, nullptr) == LNC_UTIL_ERROR_INVALID_ARGUMENT);
     Require(appIds[0] == Sentinel && appIds[1] == Sentinel && count == 0xdeadbeefu);
 }
 
 template<typename TValue, typename TQuery>
-void TestRunningAppAnswer(TQuery query, TValue expected, TValue sentinel) {
+void TestRunningAppAnswer(TQuery query, TValue expected, TValue sentinel, int nullOutputResult) {
     const std::int32_t runningAppId = sceSystemServiceGetAppIdOfRunningBigApp();
     TValue value = sentinel;
     Require(query(runningAppId, &value) == SYSTEM_SERVICE_OK && value == expected);
-    Require(Throws([&] { return query(runningAppId, nullptr); }));
+    Require(query(runningAppId, nullptr) == nullOutputResult);
     for (const std::int32_t other : {runningAppId + 1, runningAppId - 1, -1, std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()}) {
         TValue untouched = sentinel;
         Require(Throws([&] { return query(other, &untouched); }) && untouched == sentinel);
+        Require(query(other, nullptr) == nullOutputResult);
     }
 }
 
 void TestRunningAppUser() {
     constexpr std::int32_t Sentinel = 0x5a5a5a5a;
-    TestRunningAppAnswer<std::int32_t>(sceLncUtilGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel);
-    TestRunningAppAnswer<std::int32_t>(sceSystemServiceGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel);
-    TestRunningAppAnswer<std::int32_t>(sceShellCoreUtilGetUserFocus, USER_SERVICE_INITIAL_USER_ID, Sentinel);
+    TestRunningAppAnswer<std::int32_t>(sceLncUtilGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel, LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    TestRunningAppAnswer<std::int32_t>(sceSystemServiceGetAppLaunchedUser, USER_SERVICE_INITIAL_USER_ID, Sentinel, LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    TestRunningAppAnswer<std::int32_t>(sceShellCoreUtilGetUserFocus, USER_SERVICE_INITIAL_USER_ID, Sentinel, SHELL_CORE_UTIL_ERROR_INVALID_ARGUMENT);
 }
 
 void TestRunningAppState() {
-    TestRunningAppAnswer<bool>(sceLncUtilIsAppSuspended, false, true);
-    TestRunningAppAnswer<bool>(sceSystemServiceIsAppSuspended, false, true);
-    TestRunningAppAnswer<bool>(sceLncUtilIsSpeculativeLaunch, false, true);
+    TestRunningAppAnswer<bool>(sceLncUtilIsAppSuspended, false, true, LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    TestRunningAppAnswer<bool>(sceSystemServiceIsAppSuspended, false, true, LNC_UTIL_ERROR_INVALID_ARGUMENT);
+    TestRunningAppAnswer<bool>(sceLncUtilIsSpeculativeLaunch, false, true, LNC_UTIL_ERROR_INVALID_ARGUMENT);
 }
 
 void TestRunningBigApp() {
