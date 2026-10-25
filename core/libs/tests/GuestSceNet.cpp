@@ -257,18 +257,16 @@ static void CheckInitParam() {
     std::uint32_t randomOutput = 0;
     Require(sceNetTerm() == 0);
     Require(Failed(sceNetGetRandom(&randomOutput), 200));
-    bool threw = false;
-    try {
-        sceNetInitParam(nullptr);
-    } catch (const std::runtime_error&) {
-        threw = true;
-    }
-    Require(threw);
+    Require(Failed(sceNetInitParam(nullptr), 22));
     Require(Failed(sceNetGetRandom(&randomOutput), 200));
     Require(sceNetInitParam(initialize) == 0);
     Require(sceNetGetRandom(&randomOutput) == 0);
-    Require(sceNetInitParam(initialize) == 0);
-    Require(sceNetGetRandom(&randomOutput) == 0);
+    Require(Failed(sceNetInitParam(initialize), 16));
+    Require(Failed(sceNetInitParam(nullptr), 16));
+    Require(sceNetTerm() == 0);
+    Require(Failed(sceNetInitParam(initialize), 16));
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    Require(sceNetInit_nid_postfix() == 0);
 }
 
 static void CheckIfFlags() {
@@ -285,13 +283,8 @@ static void CheckIfFlags() {
         }
         Require(threw && flags == 0x5a5a5a5a);
     }
-    bool threw = false;
-    try {
-        sceNetConfigGetIfFlags(0, nullptr);
-    } catch (const std::runtime_error&) {
-        threw = true;
-    }
-    Require(threw);
+    Require(sceNetConfigGetIfFlags(0, nullptr) == static_cast<int>(0x8041130Eu));
+    Require(sceNetConfigGetIfFlags(10, nullptr) == static_cast<int>(0x8041130Eu));
 }
 
 static void CheckNetMemory() {
