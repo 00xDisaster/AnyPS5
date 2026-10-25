@@ -446,16 +446,14 @@ int APS5_VABI sceNpManagerIntGetAccessTokenViaImplicitFlow(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetAccountAge(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetAccountCountry(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetAccountCountryA(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetAccountCountrySdk(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -478,8 +476,7 @@ int APS5_VABI sceNpManagerIntGetAccountLanguage(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetAccountLanguageA(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetAccountNpEnv(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -526,8 +523,7 @@ int APS5_VABI sceNpManagerIntGetNpEnv(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetNpId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetNpIdByOnlineId(void) {
     NotImplemented_nid_no_patch(__func__);
@@ -542,8 +538,7 @@ int APS5_VABI sceNpManagerIntGetOfflineAccountId(void) {
     return 0;
 }
 int APS5_VABI sceNpManagerIntGetOnlineId(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return SCE_NP_ERROR_SIGNED_OUT;
 }
 int APS5_VABI sceNpManagerIntGetOnlineIdChangeFlag(void) {
     NotImplemented_nid_no_patch(__func__);

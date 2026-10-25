@@ -273,6 +273,48 @@ void CheckIdMapperAccountIdLookups() {
     Require(sceNpIdMapperOnlineIdToAccountId() == SignedOut, "sceNpIdMapperOnlineIdToAccountId must report NP as signed out");
 }
 
+template <typename... Args>
+int CallWith(int (APS5_VABI* function)(), Args... args) {
+    return reinterpret_cast<int (APS5_VABI*)(Args...)>(function)(args...);
+}
+
+struct SentinelBuffer {
+    unsigned char bytes[64];
+    SentinelBuffer() { std::memset(bytes, 0x5a, sizeof(bytes)); }
+    bool Untouched() const {
+        for (const unsigned char byte : bytes) {
+            if (byte != 0x5a) return false;
+        }
+        return true;
+    }
+};
+
+void CheckManagerIntProfileGetters() {
+    const int live = sceNpManagerIntCreateRequest();
+    const int deleted = sceNpManagerIntCreateRequest();
+    Require(live > 0 && deleted > live && sceNpManagerIntDeleteRequest(deleted) == 0, "NpManagerInt requests for the profile getters");
+    for (const int request : {live, deleted, 0x7fffffff}) {
+        SentinelBuffer age;
+        Require(CallWith(sceNpManagerIntGetAccountAge, request, InitialUserId, age.bytes) == SignedOut && age.Untouched(), "sceNpManagerIntGetAccountAge must report NP as signed out and write nothing");
+        SentinelBuffer language;
+        Require(CallWith(sceNpManagerIntGetAccountLanguageA, request, InitialUserId, language.bytes) == SignedOut && language.Untouched(), "sceNpManagerIntGetAccountLanguageA must report NP as signed out and write nothing");
+    }
+    SentinelBuffer country;
+    Require(CallWith(sceNpManagerIntGetAccountCountryA, InitialUserId, country.bytes) == SignedOut && country.Untouched(), "sceNpManagerIntGetAccountCountryA must report NP as signed out and write nothing");
+    SentinelBuffer npId;
+    Require(CallWith(sceNpManagerIntGetNpId, InitialUserId, npId.bytes) == SignedOut && npId.Untouched(), "sceNpManagerIntGetNpId must report NP as signed out and write nothing");
+    SentinelBuffer onlineId;
+    Require(CallWith(sceNpManagerIntGetOnlineId, InitialUserId, onlineId.bytes) == SignedOut && onlineId.Untouched(), "sceNpManagerIntGetOnlineId must report NP as signed out and write nothing");
+    Require(sceNpManagerIntGetAccountAge() == SignedOut && sceNpManagerIntGetAccountCountryA() == SignedOut && sceNpManagerIntGetAccountLanguageA() == SignedOut && sceNpManagerIntGetNpId() == SignedOut && sceNpManagerIntGetOnlineId() == SignedOut, "the profile getters without arguments");
+    NpId twinNpId{};
+    NpOnlineId twinOnlineId{};
+    std::uint8_t twinAge = 0;
+    char twinCountry[3] = {};
+    Require(sceNpGetNpId(InitialUserId, &twinNpId) == SignedOut && sceNpGetOnlineId(InitialUserId, &twinOnlineId) == SignedOut && sceNpGetAccountAge(live, InitialUserId, &twinAge) == SignedOut && sceNpGetAccountCountryA(InitialUserId, twinCountry) == SignedOut, "the public twins answer the same while signed out");
+    Require(sceNpManagerIntAbortRequest(live) == 0 && sceNpManagerIntDeleteRequest(live) == 0, "the profile getters leave a live request live");
+    Require(sceNpManagerIntDeleteRequest(deleted) == RequestNotFound, "the profile getters leave a deleted request deleted");
+}
+
 void CheckOnlineIdQueries() {
     NpOnlineId onlineId{};
     std::memcpy(onlineId.data, "player", 6);
@@ -434,6 +476,7 @@ int main() {
     CheckIdMapperRequestLifecycle();
     CheckManagerIntRequestLifecycle();
     CheckIdMapperAccountIdLookups();
+    CheckManagerIntProfileGetters();
     CheckPlusAndContentRestriction();
     NpId npId{};
     std::memset(&npId, 0x5a, sizeof(npId));
