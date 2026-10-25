@@ -1,16 +1,11 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
 #include <cstdint>
 #include <cstring>
 
-extern "C" {
-
-int* APS5_VABI __error_nid_postfix();
-int APS5_VABI select_nid_postfix(int nfds, void* readfds, void* writefds, void* exceptfds, const void* timeout);
-int APS5_VABI sigprocmask_nid_postfix(int how, const void* set, void* previousSet);
-int APS5_VABI SetSignalMaskCatching_nid_no_patch(const void* set, void* previousSet);
-
-}
+extern "C" int APS5_VABI SetSignalMaskCatching_nid_no_patch(const GuestSignalSet* set, GuestSignalSet* previousSet);
 
 namespace {
 
@@ -64,12 +59,12 @@ int APS5_VABI pselect_nid_postfix(int nfds, void* readfds, void* writefds, void*
         wait = &limit;
     }
     if (sigmask == nullptr) return select_nid_postfix(nfds, readfds, writefds, exceptfds, wait);
-    std::uint32_t previous[4]{};
-    const bool caught = SetSignalMaskCatching_nid_no_patch(sigmask, previous) != 0;
+    GuestSignalSet previous{};
+    const bool caught = SetSignalMaskCatching_nid_no_patch(static_cast<const GuestSignalSet*>(sigmask), &previous) != 0;
     const int result = caught ? ScanAfterCaughtSignal(nfds, readfds, writefds, exceptfds, wait)
                               : select_nid_postfix(nfds, readfds, writefds, exceptfds, wait);
     const int error = *__error_nid_postfix();
-    sigprocmask_nid_postfix(SetMask, previous, nullptr);
+    sigprocmask_nid_postfix(SetMask, &previous, nullptr);
     *__error_nid_postfix() = error;
     return result;
 }
