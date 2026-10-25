@@ -160,7 +160,10 @@ def syntax_only(entry, source):
 
 
 def validate_preprocessor_arguments(argument):
-    options = iter(argument[4:].split(","))
+    forwarded = argument[4:].split(",")
+    if any(option.startswith("@") for option in forwarded):
+        raise ValueError(f"unsupported forwarded compiler option response file in {argument}")
+    options = iter(forwarded)
     for option in options:
         if option in ("-D", "-U", "-I", "-F", "-include", "--include", "-imacros", "--imacros",
                       "-isystem", "-iquote", "-idirafter", "-isysroot"):
