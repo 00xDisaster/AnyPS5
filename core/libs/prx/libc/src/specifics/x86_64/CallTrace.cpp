@@ -222,7 +222,7 @@ void SnapshotModules() {
         for (std::uint32_t commandIndex = 0; commandIndex < header->ncmds && map->count < std::size(map->segments); ++commandIndex) {
             if (command->cmd == LC_SEGMENT_64) {
                 const auto* segment = reinterpret_cast<const segment_command_64*>(command);
-                if (segment->vmsize != 0 && segment->initprot != 0) {
+                if (segment->vmsize != 0 && (segment->initprot & VM_PROT_EXECUTE) != 0) {
                     auto& recorded = map->segments[map->count++];
                     recorded.base = base;
                     recorded.start = segment->vmaddr + slide;

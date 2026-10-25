@@ -15,6 +15,7 @@ HOOK = ("#include <string.h>\n"
         "#include <unistd.h>\n"
         "static int replacement(void) { _exit(77); }\n"
         "void* TraceImport_nid_no_patch(void* target, const char* name, const char* library) {\n"
+        "    if (((unsigned long)__builtin_frame_address(0) & 15) != 0) _exit(13);\n"
         "    return strcmp(name, \"shared\") == 0 && strcmp(library, \"a.prx\") == 0 ? (void*)replacement : target;\n"
         "}\n")
 PLAIN = "int Unrelated(void) { return 0; }\n"

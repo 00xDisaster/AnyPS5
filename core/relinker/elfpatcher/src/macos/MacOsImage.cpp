@@ -102,7 +102,7 @@ struct MacOsTracePrologue {
 };
 
 MacOsTracePrologue BuildTracePrologue(const std::uint32_t prologueRva, const std::uint32_t tableRva, const std::uint32_t tableEndRva, const std::uint32_t functionSlotRva) {
-    std::vector<std::uint8_t> code = {0x57, 0x56, 0x52, 0x51, 0x53, 0x48, 0x83, 0xec, 0x08};
+    std::vector<std::uint8_t> code = {0x57, 0x56, 0x52, 0x51, 0x53, 0x41, 0x54, 0x48, 0x83, 0xec, 0x08};
     const auto rip = [&](const std::initializer_list<std::uint8_t> opcode, const std::uint32_t target) {
         code.insert(code.end(), opcode);
         const auto displacement = static_cast<std::int64_t>(target) - static_cast<std::int64_t>(prologueRva + code.size() + 4);
@@ -125,7 +125,7 @@ MacOsTracePrologue BuildTracePrologue(const std::uint32_t prologueRva, const std
     if (code.size() - exit > 127)
         throw Domain::RelinkerException("Import trace loop exceeds rel8 range");
     code[exit - 1] = static_cast<std::uint8_t>(code.size() - exit);
-    code.insert(code.end(), {0x48, 0x83, 0xc4, 0x08, 0x5b, 0x59, 0x5a, 0x5e, 0x5f, 0xe9, 0x00, 0x00, 0x00, 0x00});
+    code.insert(code.end(), {0x48, 0x83, 0xc4, 0x08, 0x41, 0x5c, 0x5b, 0x59, 0x5a, 0x5e, 0x5f, 0xe9, 0x00, 0x00, 0x00, 0x00});
     const auto entry = code.size() - 4;
     return {std::move(code), entry};
 }
@@ -527,7 +527,7 @@ std::vector<std::uint8_t> WriteMacOsImage(MacOsImageInput& input) {
     const auto initPointer = AlignUp(metaSize, 8);
     const auto startSlot = initPointer + 8;
     const auto traceFunctionSlot = input.TraceImports ? startSlot + 8 : startSlot;
-    const auto tlsExports = (input.TraceImports ? traceFunctionSlot : startSlot) + 8;
+    const auto tlsExports = traceFunctionSlot + 8;
     std::map<std::string, std::uint64_t> tlsImportSlots;
     for (const auto& import : input.TlsImports) tlsImportSlots.emplace(import.Symbol, 0);
     auto metaEnd = tlsExports + input.TlsExports.size() * 16;
