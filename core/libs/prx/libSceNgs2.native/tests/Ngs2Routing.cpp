@@ -163,6 +163,36 @@ static void TestGainRouting() {
     }
 }
 
+static void TestUnityCopy() {
+    const auto system = CreateSystem();
+    auto option = RackOption(2);
+    AddGain(option, 0, 1);
+    const auto custom = CustomVoice(CustomRack(system, option));
+    SetGain(custom, 1.0f);
+    Output(system, custom, 0, 0);
+    Output(system, custom, 1, 1);
+    Render(system, {0.0f, 0.0f});
+    std::vector<std::int16_t> source(Grain * 2), dest(Grain * 2);
+    for (std::uint32_t i = 0; i < Grain; i++) {
+        source[i * 2] = 8192;
+        source[i * 2 + 1] = -16384;
+        dest[i * 2] = -24576;
+        dest[i * 2 + 1] = 4096;
+    }
+    Route(Input(system, source), 0, custom);
+    Route(Input(system, dest), 0, custom, 1);
+    std::array<std::array<float, Grain * 2>, 2> outputs{};
+    std::array<Ngs2RenderBufferInfo, 2> info{};
+    for (std::size_t i = 0; i < outputs.size(); i++) {
+        info[i] = {outputs[i].data(), sizeof(outputs[i]), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 2};
+    }
+    Require(sceNgs2SystemRender(system, info.data(), info.size()) == SCE_NGS2_OK);
+    for (const auto& output : outputs) {
+        for (std::uint32_t i = 0; i < Grain; i++) Require(output[i * 2] == 0.25f && output[i * 2 + 1] == -0.5f);
+    }
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
 static void TestIndependentVoicesAndSilentRamp(std::uint32_t channels) {
     const auto system = CreateSystem();
     auto option = RackOption(4, channels);
@@ -197,6 +227,7 @@ int main() {
     TestNoModules(3, {0.0f, -0.75f, 0.25f});
     TestNoModules(4, {0.0f, 0.0f, -0.75f, 0.25f});
     TestGainRouting();
+    TestUnityCopy();
     for (std::uint32_t channels = 1; channels <= 8; channels++) TestIndependentVoicesAndSilentRamp(channels);
     return 0;
 }
