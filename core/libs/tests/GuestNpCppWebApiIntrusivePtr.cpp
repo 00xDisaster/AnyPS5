@@ -10,6 +10,7 @@ using Deleter = void (APS5_VABI*)(void*);
 
 using Construct = void (APS5_VABI*)(IntrusivePtr*);
 using Copy = void (APS5_VABI*)(IntrusivePtr*, const IntrusivePtr*);
+using Assign = void (APS5_VABI*)(IntrusivePtr*, const IntrusivePtr*);
 using Destroy = void (APS5_VABI*)(IntrusivePtr*);
 using Access = void* (APS5_VABI*)(const IntrusivePtr*);
 
@@ -20,6 +21,11 @@ static constexpr std::size_t VectorReferenceCountOffset = 0x30;
 
 struct DestroyCase {
     Destroy destroy;
+    std::size_t referenceCountOffset;
+};
+
+struct AssignCase {
+    Assign assign;
     std::size_t referenceCountOffset;
 };
 
@@ -90,6 +96,38 @@ static void TestCopy(const Copy copy) {
     Require(target.object == nullptr);
     Require(target.deleter == RecordDelete);
     Require(target.libContext == &context);
+}
+
+static void TestAssign(const AssignCase& testCase) {
+    const std::size_t offset = testCase.referenceCountOffset;
+    alignas(8) unsigned char first[ObjectSize];
+    alignas(8) unsigned char second[ObjectSize];
+    std::memset(first, 0x5a, sizeof(first));
+    std::memset(second, 0x5a, sizeof(second));
+    WriteCount(first, offset, 1);
+    WriteCount(second, offset, 1);
+    int context = 0;
+    deleterCalls = 0;
+    deletedObject = nullptr;
+
+    IntrusivePtr pointer{first, RecordDelete, &context};
+    testCase.assign(&pointer, &pointer);
+    Require(pointer.object == first && pointer.deleter == RecordDelete && pointer.libContext == &context);
+    Require(ReadCount(first, offset) == 1);
+
+    const IntrusivePtr alias{first, nullptr, nullptr};
+    testCase.assign(&pointer, &alias);
+    Require(pointer.object == first && pointer.deleter == RecordDelete && pointer.libContext == &context);
+    Require(ReadCount(first, offset) == 1);
+    Require(deleterCalls == 0);
+
+    const IntrusivePtr other{second, RecordDelete, &context};
+    testCase.assign(&pointer, &other);
+    Require(pointer.object == second);
+    Require(ReadCount(second, offset) == 2);
+    Require(ReadCount(first, offset) == 0);
+    Require(deleterCalls == 1 && deletedObject == first);
+    Require(OnlyCountChanged(first, offset) && OnlyCountChanged(second, offset));
 }
 
 static void TestDestroy(const DestroyCase& testCase) {
@@ -292,6 +330,13 @@ int main() {
         _ZN3sce2Np9CppWebApi6Common12IntrusivePtrINS1_13InGameCatalog2V59ContainerEEC1ERS7_,
     };
     for (const auto copy : copies) TestCopy(copy);
+
+    const AssignCase assignments[] = {
+        {_ZN3sce2Np9CppWebApi6Common12IntrusivePtrINS1_14SessionManager2V113PlayerSessionEEaSERS7_, 0},
+        {_ZN3sce2Np9CppWebApi6Common12IntrusivePtrINS2_6VectorINS3_INS1_14SessionManager2V113PlayerSessionEEEEEEaSERKSA_, VectorReferenceCountOffset},
+        {_ZN3sce2Np9CppWebApi6Common12IntrusivePtrINS2_6VectorINS3_INS1_13InGameCatalog2V59ContainerEEEEEEaSERKSA_, VectorReferenceCountOffset},
+    };
+    for (const auto& testCase : assignments) TestAssign(testCase);
 
     const DestroyCase destructors[] = {
         {_ZN3sce2Np9CppWebApi6Common12IntrusivePtrINS1_12Leaderboards2V121GetRankingRequestBodyEED1Ev, 0},
