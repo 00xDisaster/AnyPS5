@@ -1099,6 +1099,29 @@ int main() {
     Require((std::filesystem::status(modeFile).permissions() & std::filesystem::perms::all) == readable);
     Require(RemoveSymlink(modeLink));
 #endif
+    const auto chmodTarget = (root / "chmod-target.txt").string();
+    { std::ofstream file(chmodTarget); file << "x"; }
+    const auto chmodLink = (root / "chmod-link.txt").string();
+    const auto chmodDangling = (root / "chmod-dangling.txt").string();
+    const auto chmodLoopA = (root / "chmod-loop-a").string();
+    const auto chmodLoopB = (root / "chmod-loop-b").string();
+    if (symlink_nid_postfix("chmod-target.txt", chmodLink.c_str()) == 0) {
+        Require(symlink_nid_postfix("chmod-missing.txt", chmodDangling.c_str()) == 0);
+        Require(symlink_nid_postfix("chmod-loop-b", chmodLoopA.c_str()) == 0 && symlink_nid_postfix("chmod-loop-a", chmodLoopB.c_str()) == 0);
+        const auto writable = [&] {
+            FileStat linked{};
+            Require(stat_nid_postfix(chmodTarget.c_str(), &linked) == 0);
+            return (linked.st_mode & 0222) != 0;
+        };
+        Require(writable());
+        Require(fchmodat_nid_postfix(base, "chmod-link.txt", 0400, 0) == 0 && !writable());
+        Require(fchmodat_nid_postfix(-100, chmodLink.c_str(), 0600, 0) == 0 && writable());
+        Require(fchmodat_nid_postfix(base, "chmod-dangling.txt", 0600, 0) == -1 && Error() == 2);
+        Require(fchmodat_nid_postfix(-100, chmodDangling.c_str(), 0600, 0) == -1 && Error() == 2);
+        Require(fchmodat_nid_postfix(base, "chmod-loop-a", 0600, 0) == -1 && Error() == 62);
+        Require(fchmodat_nid_postfix(base, "chmod-link.txt/child", 0600, 0) == -1 && Error() == 20);
+        Require(RemoveSymlink(chmodLink) && RemoveSymlink(chmodDangling) && RemoveSymlink(chmodLoopA) && RemoveSymlink(chmodLoopB));
+    }
     Require(fchown_nid_postfix(base, 0, 0) == 0);
     Require(fchown_nid_postfix(base, 0xFFFFFFFFu, 0xFFFFFFFFu) == 0);
     Require(fchown_nid_postfix(-1, 0, 0) == -1 && Error() == 9);

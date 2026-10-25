@@ -11,6 +11,7 @@ extern "C" const char* GetDirectoryDescriptorPath_nid_no_patch(int fd, int* erro
 extern "C" std::uint64_t GetDirectoryDescriptorPosition_nid_no_patch(int fd);
 extern "C" int OpenInDirectory_nid_no_patch(int directory, const char* path, int flags, std::uint16_t mode);
 extern "C" int StatInDirectory_nid_no_patch(int directory, const char* path, FileStat* sb, bool follow);
+extern "C" int ChmodNative_nid_no_patch(const std::filesystem::path& native, int mode);
 
 namespace File {
 
