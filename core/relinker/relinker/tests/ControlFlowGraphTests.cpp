@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <limits>
+#include <chrono>
 
 namespace {
 
@@ -501,6 +502,47 @@ void CheckEmbeddedDataTables() {
     Require(tablesWhirlpool[0].Begin == TextAddress + 32, "Whirlpool table start was incorrect");
 }
 
+void CheckLargeZeroGaps() {
+    constexpr std::size_t stride = 0x10000;
+    constexpr std::size_t count = 32;
+    constexpr std::size_t functionSize = 8;
+    constexpr std::size_t codeFill = 0x8000;
+    Bytes text(stride * count, 0x00);
+    std::vector<std::pair<VirtualAddress, VirtualAddress>> functions;
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto begin = index * stride;
+        text[begin] = 0x48;
+        text[begin + 1] = 0x8d;
+        text[begin + 2] = 0x05;
+        SetDisplacement(text, begin + 3, begin + 7, TextAddress + begin + functionSize);
+        text[begin + 7] = 0xc3;
+        const auto table = begin + functionSize;
+        text[table] = 0x0f;
+        text[table + 1] = 0x78;
+        text[table + 2] = 0x33;
+        text[table + 3] = 0x1e;
+        for (auto at = table + 4; at + 2 < begin + codeFill; at += 3) {
+            text[at] = 0x48;
+            text[at + 1] = 0x89;
+            text[at + 2] = 0xc0;
+        }
+        functions.emplace_back(TextAddress + begin, TextAddress + begin + functionSize);
+    }
+    functions.emplace_back(TextAddress + stride * count, TextAddress + stride * count + functionSize);
+
+    const auto started = std::chrono::steady_clock::now();
+    const auto tables = Relinker::FindRelativeJumpTables(text, TextAddress, functions);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    Require(tables.size() == count, "Expected one data table per large gap");
+    for (std::size_t index = 0; index < tables.size(); ++index) {
+        Require(tables[index].Function == TextAddress + index * stride, "Large gap table was attached to the wrong function");
+        Require(tables[index].Begin == TextAddress + index * stride + functionSize, "Large gap table start was incorrect");
+        Require(tables[index].End == TextAddress + (index + 1) * stride, "Large gap table end was incorrect");
+    }
+    Require(elapsed < std::chrono::seconds(10), "Large gap analysis took too long");
+}
+
 }
 
 int main() {
@@ -520,6 +562,7 @@ int main() {
         CheckHighVirtualAddress();
         CheckRelativeJumpTables();
         CheckEmbeddedDataTables();
+        CheckLargeZeroGaps();
         std::cout << "Control-flow graph tests passed\n";
         return 0;
     } catch (const std::exception& error) {
