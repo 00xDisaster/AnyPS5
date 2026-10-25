@@ -46,6 +46,15 @@ class StubgenTests(unittest.TestCase):
                 self.assertIn("[AAAAAAAAAAA]", debt)
                 self.assertNotIn(f'APS5_EXPORT("{known_nid}", sceAmprUnknown', code)
 
+    def test_generate_preserves_single_pass_iterable_inputs(self):
+        known = "6OkOa1SOKuY"
+        db = {known: "sceAmprUnknown00"}
+        for values in (("AAAAAAAAAAA", known), (known, "AAAAAAAAAAA")):
+            expected = stubgen.generate("libSceAmpr", values, db)
+            for label, factory in (("iterator", iter), ("generator", lambda items: (nid for nid in items))):
+                with self.subTest(values=values, input=label):
+                    self.assertEqual(stubgen.generate("libSceAmpr", factory(values), db), expected)
+
     def test_prx_suffix_is_stripped_from_module_name(self):
         nids = ["AAAAAAAAAAA", "BBBBBBBBBBB"]
         expected = stubgen.generate("libSceAmpr", nids, {})
