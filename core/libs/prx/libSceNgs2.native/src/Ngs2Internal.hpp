@@ -1,9 +1,9 @@
 #ifndef CORE_LIBS_PRX_LIBSCENGS2_SRC_NGS2INTERNAL_HPP
 #define CORE_LIBS_PRX_LIBSCENGS2_SRC_NGS2INTERNAL_HPP
 
-#include <cstddef>
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #include "prx/libSceNgs2.native/include/Ngs2Types.hpp"
@@ -88,6 +89,7 @@ struct Ngs2Port {
     Ngs2Voice* dest = nullptr;
     float volume = 1.0f;
     std::int32_t matrix = -1;
+    std::vector<float> rampFrom;
 };
 
 struct Ngs2UserFx2 {
@@ -112,6 +114,14 @@ struct Ngs2QueuedCallback {
     Ngs2VoiceCallbackInfo info;
     std::uint64_t sequence;
 };
+
+struct Ngs2MatrixControl {
+    std::uint32_t index;
+    std::vector<float> levels;
+};
+
+using Ngs2PendingControl = std::variant<std::uint32_t, Ngs2VoicePortVolumeParam, Ngs2VoicePortMatrixParam,
+    Ngs2MatrixControl, Ngs2SamplerVoicePitchParam, Ngs2MasteringVoiceGainParam, Ngs2CustomVoicePitchShiftParam>;
 
 struct Ngs2Voice {
     Ngs2Rack* rack = nullptr;
@@ -139,7 +149,9 @@ struct Ngs2Voice {
     std::uint32_t samplerWritePosition = 0;
     std::deque<Ngs2Block> blocks;
     bool acceptsBlocks = true;
-    std::vector<std::uint32_t> pendingEvents;
+    std::vector<Ngs2PendingControl> pendingControls;
+    bool pendingPlay = false;
+    alignas(std::atomic_ref<bool>::required_alignment) mutable bool killCurrent = false;
     std::uint64_t decodedSamples = 0;
     std::uint64_t decodedBytes = 0;
     std::uint64_t waveformRevision = 0;
@@ -168,7 +180,9 @@ struct Ngs2Voice {
     bool hasSamples = false;
 
     void SetEvent(std::uint32_t eventId);
-    void ApplyPendingEvents();
+    void ApplyPendingControls();
+    bool KilledForRender() const { return std::atomic_ref<bool>(killCurrent).load(std::memory_order_relaxed); }
+    void KillForRender(bool killed) { std::atomic_ref<bool>(killCurrent).store(killed, std::memory_order_relaxed); }
     void ResetSetup();
     bool IsSampler() const;
     const std::uint8_t* WaveformData() const;
@@ -286,6 +300,7 @@ bool Ngs2ProcessReverb(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
 void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
 void Ngs2PublishSamplerState(Ngs2Voice& voice);
 void Ngs2ResetJobSchedulerOption(Ngs2JobSchedulerOption& option);
+void Ngs2PrepareControlMix(Ngs2Voice& voice);
 void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);
 void Ngs2RenderSilence(const Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo, std::uint32_t numBufferInfo);
 float Ngs2DefaultLevel(std::uint32_t sourceChannels, std::uint32_t source, std::uint32_t destChannels, std::uint32_t dest);

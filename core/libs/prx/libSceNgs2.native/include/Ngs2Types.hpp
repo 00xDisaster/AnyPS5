@@ -717,9 +717,9 @@ static_assert(sizeof(Ngs2VoicePortInfo) == 24);
 
 struct Ngs2VoiceMatrixInfo {
     std::uint32_t num_levels;
-    float levels[64];
+    float levels[37 * 37];
 };
-static_assert(sizeof(Ngs2VoiceMatrixInfo) == 260);
+static_assert(sizeof(Ngs2VoiceMatrixInfo) == 5480);
 
 struct Ngs2VoiceState {
     std::uint32_t state_flags;
