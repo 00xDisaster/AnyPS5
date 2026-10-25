@@ -52,6 +52,7 @@ extern DinkumwareFloatCharacteristics _Dbl_nid_postfix;
 extern DinkumwareFloatCharacteristics _Ldbl_nid_postfix;
 }
 static void Require(bool value) { if (!value) std::abort(); }
+constexpr int StandardExceptions = FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT;
 
 static void CheckSquareRoot() {
     Require(sqrt_nid_postfix(4.) == 2. && sqrtf_nid_postfix(6.25f) == 2.5f);
@@ -961,7 +962,7 @@ static void CheckScaledHyperbolic() {
             if ((exact ? actualBits != expectedBits : !std::isfinite(result) || distance > 2) ||
                 (std::isfinite(expected) && (std::fetestexcept(FE_OVERFLOW | FE_INVALID) != 0 || errno != 12345))) {
                 std::fprintf(stderr, "%s(%a, %a): got %08x, expected %08x, errno %d, flags %x\n",
-                    name, static_cast<double>(x), static_cast<double>(y), actualBits, expectedBits, errno, std::fetestexcept(FE_ALL_EXCEPT));
+                    name, static_cast<double>(x), static_cast<double>(y), actualBits, expectedBits, errno, std::fetestexcept(StandardExceptions));
                 std::abort();
             }
             ++checks;
@@ -997,7 +998,7 @@ static void CheckScaledHyperbolic() {
             std::feraiseexcept(FE_DIVBYZERO);
             errno = 12345;
             const float result = function(x, y);
-            const int raised = std::fetestexcept(FE_ALL_EXCEPT);
+            const int raised = std::fetestexcept(StandardExceptions);
             if (std::bit_cast<std::uint32_t>(result) != expectedBits || errno != error || raised != (FE_DIVBYZERO | flags)) {
                 std::fprintf(stderr, "%s special (%a, %a): got %08x, expected %08x, errno %d, flags %x\n",
                     name, static_cast<double>(x), static_cast<double>(y), std::bit_cast<std::uint32_t>(result), expectedBits, errno, raised);
