@@ -1,4 +1,5 @@
 #include "prx/libc/include/GuestFileNumber.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/GuestDirectory.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/FilesystemError.hpp"

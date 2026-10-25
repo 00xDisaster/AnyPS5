@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include <climits>
 #include <clocale>
 #include <cstddef>
@@ -23,11 +24,6 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
 #include "SceTypes.hpp"
-
-extern "C" {
-void* APS5_VABI _Znwm_nid_postfix(std::size_t size);
-void APS5_VABI _ZdlPv_nid_postfix(void* pointer);
-}
 
 namespace {
 
@@ -110,6 +106,7 @@ void APS5_VABI DestroyCollate(GuestLocale::Facet*) {}
 void APS5_VABI DeleteCollate(GuestLocale::Facet* self) {
     if (self == nullptr) throw std::invalid_argument("collate delete: null facet");
     _ZdlPv_nid_postfix(self);
+
 }
 
 void APS5_VABI RetainFacet(GuestLocale::Facet* self) {
@@ -373,6 +370,7 @@ std::uint64_t _ZNSt5ctypeIcE2idE_nid_postfix = 0;
 std::uint64_t _ZNSt5ctypeIwE2idE_nid_postfix = 0;
 std::uint64_t _ZNSt7collateIwE2idE_nid_postfix = 0;
 std::uint64_t _ZNSt7collateIcE2idE_nid_postfix = 0;
+std::uintptr_t _ZTVSt7collateIcE_nid_postfix[9] {};
 std::uint64_t _ZNSt7codecvtIcc9_MbstatetE2idE_nid_postfix = 0;
 std::uintptr_t _ZTVSt7codecvtIcc9_MbstatetE_nid_postfix[16] {};
 std::uintptr_t _ZTVSt7codecvtIwc9_MbstatetE_nid_postfix[13] {};
@@ -385,6 +383,7 @@ std::uint64_t _ZNSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE2idE_n
 std::uintptr_t _ZTVSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE_nid_postfix[14] {};
 std::uint64_t _ZNSt8numpunctIcE2idE_nid_postfix = 0;
 std::uint64_t _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE2idE_nid_postfix = 0;
+std::uintptr_t _ZTVSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix[13] {};
 
 std::streamoff _ZSt7_BADOFF_nid_postfix = -1;
 std::fpos_t _ZSt4_Fpz_nid_postfix {};
@@ -409,11 +408,6 @@ GuestLocale::IosBase* APS5_VABI SetStreamWidth(GuestLocale::IosBase* stream, std
     stream->width = width;
     return stream;
 }
-
-struct StreamManipulator {
-    GuestLocale::IosBase* (APS5_VABI* function)(GuestLocale::IosBase*, std::int32_t);
-    std::int32_t argument;
-};
 
 static_assert(sizeof(StreamManipulator) == 0x10);
 
@@ -454,9 +448,7 @@ GuestLocale::Implementation* APS5_VABI _ZNSt6locale16_GetgloballocaleEv_nid_post
 }
 
 namespace {
-struct GuestLocaleFacade {
-    GuestLocale::Implementation* implementation;
-};
+
 GuestLocaleFacade g_classicLocaleFacade{&g_classicLocale};
 }
 
@@ -637,6 +629,7 @@ void APS5_VABI _init_env_nid_postfix() {
 void APS5_VABI init_env_nid_postfix(const InitEnvParams* params) {
     (void)params;
     _init_env_nid_postfix();
+
 }
 
 SonyLconv* APS5_VABI localeconv_nid_postfix(void) {
