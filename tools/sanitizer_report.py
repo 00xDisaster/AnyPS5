@@ -64,6 +64,12 @@ def summarize(title, found, known=None):
         lines += ["| Failed test |", "| - |"] + [f"| `{name}` |" for name in failed] + [""]
     if expected:
         lines += ["| Known failure | Reason |", "| - | - |"] + [f"| `{name}` | {cell(known[name])} |" for name in expected] + [""]
+    recovered = sorted(name for name in known if found.get(name) == "passed")
+    if recovered:
+        lines += ["| Listed as known but passed | Reason |", "| - | - |"] + [f"| `{name}` | {cell(known[name])} |" for name in recovered] + [""]
+    absent = sorted(name for name in known if name not in found)
+    if absent:
+        lines += ["| Listed as known but not in this run |", "| - |"] + [f"| `{name}` |" for name in absent] + [""]
     return "\n".join(lines) + "\n", bool(failed)
 
 
