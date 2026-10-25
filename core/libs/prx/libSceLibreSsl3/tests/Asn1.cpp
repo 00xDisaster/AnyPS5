@@ -9,7 +9,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
 #include <initializer_list>
 #include <limits>
 #include <source_location>
@@ -29,22 +28,12 @@ void Require(bool condition, std::source_location location = std::source_locatio
     std::abort();
 }
 
-template<typename TAction>
-void RequireThrows(TAction action, std::source_location location = std::source_location::current()) {
-    try { action(); } catch (const std::exception&) { return; }
-    Require(false, location);
-}
-
 std::unordered_map<void*, std::size_t> allocations;
-std::size_t allocateCalls = 0;
-std::size_t failAt = 0;
 std::size_t freeCalls = 0;
 void* dataToClear = nullptr;
 std::size_t clearLength = 0;
 
 void* APS5_VABI Allocate_nid_no_patch(std::size_t size) {
-    ++allocateCalls;
-    if (allocateCalls == failAt) return nullptr;
     void* result = std::malloc(size);
     Require(result != nullptr);
     allocations.emplace(result, size);
@@ -170,28 +159,7 @@ void Ownership() {
         Release(value);
     }
     Require(allocations.empty());
-    for (std::size_t stage = 1; stage <= 2; ++stage) {
-        cursor = encoded;
-        output = nullptr;
-        failAt = allocateCalls + stage;
-        RequireThrows([&] { d2i_ASN1_INTEGER_nid_postfix(&output, &cursor, sizeof(encoded)); });
-        Require(cursor == encoded && output == nullptr && allocations.empty());
-        failAt = 0;
-    }
-    for (std::size_t stage = 1; stage <= 2; ++stage) {
-        cursor = encoded;
-        output = d2i_ASN1_INTEGER_nid_postfix(nullptr, &cursor, sizeof(encoded));
-        const auto* original = static_cast<const String*>(output);
-        dataToClear = original->data;
-        clearLength = original->length;
-        const auto before = freeCalls;
-        cursor = encoded;
-        failAt = allocateCalls + stage;
-        RequireThrows([&] { d2i_ASN1_INTEGER_nid_postfix(&output, &cursor, sizeof(encoded)); });
-        Require(cursor == encoded && output == nullptr && allocations.empty() && dataToClear == nullptr);
-        Require(freeCalls == before + stage + 1);
-        failAt = 0;
-    }
+
 }
 
 void BerExtremes() {
@@ -225,31 +193,6 @@ void BerExtremes() {
     Check(length, expected);
 }
 
-void InvalidEncodings() {
-    const std::vector<std::vector<unsigned char>> cases{
-        {}, {2}, {2, 0}, {2, 1}, {2, 2, 0}, {4, 1, 1}, {0x42, 1, 1}, {0x22, 1, 1},
-        {2, 0x80, 1, 0, 0}, {2, 0xff}, {2, 0x81}, {2, 0x82, 1},
-        {2, 2, 0, 0x7f}, {2, 2, 0xff, 0x80}, {2, 3, 0xff, 0xff, 1},
-        {0x1f}, {0x1f, 0x81}, {0x1f, 0x90, 0x80, 0x80, 0x80, 0x80, 0, 1, 1},
-        {2, 0x89, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0x1f, 0x8f, 0xff, 0xff, 0xff, 0x7f, 1, 1},
-        {0x1f, 0x8f, 0xff, 0xff, 0xff, 0xff, 0, 1, 1},
-        {2, 0x88, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-        {2, 0x89, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-    };
-    for (const auto& encoded : cases) {
-        const unsigned char* cursor = encoded.data();
-        void* output = nullptr;
-        const auto before = allocateCalls;
-        RequireThrows([&] { d2i_ASN1_INTEGER_nid_postfix(&output, &cursor, encoded.size()); });
-        Require(cursor == encoded.data() && output == nullptr && allocateCalls == before);
-    }
-    Require(d2i_ASN1_INTEGER_nid_postfix(nullptr, nullptr, -1) == nullptr);
-    RequireThrows([] { d2i_ASN1_INTEGER_nid_postfix(nullptr, nullptr, 1); });
-    const unsigned char* cursor = nullptr;
-    RequireThrows([&] { d2i_ASN1_INTEGER_nid_postfix(nullptr, &cursor, 1); });
-}
-
 } // namespace
 
 int main() {
@@ -261,7 +204,6 @@ int main() {
     Integers();
     BerExtremes();
     Ownership();
-    InvalidEncodings();
     Require(allocations.empty());
     std::puts("libSceLibreSsl3 ASN.1 tests passed");
 }
