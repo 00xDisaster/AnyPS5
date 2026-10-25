@@ -841,34 +841,7 @@ extern "C" bool GuestCopyIn_nid_no_patch(void* destination, const void* source, 
     if (bytes == 0) return true;
     const auto start = reinterpret_cast<std::uintptr_t>(source);
     if (start == 0 || bytes > UINTPTR_MAX - start) return false;
-    GuestArena::GuestArenaPrepareHostRead_nid_no_patch(source, bytes);
-#ifdef _WIN32
-    for (auto address = start; address < start + bytes;) {
-        MEMORY_BASIC_INFORMATION memory{};
-        if (VirtualQuery(reinterpret_cast<LPCVOID>(address), &memory, sizeof(memory)) != sizeof(memory) || memory.State != MEM_COMMIT ||
-            (memory.Protect & PAGE_GUARD) != 0 ||
-            (memory.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) == 0) return false;
-        address = reinterpret_cast<std::uintptr_t>(memory.BaseAddress) + memory.RegionSize;
-    }
-    std::memcpy(destination, source, bytes);
-    return true;
-#elif defined(__linux__)
-    iovec local{destination, bytes};
-    iovec remote{const_cast<void*>(source), bytes};
-    const ssize_t copied = ::process_vm_readv(::getpid(), &local, 1, &remote, 1, 0);
-    if (copied < 0) {
-        if (errno == EFAULT) return false;
-        throw std::runtime_error("GuestCopyIn: process_vm_readv failed with errno " + std::to_string(errno));
-    }
-    return static_cast<std::size_t>(copied) == bytes;
-#elif defined(__APPLE__)
-    mach_vm_size_t copied = 0;
-    return ::mach_vm_read_overwrite(::mach_task_self(), reinterpret_cast<mach_vm_address_t>(source), bytes,
-               reinterpret_cast<mach_vm_address_t>(destination), &copied) == KERN_SUCCESS && copied == bytes;
-#else
-    std::memcpy(destination, source, bytes);
-    return true;
-#endif
+    return CopyGuestBytes(destination, source, bytes);
 }
 
 extern "C" std::filesystem::path ResolvePath_nid_no_patch(const char* path) {
