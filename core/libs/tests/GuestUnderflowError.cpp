@@ -1,10 +1,10 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 
 struct TypeRecord { const void* const* vtable; const char* name; const TypeRecord* base; };
-struct Object { const void* vtable; const char* message; };
 struct Vtable { std::ptrdiff_t offset; const TypeRecord* type; const void* destroy; const void* deleteObject; const void* what; };
 
 extern "C" {
@@ -12,8 +12,6 @@ extern const TypeRecord _ZTISt13runtime_error_nid_postfix;
 extern const TypeRecord _ZTISt15underflow_error_nid_postfix;
 extern const Vtable _ZTVSt13runtime_error_nid_postfix;
 extern const Vtable _ZTVSt15underflow_error_nid_postfix;
-void APS5_VABI _ZNSt13runtime_errorC1EPKc_nid_postfix(Object*, const char*);
-void APS5_VABI _ZNSt15underflow_errorD1Ev_nid_postfix(Object*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -27,7 +25,7 @@ int main() {
     const auto& runtimeTable = _ZTVSt13runtime_error_nid_postfix;
     Require(table.offset == 0 && table.type == &type);
     Require(table.destroy == runtimeTable.destroy && table.deleteObject == runtimeTable.deleteObject && table.what == runtimeTable.what);
-    Object object{};
+    LibcException::ExceptionObject object{};
     _ZNSt13runtime_errorC1EPKc_nid_postfix(&object, "value too small");
     Require(object.message != nullptr && std::strcmp(object.message, "value too small") == 0);
     _ZNSt15underflow_errorD1Ev_nid_postfix(&object);
