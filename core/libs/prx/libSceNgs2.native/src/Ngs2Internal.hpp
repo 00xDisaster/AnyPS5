@@ -139,6 +139,7 @@ struct Ngs2Voice {
     std::uint32_t samplerWritePosition = 0;
     std::deque<Ngs2Block> blocks;
     bool acceptsBlocks = true;
+    std::vector<std::uint32_t> pendingEvents;
     std::uint64_t decodedSamples = 0;
     std::uint64_t decodedBytes = 0;
     std::uint64_t waveformRevision = 0;
@@ -167,6 +168,7 @@ struct Ngs2Voice {
     bool hasSamples = false;
 
     void SetEvent(std::uint32_t eventId);
+    void ApplyPendingEvents();
     void ResetSetup();
     bool IsSampler() const;
     const std::uint8_t* WaveformData() const;

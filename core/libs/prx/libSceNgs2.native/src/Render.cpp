@@ -429,6 +429,7 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
     std::vector<Ngs2Voice*> voices;
     for (auto* rack : system.racks) {
         for (auto& voice : rack->voices) {
+            voice.ApplyPendingEvents();
             voice.rendered = false;
             Ngs2PublishSamplerState(voice);
             voices.push_back(&voice);

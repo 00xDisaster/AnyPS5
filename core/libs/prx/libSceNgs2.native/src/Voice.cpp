@@ -17,7 +17,6 @@ static constexpr std::uint32_t COMMAND_PORT_VOLUME = 6;
 static constexpr std::uint32_t COMMAND_PORT_MATRIX = 7;
 static constexpr std::uint8_t COMMAND_TYPE_FLOAT = 1;
 static constexpr std::uint8_t COMMAND_TYPE_INT = 3;
-static constexpr std::uint8_t COMMAND_TYPE_UINT = 4;
 static constexpr std::uint8_t COMMAND_TYPE_FLOAT_ARRAY = 0x11;
 static constexpr float MAX_MATRIX_LEVEL = 4.0f;
 
@@ -75,6 +74,35 @@ void Ngs2Voice::SetEvent(std::uint32_t eventId) {
             break;
         default: throw std::invalid_argument("NGS2: unknown voice event " + Ngs2Hex(eventId));
     }
+}
+
+void Ngs2Voice::ApplyPendingEvents() {
+    for (const auto event : pendingEvents) {
+        if (event == SCE_NGS2_VOICE_EVENT_PLAY) {
+            if (state == Ngs2PlayState::Playing) state = Ngs2PlayState::Stopped;
+            SetEvent(event);
+        } else if (event == SCE_NGS2_VOICE_EVENT_STOP || event == SCE_NGS2_VOICE_EVENT_STOP_IMM) {
+            SetEvent(SCE_NGS2_VOICE_EVENT_STOP);
+        } else throw std::runtime_error("NGS2: this deferred voice event is not implemented");
+    }
+    pendingEvents.clear();
+}
+
+static void ValidateDeferredEvent(const Ngs2Voice& voice, std::uint32_t event) {
+    if (!voice.IsSampler() || std::any_of(voice.rack->customModuleIds.begin(), voice.rack->customModuleIds.end(), [](auto module) {
+            return module == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX || module == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2;
+        })) throw std::runtime_error("NGS2: deferred events for this voice configuration are not implemented");
+    if (event != SCE_NGS2_VOICE_EVENT_STOP && event != SCE_NGS2_VOICE_EVENT_STOP_IMM &&
+        (voice.rack->system->jobsExecuting || event != SCE_NGS2_VOICE_EVENT_PLAY)) {
+        throw std::runtime_error("NGS2: this deferred voice event is not implemented");
+    }
+}
+
+static bool DeferEvent(Ngs2Voice& voice, std::uint32_t event) {
+    if (!voice.rack->system->jobsExecuting && voice.pendingEvents.empty()) return false;
+    ValidateDeferredEvent(voice, event);
+    voice.pendingEvents.push_back(event);
+    return true;
 }
 
 void Ngs2Voice::ResetSetup() {
@@ -179,7 +207,11 @@ static void ApplyCommonParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param
             break;
         }
         case SCE_NGS2_VOICE_PARAM_PATCH: Patch(voice, ParamAs<Ngs2VoicePatchParam>(param)); break;
-        case SCE_NGS2_VOICE_PARAM_EVENT: SendEvent(voice, ParamAs<Ngs2VoiceEventParam>(param).event_id); break;
+        case SCE_NGS2_VOICE_PARAM_EVENT: {
+            const auto event = ParamAs<Ngs2VoiceEventParam>(param).event_id;
+            if (!DeferEvent(voice, event)) SendEvent(voice, event);
+            break;
+        }
         case SCE_NGS2_VOICE_PARAM_CALLBACK: {
             const auto& callback = ParamAs<Ngs2VoiceCallbackParam>(param);
             voice.callback = callback.callback;
@@ -454,25 +486,23 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
     }
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
-    try {
-        for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
-            if (voice.rack->system->jobsExecuting && param->id != SCE_NGS2_VOICE_PARAM_CALLBACK) throw std::runtime_error("NGS2: render parameter changes from active job handlers are not implemented");
-            if (voice.channels != 0 && (param->id >> 16) == voice.rack->rackId && (param->id == SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS || param->id == SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS)) {
-                const auto& blocks = ParamAs<Ngs2SamplerVoiceWaveformBlocksParam>(*param);
-                const bool reset = (blocks.flags & SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET) != 0;
-                if (!voice.acceptsBlocks && !reset) return static_cast<int>(0x804A8054u);
-                std::size_t size = reset ? 0 : voice.blocks.size();
-                const auto* end = size != 0 && voice.blocks.back().data != nullptr ? voice.blocks.back().data + voice.blocks.back().info.data_size : nullptr;
-                auto lastUserData = size != 0 ? voice.blocks.back().info.user_data : 0;
-                for (std::uint32_t i = 0; blocks.blocks != nullptr && i < blocks.num_blocks; ++i) {
-                    const auto& block = blocks.blocks[i];
-                    const auto* data = blocks.data == nullptr ? nullptr : static_cast<const std::uint8_t*>(blocks.data) + block.data_offset;
-                    if (block.data_size == 0 && block.num_samples == 0) continue;
-                    if ((blocks.flags & SCE_NGS2_WAVEFORM_BLOCKS_FLAG_APPEND) == 0 || data != end || block.user_data != lastUserData) {
-                        ++size;
-                    }
-                    end = data == nullptr ? nullptr : data + block.data_size;
-                    lastUserData = block.user_data;
+    for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
+        if ((voice.rack->system->jobsExecuting || !voice.pendingEvents.empty()) && param->id != SCE_NGS2_VOICE_PARAM_CALLBACK && param->id != SCE_NGS2_VOICE_PARAM_EVENT) {
+            throw std::runtime_error("NGS2: render parameter changes from active job handlers are not implemented");
+        }
+        if (voice.channels != 0 && (param->id >> 16) == voice.rack->rackId && (param->id == SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS || param->id == SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS)) {
+            const auto& blocks = ParamAs<Ngs2SamplerVoiceWaveformBlocksParam>(*param);
+            const bool reset = (blocks.flags & SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET) != 0;
+            if (!voice.acceptsBlocks && !reset) return static_cast<int>(0x804A8054u);
+            std::size_t size = reset ? 0 : voice.blocks.size();
+            const auto* end = size != 0 && voice.blocks.back().data != nullptr ? voice.blocks.back().data + voice.blocks.back().info.data_size : nullptr;
+            auto lastUserData = size != 0 ? voice.blocks.back().info.user_data : 0;
+            for (std::uint32_t i = 0; blocks.blocks != nullptr && i < blocks.num_blocks; ++i) {
+                const auto& block = blocks.blocks[i];
+                const auto* data = blocks.data == nullptr ? nullptr : static_cast<const std::uint8_t*>(blocks.data) + block.data_offset;
+                if (block.data_size == 0 && block.num_samples == 0) continue;
+                if ((blocks.flags & SCE_NGS2_WAVEFORM_BLOCKS_FLAG_APPEND) == 0 || data != end || block.user_data != lastUserData) {
+                    ++size;
                 }
                 if (size > std::max(1u, voice.rack->maxWaveformBlocks)) return static_cast<int>(0x804A8054u);
             }
@@ -495,25 +525,33 @@ int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCom
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
     if (commands == nullptr && num_commands != 0) APS5_INVALID_ARG_EX;
-    if (num_commands != 0 && voice.rack->system->jobsExecuting) throw std::runtime_error("NGS2: voice commands from active job handlers are not implemented");
-    try {
-        for (std::size_t i = 0; i < num_commands; i++) {
-            const auto& command = commands[i];
-            const std::uint32_t index = command.id >> 24;
-            const std::uint32_t id = command.id & 0xffffff;
-            const std::uint8_t expectedType = id == COMMAND_EVENT ? COMMAND_TYPE_UINT
-                                            : id == COMMAND_MATRIX_LEVELS ? COMMAND_TYPE_FLOAT_ARRAY
-                                            : id == COMMAND_PORT_VOLUME ? COMMAND_TYPE_FLOAT
-                                            : id == COMMAND_PORT_MATRIX ? COMMAND_TYPE_INT : 0;
-            if (expectedType == 0) throw std::runtime_error("NGS2: voice command " + Ngs2Hex(command.id) + " is not implemented");
-            if (command.type != expectedType) throw std::invalid_argument("NGS2: voice command " + Ngs2Hex(command.id) + " has value type " + Ngs2Hex(command.type));
-            if (id == COMMAND_EVENT) SendEvent(voice, command.value.u);
-            else if (id == COMMAND_MATRIX_LEVELS) SetMatrixLevels(voice, index, command.value.levels, command.count);
-            else if (id == COMMAND_PORT_VOLUME) PortAt(voice, index).volume = command.value.f;
-            else SetPortMatrix(voice, index, command.value.i);
+    if (voice.rack->system->jobsExecuting || !voice.pendingEvents.empty()) {
+        if (num_commands > voice.pendingEvents.max_size() - voice.pendingEvents.size()) throw std::length_error("NGS2: too many deferred voice commands");
+        for (std::size_t i = 0; i < num_commands; ++i) {
+            if ((commands[i].id & 0xffffffu) != COMMAND_EVENT)
+                throw std::runtime_error("NGS2: this deferred voice command is not implemented");
+            ValidateDeferredEvent(voice, commands[i].value.u);
         }
-    } catch (const Ngs2ReturnCode& result) {
-        return result.code;
+        voice.pendingEvents.reserve(voice.pendingEvents.size() + num_commands);
+        for (std::size_t i = 0; i < num_commands; ++i) voice.pendingEvents.push_back(commands[i].value.u);
+        return SCE_NGS2_OK;
+    }
+    for (std::size_t i = 0; i < num_commands; i++) {
+        const auto& command = commands[i];
+        const std::uint32_t index = command.id >> 24;
+        const std::uint32_t id = command.id & 0xffffff;
+        if (id == COMMAND_EVENT) {
+            SendEvent(voice, command.value.u);
+            continue;
+        }
+        const std::uint8_t expectedType = id == COMMAND_MATRIX_LEVELS ? COMMAND_TYPE_FLOAT_ARRAY
+                                        : id == COMMAND_PORT_VOLUME ? COMMAND_TYPE_FLOAT
+                                        : id == COMMAND_PORT_MATRIX ? COMMAND_TYPE_INT : 0;
+        if (expectedType == 0) throw std::runtime_error("NGS2: voice command " + Ngs2Hex(command.id) + " is not implemented");
+        if (command.type != expectedType) throw std::invalid_argument("NGS2: voice command " + Ngs2Hex(command.id) + " has value type " + Ngs2Hex(command.type));
+        if (id == COMMAND_MATRIX_LEVELS) SetMatrixLevels(voice, index, command.value.levels, command.count);
+        else if (id == COMMAND_PORT_VOLUME) PortAt(voice, index).volume = command.value.f;
+        else SetPortMatrix(voice, index, command.value.i);
     }
     return SCE_NGS2_OK;
 }
