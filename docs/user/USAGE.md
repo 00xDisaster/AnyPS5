@@ -452,4 +452,4 @@ By default, imports use the library export naming rules: `_nid_no_patch` and `SD
 
 `nid_patcher --exec --only-sce <file>` restricts renaming to names starting with `sce` (case-insensitive) or ending with `_nid_postfix`. Both modes accept `--preserve-exports <unpatched-library>` or `--preserve-export-list <export-list>` for explicit exclusions. The existing `nid_patcher <library_name> <file>` mode is unchanged.
 
-Unsupported layouts fail before the input file is written. See the [format limitations](../dev/debt/libs.md).
+Unsupported layouts fail before the input file is written.
