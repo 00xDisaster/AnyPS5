@@ -72,6 +72,7 @@ private:
     void snapshot(const Range& range);
     void writeReferenceFrames();
     bool abandonIfDiskLow();
+    void stop(const char* reason);
     std::string header() const;
     std::vector<Range> committedRanges();
     std::vector<Range> newRanges();

@@ -360,10 +360,23 @@ void FrameRecorder::emitShaderDelta(std::span<const Shader* const> shaders) {
 
 void FrameRecorder::writeDelta(std::span<const Span> spans, std::span<const std::uint64_t> hostPages, std::span<const Range> added) {
     if (abandonIfDiskLow()) return;
-    const auto [accepted, completed] = DriverDetail::Driver::Get().SerialProgress();
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> blocks;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> written;
+    for (const auto& span : spans) {
+        GuestMemory::CollectWrittenBlocks(span.address, static_cast<std::size_t>(span.bytes), span.since, written);
+        blocks.insert(blocks.end(), written.begin(), written.end());
+    }
+    auto& driver = DriverDetail::Driver::Get();
+    auto [accepted, completed] = driver.SerialProgress();
+    if (completed < accepted && (!added.empty() || !blocks.empty())) {
+        if (!driver.WaitIdleFor(std::chrono::seconds(10))) {
+            stop("stopped: the GPU work submitted before a memory delta did not finish within 10 s");
+            return;
+        }
+        std::tie(accepted, completed) = driver.SerialProgress();
+    }
     const auto group = deltaGroups + 1;
     bool any = false;
-    std::vector<std::pair<std::uint64_t, std::uint64_t>> written;
     std::vector<std::byte> bytes;
     for (const auto& range : added) {
         writer->WriteRange(range.address, range.bytes, range.kind, range.protection, range.access);
@@ -397,15 +410,12 @@ void FrameRecorder::writeDelta(std::span<const Span> spans, std::span<const std:
         deltaBytes += bytes.size();
         any = true;
     }
-    for (const auto& span : spans) {
-        GuestMemory::CollectWrittenBlocks(span.address, static_cast<std::size_t>(span.bytes), span.since, written);
-        for (const auto& [begin, end] : written) {
-            bytes.resize(static_cast<std::size_t>(end - begin));
-            GuestMemory::ReadCommittedUnsynced(begin, bytes);
-            writer->WriteDelta(group, completed, begin, bytes);
-            deltaBytes += bytes.size();
-            any = true;
-        }
+    for (const auto& [begin, end] : blocks) {
+        bytes.resize(static_cast<std::size_t>(end - begin));
+        GuestMemory::ReadCommittedUnsynced(begin, bytes);
+        writer->WriteDelta(group, completed, begin, bytes);
+        deltaBytes += bytes.size();
+        any = true;
     }
     if (!any) return;
     deltaGroups = group;
@@ -436,8 +446,13 @@ bool FrameRecorder::abandonIfDiskLow() {
     std::error_code error;
     const auto space = std::filesystem::space(directory, error);
     if (error || space.available >= MinimumFreeBytes) return false;
-    warnings.push_back("stopped: less than 4 GiB free on the capture volume");
-    std::fprintf(stderr, "[frame-capture] stopped: less than 4 GiB free on the capture volume\n");
+    stop("stopped: less than 4 GiB free on the capture volume");
+    return true;
+}
+
+void FrameRecorder::stop(const char* reason) {
+    warnings.push_back(reason);
+    std::fprintf(stderr, "[frame-capture] %s\n", reason);
     try {
         writer->Finish(header());
     } catch (const std::exception& failure) {
@@ -445,7 +460,6 @@ bool FrameRecorder::abandonIfDiskLow() {
     }
     writer.reset();
     state = State::Done;
-    return true;
 }
 
 void FrameRecorder::start() {
