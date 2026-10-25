@@ -1,3 +1,4 @@
+#include "prx/libSceVideoOut/include/VideoOut.hpp"
 #include <cstdint>
 #include <cstddef>
 #include "SceTypes.hpp"
