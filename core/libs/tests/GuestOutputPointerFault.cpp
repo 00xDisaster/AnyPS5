@@ -52,6 +52,13 @@ int main() {
     Require(gettimeofday_nid_postfix(timeValid, zoneValid) == 0);
     Require(getitimer_nid_postfix(0, timerValid) == 0);
     Require(setitimer_nid_postfix(0, zeroTimerValue, timerValid) == 0);
+    GuestItimerval armed{};
+    armed.value.tv_sec = 3600;
+    *__error_nid_postfix() = 0;
+    Require(Efault(setitimer_nid_postfix(0, &armed, reinterpret_cast<GuestItimerval*>(~std::uintptr_t{0xfff}))));
+    GuestItimerval current{};
+    Require(getitimer_nid_postfix(0, &current) == 0 && current.value.tv_sec > 0);
+    Require(setitimer_nid_postfix(0, zeroTimerValue, nullptr) == 0);
     Require(sceKernelGettimeofday(timeValid) == 0);
     Require(sceKernelGettimezone(zoneValid) == 0);
 }

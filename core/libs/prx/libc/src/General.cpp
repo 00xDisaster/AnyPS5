@@ -862,6 +862,10 @@ extern "C" bool GuestCopyIn_nid_no_patch(void* destination, const void* source, 
         return true;
     }
     return static_cast<std::size_t>(copied) == bytes;
+#elif defined(__APPLE__)
+    mach_vm_size_t copied = 0;
+    return ::mach_vm_read_overwrite(::mach_task_self(), reinterpret_cast<mach_vm_address_t>(source), bytes,
+               reinterpret_cast<mach_vm_address_t>(destination), &copied) == KERN_SUCCESS && copied == bytes;
 #else
     std::memcpy(destination, source, bytes);
     return true;
