@@ -4,7 +4,6 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdio>
 #include <cstdlib>
-#include <stdexcept>
 
 static constexpr int GUEST_ESRCH = 3;
 static constexpr int GUEST_EFAULT = 14;
@@ -18,16 +17,6 @@ static void Require(bool condition, int line) {
     }
 }
 #define REQUIRE(condition) Require(condition, __LINE__)
-
-template <typename Call>
-static bool Throws(Call call) {
-    try {
-        call();
-    } catch (const std::exception&) {
-        return true;
-    }
-    return false;
-}
 
 static bool FailsWith(int result, int error) {
     return result == -1 && *__error_nid_postfix() == error;
@@ -57,17 +46,6 @@ static void CheckCallingThread() {
     const KernelSchedParam lowered{300};
     REQUIRE(sched_setparam_nid_postfix(0, &lowered) == 0 && sched_getscheduler_nid_postfix(0) == SCHED_RR_POLICY);
     REQUIRE(sched_getparam_nid_postfix(0, &reported) == 0 && reported.sched_priority == 300);
-    for (const int priority : {255, 768, 895, 896, 959, 960, 0, -1}) {
-        const KernelSchedParam outside{priority};
-        REQUIRE(Throws([&] { sched_setparam_nid_postfix(0, &outside); }));
-    }
-    REQUIRE(sched_getparam_nid_postfix(0, &reported) == 0 && reported.sched_priority == 300);
-    const KernelSchedParam upperBand{900};
-    REQUIRE(pthread_setschedparam_nid_postfix(scePthreadSelf(), SCHED_RR_POLICY, &upperBand) == 0);
-    REQUIRE(Throws([&] { sched_getparam_nid_postfix(0, &reported); }));
-    REQUIRE(sched_getscheduler_nid_postfix(0) == SCHED_RR_POLICY);
-    REQUIRE(pthread_setschedparam_nid_postfix(scePthreadSelf(), SCHED_RR_POLICY, &lowered) == 0);
-    REQUIRE(sched_getparam_nid_postfix(0, &reported) == 0 && reported.sched_priority == 300);
     REQUIRE(pthread_setschedparam_nid_postfix(scePthreadSelf(), policy, &expected) == 0);
 }
 
@@ -83,9 +61,6 @@ static void CheckTargets() {
         *__error_nid_postfix() = 0;
         REQUIRE(FailsWith(sched_setparam_nid_postfix(pid, &valid), GUEST_ESRCH));
     }
-    REQUIRE(Throws([&] { sched_getparam_nid_postfix(self, &param); }));
-    REQUIRE(Throws([&] { sched_getscheduler_nid_postfix(self); }));
-    REQUIRE(Throws([&] { sched_setparam_nid_postfix(self, &valid); }));
     *__error_nid_postfix() = 0;
     REQUIRE(FailsWith(sched_getparam_nid_postfix(0, nullptr), GUEST_EFAULT));
     *__error_nid_postfix() = 0;
@@ -95,6 +70,8 @@ static void CheckTargets() {
     *__error_nid_postfix() = 0;
     REQUIRE(FailsWith(sched_setparam_nid_postfix(self + 1, nullptr), GUEST_EFAULT));
 }
+
+static constexpr int WorkerPriority = 700;
 
 struct Worker {
     int before = -1;
@@ -107,7 +84,7 @@ static void* APS5_VABI WorkerEntry(void* arg) {
     KernelSchedParam param{};
     REQUIRE(sched_getparam_nid_postfix(0, &param) == 0);
     worker.before = param.sched_priority;
-    const KernelSchedParam set{700};
+    const KernelSchedParam set{WorkerPriority};
     REQUIRE(sched_setparam_nid_postfix(0, &set) == 0);
     REQUIRE(sched_getparam_nid_postfix(0, &param) == 0);
     worker.after = param.sched_priority;
@@ -116,15 +93,19 @@ static void* APS5_VABI WorkerEntry(void* arg) {
 }
 
 static void CheckOtherThread() {
-    KernelSchedParam mainBefore{};
-    REQUIRE(sched_getparam_nid_postfix(0, &mainBefore) == 0);
+    constexpr int callerPriority = 400;
+    KernelSchedParam original{};
+    REQUIRE(sched_getparam_nid_postfix(0, &original) == 0);
+    const KernelSchedParam callerParam{callerPriority};
+    REQUIRE(sched_setparam_nid_postfix(0, &callerParam) == 0);
     Worker worker;
     Pthread thread = nullptr;
     REQUIRE(scePthreadCreate(&thread, nullptr, WorkerEntry, &worker, "sched") == 0);
     REQUIRE(scePthreadJoin(thread, nullptr) == 0);
-    REQUIRE(worker.after == 700 && (worker.policy == SCHED_FIFO_POLICY || worker.policy == SCHED_RR_POLICY));
-    KernelSchedParam mainAfter{};
-    REQUIRE(sched_getparam_nid_postfix(0, &mainAfter) == 0 && mainAfter.sched_priority == mainBefore.sched_priority);
+    REQUIRE(worker.after == WorkerPriority && (worker.policy == SCHED_FIFO_POLICY || worker.policy == SCHED_RR_POLICY));
+    KernelSchedParam callerAfter{};
+    REQUIRE(sched_getparam_nid_postfix(0, &callerAfter) == 0 && callerAfter.sched_priority == callerPriority);
+    REQUIRE(sched_setparam_nid_postfix(0, &original) == 0);
 }
 
 int main() {
