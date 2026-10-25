@@ -110,6 +110,9 @@ int main() {
     Reopen();
     CheckedOpen();
     std::error_code error;
+#ifdef _WIN32
+    DeleteFileW(L"loop");
+#endif
     std::filesystem::current_path(std::filesystem::temp_directory_path(), error);
     std::filesystem::remove_all(root, error);
     return 0;
