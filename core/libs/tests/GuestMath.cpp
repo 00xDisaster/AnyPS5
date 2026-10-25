@@ -1142,8 +1142,7 @@ static void CheckFloatClassification() {
             std::fprintf(stderr, "Guest _FDtest failed for %08x\n", test.bits);
             std::abort();
         }
-        const int fpclass = test.code == 0 ? 0x10 : test.code == -2 ? 0x08 : test.code == -1 ? 0x04 : test.code == 1 ? 0x01 : 0x02;
-        if (__fpclassifyf_nid_postfix(value) != fpclass) {
+        if (__fpclassifyf_nid_postfix(value) != test.code) {
             std::fprintf(stderr, "Guest __fpclassifyf failed for %08x\n", test.bits);
             std::abort();
         }
