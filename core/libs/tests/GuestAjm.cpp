@@ -2025,6 +2025,6 @@ int main() {
     TestAt9GaplessSegments(context);
     TestAt9RunDecodesWholeInput(context);
     TestPcmResample(context);
-    Require(sceAjmDecWVorbisCreateHeaderPacket(nullptr) == static_cast<int>(0x80B50001));
+    Require(sceAjmDecWVorbisCreateHeaderPacket(nullptr) == static_cast<int>(0x8A6E0001));
     Require(sceAjmFinalize(context) == 0);
 }
