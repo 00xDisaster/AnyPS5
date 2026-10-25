@@ -12,5 +12,6 @@ inline constexpr int SCE_CAMERA_ERROR_FATAL = static_cast<int>(0x802E00FF);
 namespace Camera {
 
 bool IsOpen();
+bool IsOpen(std::int32_t handle);
 
 }

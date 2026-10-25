@@ -1,123 +1,12 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceCamera/libSceCamera.hpp"
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-struct CameraExposureGain {
-    std::uint32_t exposureControl;
-    std::uint32_t exposure;
-    std::uint32_t gain;
-    std::uint32_t mode;
-};
-
-struct CameraWhiteBalance {
-    std::uint32_t whiteBalanceControl;
-    std::uint32_t gainRed;
-    std::uint32_t gainBlue;
-    std::uint32_t gainGreen;
-};
-
-struct CameraGamma {
-    std::uint32_t gammaControl;
-    std::uint32_t value;
-    std::uint8_t reserved[16];
-};
-
-struct CameraAttribute {
-    std::uint32_t sizeThis;
-    std::uint32_t channel;
-    std::uint32_t framePosition[4];
-    CameraExposureGain exposureGain;
-    CameraWhiteBalance whiteBalance;
-    CameraGamma gamma;
-    std::uint32_t saturation;
-    std::uint32_t contrast;
-    std::uint32_t sharpness;
-    std::int32_t hue;
-    std::uint32_t reserved[4];
-};
-
-struct CameraAutoExposureGainTarget {
-    std::uint32_t sizeThis;
-    std::uint32_t target;
-};
-
-struct CameraConfigExtension {
-    std::uint32_t formatLevel[4];
-    std::uint32_t resolution;
-    std::uint32_t framerate;
-    std::uint32_t width;
-    std::uint32_t height;
-    std::uint32_t reserved;
-    void* baseOption;
-};
-
-struct CameraConfig {
-    std::uint32_t sizeThis;
-    std::uint32_t configType;
-    CameraConfigExtension extension[2];
-};
-
-struct CameraDeviceInfo {
-    std::uint32_t sizeThis;
-    std::uint32_t infoRevision;
-    std::uint32_t deviceRevision;
-    std::uint32_t padding;
-};
-
-struct CameraGetCalibrationDataParameter {
-    std::uint32_t size;
-    std::uint32_t formatType;
-    std::uint32_t functionType;
-};
-
 using GetU32 = int(APS5_VABI*)(std::int32_t, std::uint32_t, std::uint32_t*, void*);
 using SetU32 = int(APS5_VABI*)(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-
-extern "C" {
-int APS5_VABI sceCameraOpen(std::int32_t userId, std::int32_t type, std::int32_t index, void* param);
-int APS5_VABI sceCameraClose(std::int32_t handle);
-int APS5_VABI sceCameraGetAttribute(std::int32_t handle, CameraAttribute* attribute);
-int APS5_VABI sceCameraSetAttribute(std::int32_t handle, const CameraAttribute* attribute);
-int APS5_VABI sceCameraGetAutoExposureGain(std::int32_t handle, std::uint32_t channel, std::uint32_t* enable, CameraAutoExposureGainTarget* option);
-int APS5_VABI sceCameraSetAutoExposureGain(std::int32_t handle, std::uint32_t channel, std::uint32_t enable, const CameraAutoExposureGainTarget* option);
-int APS5_VABI sceCameraGetAutoWhiteBalance(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetDefectivePixelCancellation(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetLensCorrection(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetContrast(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetSaturation(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetSharpness(std::int32_t, std::uint32_t, std::uint32_t*, void*);
-int APS5_VABI sceCameraGetHue(std::int32_t, std::uint32_t, std::int32_t*, void*);
-int APS5_VABI sceCameraGetExposureGain(std::int32_t, std::uint32_t, CameraExposureGain*, void*);
-int APS5_VABI sceCameraGetWhiteBalance(std::int32_t, std::uint32_t, CameraWhiteBalance*, void*);
-int APS5_VABI sceCameraGetGamma(std::int32_t, std::uint32_t, CameraGamma*, void*);
-int APS5_VABI sceCameraSetAutoWhiteBalance(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetDefectivePixelCancellation(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetDefectivePixelCancellationInternal(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetLensCorrection(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetLensCorrectionInternal(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetContrast(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetSaturation(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetSharpness(std::int32_t, std::uint32_t, std::uint32_t, const void*);
-int APS5_VABI sceCameraSetHue(std::int32_t, std::uint32_t, std::int32_t, const void*);
-int APS5_VABI sceCameraSetExposureGain(std::int32_t, std::uint32_t, const CameraExposureGain*, const void*);
-int APS5_VABI sceCameraSetWhiteBalance(std::int32_t, std::uint32_t, const CameraWhiteBalance*, const void*);
-int APS5_VABI sceCameraSetGamma(std::int32_t, std::uint32_t, const CameraGamma*, const void*);
-int APS5_VABI sceCameraGetConfig(std::int32_t handle, CameraConfig* config);
-int APS5_VABI sceCameraSetConfig(std::int32_t handle, const CameraConfig* config);
-int APS5_VABI sceCameraSetConfigInternal(std::int32_t handle, const CameraConfig* config);
-int APS5_VABI sceCameraGetDeviceConfig(std::int32_t handle, CameraConfig* config);
-int APS5_VABI sceCameraGetDeviceConfigWithoutHandle(CameraConfig* config);
-int APS5_VABI sceCameraGetDeviceInfo(std::int32_t reserved, const CameraDeviceInfo* deviceInfo);
-int APS5_VABI sceCameraGetProductInfo(void* productInfo);
-int APS5_VABI sceCameraGetRegistryInfo(void* registryInfo);
-int APS5_VABI sceCameraGetMmapConnectedCount(std::uint32_t* count);
-int APS5_VABI sceCameraGetCalibDataFromDevice(void);
-int APS5_VABI sceCameraGetCalibrationData(const CameraGetCalibrationDataParameter* param, void* calibrationData);
-int APS5_VABI sceCameraAudioOpen(void);
-}
 
 namespace {
 
@@ -164,6 +53,7 @@ void CheckGetter(GetU32 get, std::uint32_t expected, const char* message) {
     value = 0x5a5a5a5a;
     std::uint32_t option = 0;
     Require(get(0, Channel0, &value, nullptr) == ErrorParam, "a getter must reject handle 0");
+    Require(get(99, Channel0, &value, nullptr) == ErrorNotOpen && value == 0x5a5a5a5a, "a fabricated handle must not read settings");
     Require(get(1, 0, &value, nullptr) == ErrorParam, "a getter must reject channel 0");
     Require(get(1, ChannelBoth, &value, nullptr) == ErrorParam, "a getter must reject both channels");
     Require(get(1, Channel0, nullptr, nullptr) == ErrorParam, "a getter must reject a null result");
@@ -205,7 +95,7 @@ void CheckAttribute() {
     attribute.channel = Channel1;
     Require(sceCameraGetAttribute(1, &attribute) == 0, "the attributes must be readable");
     Require(attribute.sizeThis == sizeof(CameraAttribute) && attribute.channel == Channel1, "the attribute header must be kept");
-    Require(attribute.framePosition[0] == 0 && attribute.exposureGain.exposure == 83 && attribute.exposureGain.gain == 100, "the attribute exposure is wrong");
+    Require(attribute.framePosition.x == 0 && attribute.exposureGain.exposure == 83 && attribute.exposureGain.gain == 100, "the attribute exposure is wrong");
     Require(attribute.whiteBalance.gainRed == 768 && attribute.whiteBalance.gainGreen == 512 && attribute.gamma.value == 4, "the attribute colour defaults are wrong");
     Require(attribute.saturation == 64 && attribute.contrast == 32 && attribute.sharpness == 1 && attribute.hue == 1 && attribute.reserved[3] == 0, "the attribute levels are wrong");
     attribute.channel = ChannelBoth;

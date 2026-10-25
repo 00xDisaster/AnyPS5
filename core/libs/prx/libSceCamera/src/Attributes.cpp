@@ -1,6 +1,6 @@
 #include <cstdint>
 #include <cstring>
-#include "SceTypes.hpp"
+#include "prx/libSceCamera/libSceCamera.hpp"
 #include "prx/libSceCamera/include/Camera.hpp"
 
 namespace {
@@ -8,53 +8,6 @@ namespace {
 constexpr std::uint32_t CHANNEL_0 = 1;
 constexpr std::uint32_t CHANNEL_BOTH = 3;
 constexpr std::uint32_t AECAGC_TARGET_2_0 = 0x20;
-
-struct CameraFramePosition {
-    std::uint32_t x;
-    std::uint32_t y;
-    std::uint32_t xSize;
-    std::uint32_t ySize;
-};
-
-struct CameraExposureGain {
-    std::uint32_t exposureControl;
-    std::uint32_t exposure;
-    std::uint32_t gain;
-    std::uint32_t mode;
-};
-
-struct CameraWhiteBalance {
-    std::uint32_t whiteBalanceControl;
-    std::uint32_t gainRed;
-    std::uint32_t gainBlue;
-    std::uint32_t gainGreen;
-};
-
-struct CameraGamma {
-    std::uint32_t gammaControl;
-    std::uint32_t value;
-    std::uint8_t reserved[16];
-};
-
-struct CameraAttribute {
-    std::uint32_t sizeThis;
-    std::uint32_t channel;
-    CameraFramePosition framePosition;
-    CameraExposureGain exposureGain;
-    CameraWhiteBalance whiteBalance;
-    CameraGamma gamma;
-    std::uint32_t saturation;
-    std::uint32_t contrast;
-    std::uint32_t sharpness;
-    std::int32_t hue;
-    std::uint32_t reserved[4];
-};
-static_assert(sizeof(CameraAttribute) == 112);
-
-struct CameraAutoExposureGainTarget {
-    std::uint32_t sizeThis;
-    std::uint32_t target;
-};
 
 constexpr std::uint32_t DEFAULT_CONTRAST = 32;
 constexpr std::uint32_t DEFAULT_SATURATION = 64;
@@ -69,13 +22,13 @@ bool Writable(std::uint32_t channel) { return channel >= CHANNEL_0 && channel <=
 
 int CheckGet(std::int32_t handle, std::uint32_t channel, const void* out, const void* option) {
     if (handle < 1 || !Readable(channel) || !out || option) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     return 0;
 }
 
 int RefuseSet(std::int32_t handle, std::uint32_t channel, bool valid) {
     if (handle < 1 || !Writable(channel) || !valid) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     return SCE_CAMERA_ERROR_NOT_CONNECTED;
 }
 
@@ -97,7 +50,7 @@ extern "C" {
 
 int APS5_VABI sceCameraGetAttribute(std::int32_t handle, CameraAttribute* attribute) {
     if (handle < 1 || !attribute || attribute->sizeThis != sizeof(CameraAttribute) || !Readable(attribute->channel)) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     const std::uint32_t channel = attribute->channel;
     *attribute = {};
     attribute->sizeThis = sizeof(CameraAttribute);
@@ -116,7 +69,7 @@ int APS5_VABI sceCameraGetAttribute(std::int32_t handle, CameraAttribute* attrib
 int APS5_VABI sceCameraGetAutoExposureGain(std::int32_t handle, std::uint32_t channel, std::uint32_t* enable, CameraAutoExposureGainTarget* option) {
     if (handle < 1 || !Readable(channel) || !enable) return SCE_CAMERA_ERROR_PARAM;
     if (option && option->sizeThis != sizeof(CameraAutoExposureGainTarget)) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     *enable = 0;
     if (option) *option = {};
     return 0;

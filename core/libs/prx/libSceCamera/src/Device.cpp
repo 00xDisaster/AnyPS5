@@ -1,21 +1,8 @@
 #include <cstdint>
-#include "SceTypes.hpp"
+#include "prx/libSceCamera/libSceCamera.hpp"
 #include "prx/libSceCamera/include/Camera.hpp"
 
 namespace {
-
-struct CameraDeviceInfo {
-    std::uint32_t sizeThis;
-    std::uint32_t infoRevision;
-    std::uint32_t deviceRevision;
-    std::uint32_t padding;
-};
-
-struct CameraGetCalibrationDataParameter {
-    std::uint32_t size;
-    std::uint32_t formatType;
-    std::uint32_t functionType;
-};
 
 constexpr std::uint32_t CALIBRATION_IMAGE_INVERSE_RECTIFICATION = 1;
 

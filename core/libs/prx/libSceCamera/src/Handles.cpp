@@ -1,6 +1,9 @@
-#include <atomic>
+#include <limits>
+#include <mutex>
+#include <unordered_set>
+#include <stdexcept>
 #include <cstdint>
-#include "SceTypes.hpp"
+#include "prx/libSceCamera/libSceCamera.hpp"
 #include "prx/libSceCamera/include/Camera.hpp"
 
 namespace {
@@ -8,48 +11,44 @@ namespace {
 constexpr std::int32_t SCE_USER_SERVICE_USER_ID_SYSTEM = 0xFF;
 constexpr std::uint32_t MAX_FRAME_DATA_SIZE = 584;
 
-struct CameraStartParameter {
-    std::uint32_t sizeThis;
-    std::uint32_t formatLevel[2];
-    void* startOption;
-};
-
-struct CameraFrameData {
-    std::uint32_t sizeThis;
-    std::uint32_t readMode;
-    std::uint32_t framePosition[2][4][4];
-    void* framePointerList[2][4];
-    std::uint32_t frameSize[2][4];
-    std::uint32_t status[2];
-};
-
-std::atomic<std::int32_t> openHandles{0};
+std::mutex handlesMutex;
+std::unordered_set<std::int32_t> openHandles;
+std::int64_t nextHandle = 1;
 
 int CheckStart(std::int32_t handle, const CameraStartParameter* param) {
     if (handle < 1 || !param || param->sizeThis != sizeof(CameraStartParameter)) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     return 0;
 }
 
 }
 
 bool Camera::IsOpen() {
-    return openHandles.load() != 0;
+    std::lock_guard lock(handlesMutex);
+    return !openHandles.empty();
+}
+
+bool Camera::IsOpen(std::int32_t handle) {
+    std::lock_guard lock(handlesMutex);
+    return openHandles.contains(handle);
 }
 
 extern "C" {
 
 int APS5_VABI sceCameraOpen(std::int32_t userId, std::int32_t type, std::int32_t index, void*) {
     if (userId != SCE_USER_SERVICE_USER_ID_SYSTEM || type != 0 || index != 0) return SCE_CAMERA_ERROR_PARAM;
-    return ++openHandles;
+    std::lock_guard lock(handlesMutex);
+    if (nextHandle > std::numeric_limits<std::int32_t>::max()) throw std::runtime_error("camera handle space exhausted");
+    const auto handle = static_cast<std::int32_t>(nextHandle);
+    openHandles.insert(handle);
+    ++nextHandle;
+    return handle;
 }
 
 int APS5_VABI sceCameraClose(std::int32_t handle) {
     if (handle < 1) return SCE_CAMERA_ERROR_PARAM;
-    std::int32_t open = openHandles.load();
-    do {
-        if (open == 0) return SCE_CAMERA_ERROR_NOT_OPEN;
-    } while (!openHandles.compare_exchange_weak(open, open - 1));
+    std::lock_guard lock(handlesMutex);
+    if (openHandles.erase(handle) == 0) return SCE_CAMERA_ERROR_NOT_OPEN;
     return 0;
 }
 
@@ -70,7 +69,7 @@ int APS5_VABI sceCameraStartByHandle(std::int32_t handle, const CameraStartParam
 
 int APS5_VABI sceCameraStop(std::int32_t handle) {
     if (handle < 1) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     return 0;
 }
 
@@ -88,7 +87,7 @@ int APS5_VABI sceCameraGetFrameData(std::int32_t handle, CameraFrameData* frameD
 
 int APS5_VABI sceCameraIsValidFrameData(std::int32_t handle, const CameraFrameData* frameData) {
     if (handle < 1 || !frameData || frameData->sizeThis > MAX_FRAME_DATA_SIZE) return SCE_CAMERA_ERROR_PARAM;
-    if (!Camera::IsOpen()) return SCE_CAMERA_ERROR_NOT_OPEN;
+    if (!Camera::IsOpen(handle)) return SCE_CAMERA_ERROR_NOT_OPEN;
     return frameData->status[0] == 1 && frameData->status[1] == 1;
 }
 

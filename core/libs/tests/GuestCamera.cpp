@@ -1,41 +1,9 @@
-#include "prx/libSceCamera/include/Api.hpp"
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceCamera/libSceCamera.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
-
-struct CameraStartParameter {
-    std::uint32_t sizeThis;
-    std::uint32_t formatLevel[2];
-    void* startOption;
-};
-
-struct CameraFrameData {
-    std::uint32_t sizeThis;
-    std::uint32_t readMode;
-    std::uint32_t framePosition[2][4][4];
-    void* framePointerList[2][4];
-    std::uint32_t frameSize[2][4];
-    std::uint32_t status[2];
-    std::uint8_t rest[584 - 240];
-};
-
-extern "C" {
-int APS5_VABI sceCameraIsAttached(std::int32_t index);
-int APS5_VABI sceCameraOpen(std::int32_t userId, std::int32_t type, std::int32_t index, void* param);
-int APS5_VABI sceCameraClose(std::int32_t handle);
-int APS5_VABI sceCameraCloseByHandle(std::int32_t handle);
-int APS5_VABI sceCameraStart(std::int32_t handle, const CameraStartParameter* param);
-int APS5_VABI sceCameraStartByHandle(std::int32_t handle, const CameraStartParameter* param);
-int APS5_VABI sceCameraStop(std::int32_t handle);
-int APS5_VABI sceCameraStopByHandle(std::int32_t handle);
-int APS5_VABI sceCameraSetVideoSync(void);
-int APS5_VABI sceCameraGetCalibData(void);
-int APS5_VABI sceCameraGetFrameData(std::int32_t handle, CameraFrameData* frameData);
-int APS5_VABI sceCameraIsValidFrameData(std::int32_t handle, const CameraFrameData* frameData);
-}
 
 namespace {
 
@@ -131,11 +99,30 @@ void CheckFrames() {
 
 void CheckClose() {
     Require(sceCameraClose(0) == ErrorParam, "closing handle 0 must be rejected");
-    Require(sceCameraClose(2) == 0, "closing the second handle must succeed");
-    Require(sceCameraCloseByHandle(1) == 0, "closing the first handle by handle must succeed");
-    Require(sceCameraClose(1) == ErrorNotOpen, "closing after every handle is closed must report NOT_OPEN");
-    Require(sceCameraOpen(SystemUser, 0, 0, nullptr) == 1, "reopening must start again from handle 1");
-    Require(sceCameraClose(1) == 0, "closing the reopened handle must succeed");
+    const CameraStartParameter start = Start(1, 1);
+    CameraFrameData frame{};
+    frame.sizeThis = sizeof(frame);
+    frame.status[0] = frame.status[1] = 1;
+    for (const int handle : {99, 1}) {
+        if (handle == 1) Require(sceCameraClose(1) == 0, "closing the first handle must succeed");
+        Require(sceCameraClose(handle) == ErrorNotOpen, "a stale or fabricated handle must not close another session");
+        Require(sceCameraCloseByHandle(handle) == ErrorNotOpen, "close by handle must reject a stale or fabricated handle");
+        Require(sceCameraStart(handle, &start) == ErrorNotOpen, "start must reject a stale or fabricated handle");
+        Require(sceCameraStartByHandle(handle, &start) == ErrorNotOpen, "start by handle must reject a stale or fabricated handle");
+        Require(sceCameraStop(handle) == ErrorNotOpen, "stop must reject a stale or fabricated handle");
+        Require(sceCameraStopByHandle(handle) == ErrorNotOpen, "stop by handle must reject a stale or fabricated handle");
+        Require(sceCameraIsValidFrameData(handle, &frame) == ErrorNotOpen, "frame validation must reject a stale or fabricated handle");
+        Require(sceCameraStop(2) == 0, "the second session must remain open");
+    }
+    const int third = sceCameraOpen(SystemUser, 0, 0, nullptr);
+    Require(third > 2, "opening after a close must not reuse a live or stale handle");
+    Require(sceCameraCloseByHandle(2) == 0, "closing the second handle must succeed");
+    Require(sceCameraStop(third) == 0, "closing the second handle must preserve the third");
+    Require(sceCameraClose(third) == 0, "closing the third handle must succeed");
+    const int reopened = sceCameraOpen(SystemUser, 0, 0, nullptr);
+    Require(reopened > third, "reopening must not revive a stale handle");
+    Require(sceCameraClose(third) == ErrorNotOpen, "a stale handle must not close the reopened session");
+    Require(sceCameraClose(reopened) == 0, "closing the reopened handle must succeed");
 }
 
 }
