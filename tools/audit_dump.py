@@ -84,7 +84,8 @@ def comparison_path(path, links=frozenset()):
             raise RuntimeError("symbolic link cycle")
         target = prefix.readlink()
         destination = target if target.is_absolute() else prefix.parent / target
-        return comparison_path(destination / path.relative_to(prefix), links | {identity})
+        resolved_target = comparison_path(destination, links | {identity})
+        return comparison_path(resolved_target / path.relative_to(prefix), links)
     resolved = path.resolve()
     drive = resolved.drive
     if drive.casefold().startswith("\\\\?\\unc\\"):

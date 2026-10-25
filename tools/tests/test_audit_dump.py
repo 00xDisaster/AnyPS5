@@ -282,6 +282,18 @@ class AuditDumpTests(unittest.TestCase):
             self.skipTest("symbolic links unavailable")
         self.assert_report_rejected(first)
 
+    def test_repeated_parent_alias_in_link_target_is_not_a_cycle(self):
+        alias = self.root / "parent-alias"
+        link = self.root / "report-through-parent"
+        target = self.root / "external-report.json"
+        try:
+            os.symlink(self.root, alias, target_is_directory=True)
+            os.symlink(alias / target.name, link)
+        except OSError:
+            self.skipTest("symbolic links unavailable")
+        self.assertEqual(audit_dump.comparison_path(alias / link.name), target.resolve())
+        self.assertFalse(audit_dump.report_overlaps_dump(alias / link.name, self.dump))
+
     def test_json_output_hardlink_aliases_of_dump_files_are_rejected(self):
         self.module("Media/Plugins/libfmod.prx")
         for name in ("eboot.bin", "Media/Plugins/libfmod.prx"):
