@@ -83,27 +83,52 @@ def progress(message):
     print(f"pr_overlap: {message}", file=sys.stderr, flush=True)
 
 
-def open_prs(base):
-    query = urlencode({"state": "open", "base": base, "per_page": 100})
-    out = gh("api", "--paginate", f"repos/{REPO}/pulls?{query}")
-    prs = {}
+LAST_PAGE = re.compile(r'[?&]page=(\d+)>; rel="last"')
+
+
+def page(url):
+    out = gh("api", "--include", url)
+    if not out.startswith("HTTP/"):
+        return "", out
+    blank = re.search(r"\r?\n\r?\n", out)
+    return (out, "") if blank is None else (out[:blank.start()], out[blank.end():])
+
+
+def json_pages(out):
     decoder = json.JSONDecoder()
     offset = 0
-    page_count = 0
-    pull_requests = []
+    pages = []
     while offset < len(out):
         while offset < len(out) and out[offset].isspace():
             offset += 1
         if offset == len(out):
             break
-        page, offset = decoder.raw_decode(out, offset)
-        if not isinstance(page, list):
-            raise ValueError("gh api --paginate returned a non-array page")
-        page_count += 1
-        pull_requests.extend(page)
-    if page_count == 0:
-        raise ValueError("gh api --paginate returned no JSON pages")
+        found, offset = decoder.raw_decode(out, offset)
+        if not isinstance(found, list):
+            raise ValueError("gh api returned a non-array page")
+        pages.append(found)
+    return pages
 
+
+def open_prs(base):
+    query = urlencode({"state": "open", "base": base, "per_page": 100})
+    url = f"repos/{REPO}/pulls?{query}"
+    head, out = page(f"{url}&page=1")
+    pages = json_pages(out)
+    if not pages:
+        raise ValueError("gh api returned no JSON pages")
+    last = LAST_PAGE.search(head)
+    if last:
+        numbers = range(2, int(last.group(1)) + 1)
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            for out in executor.map(lambda number: page(f"{url}&page={number}")[1], numbers):
+                pages.extend(json_pages(out))
+        pushed_past_last = numbers.stop
+        while len(pages[-1]) == 100:
+            pages.extend(json_pages(page(f"{url}&page={pushed_past_last}")[1]) or [[]])
+            pushed_past_last += 1
+    pull_requests = [pr for found in pages for pr in found]
+    prs = {}
     for pr in pull_requests:
         prs[pr["number"]] = {
             "ref": f"refs/pr/{pr['number']}",
