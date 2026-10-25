@@ -1,0 +1,172 @@
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+TOOL = ROOT / "tools/check_compile.py"
+
+
+class CheckCompileModeTests(unittest.TestCase):
+    def compilers(self):
+        values = list(dict.fromkeys(value for value in (shutil.which("gcc"), shutil.which("clang")) if value))
+        if not values:
+            self.skipTest("needs GCC or Clang")
+        return values
+
+    def run_tool(self, root, build, source, arguments, field):
+        if not (root / ".git").exists():
+            subprocess.run(["git", "init", "-q", str(root)], capture_output=True, check=True)
+        command = (subprocess.list2cmdline(arguments) if os.name == "nt" else
+                   " ".join(shlex.quote(value) for value in arguments))
+        entry = {"directory": str(build), "file": str(source),
+                 field: arguments if field == "arguments" else command}
+        (build / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
+        before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+        result = subprocess.run([sys.executable, "-I", str(TOOL), "--build", str(build), str(source)],
+                                cwd=root, capture_output=True, text=True, encoding="utf-8", check=False)
+        self.assertEqual({path for path in root.rglob("*") if path.is_file()}, set(before), result.stderr)
+        for path, data in before.items():
+            self.assertEqual(path.read_bytes(), data, path.name)
+        self.assertNotIn("Traceback", result.stderr)
+        return result
+
+    def check_modes(self, variants, dependency=False, configure=None, invalid=None, marker="syntax_must_be_checked"):
+        for compiler in self.compilers():
+            for flags in variants:
+                for field in ("arguments", "command"):
+                    with self.subTest(compiler=compiler, flags=flags, field=field), tempfile.TemporaryDirectory(prefix="syntax mode ") as name:
+                        root = Path(name).resolve()
+                        build = root / "build"
+                        build.mkdir()
+                        source = root / "unit.c"
+                        object_file, dependency_file = build / "unit.o", build / "unit.d"
+                        prefix = "#if REQUIRED != 42\n#error definition was lost\n#endif\n"
+                        suffix = ""
+                        extra = list(flags)
+                        if configure is not None:
+                            additions, opening, suffix = configure(root, build, source)
+                            extra += additions
+                            prefix = opening + prefix
+                        valid = prefix + "int main(void) { return 0; }\n" + suffix
+                        invalid_text = prefix + (invalid or "int syntax_must_be_checked = ;\n") + suffix
+                        compile_flags = [] if any(flag in flags for flag in ("-E", "--preprocess", "-M", "--dependencies", "-MM", "--user-dependencies")) else ["-c"]
+                        arguments = [compiler, "-D", "REQUIRED=42", *extra, *compile_flags, str(source), "-o", str(object_file)]
+                        if dependency:
+                            arguments += ["-MF", str(dependency_file)]
+                        source.write_text(valid, encoding="utf-8")
+                        control = subprocess.run(arguments, cwd=build, capture_output=True, text=True, check=False)
+                        self.assertEqual(control.returncode, 0, control.stderr)
+                        object_file.write_bytes(b"existing object output\n")
+                        dependency_file.write_bytes(b"existing dependency output\n")
+                        for text, expected in ((valid, 0), (invalid_text, 1)):
+                            source.write_text(text, encoding="utf-8")
+                            result = self.run_tool(root, build, source, arguments, field)
+                            self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                            if expected:
+                                self.assertIn(marker, result.stderr)
+                            else:
+                                self.assertIn("1 translation units compile", result.stdout)
+
+    def test_preprocessing_modes_reach_syntax_errors(self):
+        self.check_modes((("-E",), ("--preprocess",)))
+
+    def test_dependency_modes_reach_syntax_errors(self):
+        self.check_modes((("-M",), ("--dependencies",)), dependency=True)
+
+    def test_user_dependency_modes_reach_syntax_errors(self):
+        self.check_modes((("-MM",), ("--user-dependencies",)), dependency=True)
+
+    def test_generated_header_mode_does_not_hide_missing_headers(self):
+        self.check_modes((("-M", "-MG"), ("--dependencies", "--print-missing-file-dependencies")),
+                         dependency=True, invalid='#include "missing_generated_header.h"\n',
+                         marker="missing_generated_header.h")
+
+    def test_preprocessor_output_companions_do_not_block_syntax_checks(self):
+        self.check_modes((("-Werror", "-E", "-P"), ("-Werror", "--preprocess", "--no-line-commands")))
+
+    def test_macro_dump_modes_still_check_syntax(self):
+        self.check_modes((("-Werror", "-E", "-dM"), ("-Werror", "-E", "-dD")))
+
+    def test_comment_output_modes_still_check_syntax(self):
+        self.check_modes((("-Werror", "-E", "-C"), ("-Werror", "-E", "-CC")))
+
+    def test_joined_options_before_preprocessing_modes_are_preserved(self):
+        self.check_modes((("-DANOTHER_MACRO", "-E"), ("-UUNUSED_MACRO", "-E"), ("-O2", "-Wall", "-E")))
+
+    def test_include_directory_values_can_look_like_modes(self):
+        def configure(root, build, source):
+            directory = build / "-E"
+            directory.mkdir()
+            (directory / "only_here.h").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
+            return ["-I", "-E"], '#include "only_here.h"\n#ifndef FROM_INCLUDE\n#error include lost\n#endif\n', ""
+        self.check_modes(((),), configure=configure)
+
+    def test_library_directory_values_can_look_like_modes(self):
+        self.check_modes((("-L", "-E"),))
+
+    def test_forced_include_values_can_look_like_modes(self):
+        def configure(root, build, source):
+            (build / "-M").write_text("#define FROM_INCLUDE 1\n", encoding="utf-8")
+            return ["-include", "-M"], "#ifndef FROM_INCLUDE\n#error include lost\n#endif\n", ""
+        self.check_modes(((),), configure=configure)
+
+    def test_source_path_used_as_an_option_value_is_preserved(self):
+        def configure(root, build, source):
+            return ["-include", str(source)], "#ifndef INCLUDED_ONCE\n#define INCLUDED_ONCE\n", "#endif\n"
+        self.check_modes(((),), configure=configure)
+
+    def test_missing_values_fail_before_a_syntax_flag_is_injected(self):
+        for compiler in self.compilers():
+            for option in ("-I", "-L", "-include", "-x", "-o", "-MF"):
+                for field in ("arguments", "command"):
+                    with self.subTest(compiler=compiler, option=option, field=field), tempfile.TemporaryDirectory(prefix="syntax missing ") as name:
+                        root = Path(name).resolve()
+                        build = root / "build"
+                        build.mkdir()
+                        source = root / "unit.c"
+                        source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                        result = self.run_tool(root, build, source, [compiler, option], field)
+                        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                        self.assertIn("missing", result.stderr.lower())
+
+    def test_unknown_options_still_fail(self):
+        for compiler in self.compilers():
+            for field in ("arguments", "command"):
+                with self.subTest(compiler=compiler, field=field), tempfile.TemporaryDirectory(prefix="syntax unknown ") as name:
+                    root = Path(name).resolve()
+                    build = root / "build"
+                    build.mkdir()
+                    source = root / "unit.c"
+                    source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                    option = "-funknown-syntax-mode-test"
+                    result = self.run_tool(root, build, source, [compiler, "-E", option, "-c", str(source)], field)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(option, result.stderr)
+
+    def test_unknown_operand_counts_are_rejected_before_mode_rewriting(self):
+        compiler = shutil.which("clang")
+        if compiler is None:
+            self.skipTest("needs Clang")
+        for field in ("arguments", "command"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory(prefix="syntax arity ") as name:
+                root = Path(name).resolve()
+                build = root / "build"
+                build.mkdir()
+                source = root / "unit.c"
+                source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                arguments = [compiler, "-fdebug-compilation-dir", "-E", "-c", str(source), "-o", str(build / "unit.o")]
+                control = subprocess.run(arguments, cwd=build, capture_output=True, text=True, check=False)
+                self.assertEqual(control.returncode, 0, control.stderr)
+                result = self.run_tool(root, build, source, arguments, field)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("unknown operand count", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
