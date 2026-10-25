@@ -24,6 +24,13 @@ static_assert(offsetof(LibreSslX509Store, param) == 24);
 static_assert(offsetof(LibreSslX509Store, callbacks) == 32);
 static_assert(offsetof(LibreSslX509Store, exData) == 120);
 static_assert(offsetof(LibreSslX509Store, references) == 128);
+static_assert(sizeof(LibreSslX509LookupMethod) == 80);
+static_assert(offsetof(LibreSslX509LookupMethod, shutdown) == 32);
+static_assert(offsetof(LibreSslX509LookupMethod, ctrl) == 40);
+static_assert(sizeof(LibreSslX509Lookup) == 32);
+static_assert(offsetof(LibreSslX509Lookup, method) == 8);
+static_assert(offsetof(LibreSslX509Lookup, methodData) == 16);
+static_assert(offsetof(LibreSslX509Lookup, storeContext) == 24);
 
 namespace {
 
@@ -51,6 +58,14 @@ int APS5_VABI CompareObjects(const void*, const void*) {
     return 0;
 }
 
+int APS5_VABI LoadFile(LibreSslX509Lookup*, int, const char*, std::int64_t, char**) {
+    NotImplemented_nid_no_patch("X509_LOOKUP_file: loading certificates and CRLs from a file");
+    return 0;
+}
+
+LibreSslX509LookupMethod fileLookup{"Load file into cache", nullptr, nullptr, nullptr, nullptr,
+    reinterpret_cast<void*>(LoadFile), nullptr, nullptr, nullptr, nullptr};
+
 Stack* NewStack(Compare compare) {
     auto* stack = static_cast<Stack*>(malloc_nid_postfix(sizeof(Stack)));
     if (!stack) return nullptr;
@@ -76,6 +91,29 @@ void FreeStack(Stack* stack) {
 char** Elements(const Stack* stack, const char* function) {
     if (!stack->data) NotImplemented_nid_no_patch(function);
     return stack->data;
+}
+
+bool Push(Stack* stack, void* element, const char* function) {
+    if (!stack) return false;
+    if (stack->numAlloc <= stack->num + 1) {
+        if (stack->numAlloc <= 0 || stack->num < 0) NotImplemented_nid_no_patch(function);
+        auto* grown = static_cast<char**>(realloc_nid_postfix(stack->data, static_cast<std::size_t>(stack->numAlloc) * 2 * sizeof(char*)));
+        if (!grown) return false;
+        stack->data = grown;
+        stack->numAlloc *= 2;
+    }
+    stack->data[stack->num] = static_cast<char*>(element);
+    ++stack->num;
+    stack->sorted = 0;
+    return true;
+}
+
+void FreeLookup(LibreSslX509Lookup* lookup, bool shutdown, const char* function) {
+    if (!lookup) NotImplemented_nid_no_patch(function);
+    const auto* method = lookup->method;
+    if (shutdown && method && method->shutdown) NotImplemented_nid_no_patch("X509_LOOKUP shutdown callback");
+    if (method && method->free) NotImplemented_nid_no_patch("X509_LOOKUP free callback");
+    free_nid_postfix(lookup);
 }
 
 bool HoldsElements(const Stack* stack, const char* function) {
@@ -150,7 +188,11 @@ void APS5_VABI X509_STORE_free_nid_postfix(LibreSslX509Store* store) {
     if (!store) return;
     if (std::atomic_ref<std::int32_t>(store->references).fetch_sub(1) - 1 > 0) return;
     auto* lookupMethods = static_cast<Stack*>(store->lookupMethods);
-    if (lookupMethods && lookupMethods->num > 0) NotImplemented_nid_no_patch("X509_STORE_free: lookup methods");
+    if (lookupMethods && lookupMethods->num > 0) {
+        char** const lookups = Elements(lookupMethods, __func__);
+        for (int index = 0; index < lookupMethods->num; ++index)
+            FreeLookup(reinterpret_cast<LibreSslX509Lookup*>(lookups[index]), true, __func__);
+    }
     FreeStack(lookupMethods);
     auto* objects = static_cast<Stack*>(store->objects);
     if (HoldsElements(objects, __func__)) NotImplemented_nid_no_patch("X509_STORE_free: stored certificates and CRLs");
@@ -165,6 +207,36 @@ int APS5_VABI X509_STORE_set_flags_nid_postfix(LibreSslX509Store* store, std::ui
     store->param->flags |= flags;
     if (flags & PolicyMask) store->param->flags |= PolicyCheck;
     return 1;
+}
+
+LibreSslX509LookupMethod* APS5_VABI X509_LOOKUP_file_nid_postfix(void) {
+    return &fileLookup;
+}
+
+LibreSslX509Lookup* APS5_VABI X509_STORE_add_lookup_nid_postfix(LibreSslX509Store* store, LibreSslX509LookupMethod* method) {
+    if (!store) NotImplemented_nid_no_patch(__func__);
+    auto* lookupMethods = static_cast<Stack*>(store->lookupMethods);
+    if (lookupMethods && lookupMethods->num > 0) {
+        char** const lookups = Elements(lookupMethods, __func__);
+        for (int index = 0; index < lookupMethods->num; ++index) {
+            auto* lookup = reinterpret_cast<LibreSslX509Lookup*>(lookups[index]);
+            if (!lookup) NotImplemented_nid_no_patch(__func__);
+            if (lookup->method == method) return lookup;
+        }
+    }
+    auto* lookup = static_cast<LibreSslX509Lookup*>(malloc_nid_postfix(sizeof(LibreSslX509Lookup)));
+    if (!lookup) return nullptr;
+    lookup->init = 0;
+    lookup->skip = 0;
+    lookup->method = method;
+    lookup->methodData = nullptr;
+    lookup->storeContext = nullptr;
+    if (!method) NotImplemented_nid_no_patch(__func__);
+    if (method->newItem) NotImplemented_nid_no_patch("X509_LOOKUP new_item callback");
+    lookup->storeContext = store;
+    if (Push(lookupMethods, lookup, __func__)) return lookup;
+    FreeLookup(lookup, false, __func__);
+    return nullptr;
 }
 
 }
