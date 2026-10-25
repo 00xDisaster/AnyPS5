@@ -1,4 +1,5 @@
 import argparse
+import bisect
 import functools
 import re
 import sys
@@ -94,15 +95,12 @@ def reads(roots, prefixes=PREFIXES):
             except (OSError, UnicodeDecodeError) as error:
                 raise ValueError(f"cannot read {path.as_posix()}: {error}") from error
             lines = text.splitlines()
-            for number, line in enumerate(lines, 1):
+            starts = [0] + [match.end() for match in re.finditer("\n", text)]
+            for reader, match in line_reads(text, prefixes):
+                number = bisect.bisect_right(starts, match.start())
                 window = "\n".join(lines[number - 1:number + 2])
-                if not any(prefix in window for prefix in prefixes):
-                    continue
-                for reader, match in line_reads(window, prefixes):
-                    if match.start() >= len(line):
-                        continue
-                    found.setdefault(match.group("name"), []).append(
-                        (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
+                found.setdefault(match.group("name"), []).append(
+                    (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
     for sites in found.values():
         sites.sort()
     return found

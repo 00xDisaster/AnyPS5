@@ -84,6 +84,21 @@ class EnvReferenceTests(unittest.TestCase):
         found = env_reference.reads([root / "core"])
         self.assertIn("APS5_MULTILINE", found)
 
+    def test_long_multiline_reads_are_checked_and_keep_their_locations(self):
+        root = self.fixture()
+        source = root / "core" / "Sample.cpp"
+        source.write_text('auto a = std::getenv(\n\n\n\n"APS5_DEEP_STRING");\n'
+                          'auto b = EnvInt(\n\n\n\n"APS5_DEEP_COUNT", 17);\n', encoding="utf-8")
+        found = env_reference.reads([root / "core"])
+        self.assertEqual(found["APS5_DEEP_STRING"], [(source.as_posix(), 1, "string", "")])
+        self.assertEqual(found["APS5_DEEP_COUNT"], [(source.as_posix(), 6, "integer", "17")])
+        doc = root / "ENVIRONMENT.md"
+        doc.write_text("", encoding="utf-8")
+        out = io.StringIO()
+        self.assertEqual(env_reference.check(found, doc, BOTH, out), 1)
+        self.assertIn("APS5_DEEP_STRING", out.getvalue())
+        self.assertIn("APS5_DEEP_COUNT", out.getvalue())
+
     def test_whitespace_before_parentheses_preserves_names_kinds_and_defaults(self):
         root = self.fixture()
         source = root / "core" / "Sample.cpp"
