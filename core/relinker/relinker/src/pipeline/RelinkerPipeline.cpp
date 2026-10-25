@@ -265,6 +265,8 @@ RelinkResult RelinkerPipeline::Relink() {
     auto readCStr = [&](FileByteOffset strOff) -> std::string {
         if (strOff >= dynStrTabSize)
             throw RelinkerException("Dynamic string offset is outside DT_STRSZ", strOff);
+        if (strOff == 0 && raw[dynStrTabOffset] != 0)
+            throw RelinkerException("Dynamic string table does not begin with a NUL byte", dynStrTabOffset);
         std::string result;
         FileByteOffset pos = dynStrTabOffset + strOff;
         const FileByteOffset end = dynStrTabOffset + dynStrTabSize;
