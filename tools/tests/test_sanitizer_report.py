@@ -8,6 +8,9 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import sanitizer_report
 
+REPOSITORY = Path(__file__).resolve().parents[2]
+KNOWN_FAILURES = REPOSITORY / ".github" / "sanitizer-known-failures.txt"
+
 
 def case(name, status="run", body=""):
     return f'<testcase name="{name}" classname="{name}" time="0.1" status="{status}">{body}</testcase>'
@@ -203,6 +206,16 @@ class SanitizerReportTests(unittest.TestCase):
         code, stdout, _ = self.run_main(self.write(suite(case("plain", "fail", '<failure message=""/><system-out>FAIL</system-out>'))))
         self.assertEqual(code, 1)
         self.assertIn("| Failed test |\n| - |\n| `plain` |\n", stdout)
+
+
+
+class RepositoryKnownFailuresTests(unittest.TestCase):
+    def test_every_entry_parses(self):
+        self.assertTrue(sanitizer_report.load_known(KNOWN_FAILURES, list(sanitizer_report.SANITIZERS)))
+
+    def test_entries_stay_sorted_by_test_name(self):
+        names = [line.split(None, 1)[0] for line in KNOWN_FAILURES.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(names, sorted(names))
 
 
 if __name__ == "__main__":
