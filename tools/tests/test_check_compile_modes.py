@@ -13,8 +13,8 @@ TOOL = ROOT / "tools/check_compile.py"
 
 
 class CheckCompileModeTests(unittest.TestCase):
-    def compilers(self):
-        values = list(dict.fromkeys(value for value in (shutil.which("gcc"), shutil.which("clang")) if value))
+    def compilers(self, names=("gcc", "clang")):
+        values = list(dict.fromkeys(value for value in map(shutil.which, names) if value))
         if not values:
             self.skipTest("needs GCC or Clang")
         return values
@@ -36,8 +36,8 @@ class CheckCompileModeTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
         return result
 
-    def check_modes(self, variants, dependency=False, configure=None, invalid=None, marker="syntax_must_be_checked"):
-        for compiler in self.compilers():
+    def check_modes(self, variants, dependency=False, configure=None, invalid=None, marker="syntax_must_be_checked", compiler_names=("gcc", "clang"), wrap=False, trailing=False):
+        for compiler in self.compilers(compiler_names):
             for flags in variants:
                 for field in ("arguments", "command"):
                     with self.subTest(compiler=compiler, flags=flags, field=field), tempfile.TemporaryDirectory(prefix="syntax mode ") as name:
@@ -56,7 +56,15 @@ class CheckCompileModeTests(unittest.TestCase):
                         valid = prefix + "int main(void) { return 0; }\n" + suffix
                         invalid_text = prefix + (invalid or "int syntax_must_be_checked = ;\n") + suffix
                         compile_flags = [] if any(flag in flags for flag in ("-E", "--preprocess", "-M", "--dependencies", "-MM", "--user-dependencies")) else ["-c"]
-                        arguments = [compiler, "-D", "REQUIRED=42", *extra, *compile_flags, str(source), "-o", str(object_file)]
+                        driver = [compiler]
+                        if wrap:
+                            wrapper = root / "wrapper.py"
+                            wrapper.write_text("import subprocess, sys\n"
+                                               "if sys.argv[2:].count('-fsyntax-only') != 1: sys.exit(78)\n"
+                                               "sys.exit(subprocess.run(sys.argv[1:]).returncode)\n", encoding="utf-8")
+                            driver = [sys.executable, str(wrapper), compiler]
+                        arguments = [*driver, "-D", "REQUIRED=42", *([] if trailing else extra),
+                                     *compile_flags, str(source), *(extra if trailing else []), "-o", str(object_file)]
                         if dependency:
                             arguments += ["-MF", str(dependency_file)]
                         source.write_text(valid, encoding="utf-8")
@@ -93,11 +101,29 @@ class CheckCompileModeTests(unittest.TestCase):
     def test_macro_dump_modes_still_check_syntax(self):
         self.check_modes((("-Werror", "-E", "-dM"), ("-Werror", "-E", "-dD")))
 
+    def test_include_dump_mode_still_checks_syntax(self):
+        self.check_modes((("-Werror", "-E", "-dI"),))
+
+    def test_real_compiler_wrapper_keeps_one_syntax_mode(self):
+        self.check_modes((("-fsyntax-only", "-E"),), wrap=True)
+
+    def test_trailing_preprocessing_mode_still_checks_syntax(self):
+        self.check_modes((("-E",),), trailing=True)
+
     def test_comment_output_modes_still_check_syntax(self):
         self.check_modes((("-Werror", "-E", "-C"), ("-Werror", "-E", "-CC")))
 
-    def test_joined_options_before_preprocessing_modes_are_preserved(self):
-        self.check_modes((("-DANOTHER_MACRO", "-E"), ("-UUNUSED_MACRO", "-E"), ("-O2", "-Wall", "-E")))
+    def test_joined_definitions_before_preprocessing_modes_are_preserved(self):
+        self.check_modes((("-DANOTHER_MACRO", "-E"),))
+
+    def test_joined_undefinitions_before_preprocessing_modes_are_preserved(self):
+        self.check_modes((("-UUNUSED_MACRO", "-E"),))
+
+    def test_optimization_and_warning_options_before_preprocessing_modes_are_preserved(self):
+        self.check_modes((("-O2", "-Wall", "-E"),))
+
+    def test_gcc_negative_syntax_mode_cannot_enable_output(self):
+        self.check_modes((("-fno-syntax-only",),), compiler_names=("gcc",))
 
     def test_explicit_cpp_language_is_preserved(self):
         self.check_modes((("-E", "-x", "c++"),))
