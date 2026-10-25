@@ -123,6 +123,10 @@ class CheckCompileModeTests(unittest.TestCase):
         self.check_modes((("-O2", "-Wall", "-E"),))
 
     def test_gcc_negative_syntax_mode_cannot_enable_output(self):
+        compiler = self.compilers(("gcc",))[0]
+        version = subprocess.run([compiler, "--version"], capture_output=True, text=True, check=False)
+        if "clang" in (version.stdout + version.stderr).lower():
+            self.skipTest("GCC's negative syntax mode is unsupported by Clang")
         self.check_modes((("-fno-syntax-only",),), compiler_names=("gcc",))
 
     def test_explicit_cpp_language_is_preserved(self):
