@@ -223,6 +223,16 @@ static void ReportPlaceholders() {
     }
 }
 
+static void ReportUnimplemented() {
+    try {
+        sceNpUniversalDataSystemIntInitialize();
+    } catch (const std::runtime_error& error) {
+        Require(std::string(error.what()) == "sceNpUniversalDataSystemIntInitialize not implemented", "sceNpUniversalDataSystemIntInitialize threw");
+        return;
+    }
+    Require(false, "sceNpUniversalDataSystemIntInitialize must report that it is not implemented");
+}
+
 int main() {
     const auto previous = std::filesystem::current_path();
     const auto root = std::filesystem::temp_directory_path() / ("anyps5-trophy-data-" + std::to_string(std::random_device{}()));
@@ -236,6 +246,7 @@ int main() {
     ReportTrophyData(context);
     PostUnlocks(context);
     ReportPlaceholders();
+    ReportUnimplemented();
 
     std::filesystem::current_path(previous);
     std::filesystem::remove_all(root);

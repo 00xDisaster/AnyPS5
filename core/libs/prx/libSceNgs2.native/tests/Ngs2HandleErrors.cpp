@@ -1,4 +1,5 @@
 #include "Ngs2Test.hpp"
+#include "prx/libSceNgs2.native/include/Api.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -11,6 +12,16 @@
 
 static void Status(int actual, int expected, const char* message) {
     if (actual != expected) throw std::runtime_error(message);
+}
+
+static void CheckUnimplemented() {
+    try {
+        sceNgs2RackQueryInfo();
+    } catch (const std::runtime_error& error) {
+        Require(std::string(error.what()) == "sceNgs2RackQueryInfo not implemented");
+        return;
+    }
+    throw std::runtime_error("sceNgs2RackQueryInfo must report that it is not implemented");
 }
 
 static void CheckResetOption() {
@@ -316,6 +327,7 @@ int main() {
         CheckSystemOption();
         CheckSetGrainSamples();
         CheckSetSampleRate();
+        CheckUnimplemented();
         std::cout << "NGS2 PS5 handle errors and validation precedence checked\n";
         return 0;
     } catch (const std::exception& error) {
