@@ -156,10 +156,10 @@ int APS5_VABI sceFreeTypeOtUnknown_tCMhTh7h8D4_nid_no_patch() {
 }
 APS5_EXPORT("tCMhTh7h8D4", sceFreeTypeOtUnknown_tCMhTh7h8D4_nid_no_patch);
 
-int APS5_VABI sceFreeTypeOtUnknown_zyezaHweY3U_nid_no_patch() {
+int APS5_VABI sceFreeTypeOtNewSize_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("zyezaHweY3U", sceFreeTypeOtUnknown_zyezaHweY3U_nid_no_patch);
+APS5_EXPORT("zyezaHweY3U", sceFreeTypeOtNewSize_nid_no_patch);
 
 int APS5_VABI sceFreeTypeOtUnknown_C_PpdS5zris_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -176,15 +176,15 @@ int APS5_VABI sceFreeTypeOtUnknown_OeNH41MA2Vs_nid_no_patch() {
 }
 APS5_EXPORT("OeNH41MA2Vs", sceFreeTypeOtUnknown_OeNH41MA2Vs_nid_no_patch);
 
-int APS5_VABI sceFreeTypeOtUnknown_Bhm8Injl0KA_nid_no_patch() {
+int APS5_VABI sceFreeTypeOtOutlineCopy_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("Bhm8Injl0KA", sceFreeTypeOtUnknown_Bhm8Injl0KA_nid_no_patch);
+APS5_EXPORT("Bhm8Injl0KA", sceFreeTypeOtOutlineCopy_nid_no_patch);
 
-int APS5_VABI sceFreeTypeOtUnknown___lgV9pRsO4_nid_no_patch() {
+int APS5_VABI sceFreeTypeOtOutlineDecompose_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("++lgV9pRsO4", sceFreeTypeOtUnknown___lgV9pRsO4_nid_no_patch);
+APS5_EXPORT("++lgV9pRsO4", sceFreeTypeOtOutlineDecompose_nid_no_patch);
 
 int APS5_VABI sceFreeTypeOtUnknown_BqGJsJcFYaM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
