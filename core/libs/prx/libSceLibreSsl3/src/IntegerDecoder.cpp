@@ -1,3 +1,5 @@
+#include "prx/libSceLibreSsl3/libSceLibreSsl3.hpp"
+#include "prx/libc/libc.hpp"
 #include "prx/libc/include/General.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -5,19 +7,9 @@
 #include <limits>
 #include <span>
 
-extern "C" {
-void* APS5_VABI malloc_nid_postfix(std::size_t size);
-void APS5_VABI free_nid_postfix(void* pointer);
-}
 
 namespace {
 
-struct Asn1String {
-    std::int32_t length;
-    std::int32_t type;
-    unsigned char* data;
-    std::int64_t flags;
-};
 
 static_assert(sizeof(Asn1String) == 24);
 static_assert(offsetof(Asn1String, data) == 8);
@@ -64,21 +56,12 @@ std::span<const unsigned char> ReadInteger(std::span<const unsigned char>& input
     return content;
 }
 
-} // namespace
-
-extern "C" {
-
-const unsigned char* APS5_VABI ASN1_STRING_get0_data_nid_postfix(const void* value) {
-    if (!value) NotImplemented_nid_no_patch(__func__);
-    return static_cast<const Asn1String*>(value)->data;
-}
-
-void APS5_VABI ASN1_INTEGER_free_nid_postfix(void* value) {
+void FreeInteger(void* value) {
     if (!value) return;
     auto& integer = *static_cast<Asn1String*>(value);
     if (!(integer.flags & 0x10)) {
-        if (integer.length < 0) NotImplemented_nid_no_patch(__func__);
         if (integer.data) {
+            if (integer.length < 0) NotImplemented_nid_no_patch(__func__);
             auto* bytes = static_cast<volatile unsigned char*>(integer.data);
             for (int index = 0; index < integer.length; ++index) bytes[index] = 0;
             free_nid_postfix(integer.data);
@@ -89,6 +72,11 @@ void APS5_VABI ASN1_INTEGER_free_nid_postfix(void* value) {
     integer.length = 0;
     free_nid_postfix(value);
 }
+
+
+} // namespace
+
+extern "C" {
 
 void* APS5_VABI d2i_ASN1_INTEGER_nid_postfix(void** output, const unsigned char** input, std::int64_t length) {
     if (length < 0) return nullptr;
@@ -108,7 +96,7 @@ void* APS5_VABI d2i_ASN1_INTEGER_nid_postfix(void** output, const unsigned char*
         }
     }
     if (output) {
-        ASN1_INTEGER_free_nid_postfix(*output);
+        FreeInteger(*output);
         *output = nullptr;
     }
     auto* data = static_cast<unsigned char*>(malloc_nid_postfix(content.size()));

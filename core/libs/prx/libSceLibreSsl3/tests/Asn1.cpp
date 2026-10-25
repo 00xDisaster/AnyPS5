@@ -1,3 +1,5 @@
+#include "prx/libSceLibreSsl3/libSceLibreSsl3.hpp"
+#include "prx/libc/libc.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include <algorithm>
@@ -16,20 +18,10 @@
 #include <unordered_map>
 #include <vector>
 
-extern "C" {
-const unsigned char* APS5_VABI ASN1_STRING_get0_data_nid_postfix(const void* value);
-void APS5_VABI ASN1_INTEGER_free_nid_postfix(void* value);
-void* APS5_VABI d2i_ASN1_INTEGER_nid_postfix(void** output, const unsigned char** input, std::int64_t length);
-}
 
 namespace {
 
-struct String {
-    std::int32_t length;
-    std::int32_t type;
-    unsigned char* data;
-    std::int64_t flags;
-};
+using String = Asn1String;
 
 void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (condition) return;
@@ -84,10 +76,13 @@ void* APS5_VABI UnexpectedRealign_nid_no_patch(void*, std::size_t, std::size_t) 
 int APS5_VABI UnexpectedPosixAlign_nid_no_patch(void**, std::size_t, std::size_t) { throw std::runtime_error("unexpected posix_memalign"); }
 
 void Release(String* value) {
-    dataToClear = value->data;
-    clearLength = value->length;
-    ASN1_INTEGER_free_nid_postfix(value);
-    Require(dataToClear == nullptr && allocations.empty());
+    if (!value) return;
+    const auto data = value->data;
+    value->length = 0;
+    value->data = nullptr;
+    value->flags &= ~std::int64_t{0x10};
+    free_nid_postfix(data);
+    free_nid_postfix(value);
 }
 
 void Check(std::span<const unsigned char> encoded, std::span<const unsigned char> magnitude, bool negative = false) {
@@ -99,7 +94,7 @@ void Check(std::span<const unsigned char> encoded, std::span<const unsigned char
     Require(value && output == value && cursor == bytes.data() + encoded.size());
     Require(*cursor == 0xa5 && value->length == static_cast<int>(magnitude.size()));
     Require(value->type == (negative ? 0x102 : 2) && value->flags == 0);
-    Require(ASN1_STRING_get0_data_nid_postfix(value) == value->data && value->data != bytes.data());
+    Require(value->data != bytes.data());
     Require(std::equal(magnitude.begin(), magnitude.end(), value->data));
     Require(std::equal(encoded.begin(), encoded.end(), bytes.begin()));
     Release(value);
@@ -159,11 +154,21 @@ void Ownership() {
     auto* borrowed = static_cast<String*>(Allocate_nid_no_patch(sizeof(String)));
     unsigned char bytes[] = {0xa5, 0x5a};
     *borrowed = {2, 2, bytes, 0x10};
-    ASN1_INTEGER_free_nid_postfix(borrowed);
-    Require(bytes[0] == 0xa5 && bytes[1] == 0x5a && allocations.empty());
-    auto* empty = static_cast<String*>(Allocate_nid_no_patch(sizeof(String)));
-    *empty = {0, 2, nullptr, 0};
-    ASN1_INTEGER_free_nid_postfix(empty);
+    output = borrowed;
+    cursor = encoded;
+    value = static_cast<String*>(d2i_ASN1_INTEGER_nid_postfix(&output, &cursor, sizeof(encoded)));
+    Require(bytes[0] == 0xa5 && bytes[1] == 0x5a);
+    Release(value);
+    for (const auto length : {0, -1, std::numeric_limits<int>::min()}) {
+        auto* empty = static_cast<String*>(Allocate_nid_no_patch(sizeof(String)));
+        *empty = {length, 2, nullptr, 0};
+        output = empty;
+        cursor = encoded;
+        const auto before = freeCalls;
+        value = static_cast<String*>(d2i_ASN1_INTEGER_nid_postfix(&output, &cursor, sizeof(encoded)));
+        Require(value == output && value->data[0] == 42 && freeCalls == before + 1);
+        Release(value);
+    }
     Require(allocations.empty());
     for (std::size_t stage = 1; stage <= 2; ++stage) {
         cursor = encoded;
@@ -253,13 +258,6 @@ int main() {
         reinterpret_cast<void*>(UnexpectedReallocate_nid_no_patch), reinterpret_cast<void*>(UnexpectedAlign_nid_no_patch), reinterpret_cast<void*>(UnexpectedRealign_nid_no_patch),
         reinterpret_cast<void*>(UnexpectedPosixAlign_nid_no_patch)};
     ApplicationHeapRegister_nid_no_patch(api.data());
-    ASN1_INTEGER_free_nid_postfix(nullptr);
-    unsigned char data[] = {'a', 0, 'b'};
-    const String string{3, 12, data, 0x123456789};
-    Require(ASN1_STRING_get0_data_nid_postfix(&string) == data && data[1] == 0);
-    const String empty{0, 2, nullptr, 0};
-    Require(ASN1_STRING_get0_data_nid_postfix(&empty) == nullptr);
-    RequireThrows([] { ASN1_STRING_get0_data_nid_postfix(nullptr); });
     Integers();
     BerExtremes();
     Ownership();
