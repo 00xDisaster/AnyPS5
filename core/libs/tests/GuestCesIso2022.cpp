@@ -1,36 +1,10 @@
+#include "prx/libSceCesCs/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
-
-extern "C" {
-void* APS5_VABI sceCesUcsProfileInitIso2022JpRfc1468(void*);
-void* APS5_VABI sceCesUcsProfileInitIso2022JpCp50221(void*);
-void* APS5_VABI sceCesUcsProfileInitIso2022JpCp50222(void*);
-void* APS5_VABI sceCesUcsProfileInitSJis1997Cp932(void*);
-int APS5_VABI sceCesIso2022UcsContextInit(void*, const void*);
-int APS5_VABI sceCesIso2022UcsContextInitCopy(void*, const void*);
-int APS5_VABI sceCesMbcsUcsContextInit(void*, const void*);
-int APS5_VABI sceCesUtf8StrToIso2022Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf8StrGetIso2022Len(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrToUtf8Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrGetUtf8Len(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesUcs2StrToIso2022Str(void*, const std::uint16_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUcs2StrGetIso2022Len(void*, const std::uint16_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrToUcs2Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint16_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrGetUcs2Len(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesUtf16StrToIso2022Str(void*, const std::uint16_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf16StrGetIso2022Len(void*, const std::uint16_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrToUtf16Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint16_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrGetUtf16Len(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesUtf32StrToIso2022Str(void*, const std::uint32_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesUtf32StrGetIso2022Len(void*, const std::uint32_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrToUtf32Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*, std::uint32_t, std::uint32_t*);
-int APS5_VABI sceCesIso2022StrGetUtf32Len(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI sceCesMbcsStrToUtf8Str(void*, const std::uint8_t*, std::uint32_t, std::uint32_t*, std::uint8_t*, std::uint32_t, std::uint32_t*);
-}
 
 namespace {
 
