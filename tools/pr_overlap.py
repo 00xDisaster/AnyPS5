@@ -1,5 +1,5 @@
 import argparse
-import io
+import hashlib
 import json
 import os
 import re
@@ -8,7 +8,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
 from pathlib import Path
-import tarfile
 from urllib.parse import quote, urlencode
 
 import nid_names
@@ -238,22 +237,79 @@ def source_changed_exports(diff, prefix):
     return found
 
 
+def export_cache_version():
+    parsers = (Path(__file__), Path(nid_names.__file__))
+    return hashlib.sha256(b"".join(path.read_bytes() for path in parsers)).hexdigest()
+
+
+def load_export_cache(path, version):
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(cache, dict) or cache.get("version") != version or not isinstance(cache.get("files"), dict):
+        return {}
+    return cache["files"]
+
+
+def save_export_cache(path, version, files):
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps({"version": version, "files": files}), encoding="utf-8")
+        os.replace(temporary, path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+
+
+def base_sources(root, ref):
+    listing = subprocess.run(["git", "-C", root, "ls-tree", "-r", "-z", ref, "--", "core/libs"],
+                             capture_output=True, check=True).stdout.decode("utf-8", errors="replace")
+    sources = []
+    for entry in filter(None, listing.split("\0")):
+        info, name = entry.split("\t", 1)
+        mode, kind, blob = info.split()
+        path = Path(name)
+        if kind != "blob" or mode == "120000" or path.suffix != ".cpp" or any(
+                part.lower() in {"test", "tests"} for part in path.parts[2:-1]):
+            continue
+        sources.append((blob, name))
+    return sources
+
+
+def blob_texts(root, blobs):
+    if not blobs:
+        return {}
+    out = subprocess.run(["git", "-C", root, "cat-file", "--batch"], input="".join(f"{blob}\n" for blob in blobs).encode(),
+                         capture_output=True, check=True).stdout
+    texts, offset = {}, 0
+    for blob in blobs:
+        header_end = out.index(b"\n", offset)
+        size = int(out[offset:header_end].split()[2])
+        texts[blob] = out[header_end + 1:header_end + 1 + size].decode("utf-8", errors="replace")
+        offset = header_end + 2 + size
+    return texts
+
+
 def base_exports(ref):
     root = git("rev-parse", "--show-toplevel").strip()
-    archive = subprocess.run(
-        ["git", "-C", root, "archive", "--format=tar", ref, "core/libs"], capture_output=True, check=True
-    ).stdout
+    cache_path = Path(root, git("rev-parse", "--git-common-dir").strip()) / "pr_overlap-exports.json"
+    version = export_cache_version()
+    cached = load_export_cache(cache_path, version)
+    sources = base_sources(root, ref)
+    keys = {(blob, name): f"{blob} {library_for_path(name)}" for blob, name in sources}
+    texts = blob_texts(root, sorted({blob for (blob, name), key in keys.items() if key not in cached}))
+    files = {}
     found = {}
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source:
-        for entry in source:
-            path = Path(entry.name)
-            if not entry.isfile() or path.suffix != ".cpp" or any(
-                    part.lower() in {"test", "tests"} for part in path.parts[2:-1]):
-                continue
-            text = source.extractfile(entry).read().decode("utf-8", errors="replace")
-            library = library_for_path(entry.name)
-            for key, names in source_exports(text, library).items():
-                found.setdefault(key, set()).update(names)
+    for (blob, name), key in keys.items():
+        if key not in files:
+            files[key] = cached[key] if key in cached else [
+                [library, nid, sorted(names)] for (library, nid), names in source_exports(texts[blob], library_for_path(name)).items()]
+        for library, nid, names in files[key]:
+            found.setdefault((library, nid), set()).update(names)
+    older_bases_fit = len(cached) + len(files) <= 4 * len(files)
+    kept = {**cached, **files} if older_bases_fit else files
+    if kept != cached:
+        save_export_cache(cache_path, version, kept)
     return found
 
 
