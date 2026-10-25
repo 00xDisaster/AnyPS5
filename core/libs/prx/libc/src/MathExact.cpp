@@ -103,8 +103,11 @@ short ScaleExtended(long double& value, long long exponent) {
     }
     const long long rightShift = 1 - biased;
     if (rightShift >= 65) {
-        value = JoinExtended(0, sign);
-        return Zero;
+        const bool negative = sign != 0;
+        const int mode = std::fegetround();
+        const bool away = (mode == FE_UPWARD && !negative) || (mode == FE_DOWNWARD && negative);
+        value = JoinExtended(away ? 1 : 0, sign);
+        return away ? Denormal : Zero;
     }
     std::uint64_t kept = rightShift == 64 ? 0 : mantissa >> rightShift;
     const std::uint64_t lost = rightShift == 64 ? mantissa : mantissa << (64 - rightShift);

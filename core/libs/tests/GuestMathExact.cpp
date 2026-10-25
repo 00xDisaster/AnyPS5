@@ -188,6 +188,50 @@ static void CheckLongDoubleExpOverflowRounding() {
     Require(std::fesetround(saved) == 0);
 }
 
+static void CheckLongDoubleExpTinyRounding() {
+    struct Case {
+        int mode;
+        long double multiplier;
+        long double x;
+        short scale;
+        bool away;
+    };
+    const Case cases[] = {
+        {FE_TONEAREST, 1.0L, 0.0L, -20000, false},
+        {FE_TOWARDZERO, 1.0L, 0.0L, -20000, false},
+        {FE_DOWNWARD, 1.0L, 0.0L, -20000, false},
+        {FE_UPWARD, 1.0L, 0.0L, -20000, true},
+        {FE_TONEAREST, -1.0L, 0.0L, -20000, false},
+        {FE_TOWARDZERO, -1.0L, 0.0L, -20000, false},
+        {FE_UPWARD, -1.0L, 0.0L, -20000, false},
+        {FE_DOWNWARD, -1.0L, 0.0L, -20000, true},
+        {FE_TONEAREST, 1.0L, -0.001L, -16446, false},
+        {FE_TOWARDZERO, 1.0L, -0.001L, -16446, false},
+        {FE_DOWNWARD, 1.0L, -0.001L, -16446, false},
+        {FE_UPWARD, 1.0L, -0.001L, -16446, true},
+        {FE_TONEAREST, -1.0L, -0.001L, -16446, false},
+        {FE_TOWARDZERO, -1.0L, -0.001L, -16446, false},
+        {FE_UPWARD, -1.0L, -0.001L, -16446, false},
+        {FE_DOWNWARD, -1.0L, -0.001L, -16446, true},
+    };
+    const long double denormMin = std::numeric_limits<long double>::denorm_min();
+    const int saved = std::fegetround();
+    for (const auto& test : cases) {
+        Require(std::fesetround(test.mode) == 0);
+        errno = 0;
+        std::feclearexcept(FE_ALL_EXCEPT);
+        long double result = test.x;
+        const short kind = _LExp_nid_postfix(&result, test.multiplier, test.scale);
+        const long double expected = test.away
+            ? std::copysign(denormMin, test.multiplier)
+            : std::copysign(0.0L, test.multiplier);
+        Require(SameBits(result, expected));
+        Require(kind == (test.away ? -2 : 0));
+        Require(errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    }
+    Require(std::fesetround(saved) == 0);
+}
+
 static void CheckClassification() {
     const long double pseudoDenormal = Extended(0x0000, 0x8000000000000000ull);
     Require(_LDtest_nid_postfix(&pseudoDenormal) == -1 && __fpclassifyl_nid_postfix(pseudoDenormal) == -2);
@@ -280,6 +324,7 @@ int main() {
     CheckConsoleQuirks();
     CheckRoundingModes();
     CheckLongDoubleExpOverflowRounding();
+    CheckLongDoubleExpTinyRounding();
     CheckClassification();
     CheckLongDoubleExp();
     return 0;
