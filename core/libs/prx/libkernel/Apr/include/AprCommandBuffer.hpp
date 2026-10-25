@@ -87,6 +87,16 @@ struct CompactReadFileGatherCommand {
 };
 static_assert(sizeof(CompactReadFileGatherCommand) == 12);
 
+inline constexpr std::uint32_t NopHeaderBytes = 4;
+
+constexpr std::uint32_t NopHeader(std::uint32_t dwords) {
+    return static_cast<std::uint32_t>(Opcode::Nop) | dwords << 8u;
+}
+
+constexpr std::uint32_t NopDwords(std::uint32_t header) {
+    return header >> 8u;
+}
+
 struct ResetGatherScatterStateCommand {
     CommandHeader header;
 };

@@ -88,7 +88,7 @@ static int AppendRead(Apr::CommandBufferObject* buffer, Apr::Opcode opcode, std:
 }
 
 static std::uint64_t NopBytes(std::uint32_t dwords) {
-    return sizeof(Apr::CommandHeader) + std::uint64_t{dwords} * 4u;
+    return std::uint64_t{dwords} * 4u;
 }
 
 static int AppendNop(Apr::CommandBufferObject* buffer, std::uint32_t dwords, const std::uint32_t* data) {
@@ -96,10 +96,10 @@ static int AppendNop(Apr::CommandBufferObject* buffer, std::uint32_t dwords, con
     const std::uint64_t bytes = NopBytes(dwords);
     if (!buffer->base) return SCE_KERNEL_ERROR_EPERM;
     if (bytes > RemainingCommandBytes(*buffer)) return SCE_KERNEL_ERROR_EBUSY;
-    const Apr::CommandHeader header{Apr::Opcode::Nop, static_cast<std::uint32_t>(bytes)};
+    const std::uint32_t header = Apr::NopHeader(dwords);
     std::uint8_t* destination = buffer->base + buffer->offset;
     std::memcpy(destination, &header, sizeof(header));
-    if (data) std::memcpy(destination + sizeof(header), data, std::uint64_t{dwords} * 4u);
+    if (data) std::memcpy(destination + sizeof(header), data, bytes - sizeof(header));
     buffer->offset += static_cast<std::uint32_t>(bytes);
     ++buffer->numCommands;
     return 0;
@@ -373,9 +373,9 @@ int APS5_VABI sceAmprCommandBufferConstructNop(Apr::CommandBufferObject* buffer,
     if (payloadBytes != 0u && !payload) throw std::invalid_argument("sceAmprCommandBufferConstructNop: null payload");
     const std::uint32_t dwords = (payloadBytes + 3u) / 4u + (word ? 1u : 0u);
     const std::uint32_t offset = buffer ? buffer->offset : 0u;
-    const int result = AppendNop(buffer, dwords, nullptr);
+    const int result = AppendNop(buffer, dwords + 1u, nullptr);
     if (result != 0) return result;
-    std::uint8_t* data = buffer->base + offset + sizeof(Apr::CommandHeader);
+    std::uint8_t* data = buffer->base + offset + Apr::NopHeaderBytes;
     if (word) {
         std::memcpy(data, word, sizeof(*word));
         data += sizeof(*word);
@@ -422,7 +422,7 @@ int APS5_VABI sceAmprCommandBufferNop(Apr::CommandBufferObject* buffer, std::uin
 
 int APS5_VABI sceAmprCommandBufferNopWithData(Apr::CommandBufferObject* buffer, std::uint32_t dwords, const std::uint32_t* data) {
     if (dwords > 15u) return SCE_KERNEL_ERROR_EINVAL;
-    return AppendNop(buffer, dwords, data);
+    return AppendNop(buffer, dwords + 1u, data);
 }
 
 int APS5_VABI sceAmprCommandBufferPopMarker(Apr::CommandBufferObject* buffer) {
@@ -528,7 +528,7 @@ std::uint64_t APS5_VABI sceAmprMeasureCommandSizeNop(std::uint32_t dwords) {
 
 std::uint64_t APS5_VABI sceAmprMeasureCommandSizeNopWithData(std::uint32_t dwords) {
     if (dwords == 0u || dwords > 16u) return MeasureInvalid;
-    return NopBytes(dwords - 1u);
+    return NopBytes(dwords);
 }
 
 std::uint64_t APS5_VABI sceAmprMeasureCommandSizePopMarker() {

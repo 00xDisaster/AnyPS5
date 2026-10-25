@@ -57,6 +57,12 @@ struct Recorder {
 void RequireAppended(const Recorder& recorder, std::uint32_t offset, std::uint32_t commands, Apr::Opcode opcode, std::uint64_t measured) {
     Require(recorder.Offset() == offset + measured);
     Require(recorder.Commands() == commands + 1);
+    if (opcode == Apr::Opcode::Nop) {
+        std::uint32_t first;
+        std::memcpy(&first, recorder.memory.data() + offset, sizeof(first));
+        Require(first == Apr::NopHeader(static_cast<std::uint32_t>(measured / 4u)) && measured % 4u == 0u);
+        return;
+    }
     Apr::CommandHeader header;
     std::memcpy(&header, recorder.memory.data() + offset, sizeof(header));
     if (opcode == Apr::Opcode::CompactReadFileGather) {
@@ -345,12 +351,12 @@ void TestNops() {
     const auto commands = recorder.Commands();
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 3, data) == 0);
     RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNopWithData(4));
-    Require(std::memcmp(recorder.memory.data() + offset + sizeof(Apr::CommandHeader), data, sizeof(data)) == 0);
+    Require(std::memcmp(recorder.memory.data() + offset + Apr::NopHeaderBytes, data, sizeof(data)) == 0);
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 0, nullptr) == 0);
     const auto emptyPayloadOffset = recorder.Offset();
     std::memset(recorder.memory.data() + emptyPayloadOffset, 0x5A, sceAmprMeasureCommandSizeNopWithData(4));
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 3, nullptr) == 0);
-    for (std::size_t index = 0; index < 12; ++index) Require(recorder.memory[emptyPayloadOffset + sizeof(Apr::CommandHeader) + index] == 0x5A);
+    for (std::size_t index = 0; index < 12; ++index) Require(recorder.memory[emptyPayloadOffset + Apr::NopHeaderBytes + index] == 0x5A);
     Require(sceKernelAprSubmitCommandBuffer(&recorder.buffer, 0) == 0);
 
     const auto rejected = static_cast<std::uint64_t>(static_cast<std::uint32_t>(invalidArgument));
@@ -359,6 +365,37 @@ void TestNops() {
     Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 16, data) == invalidArgument);
     Require(sceAmprMeasureCommandSizeNop(0) == rejected && sceAmprMeasureCommandSizeNop(17) == rejected);
     Require(sceAmprMeasureCommandSizeNopWithData(0) == rejected && sceAmprMeasureCommandSizeNopWithData(17) == rejected);
+}
+
+void TestNopPadding() {
+    Require(sceAmprMeasureCommandSizeNop(1) == 4 && sceAmprMeasureCommandSizeNop(16) == 64);
+    Require(sceAmprMeasureCommandSizeNopWithData(1) == 4 && sceAmprMeasureCommandSizeNopWithData(16) == 64);
+
+    Recorder recorder(64);
+    alignas(8) std::uint64_t done = 0;
+    Require(sceAmprCommandBufferPushMarker(&recorder.buffer, "pad") == 0);
+    Require(sceAmprCommandBufferWriteAddressOnCompletion(&recorder.buffer, &done, 1) == 0);
+    const std::uint32_t remaining = 64 - recorder.Offset();
+    Require(remaining % 4 == 0 && remaining / 4 >= 2);
+    Require(sceAmprCommandBufferNop(&recorder.buffer, remaining / 4 + 1) == busy);
+    Require(recorder.Offset() == 64 - remaining && recorder.Commands() == 2);
+    Require(sceAmprCommandBufferNop(&recorder.buffer, remaining / 4) == 0);
+    Require(recorder.Offset() == 64 && recorder.Commands() == 3);
+    Require(sceAmprCommandBufferNop(&recorder.buffer, 1) == busy);
+    Require(sceAmprCommandBufferNopWithData(&recorder.buffer, 0, nullptr) == busy);
+    Require(sceKernelAprSubmitCommandBuffer(&recorder.buffer, 0) == 0);
+    Require(done == 1);
+
+    Recorder odd;
+    done = 0;
+    Require(sceAmprCommandBufferNop(&odd.buffer, 1) == 0);
+    Require(odd.Offset() == 4);
+    Require(sceAmprCommandBufferWriteAddressOnCompletion(&odd.buffer, &done, 2) == 0);
+    Require(sceAmprCommandBufferNopWithData(&odd.buffer, 2, nullptr) == 0);
+    Require(sceAmprCommandBufferNop(&odd.buffer, 1) == 0);
+    Require(odd.Offset() == 4 + sizeof(Apr::WriteAddressCommand) + 12 + 4);
+    Require(sceKernelAprSubmitCommandBuffer(&odd.buffer, 0) == 0);
+    Require(done == 2);
 }
 
 void TestVersionedCommands() {
@@ -478,7 +515,7 @@ void TestConstructed() {
     auto commands = recorder.Commands();
     Require(sceAmprCommandBufferConstructNop(&recorder.buffer, 7, payload, sizeof(payload), &word) == 0);
     RequireAppended(recorder, offset, commands, Apr::Opcode::Nop, sceAmprMeasureCommandSizeNopWithData(4));
-    const std::uint8_t* data = recorder.memory.data() + offset + sizeof(Apr::CommandHeader);
+    const std::uint8_t* data = recorder.memory.data() + offset + Apr::NopHeaderBytes;
     const std::uint8_t padding[3] = {};
     Require(std::memcmp(data, &word, sizeof(word)) == 0 && std::memcmp(data + 4, payload, sizeof(payload)) == 0 && std::memcmp(data + 9, padding, sizeof(padding)) == 0);
 
@@ -652,10 +689,9 @@ void TestResolveFailures() {
 }
 
 void TestMalformedCommandSizes() {
-    const auto requireFailure = [](Apr::Opcode opcode, std::uint32_t recordBytes, std::uint32_t bufferBytes, const char* expected) {
+    const auto requireFailure = [](const void* record, std::size_t recordBytes, std::uint32_t bufferBytes, const char* expected) {
         std::array<std::uint8_t, 16> memory{};
-        const Apr::CommandHeader header{opcode, recordBytes};
-        std::memcpy(memory.data(), &header, sizeof(header));
+        std::memcpy(memory.data(), record, recordBytes);
         Apr::CommandBufferObject buffer{Apr::BufferType::Generic, 0, bufferBytes, 1, bufferBytes, memory.data()};
         bool rejected = false;
         try {
@@ -666,14 +702,25 @@ void TestMalformedCommandSizes() {
         }
         Require(rejected);
     };
+    const auto requireHeaderFailure = [&](Apr::Opcode opcode, std::uint32_t recordBytes, std::uint32_t bufferBytes, const char* expected) {
+        const Apr::CommandHeader header{opcode, recordBytes};
+        requireFailure(&header, sizeof(header), bufferBytes, expected);
+    };
 
-    requireFailure(Apr::Opcode::ReadFile, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
-    requireFailure(Apr::Opcode::WriteAddress, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
-    requireFailure(Apr::Opcode::Nop, std::numeric_limits<std::uint32_t>::max(), 2u * sizeof(Apr::CommandHeader), "APR: malformed command");
+    requireHeaderFailure(Apr::Opcode::ReadFile, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
+    requireHeaderFailure(Apr::Opcode::WriteAddress, sizeof(Apr::CommandHeader), sizeof(Apr::CommandHeader), "APR: truncated command payload");
+    requireHeaderFailure(Apr::Opcode::PopMarker, std::numeric_limits<std::uint32_t>::max(), 2u * sizeof(Apr::CommandHeader), "APR: malformed command");
+
+    const std::uint32_t emptyNop = Apr::NopHeader(0);
+    requireFailure(&emptyNop, sizeof(emptyNop), sizeof(emptyNop), "APR: malformed command");
+    const std::uint32_t overflowingNop = Apr::NopHeader(0xffffffu);
+    requireFailure(&overflowingNop, sizeof(overflowingNop), 2u * sizeof(overflowingNop), "APR: malformed command");
+    const std::uint32_t nops[2] = {Apr::NopHeader(1), Apr::NopHeader(1)};
+    requireFailure(nops, sizeof(nops), 7u, "APR: truncated command buffer");
 
     std::array<std::uint8_t, 2 * sizeof(Apr::CommandHeader)> memory{};
-    const Apr::CommandHeader first{Apr::Opcode::Nop, sizeof(Apr::CommandHeader)};
-    const Apr::CommandHeader overflowing{Apr::Opcode::Nop, std::numeric_limits<std::uint32_t>::max()};
+    const Apr::CommandHeader first{Apr::Opcode::PopMarker, sizeof(Apr::CommandHeader)};
+    const Apr::CommandHeader overflowing{Apr::Opcode::PopMarker, std::numeric_limits<std::uint32_t>::max()};
     std::memcpy(memory.data(), &first, sizeof(first));
     std::memcpy(memory.data() + sizeof(first), &overflowing, sizeof(overflowing));
     Apr::CommandBufferObject buffer{Apr::BufferType::Generic, 0, sizeof(memory), 2, sizeof(memory), memory.data()};
@@ -1377,6 +1424,7 @@ int main() {
     TestCounters();
     TestRejectedWaitsAndCounters();
     TestNops();
+    TestNopPadding();
     TestVersionedCommands();
     TestVersionedCounters();
     TestClearBuffer();
