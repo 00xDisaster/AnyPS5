@@ -343,25 +343,29 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
         if (!mixes[i].empty()) WriteOutput(bufferInfo[i], mixes[i]);
         else if (outputBytes[i] != 0) std::memset(bufferInfo[i].buffer, 0, outputBytes[i]);
     }
-    for (auto* voice : voices) {
-        if (voice->state == Ngs2PlayState::Stopped) voice->state = Ngs2PlayState::Empty;
-        const bool wasPaused = (voice->stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
-        voice->stateFlags = static_cast<std::uint32_t>(voice->state);
-        if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
-        if (voice->state == Ngs2PlayState::Playing && voice->IsSampler() && voice->samplerStarved && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
-    }
-    for (auto* voice : voices) {
-        voice->dispatchBlockCallbacks.swap(voice->pendingBlockCallbacks);
-        struct CallbackScope {
-            std::vector<Ngs2VoiceCallbackInfo>& events;
-            ~CallbackScope() { events.clear(); }
-        } callbackScope{voice->dispatchBlockCallbacks};
-        for (auto info : voice->dispatchBlockCallbacks) {
-            if (voice->callback == nullptr) break;
-            if ((voice->callbackFlags & info.flag) == 0) continue;
-            info.callback_data = voice->callbackData;
-            const Ngs2Unlocked unlocked;
-            voice->callback(&info);
+    for (auto* rack : system.racks) {
+        for (auto& value : rack->voices) {
+            auto* voice = &value;
+            if (voice->state == Ngs2PlayState::Stopped) voice->state = Ngs2PlayState::Empty;
+            const bool wasPaused = (voice->stateFlags & SCE_NGS2_VOICE_STATE_FLAG_PAUSED) != 0;
+            voice->stateFlags = static_cast<std::uint32_t>(voice->state);
+            if (wasPaused && voice->state == Ngs2PlayState::Paused && (voice->IsSampler() || Ngs2HasPitchShift(*voice))) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_PLAYING;
+            if (voice->state == Ngs2PlayState::Playing && voice->IsSampler() && voice->samplerStarved && voice->acceptsBlocks) voice->stateFlags |= SCE_NGS2_VOICE_STATE_FLAG_EMPTY;
+        }
+        for (auto& value : rack->voices) {
+            auto* voice = &value;
+            voice->dispatchBlockCallbacks.swap(voice->pendingBlockCallbacks);
+            struct CallbackScope {
+                std::vector<Ngs2VoiceCallbackInfo>& events;
+                ~CallbackScope() { events.clear(); }
+            } callbackScope{voice->dispatchBlockCallbacks};
+            for (auto info : voice->dispatchBlockCallbacks) {
+                if (voice->callback == nullptr) break;
+                if ((voice->callbackFlags & info.flag) == 0) continue;
+                info.callback_data = voice->callbackData;
+                const Ngs2Unlocked unlocked;
+                voice->callback(&info);
+            }
         }
     }
     system.renderCount++;

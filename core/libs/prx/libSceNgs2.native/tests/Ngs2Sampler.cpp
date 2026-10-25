@@ -223,9 +223,136 @@ static void TestStreaming(std::uint32_t mode, std::uint32_t capacity = 2) {
     usedBuffers = firstBuffer;
 }
 
+struct CallbackOrder {
+    std::vector<int> events;
+    std::uintptr_t first = 0;
+    std::uintptr_t second = 0;
+    std::uint32_t mode = 0;
+    bool shared = false;
+};
+
+struct CallbackObserver {
+    CallbackOrder* order;
+    int id;
+};
+
+static void APS5_VABI ReplacementCallback(const Ngs2VoiceCallbackInfo* info) {
+    auto& observer = *reinterpret_cast<CallbackObserver*>(info->callback_data);
+    observer.order->events.push_back(20 + observer.id);
+}
+
+static void ReplacePeerCallback(CallbackOrder& order, CallbackObserver& observer) {
+    Control(order.second, SCE_NGS2_VOICE_PARAM_CALLBACK,
+            Ngs2VoiceCallbackParam{{}, ReplacementCallback, reinterpret_cast<std::uintptr_t>(&observer), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+}
+
+static void APS5_VABI OrderedCallback(const Ngs2VoiceCallbackInfo* info) {
+    auto& observer = *reinterpret_cast<CallbackObserver*>(info->callback_data);
+    auto& order = *observer.order;
+    order.events.push_back(observer.id);
+    Require(Flags(info->voice_handle) == 0);
+    if (observer.id != 1) return;
+    Require(Flags(order.second) == (order.shared ? 0u : SCE_NGS2_VOICE_STATE_FLAG_INUSE));
+    auto& peer = *(&observer + 1);
+    if (order.mode == 1) ReplacePeerCallback(order, peer);
+    if (order.mode == 2) Control(order.second, SCE_NGS2_VOICE_PARAM_CALLBACK, Ngs2VoiceCallbackParam{});
+    if (order.mode == 3) Event(order.second, SCE_NGS2_VOICE_EVENT_STOP_IMM);
+}
+
+static int APS5_VABI OrderedUserFx(Ngs2UserFxProcessContext* context) {
+    auto& observers = *reinterpret_cast<std::array<CallbackObserver, 2>*>(context->user_data0);
+    auto& order = *observers[0].order;
+    Require(order.events.empty());
+    order.events.push_back(9);
+    Require(Flags(order.first) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
+    Require(Flags(order.second) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
+    if (order.mode == 4) ReplacePeerCallback(order, observers[1]);
+    return 0;
+}
+
+static std::uintptr_t CallbackRack(std::uintptr_t system, bool custom) {
+    if (!custom) return CreateRack(system, SCE_NGS2_RACK_ID_SAMPLER);
+    Ngs2CustomSamplerRackOption option{};
+    auto& rackOption = option.custom_rack_option.rack_option;
+    rackOption.size = sizeof(option);
+    rackOption.max_grain_samples = 512;
+    rackOption.max_voices = 2;
+    rackOption.max_ports = 1;
+    rackOption.max_matrices = 1;
+    option.custom_rack_option.num_modules = 1;
+    option.custom_rack_option.num_buffers = 1;
+    option.custom_rack_option.state_size = 48;
+    option.custom_rack_option.module[0].module_id = SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT;
+    option.max_channel_works = 2;
+    option.max_waveform_blocks = 2;
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &rackOption, &query) == SCE_NGS2_OK);
+    const auto storage = Buffer(query);
+    std::uintptr_t rack = 0;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &rackOption, &storage, &rack) == SCE_NGS2_OK);
+    return rack;
+}
+
+static void TestCallbackOrder(bool custom, bool shared, bool reverse, std::uint32_t mode, bool mixed = false) {
+    const auto firstBuffer = usedBuffers;
+    const auto system = CreateSystem();
+    Require(sceNgs2SystemSetGrainSamples(system, 64) == SCE_NGS2_OK);
+    const auto master = Mastering(system, 1);
+    const auto rack = CallbackRack(system, custom);
+    CallbackOrder order;
+    order.first = Voice(rack);
+    if (shared) Require(sceNgs2RackGetVoiceHandle(rack, 1, &order.second) == SCE_NGS2_OK);
+    else order.second = Voice(CallbackRack(system, custom && !mixed));
+    order.shared = shared;
+    order.mode = mode;
+    std::array<CallbackObserver, 2> observers{{{&order, 1}, {&order, 2}}};
+    const auto effect = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
+    Control(effect, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
+    Control(effect, SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX,
+            Ngs2SubmixerVoiceUserFxParam{{}, OrderedUserFx, reinterpret_cast<std::uintptr_t>(&observers), 0, 0});
+    Patch(effect, master);
+    Event(effect, SCE_NGS2_VOICE_EVENT_PLAY);
+    const std::int16_t pcm = 1000;
+    const Ngs2WaveformBlock block{0, sizeof(pcm), 0, 0, 1, 0, 0};
+    for (auto& observer : observers) {
+        const auto voice = observer.id == 1 ? order.first : order.second;
+        const bool customVoice = custom && (observer.id == 1 || !mixed);
+        Control(voice, customVoice ? SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP : SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP,
+                Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 1, 48000, 0, 0, 0}});
+        Control(voice, customVoice ? SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS : SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS,
+                Ngs2SamplerVoiceWaveformBlocksParam{{}, &pcm, 0, 1, &block});
+        Control(voice, SCE_NGS2_VOICE_PARAM_CALLBACK,
+                Ngs2VoiceCallbackParam{{}, OrderedCallback, reinterpret_cast<std::uintptr_t>(&observer), SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+    }
+    Patch(reverse ? order.second : order.first, effect);
+    Patch(reverse ? order.first : order.second, effect);
+    Event(reverse ? order.second : order.first, SCE_NGS2_VOICE_EVENT_PLAY);
+    Event(reverse ? order.first : order.second, SCE_NGS2_VOICE_EVENT_PLAY);
+    std::array<float, 64> samples{};
+    const Ngs2RenderBufferInfo output{samples.data(), sizeof(samples), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
+    Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+    const std::vector<int> expected = mode == 2 ? std::vector<int>{9, 1} : std::vector<int>{9, 1, mode == 1 || mode == 4 ? 22 : 2};
+    Require(order.events == expected);
+    for (std::size_t i = 0; i < samples.size(); ++i) Require(samples[i] == (i == 3 ? 2000.0f / 32768.0f : 0.0f));
+    Require(Flags(order.first) == 0 && Flags(order.second) == 0);
+    Control(effect, SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX, Ngs2SubmixerVoiceUserFxParam{});
+    order.events.clear();
+    Require(sceNgs2SystemRender(system, &output, 1) == SCE_NGS2_OK);
+    Require(order.events.empty());
+    for (auto sample : samples) Require(sample == 0.0f);
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+    usedBuffers = firstBuffer;
+}
+
 int main() {
     for (const auto& test : Cases) TestSampler(test);
     for (std::uint32_t mode = 0; mode < 6; ++mode) TestStreaming(mode);
     TestStreaming(0, 3);
+    for (bool custom : {false, true})
+        for (bool shared : {false, true})
+            for (bool reverse : {false, true})
+                for (std::uint32_t mode = 0; mode < 5; ++mode) TestCallbackOrder(custom, shared, reverse, mode);
+    TestCallbackOrder(true, false, false, 0, true);
+    TestCallbackOrder(true, false, true, 1, true);
     return 0;
 }
