@@ -127,14 +127,6 @@ int GuestFileError(int error) {
     }
 }
 
-struct KernelAuthInfo {
-    std::uint64_t programAuthorityId;
-    std::uint64_t capabilities[4];
-    std::uint64_t attributes[4];
-    std::uint64_t credentials[8];
-};
-static_assert(sizeof(KernelAuthInfo) == 0x88);
-
 std::int64_t Fail(int error) {
     *__error_nid_postfix() = error;
     return -1;
@@ -346,9 +338,8 @@ std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
     return File::ExchangeCreationMask_nid_no_patch(mask);
 }
 
-int APS5_VABI sceKernelGetOpenPsId(void* id);
-
 int APS5_VABI sceKernelGetOpenPsIdForSystem(void* id) {
+    if (id == nullptr) return GuestEinval;
     return sceKernelGetOpenPsId(id);
 }
 

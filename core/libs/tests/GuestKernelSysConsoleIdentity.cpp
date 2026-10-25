@@ -1,19 +1,11 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libkernel_sys/libkernel_sys.hpp"
+#include "prx/libc/libc.hpp"
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
-extern "C" {
-int APS5_VABI sceKernelIsCEX(void);
-int APS5_VABI sceKernelIsDevKit(void);
-int APS5_VABI get_authinfo_nid_postfix(int pid, void* info);
-int APS5_VABI sceKernelGetOpenPsId(void* id);
-int APS5_VABI sceKernelGetOpenPsIdForSystem(void* id);
-int APS5_VABI getpid_nid_postfix(void);
-int* APS5_VABI __error_nid_postfix(void);
-}
 
 namespace {
 
@@ -33,20 +25,25 @@ void CheckConsoleKind() {
 }
 
 void CheckAuthInfo() {
-    std::array<std::uint64_t, 18> info;
+    struct {
+        KernelAuthInfo value;
+        std::uint64_t guard;
+    } info;
     *__error_nid_postfix() = 0;
     Require(get_authinfo_nid_postfix(0, nullptr) == -1 && *__error_nid_postfix() == GuestEperm, "a null result must fail with EPERM");
-    info.fill(0x5a5a5a5a5a5a5a5a);
+    std::memset(&info, 0x5a, sizeof(info));
     *__error_nid_postfix() = 0;
-    Require(get_authinfo_nid_postfix(getpid_nid_postfix() + 1, info.data()) == -1 && *__error_nid_postfix() == GuestEsrch,
+    Require(get_authinfo_nid_postfix(getpid_nid_postfix() + 1, &info.value) == -1 && *__error_nid_postfix() == GuestEsrch,
             "another process must fail with ESRCH");
-    Require(info[0] == 0x5a5a5a5a5a5a5a5a, "a refused call must not write the result");
+    for (const auto byte : std::bit_cast<std::array<std::uint8_t, sizeof(info)>>(info))
+        Require(byte == 0x5a, "a refused call must not write the result");
     for (const int pid : {0, getpid_nid_postfix()}) {
-        info.fill(0x5a5a5a5a5a5a5a5a);
-        Require(get_authinfo_nid_postfix(pid, info.data()) == 0, "the guest process must be described");
-        Require(info[0] == 0 && info[1] == 0x2000000000000000, "the authority ID or first capability word is wrong");
-        for (std::size_t i = 2; i < 17; ++i) Require(info[i] == 0, "the rest of the result must be cleared");
-        Require(info[17] == 0x5a5a5a5a5a5a5a5a, "get_authinfo wrote past its 0x88-byte result");
+        std::memset(&info, 0x5a, sizeof(info));
+        Require(get_authinfo_nid_postfix(pid, &info.value) == 0, "the guest process must be described");
+        Require(info.value.programAuthorityId == 0 && info.value.capabilities[0] == 0x2000000000000000, "the authority ID or first capability word is wrong");
+        const auto bytes = std::bit_cast<std::array<std::uint8_t, sizeof(KernelAuthInfo)>>(info.value);
+        for (std::size_t i = 16; i < bytes.size(); ++i) Require(bytes[i] == 0, "the rest of the result must be cleared");
+        Require(info.guard == 0x5a5a5a5a5a5a5a5a, "get_authinfo wrote past its 0x88-byte result");
     }
 }
 
@@ -54,6 +51,10 @@ void CheckOpenPsId() {
     std::array<std::uint8_t, 16> plain{};
     std::array<std::uint8_t, 24> system;
     system.fill(0xa5);
+    *__error_nid_postfix() = GuestEsrch;
+    Require(sceKernelGetOpenPsIdForSystem(nullptr) == 22, "a null system OpenPSID must return positive EINVAL");
+    Require(*__error_nid_postfix() == GuestEsrch, "a null system OpenPSID must leave errno unchanged");
+    for (auto byte : system) Require(byte == 0xa5, "a null system OpenPSID must not write output");
     Require(sceKernelGetOpenPsId(plain.data()) == 0, "the OpenPSID must be readable");
     Require(sceKernelGetOpenPsIdForSystem(system.data()) == 0, "the system OpenPSID must be readable");
     Require(std::memcmp(plain.data(), system.data(), plain.size()) == 0, "both OpenPSID queries must agree");
