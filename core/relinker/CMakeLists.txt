@@ -550,6 +550,9 @@ if(BUILD_TESTING)
         add_test(NAME overlapping_relocations COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_overlapping_relocations.py $<TARGET_FILE:relinker>)
         set_tests_properties(overlapping_relocations PROPERTIES TIMEOUT 30)
+        add_test(NAME duplicate_relocations COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_duplicate_relocations.py $<TARGET_FILE:relinker>)
+        set_tests_properties(duplicate_relocations PROPERTIES TIMEOUT 30)
         add_test(NAME guest_own_tls_relocations COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_own_tls_relocations.py $<TARGET_FILE:relinker>)
         set_tests_properties(guest_own_tls_relocations PROPERTIES TIMEOUT 30)
