@@ -116,6 +116,10 @@ def main():
                 if not valid:
                     failures.append((name, mode, result.returncode, result.stdout, result.stderr))
 
+        duplicate = fixture()
+        duplicate[64 + 2 * 56:64 + 3 * 56] = duplicate[120:176]
+        convert("duplicate", duplicate, "Multiple PT_DYNAMIC segments", ([], ["--windows"], ["--macos"]))
+
     if failures:
         raise AssertionError(failures)
     print("Dynamic segment tests passed")
