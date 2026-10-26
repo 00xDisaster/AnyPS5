@@ -238,6 +238,7 @@ foreach(agcOverlayStage IN ITEMS Vert Frag)
 endforeach()
 
 set(agcDriverSources
+        ${CMAKE_CURRENT_SOURCE_DIR}/Export.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Unimplemented.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/ComputePipelineCapture.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/DisplayBuffer.cpp
@@ -1851,10 +1852,14 @@ if(BUILD_TESTING)
     set_tests_properties(agc_recorder_cmask PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
     add_test(NAME agc_recorder_cube COMMAND agc_driver_recorder_tests --cube-only)
     set_tests_properties(agc_recorder_cube PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+    add_test(NAME agc_recorder_failed_check COMMAND agc_driver_recorder_tests --failed-check-only)
+    set_tests_properties(agc_recorder_failed_check PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "a failed check stopped the test with a texture upload in its open batch"
+        FAIL_REGULAR_EXPRESSION "recorder teardown")
     if(WIN32)
         set_tests_properties(agc_driver_host_import_lifetime agc_driver_host_import_mutation_race agc_driver_unit_shadow agc_driver_unit_shadow_budget PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
-        set_tests_properties(agc_recorder_completion_labels agc_recorder_cmask agc_recorder_cube PROPERTIES ENVIRONMENT_MODIFICATION
+        set_tests_properties(agc_recorder_completion_labels agc_recorder_cmask agc_recorder_cube agc_recorder_failed_check PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     set_property(TEST agc_driver_host_import_lifetime APPEND PROPERTY ENVIRONMENT_MODIFICATION
@@ -2191,6 +2196,18 @@ foreach(agcExecutionTestSource IN LISTS agcExecutionTestSources)
     target_link_libraries(${agcExecutionTest} PRIVATE libSceAgcDriver SDL2-static libc)
     set_target_properties(${agcExecutionTest} PROPERTIES CXX_EXTENSIONS OFF)
     configure_windows_unwind(${agcExecutionTest})
+    if(agcExecutionTests)
+        list(GET agcExecutionTests 0 agcExecutionPchTarget)
+        target_precompile_headers(${agcExecutionTest} REUSE_FROM ${agcExecutionPchTarget})
+    else()
+        target_precompile_headers(${agcExecutionTest} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/execution/VulkanTestDevice.hpp
+                <array> <iostream> <span> <string> <vector>)
+    endif()
+    if(CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache")
+        set_target_properties(${agcExecutionTest} PROPERTIES CXX_COMPILER_LAUNCHER
+                "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CMAKE_CXX_COMPILER_LAUNCHER}")
+    endif()
     list(APPEND agcExecutionTests ${agcExecutionTest})
 endforeach()
 if(BUILD_TESTING)
@@ -2891,12 +2908,12 @@ if(BUILD_TESTING)
                 ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test(NAME agc_driver_f64_denorm_preserve_spirv COMMAND agc_driver_f64_fma_subnormals_tests --verify-spv-denorm-mode)
-    set_tests_properties(agc_driver_f64_denorm_preserve_spirv PROPERTIES ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(agc_driver_f64_denorm_preserve_spirv PROPERTIES ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     if(WIN32)
         set_tests_properties(agc_driver_f64_denorm_preserve_spirv PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
     add_test(NAME agc_driver_f16_to_f32_unpack_spirv COMMAND agc_driver_f16_to_f32_unpack_tests --verify-spirv)
-    set_tests_properties(agc_driver_f16_to_f32_unpack_spirv PROPERTIES ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(agc_driver_f16_to_f32_unpack_spirv PROPERTIES ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1" SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     if(WIN32)
         set_tests_properties(agc_driver_f16_to_f32_unpack_spirv PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()

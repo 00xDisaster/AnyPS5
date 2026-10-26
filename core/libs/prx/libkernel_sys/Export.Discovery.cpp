@@ -114,22 +114,7 @@ int APS5_VABI kenv_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI kldfind_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI kldfirstmod_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI kldload_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI kldnext_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -140,11 +125,6 @@ int APS5_VABI kldstat_nid_postfix(void) {
 }
 
 int APS5_VABI kldsym_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI kldunload_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -291,11 +271,6 @@ int APS5_VABI pthread_attr_setstackaddr_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI pthread_barrier_setname_np_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI pthread_get_specificarray_np_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -322,11 +297,6 @@ int APS5_VABI pthread_mutex_getprioceiling_nid_postfix(void) {
 }
 
 int APS5_VABI pthread_mutex_init_for_mono_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI pthread_mutex_setname_np_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -358,11 +328,6 @@ int APS5_VABI pthread_resume_np_nid_postfix(Pthread thread) {
 }
 
 int APS5_VABI pthread_resume_user_context_np_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI pthread_rwlock_setname_np_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1509,11 +1474,6 @@ int APS5_VABI sceKernelLwfsWrite(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelMapNamedSystemFlexibleMemory(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelMapSanitizerShadowMemory(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -2271,26 +2231,6 @@ int APS5_VABI symlinkat_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetUpdVersion_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sysc_e00_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -2322,11 +2262,6 @@ int APS5_VABI unmount_nid_postfix(void) {
 }
 
 int APS5_VABI utrace_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI uuidgen_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
