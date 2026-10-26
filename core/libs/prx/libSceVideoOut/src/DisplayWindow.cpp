@@ -71,6 +71,9 @@ void DisplayWindow::create(std::uint32_t sourceWidth, std::uint32_t sourceHeight
     window = SDL_CreateWindow(title.value, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, static_cast<int>(initialSize.width), static_cast<int>(initialSize.height), SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     AgcDriverUnlockVulkanLoader_nid_postfix();
     require(window != nullptr, SDL_GetError());
+#ifdef __APPLE__
+    windowId = SDL_GetWindowID(window);
+#endif
     SDL_SetWindowMinimumSize(window, static_cast<int>(DisplayWindowMinimumWidth), static_cast<int>(DisplayWindowMinimumHeight));
     applyAppIcon(window);
     installSubclass();
@@ -89,6 +92,7 @@ void DisplayWindow::Destroy() noexcept {
     removeSubclass();
 #ifdef __APPLE__
     RunOnMainThread([&] { SDL_DestroyWindow(window); });
+    windowId = 0;
 #else
     SDL_DestroyWindow(window);
 #endif
@@ -101,10 +105,13 @@ SDL_Window* DisplayWindow::Handle() const {
 
 void DisplayWindow::ToggleFullscreen() {
     require(window != nullptr, "window must exist before toggling fullscreen");
-    const auto flags = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 ? 0u : static_cast<Uint32>(SDL_WINDOW_FULLSCREEN_DESKTOP);
 #ifdef __APPLE__
-    RunOnMainThread([&] { require(SDL_SetWindowFullscreen(window, flags) == 0, SDL_GetError()); });
+    RunOnMainThread([&] {
+        const auto flags = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 ? 0u : static_cast<Uint32>(SDL_WINDOW_FULLSCREEN_DESKTOP);
+        require(SDL_SetWindowFullscreen(window, flags) == 0, SDL_GetError());
+    });
 #else
+    const auto flags = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 ? 0u : static_cast<Uint32>(SDL_WINDOW_FULLSCREEN_DESKTOP);
     require(SDL_SetWindowFullscreen(window, flags) == 0, SDL_GetError());
 #endif
 }

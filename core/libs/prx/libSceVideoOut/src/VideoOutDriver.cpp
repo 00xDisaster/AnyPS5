@@ -336,14 +336,16 @@ VideoOutDriver::VideoOutDriver() {
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
 #endif
 #ifdef __APPLE__
-    int initialized = 0;
-    RunOnMainThread([&] { initialized = SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER); });
-    if (initialized < 0) {
+    std::string initError;
+    RunOnMainThread([&] {
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) initError = SDL_GetError();
+    });
+    if (!initError.empty()) throw std::runtime_error("SDL_InitSubSystem(VIDEO | GAMECONTROLLER) failed: " + initError);
 #else
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) {
-#endif
         throw std::runtime_error(std::string("SDL_InitSubSystem(VIDEO | GAMECONTROLLER) failed: ") + SDL_GetError());
     }
+#endif
     try {
         AgcDriverWaitIdle_nid_postfix();
         std::promise<void> started;
@@ -759,9 +761,15 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 }
                 padInput.HandleEvent(event, window);
                 if (window.Handle() != nullptr) {
+#ifdef __APPLE__
+                    mouseInput.HandleEvent(event, window.Id());
+                    keyboardInput.HandleEvent(event, window.Id());
+                    imeTextInput.HandleEvent(event, window.Id());
+#else
                     mouseInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
                     keyboardInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
                     imeTextInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
+#endif
                 }
             }
             padInput.Update(window);

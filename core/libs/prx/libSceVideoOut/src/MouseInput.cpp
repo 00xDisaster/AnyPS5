@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #ifdef __APPLE__
+#include <string>
 #include "prx/libc/include/MainThread.hpp"
 #endif
 
@@ -95,12 +96,22 @@ void MouseInput::UpdateCapture(bool allowed) {
     RunOnMainThread([&] { relative = SDL_GetRelativeMouseMode() == SDL_TRUE; });
     if (wanted == captured && relative == wanted) return;
     int result = 0;
-    RunOnMainThread([&] { result = SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE); });
+    std::string error;
+    RunOnMainThread([&] {
+        result = SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE);
+        if (result != 0) error = SDL_GetError();
+    });
     if (result != 0) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            std::fprintf(stderr, "[mouse] relative mouse mode unavailable: %s\n", error.c_str());
+        }
+        return;
+    }
 #else
     if (wanted == captured && (SDL_GetRelativeMouseMode() == SDL_TRUE) == wanted) return;
     if (SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE) != 0) {
-#endif
         static bool warned = false;
         if (!warned) {
             warned = true;
@@ -108,6 +119,7 @@ void MouseInput::UpdateCapture(bool allowed) {
         }
         return;
     }
+#endif
     int ignoredX = 0;
     int ignoredY = 0;
     SDL_GetRelativeMouseState(&ignoredX, &ignoredY);
