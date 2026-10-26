@@ -395,17 +395,20 @@ RelinkResult RelinkerPipeline::Relink() {
 
     std::vector<std::pair<VirtualAddress, VirtualAddress>> unwindRanges;
     std::vector<std::vector<CodeRange>> segmentUnwindRanges(executableSegments.size());
-    if (std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_SCE_DYNLIBDATA; })) {
+    const bool sceImage = std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_SCE_DYNLIBDATA; });
+    const bool hasEhFrame = sceImage || std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_GNU_EH_FRAME; });
+    if (hasEhFrame) {
         const auto functions = UnusedNidFilter::ReadExceptionFunctions(raw, programHeaders, {}, {});
         for (const auto& function : functions) unwindRanges.emplace_back(function.Begin, function.End);
         std::sort(unwindRanges.begin(), unwindRanges.end());
-        for (std::size_t index = 0; index < executableSegments.size(); ++index) {
-            auto& [segment, segmentVAddr, segmentFileOffset] = executableSegments[index];
-            static_cast<void>(segmentFileOffset);
-            if (const auto codeEnd = FindSceCodeEnd(segment, segmentVAddr, functions, gotVAddr, dynJmpRelSize))
-                segment.resize(*codeEnd - segmentVAddr);
-            segmentUnwindRanges[index] = SceUnwindRanges(segment, segmentVAddr, functions);
-        }
+        if (sceImage)
+            for (std::size_t index = 0; index < executableSegments.size(); ++index) {
+                auto& [segment, segmentVAddr, segmentFileOffset] = executableSegments[index];
+                static_cast<void>(segmentFileOffset);
+                if (const auto codeEnd = FindSceCodeEnd(segment, segmentVAddr, functions, gotVAddr, dynJmpRelSize))
+                    segment.resize(*codeEnd - segmentVAddr);
+                segmentUnwindRanges[index] = SceUnwindRanges(segment, segmentVAddr, functions);
+            }
     }
 
     std::vector<std::vector<std::uint8_t>> scanSegments;
