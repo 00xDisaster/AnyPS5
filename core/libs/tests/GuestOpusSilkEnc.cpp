@@ -62,7 +62,7 @@ std::uint32_t Bitrate(int rate, int channels) {
     return channels == 1 ? 51000u : 99000u;
 }
 
-std::array<SetupWord, 16> SetupWords(std::uint32_t instanceId, int rate, int channels) {
+std::array<SetupWord, 17> SetupWords(std::uint32_t instanceId, int rate, int channels) {
     const auto bandwidth = Bitrate(rate, channels);
     const auto rateWord = static_cast<std::uint32_t>(rate);
     const auto frameWord = static_cast<std::uint32_t>(rate / 50);
@@ -80,6 +80,7 @@ std::array<SetupWord, 16> SetupWords(std::uint32_t instanceId, int rate, int cha
         {0x34, 10u},
         {0x48, 0x3E8u},
         {0x58, frameWord},
+        {0xE4, frameWord},
         {0xD8, 0xFFFFFC18u},
         {0xDC, bandwidth},
         {0xE0, 0x10u},
@@ -171,6 +172,8 @@ int main() {
     Require(sceOpusSilkEncEncodeFloat(ToState(state), floatSamples.data(), 0, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x03));
     Require(sceOpusSilkEncEncodeFloat(ToState(invalidState), floatSamples.data(), -1, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x15));
     Require(sceOpusSilkEncEncodeFloat(ToState(invalidState), nullptr, 960, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x02));
+    RequireThrows([&] { sceOpusSilkEncEncodeFloat(ToState(state), floatSamples.data(), -1, packet, sizeof(packet)); });
+    RequireThrows([&] { sceOpusSilkEncEncodeFloat(ToState(state), floatSamples.data(), 1100000, packet, sizeof(packet)); });
 
     auto snapshot = state;
     Require(sceOpusSilkEncDestroy(ToState(state)) == 0);
@@ -219,6 +222,17 @@ int main() {
         }
     }
     Require(sceOpusSilkEncDestroy(ToState(invalidState)) == static_cast<int>(errorBase + 0x15));
+
+    std::array<std::uint8_t, 65536> retireState{};
+    retireState.fill(0x5A);
+    Require(sceOpusSilkEncCreateEx(&context, ToState(retireState), 48000, 1, callerApplication) == 0);
+    ++instanceId;
+    Require(sceOpusSilkEncCreateEx(&context, ToState(retireState), 48000, 2, callerApplication) == 0);
+    const auto retireWords = SetupWords(instanceId, 48000, 2);
+    RequireState(retireState.data(), stateSize, retireWords.data(), retireWords.size(), 0x5A);
+    ++instanceId;
+    Require(sceOpusSilkEncEncode(ToState(retireState), samples.data(), 960, packet, sizeof(packet)) > 2);
+    Require(sceOpusSilkEncDestroy(ToState(retireState)) == 0);
 
     std::array<std::uint8_t, 65536> floatState{};
     floatState.fill(0x5A);

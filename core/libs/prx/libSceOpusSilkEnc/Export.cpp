@@ -37,6 +37,7 @@ void writeState(void* state, std::uint32_t instanceId, int rate, int channels) {
     writeWord(bytes, 0x34u, 10u);
     writeWord(bytes, 0x48u, 0x3E8u);
     writeWord(bytes, 0x58u, frameWord);
+    writeWord(bytes, 0xE4u, frameWord);
     writeWord(bytes, 0xD8u, 0xFFFFFC18u);
     writeWord(bytes, 0xDCu, bandwidth);
     writeWord(bytes, 0xE0u, 0x10u);

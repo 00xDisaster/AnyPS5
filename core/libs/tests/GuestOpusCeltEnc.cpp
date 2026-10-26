@@ -176,6 +176,8 @@ int main() {
     Require(sceOpusCeltEncEncodeFloat(ToState(state), floatSamples.data(), 0, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x03));
     Require(sceOpusCeltEncEncodeFloat(ToState(invalidState), floatSamples.data(), -1, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x16));
     Require(sceOpusCeltEncEncodeFloat(ToState(invalidState), nullptr, 960, packet, sizeof(packet)) == static_cast<int>(errorBase + 0x02));
+    RequireThrows([&] { sceOpusCeltEncEncodeFloat(ToState(state), floatSamples.data(), -1, packet, sizeof(packet)); });
+    RequireThrows([&] { sceOpusCeltEncEncodeFloat(ToState(state), floatSamples.data(), 1100000, packet, sizeof(packet)); });
 
     auto snapshot = state;
     Require(sceOpusCeltEncDestroy(ToState(state)) == 0);
@@ -224,6 +226,17 @@ int main() {
         }
     }
     Require(sceOpusCeltEncDestroy(ToState(invalidState)) == static_cast<int>(errorBase + 0x16));
+
+    std::array<std::uint8_t, 65536> retireState{};
+    retireState.fill(0x5A);
+    Require(sceOpusCeltEncCreateEx(&context, ToState(retireState), 48000, 1, callerApplication) == 0);
+    ++instanceId;
+    Require(sceOpusCeltEncCreateEx(&context, ToState(retireState), 48000, 2, callerApplication) == 0);
+    const auto retireWords = SetupWords(instanceId, 48000, 2);
+    RequireState(retireState.data(), stateSize, retireWords.data(), retireWords.size(), 0x5A);
+    ++instanceId;
+    Require(sceOpusCeltEncEncode(ToState(retireState), samples.data(), 960, packet, sizeof(packet)) > 2);
+    Require(sceOpusCeltEncDestroy(ToState(retireState)) == 0);
 
     std::array<std::uint8_t, 65536> floatState{};
     floatState.fill(0x5A);

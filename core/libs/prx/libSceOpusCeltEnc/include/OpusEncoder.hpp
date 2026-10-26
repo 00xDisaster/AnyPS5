@@ -3,11 +3,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -115,8 +115,8 @@ public:
         if (frameSize == 0) return error(codes.frameErrorOffset);
         std::lock_guard lock(mutex);
         if (!hasMarker(state)) return error(codes.destroyStateErrorOffset);
-        if (frameSize < 0) std::abort();
-        if (static_cast<std::uint64_t>(frameSize) * stateWord(state, codes.stateChannelsOffset) * 4 > 0x800000) std::abort();
+        if (frameSize < 0) fail("the converted frame reservation does not fit the stack");
+        if (static_cast<std::uint64_t>(frameSize) * stateWord(state, codes.stateChannelsOffset) * 4 > 0x800000) fail("the converted frame reservation does not fit the stack");
         if (!data) return error(codes.nullDataErrorOffset);
         if (maxDataBytes == 0) return error(codes.sizeErrorOffset);
         if (!acceptedFrame(stateRate(state), frameSize)) return error(codes.frameErrorOffset);
@@ -147,6 +147,7 @@ private:
     };
 
     void Make(void* state, std::uint32_t context, int sampleRate, int channels) {
+        const auto retired = hasMarker(state) ? std::optional<std::uint32_t>{stateWord(state, codes.stateInstanceOffset)} : std::nullopt;
         const auto instanceId = nextInstanceId++;
         std::memset(state, 0, codes.stateSize);
         codes.setupState(state, instanceId, sampleRate, channels);
@@ -164,6 +165,7 @@ private:
             std::memset(state, 0, codes.stateSize);
             fail("cannot create libopus encoder");
         }
+        if (retired) encoders.erase(*retired);
         encoders.emplace(instanceId, std::move(encoder));
     }
 
