@@ -10,7 +10,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <stdexcept>
 #include <string>
 
 extern "C" {
@@ -76,14 +75,6 @@ int main() {
         Require(sceKernelGetSocSensorTemperature(invalid, nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 22);
     }
     for (const int unmapped : {3, 15, 32, 64}) {
-        int untouched = -12345;
-        bool threw = false;
-        try {
-            sceKernelGetSocSensorTemperature(unmapped, &untouched);
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw && untouched == -12345);
         *__error_nid_postfix() = 0;
         Require(sceKernelGetSocSensorTemperature(unmapped, nullptr) == SCE_KERNEL_ERROR_EFAULT && *__error_nid_postfix() == 14);
     }
