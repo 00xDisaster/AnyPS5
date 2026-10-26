@@ -248,6 +248,7 @@ std::uint64_t DrawRenderPassKey(const Context& context, const State& state, std:
         for (const auto location : state.sampleLocations) mix(location);
     }
     if (!context.provokingVertexModePerPipeline) mix(state.provokingVertexMode);
+    if (state.rasterizerDiscard) mix(0x6469736361726400ull);
     return key;
 }
 

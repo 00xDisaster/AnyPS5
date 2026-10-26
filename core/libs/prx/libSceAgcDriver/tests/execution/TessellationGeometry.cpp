@@ -204,7 +204,7 @@ void ClearPixels() {
     }
 }
 
-void DrawReference(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, VkCullModeFlags cull, std::uint32_t wave, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint16_t> indices = Indices, float maxLevel = 64.0f) {
+void DrawReference(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, VkCullModeFlags cull, std::uint32_t wave, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint16_t> indices = Indices, float maxLevel = 64.0f, bool wait = true) {
     std::uint32_t cursor = 0;
     const auto local = Compile(target, ShaderStage::Local, LocalCode, cursor, false, wave);
     const auto hull = Compile(target, ShaderStage::TessellationControl, HullCode, cursor, false, wave);
@@ -218,10 +218,10 @@ void DrawReference(AgcDriver::VulkanDevice& device, const ShaderRecompiler::Spir
         {ShaderStage::Fragment, &fragment, PixelPushOffset(offsets, target)},
     }};
     device.Draw(PatchState(AgcDriver::Graphics::ShaderPath::Tessellation, cull, wave, color, maxLevel), {reinterpret_cast<std::uintptr_t>(indices.data()), static_cast<std::uint32_t>(indices.size()), 2, 1, 0, true, 0, 0}, shaders);
-    device.WaitIdle();
+    if (wait) device.WaitIdle();
 }
 
-void DrawThroughGeometry(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, VkCullModeFlags cull, std::uint32_t wave, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint16_t> indices = Indices, float maxLevel = 64.0f) {
+void DrawThroughGeometry(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target, VkCullModeFlags cull, std::uint32_t wave, const AgcDriver::Graphics::ColorTarget& color, std::span<const std::uint16_t> indices = Indices, float maxLevel = 64.0f, bool wait = true) {
     std::uint32_t cursor = 0;
     const std::span<const std::uint32_t> merged = wave == 32u ? std::span<const std::uint32_t>(Wave32DomainGeometryCode) : std::span<const std::uint32_t>(DomainGeometryCode);
     const auto local = Compile(target, ShaderStage::Local, LocalCode, cursor, true, wave);
@@ -240,7 +240,7 @@ void DrawThroughGeometry(AgcDriver::VulkanDevice& device, const ShaderRecompiler
         {ShaderStage::Fragment, &fragment, PixelPushOffset(offsets, target)},
     }};
     device.Draw(PatchState(AgcDriver::Graphics::ShaderPath::TessellationGeometry, cull, wave, color, maxLevel), {reinterpret_cast<std::uintptr_t>(indices.data()), static_cast<std::uint32_t>(indices.size()), 2, 1, 0, true, 0, 0}, shaders);
-    device.WaitIdle();
+    if (wait) device.WaitIdle();
 }
 
 void RequireSameImage(std::span<const std::byte> reference, std::span<const std::byte> drawn, const std::string& what) {
@@ -355,6 +355,19 @@ void RequireRecordedTarget(AgcDriver::VulkanDevice& device, const ShaderRecompil
     }
 }
 
+void RequireBatchedAfterOrdinaryDraw(AgcDriver::VulkanDevice& device, const ShaderRecompiler::SpirvTarget& target) {
+    const AgcDriver::Graphics::ColorTargetLayout layout(Width, Height, AgcDriver::Graphics::ColorTileMode::RenderTarget, 4);
+    Block block((layout.Bytes() + BlockBytes - 1) / BlockBytes * BlockBytes);
+    const auto color = TiledTarget(block);
+    FillBackground(block);
+    DrawReference(device, target, VK_CULL_MODE_NONE, 64u, color);
+    const auto reference = ReadBack(device, block, color.bytes);
+    FillBackground(block);
+    DrawReference(device, target, VK_CULL_MODE_NONE, 64u, color, Indices, 64.0f, false);
+    DrawThroughGeometry(device, target, VK_CULL_MODE_NONE, 64u, color);
+    RequireSameImage(reference, ReadBack(device, block, color.bytes), "a tessellation-geometry draw recorded after an ordinary draw into the same target in one batch");
+}
+
 struct RegisteredStage {
     Shader shader{};
     std::array<ShaderRegister, 6> registers{};
@@ -435,6 +448,7 @@ int main() {
         DrawThroughGeometry(*device, target, VK_CULL_MODE_NONE, 64u, LinearTarget(), levelFive, 5.0f);
         RequireSameImage(fullLevel, Pixels, "a level-5 triangle patch alone at VGT_HOS_MAX_TESS_LEVEL 5");
         RequireRecordedTarget(*device, target);
+        RequireBatchedAfterOrdinaryDraw(*device, target);
         device.reset();
         RequireRegisteredStages();
         std::puts("Tessellation geometry tests passed");
