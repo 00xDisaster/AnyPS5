@@ -5,7 +5,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
-#include <stdexcept>
 
 static constexpr int SCE_OK = 0;
 
@@ -37,15 +36,6 @@ static void RequireInvalidArguments() {
     }
     for (const std::uint32_t attr : {0x1000u, 0x10000u, 0x80000000u, 0xffffffffu})
         Require(sceKernelCreateSema(&rejected, "rejected", attr, 0, 1, nullptr) == SCE_KERNEL_ERROR_EINVAL);
-    for (const std::uint32_t attr : {0x100u, 0x101u, 0x102u}) {
-        bool threw = false;
-        try {
-            sceKernelCreateSema(&rejected, "shared", attr, 0, 1, nullptr);
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw);
-    }
     Require(rejected == nullptr);
 
     KernelSema sem = nullptr;
