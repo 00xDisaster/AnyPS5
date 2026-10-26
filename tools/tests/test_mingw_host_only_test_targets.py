@@ -118,6 +118,19 @@ class HostOnlyTargets(unittest.TestCase):
             ["first_tests", "second_tests"],
         )
 
+    def test_header_listed_as_a_target_source_still_selects_all_host_targets(self):
+        first = self.target("first_tests")
+        second = self.target("second_tests", source="core/libs/tests/Second.cpp")
+        second["sources"].append({"path": "core/libs/tests/Shared.hpp"})
+        build_dir = self.fixture([first, second])
+        source_root, targets = build_mingw_host_only_tests.read_reply(build_dir)
+        self.assertEqual(
+            build_mingw_host_only_tests.host_only_test_targets(
+                source_root, targets, ["core/libs/tests/Shared.hpp"]
+            ),
+            ["first_tests", "second_tests"],
+        )
+
     def test_fails_when_cmake_did_not_write_a_file_api_index(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "no CMake File API index"):

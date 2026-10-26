@@ -106,6 +106,15 @@ def host_only_test_targets(source_root, targets, changed_paths=None):
     if changed_paths is None:
         return selected
     changed = {Path(path).as_posix() for path in changed_paths if path}
+    broad_change = any(
+        path in {"CMakeLists.txt", ".github/workflows/build.yml", "tools/build_mingw_host_only_tests.py"}
+        or path.startswith("core/libs/") and (
+            path.endswith((".h", ".hpp", ".hh", ".inl")) or Path(path).name == "CMakeLists.txt"
+        )
+        for path in changed
+    )
+    if broad_change:
+        return selected
     changed_source = {
         relative
         for target in targets.values()
@@ -124,14 +133,7 @@ def host_only_test_targets(source_root, targets, changed_paths=None):
                 for item in target.get("sources", []) if not item.get("isGenerated")
             )
         ]
-    broad_change = any(
-        path in {"CMakeLists.txt", ".github/workflows/build.yml", "tools/build_mingw_host_only_tests.py"}
-        or path.startswith("core/libs/") and (
-            path.endswith((".h", ".hpp", ".hh", ".inl")) or Path(path).name == "CMakeLists.txt"
-        )
-        for path in changed
-    )
-    return selected if broad_change else []
+    return []
 
 
 def main(argv=None):
