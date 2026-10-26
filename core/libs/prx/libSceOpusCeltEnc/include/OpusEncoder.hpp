@@ -7,7 +7,6 @@
 #include <memory>
 #include <mutex>
 #include <new>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -147,7 +146,7 @@ private:
     };
 
     void Make(void* state, std::uint32_t context, int sampleRate, int channels) {
-        const auto retired = hasMarker(state) ? std::optional<std::uint32_t>{stateWord(state, codes.stateInstanceOffset)} : std::nullopt;
+        if (hasMarker(state)) encoders.erase(stateWord(state, codes.stateInstanceOffset));
         const auto instanceId = nextInstanceId++;
         std::memset(state, 0, codes.stateSize);
         codes.setupState(state, instanceId, sampleRate, channels);
@@ -165,7 +164,6 @@ private:
             std::memset(state, 0, codes.stateSize);
             fail("cannot create libopus encoder");
         }
-        if (retired) encoders.erase(*retired);
         encoders.emplace(instanceId, std::move(encoder));
     }
 
