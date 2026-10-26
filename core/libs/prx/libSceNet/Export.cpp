@@ -1367,7 +1367,8 @@ int64_t APS5_VABI sceNetRecvmsg(int s, NetMsghdr* msg, int flags) {
     const auto total = message_length(msg);
     if (total < 0) return total;
     NetMsghdr header = *msg;
-    const std::vector<NetIovec> vectors(header.iov, header.iov + header.iov_length);
+    std::vector<NetIovec> vectors;
+    if (header.iov_length > 0) vectors.assign(header.iov, header.iov + header.iov_length);
     if (!message_flags_supported(flags, NET_MSG_PEEK | NET_MSG_DONTWAIT)) return fail(NET_EOPNOTSUPP);
     Sock socket;
     {

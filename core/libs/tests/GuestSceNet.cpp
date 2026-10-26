@@ -804,6 +804,16 @@ static void CheckOverlappingReceiveVectors(int receiver, int sender, const std::
     Require(sceKernelReleaseDirectMemory(physical, page) == 0);
 }
 
+static void CheckEmptyReceiveVectors(int receiver, int sender, const std::array<std::uint8_t, 16>& address) {
+    std::array<std::uint8_t, 16> destination = address;
+    Require(sceNetSendto(sender, "x", 1, 0, destination.data(), destination.size()) == 1);
+    std::array<std::uint8_t, 16> source{};
+    NetMsghdr message{source.data(), static_cast<std::uint32_t>(source.size()), nullptr, 0, nullptr, 0, -1};
+    Require(sceNetRecvmsg(receiver, &message, 0) == 0);
+    Require(message.iov == nullptr && message.iov_length == 0 && message.flags == 0x10 && message.name_length == 16);
+    Require(source[0] == 16 && source[1] == 2 && source[4] == 127 && source[7] == 1);
+}
+
 static void CheckEpollWritable() {
     std::array<std::uint8_t, 16> address{16, 2, 0, 0, 127, 0, 0, 1};
     const int receiver = sceNetSocket("epoll-receiver", 2, 2, 17);
@@ -2310,6 +2320,7 @@ int main() {
     CheckMicrosecondTimeouts(udp_receiver);
     CheckMessages(udp_receiver, udp_sender, address);
     CheckOverlappingReceiveVectors(udp_receiver, udp_sender, address);
+    CheckEmptyReceiveVectors(udp_receiver, udp_sender, address);
     Require(sceNetSocketClose(udp_sender) == 0);
     Require(sceNetSocketClose(udp_receiver) == 0);
 
