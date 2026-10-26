@@ -27,6 +27,11 @@ static void Check(bool value, int line) {
 }
 #define Require(value) Check((value), __LINE__)
 
+static void CheckNullFace(int error) {
+    if (error != FT_Err_Invalid_Argument) std::fprintf(stderr, "PFR null-face returned %d, expected %d\n", error, FT_Err_Invalid_Argument);
+    Require(error == FT_Err_Invalid_Argument);
+}
+
 static void Put24(std::vector<unsigned char>& bytes, std::uint32_t value) {
     bytes.push_back(static_cast<unsigned char>(value >> 16));
     Put16(bytes, value);
@@ -160,8 +165,8 @@ static void MetricsCases(Metrics call, GuestFaceRec* face, bool pfr) {
     Guarded<std::uint32_t> outline{.value = 0xDEADBEEFu}, metrics{.value = 0xDEADBEEFu};
     Guarded<std::int64_t> x{.value = 0x123456789ABCll}, y{.value = 0x123456789ABCll};
     for (unsigned mask = 0; mask < 16; ++mask) {
-        Require(call(nullptr, mask & 1 ? &outline.value : nullptr, mask & 2 ? &metrics.value : nullptr,
-                     mask & 4 ? &x.value : nullptr, mask & 8 ? &y.value : nullptr) == FT_Err_Invalid_Argument);
+        CheckNullFace(call(nullptr, mask & 1 ? &outline.value : nullptr, mask & 2 ? &metrics.value : nullptr,
+                     mask & 4 ? &x.value : nullptr, mask & 8 ? &y.value : nullptr));
         Require(outline.value == 0xDEADBEEFu && metrics.value == 0xDEADBEEFu && x.value == 0x123456789ABCll && y.value == 0x123456789ABCll);
         outline.Verify(); metrics.Verify(); x.Verify(); y.Verify();
     }
@@ -184,8 +189,9 @@ static void MetricsCases(Metrics call, GuestFaceRec* face, bool pfr) {
 
 static void AdvanceCases(Advance call, GuestFaceRec* face, bool pfr) {
     Guarded<std::int64_t> value{.value = 0x123456789ABCll};
-    Require(call(nullptr, 1, nullptr) == FT_Err_Invalid_Argument);
-    Require(call(nullptr, 1, &value.value) == FT_Err_Invalid_Argument && value.value == 0x123456789ABCll);
+    CheckNullFace(call(nullptr, 1, nullptr));
+    CheckNullFace(call(nullptr, 1, &value.value));
+    Require(value.value == 0x123456789ABCll);
     value.Verify();
     Require(call(face, 1, nullptr) == FT_Err_Invalid_Argument);
     for (const auto index : {0u, 1u, 2u, 3u, std::numeric_limits<std::uint32_t>::max()}) {
@@ -199,8 +205,8 @@ static void AdvanceCases(Advance call, GuestFaceRec* face, bool pfr) {
 
 static void KerningCases(Kerning call, GuestFaceRec* face, bool pfr) {
     Guarded<GuestVector> value{.value = {0x123456789ABCll, -0x123456789ABCll}};
-    Require(call(nullptr, 1, 2, nullptr) == FT_Err_Invalid_Argument);
-    Require(call(nullptr, 1, 2, &value.value) == FT_Err_Invalid_Argument);
+    CheckNullFace(call(nullptr, 1, 2, nullptr));
+    CheckNullFace(call(nullptr, 1, 2, &value.value));
     Require(value.value.x == 0x123456789ABCll && value.value.y == -0x123456789ABCll);
     value.Verify();
     Require(call(face, 1, 2, nullptr) == FT_Err_Invalid_Argument);
