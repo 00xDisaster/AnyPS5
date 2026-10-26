@@ -625,6 +625,8 @@ float APS5_VABI __powisf2_nid_postfix(float base, int exponent);
 double APS5_VABI __powidf2_nid_postfix(double base, int exponent);
 float APS5_VABI expf_nid_postfix(float x);
 float APS5_VABI exp2f_nid_postfix(float x);
+short APS5_VABI _Exp_nid_postfix(double* value, double y, short offset);
+short APS5_VABI _FExp_nid_postfix(float* value, float y, short offset);
 float APS5_VABI logf_nid_postfix(float x);
 float APS5_VABI log2f_nid_postfix(float x);
 double APS5_VABI log10_nid_postfix(double x);
@@ -1289,6 +1291,7 @@ void APS5_VABI _ZNSt11range_errorD1Ev_nid_postfix(LibcException::ExceptionObject
 void APS5_VABI _ZNSt11range_errorD2Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt11range_errorD0Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt14overflow_errorD1Ev_nid_postfix(LibcException::ExceptionObject* self);
+void APS5_VABI _ZNSt15underflow_errorD1Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt8ios_base7failureD1Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt8ios_base7failureD2Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt8ios_base7failureD0Ev_nid_postfix(LibcException::ExceptionObject* self);
