@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -244,6 +245,16 @@ int main(int argc, char** argv) {
 #ifdef _WIN32
     const auto library = LoadLibraryA(argv[1]);
     Require(library != nullptr, "load requested library");
+    const auto checkPath = [](HMODULE module, const std::filesystem::path& expected) {
+        Require(module != nullptr, "load matching runtime module");
+        std::array<wchar_t, 32768> path{};
+        const auto length = GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
+        Require(length != 0 && length < path.size(), "read loaded module path");
+        Require(std::filesystem::equivalent(expected, std::filesystem::path(path.data())), "loaded module variant path");
+    };
+    const auto requested = std::filesystem::absolute(argv[1]);
+    checkPath(library, requested);
+    checkPath(GetModuleHandleW(L"libc.prx"), requested.parent_path() / "libc.prx");
     auto query = reinterpret_cast<Query>(GetProcAddress(library, symbol));
 #else
     const auto library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);

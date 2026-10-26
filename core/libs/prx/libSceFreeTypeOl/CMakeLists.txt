@@ -23,9 +23,10 @@ if(BUILD_TESTING)
             set_tests_properties(guest_freetype_outline_border_${module}_${border}
                 guest_freetype_outline_border_${module}_${border}_patched PROPERTIES TIMEOUT 20)
             if(WIN32)
-                set_tests_properties(guest_freetype_outline_border_${module}_${border}
-                    guest_freetype_outline_border_${module}_${border}_patched PROPERTIES ENVIRONMENT_MODIFICATION
+                set_tests_properties(guest_freetype_outline_border_${module}_${border} PROPERTIES ENVIRONMENT_MODIFICATION
                     "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceFreeTypeOl>")
+                set_tests_properties(guest_freetype_outline_border_${module}_${border}_patched PROPERTIES ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:${PATCHED_DIR}")
             endif()
         endforeach()
     endforeach()
