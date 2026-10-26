@@ -21,8 +21,26 @@ template<typename TAction> static void RequireThrows(TAction action, std::source
     Require(false, location);
 }
 
+static std::vector<void*> freed;
+
+static void* APS5_VABI Allocate(std::size_t size) {
+    return std::malloc(size);
+}
+
+static void APS5_VABI Free(void* pointer) {
+    freed.push_back(pointer);
+    std::free(pointer);
+}
+
+static void* APS5_VABI Calloc(std::size_t, std::size_t) { throw std::runtime_error("unexpected calloc"); }
+static void* APS5_VABI Reallocate(void*, std::size_t) { throw std::runtime_error("unexpected realloc"); }
+static void* APS5_VABI Align(std::size_t, std::size_t) { throw std::runtime_error("unexpected aligned allocation"); }
+static void* APS5_VABI Realign(void*, std::size_t, std::size_t) { throw std::runtime_error("unexpected aligned reallocation"); }
+static int APS5_VABI PosixAlign(void**, std::size_t, std::size_t) { throw std::runtime_error("unexpected posix_memalign"); }
+
 static void InitializeHeap() {
-    void* const api[10] {};
+    void* const api[10] {reinterpret_cast<void*>(Allocate), reinterpret_cast<void*>(Free), reinterpret_cast<void*>(Calloc), reinterpret_cast<void*>(Reallocate),
+        reinterpret_cast<void*>(Align), reinterpret_cast<void*>(Realign), reinterpret_cast<void*>(PosixAlign)};
     ApplicationHeapRegister_nid_no_patch(api);
 }
 
@@ -65,12 +83,12 @@ static void TestPop() {
     char third = 'c';
     Require(sk_pop_nid_postfix(nullptr) == nullptr);
     char* elements[8] {&first, nullptr, &third};
-    LibreSslStack stack {3, elements, 0, 8, nullptr};
+    LibreSslStack stack {3, elements, 1, 8, nullptr};
     Require(sk_pop_nid_postfix(&stack) == &third);
-    Require(sk_num_nid_postfix(&stack) == 2 && stack.numAlloc == 8 && stack.data == elements && elements[2] == &third);
+    Require(sk_num_nid_postfix(&stack) == 2 && stack.numAlloc == 8 && stack.data == elements && elements[2] == &third && stack.sorted == 1);
     Require(sk_value_nid_postfix(&stack, 2) == nullptr);
     Require(sk_pop_nid_postfix(&stack) == nullptr && sk_num_nid_postfix(&stack) == 1);
-    Require(sk_pop_nid_postfix(&stack) == &first && sk_num_nid_postfix(&stack) == 0);
+    Require(sk_pop_nid_postfix(&stack) == &first && sk_num_nid_postfix(&stack) == 0 && stack.sorted == 1);
     Require(sk_pop_nid_postfix(&stack) == nullptr && sk_num_nid_postfix(&stack) == 0);
     stack.num = -2;
     Require(sk_pop_nid_postfix(&stack) == nullptr && sk_num_nid_postfix(&stack) == -2);
@@ -107,8 +125,11 @@ static void TestPopFree() {
     Require(released.empty());
 
     LibreSslStack* stack = NewStack({&first, nullptr, &second, &third}, 4);
+    char** const data = stack->data;
+    freed.clear();
     sk_pop_free_nid_postfix(stack, Release);
     Require(released == std::vector<void*>({&first, &second, &third}));
+    Require(freed == std::vector<void*>({data, stack}));
     released.clear();
 
     stack = NewStack({nullptr, nullptr}, 2);
