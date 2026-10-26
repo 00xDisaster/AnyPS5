@@ -14,16 +14,6 @@
 
 static void Require(bool value) { if (!value) std::abort(); }
 
-template <typename TCall>
-static bool NotImplemented(TCall call, const std::string& name) {
-    try {
-        call();
-    } catch (const std::runtime_error& error) {
-        return std::string(error.what()) == name + " not implemented";
-    }
-    return false;
-}
-
 static void SetEntitlements(const std::filesystem::path& file) {
 #ifdef _WIN32
     Require(_wputenv_s(L"ANYPS5_ENTITLEMENTS", file.wstring().c_str()) == 0);
@@ -59,10 +49,6 @@ int main(int argc, char** argv) {
         Require(rejected);
         std::puts("Guest entitlements rejected a missing configured file");
         return 0;
-    }
-    for (std::int64_t requestId : {std::int64_t{0}, std::int64_t{1}, INT64_MAX}) {
-        Require(NotImplemented([requestId] { sceNpEntitlementAccessAbortRequest(requestId); }, "sceNpEntitlementAccessAbortRequest"));
-        Require(NotImplemented([requestId] { sceNpEntitlementAccessDeleteRequest(requestId); }, "sceNpEntitlementAccessDeleteRequest"));
     }
     std::filesystem::create_directories(directory);
     {
