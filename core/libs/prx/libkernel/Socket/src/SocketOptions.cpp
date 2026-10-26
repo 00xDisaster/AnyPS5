@@ -15,6 +15,7 @@
 #include "prx/libkernel/Socket/include/SocketError.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/Socket/include/SocketOptions.hpp"
+#include "prx/libc/include/General.hpp"
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -29,6 +30,7 @@ constexpr int GuestDontRoute = 0x10;
 constexpr int GuestBroadcast = 0x20;
 constexpr int GuestLinger = 0x80;
 constexpr int GuestOobInline = 0x100;
+constexpr int GuestAcceptFilter = 0x1000;
 constexpr int GuestNoSigpipe = 0x800;
 constexpr int GuestSendBuffer = 0x1001;
 constexpr int GuestReceiveBuffer = 0x1002;
@@ -171,6 +173,12 @@ int Copy(void* output, std::uint32_t* length, const void* value, std::uint32_t s
 
 int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int family, int type, int option, const void* value, std::uint32_t length) {
     const auto handle = static_cast<NativeHandle>(native);
+    if (option == GuestAcceptFilter) {
+        bool listening = false;
+        if (type != 2 && !NativeListening(native, listening)) return HostError();
+        if (!listening) return ErrorInvalid;
+        NotImplemented_nid_no_patch("setsockopt: SO_ACCEPTFILTER on a listening socket");
+    }
     if (option == GuestLinger) {
         if (length < sizeof(GuestLingerValue)) return ErrorInvalid;
         GuestLingerValue guest;
@@ -280,6 +288,12 @@ bool NativeListening(std::uintptr_t native, bool& listening) {
 
 int GetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int family, int type, int option, void* value, std::uint32_t* length) {
     const auto handle = static_cast<NativeHandle>(native);
+    if (option == GuestAcceptFilter) {
+        bool listening = false;
+        if (type != 2 && !NativeListening(native, listening)) return HostError();
+        if (!listening) return ErrorInvalid;
+        NotImplemented_nid_no_patch("getsockopt: SO_ACCEPTFILTER on a listening socket");
+    }
     if (option == GuestLinger) {
         linger current{};
         socklen_t size = sizeof(current);
