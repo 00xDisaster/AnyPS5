@@ -685,6 +685,8 @@ void importCoverageHintBudgetTests(const Context& context, const BdaTestAccess& 
         Require(first != nullptr && first->base == a && first->bytes == ranges.bytes, "coverage budget fixture did not import its first range");
         const auto firstBuffer = first->buffer;
         const auto firstSerial = HostImportSerial(ranges.importing, a, 16, false);
+        NoteHostImportFrame();
+        NoteHostImportFrame();
         for (int use = 0; use < 300; ++use) Require(HostImportFor(ranges.importing, d, 16) != nullptr, "coverage budget fixture did not import its hot range");
         const auto hotSerial = HostImportSerial(ranges.importing, d, 16, false);
         Require(firstSerial != 0 && hotSerial != 0 && HostImportLiveBytes() == 2 * ranges.bytes, "coverage budget fixture has unexpected import ownership or usage");
@@ -732,6 +734,8 @@ void failedImportJoinProbeBudgetTests(const Context& context, const BdaTestAcces
     const auto* first = HostImportFor(ranges.importing, a, 16);
     Require(first != nullptr && first->base == a && first->bytes == ranges.bytes, "failed join budget fixture did not import its first range");
     const auto firstSerial = HostImportSerial(ranges.importing, a, 16, false);
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     for (int use = 0; use < 300; ++use) Require(HostImportFor(ranges.importing, d, 16) != nullptr, "failed join budget fixture did not import its hot range");
     const auto hotSerial = HostImportSerial(ranges.importing, d, 16, false);
     Require(firstSerial != 0 && hotSerial != 0 && HostImportLiveBytes() == 2 * ranges.bytes, "failed join budget fixture has unexpected import ownership or usage");
@@ -1108,6 +1112,8 @@ void importAtMapOverBudgetTests(const Context& context) {
         leased.Upload(false);
         leased.WriteBack();
     }
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     const auto live = HostImportLiveBytes();
     SetHostImportBudget(live + bytes - 1);
     change(mapped, true);
@@ -1125,6 +1131,52 @@ void importAtMapOverBudgetTests(const Context& context) {
     Require(HostImportCovers(importing, keptAddress, 16) && !HostImportCovers(importing, reinterpret_cast<std::uintptr_t>(mapped), 16), "a range mapped at the budget was imported, or the import to keep was retired");
     for (auto* block : {kept, used, mapped}) change(block, false);
     for (auto* block : {kept, used, mapped}) ::operator delete(block, std::align_val_t{bytes});
+}
+
+// Three ranges under a budget for two, each used by a build of its own in every frame, with more lookups between the
+// uses than a frame's worth of imports. The two imported first keep their imports and the third is refused at every
+// frame, instead of evicting one of the others (which then evicts the next, every frame). A range unused for two frames
+// is evicted for the third.
+void importEvictionFramesTests(const Context& context) {
+    constexpr std::size_t bytes = 65536;
+    auto importing = context;
+    importing.hostImportAlignment = bytes;
+    std::array<void*, 3> blocks{};
+    std::array<std::uintptr_t, 3> at{};
+    const auto change = [&](void* block, bool add) {
+        auto* mutation = GuestAllocations::GuestAllocationsBegin_nid_postfix();
+        if (add) GuestAllocations::GuestAllocationsAdd_nid_postfix(mutation, block, bytes, true, false, true);
+        else GuestAllocations::GuestAllocationsRemove_nid_postfix(mutation, block);
+        GuestAllocations::GuestAllocationsEnd_nid_postfix(mutation);
+    };
+    for (std::size_t index = 0; index < blocks.size(); ++index) {
+        blocks[index] = ::operator new(bytes, std::align_val_t{bytes});
+        at[index] = reinterpret_cast<std::uintptr_t>(blocks[index]);
+        change(blocks[index], true);
+    }
+    SetHostImportBudget(HostImportLiveBytes() + 2 * bytes);
+    const auto use = [&](std::size_t index) {
+        GuestBufferMemory leased(importing);
+        leased.AddReadable(at[index], 32);
+        leased.Upload(false);
+        leased.WriteBack();
+        for (int lookup = 0; lookup < 300; ++lookup) static_cast<void>(HostImportFor(importing, at[index], 16));
+        return HostImportSerial(importing, at[index], 16, false);
+    };
+    std::array<std::uint64_t, 2> serials{use(0), use(1)};
+    Require(serials[0] != 0 && serials[1] != 0, "two ranges under a budget for two were not imported");
+    for (int frame = 0; frame < 10; ++frame) {
+        Require(use(2) == 0, "a range over the budget evicted an import used in the same frame (frame " + std::to_string(frame) + ")");
+        NoteHostImportFrame();
+        Require(use(0) == serials[0] && use(1) == serials[1], "an import used in every frame was imported again (frame " + std::to_string(frame) + ")");
+    }
+    NoteHostImportFrame();
+    Require(use(1) == serials[1] && use(2) == 0, "a range over the budget evicted an import used in the previous frame");
+    NoteHostImportFrame();
+    Require(use(1) == serials[1] && use(2) != 0 && !HostImportCovers(importing, at[0], 16), "an import unused for two frames was not evicted for a range over the budget");
+    SetHostImportBudget(0);
+    for (auto* block : blocks) change(block, false);
+    for (auto* block : blocks) ::operator delete(block, std::align_val_t{bytes});
 }
 
 void importRequesterTests(const Context& context, const BdaTestAccess& access) {
@@ -1601,6 +1653,8 @@ void evictingRefusalMemoryTests(const Context& context) {
     }
     before = counted();
     Require(HostImportFor(importing, address(filled + 2), 16) == nullptr && counted().remembered == before.remembered + 1, "a remembered evicting refusal ended when a build raised the floor while no import could age out of its protection yet");
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     for (int use = 0; use < 200; ++use) Require(HostImportFor(importing, address(filled + 1), 16) != nullptr, "a live import was not found");
     before = counted();
     Require(HostImportFor(importing, address(filled + 2), 16) != nullptr && counted().remembered == before.remembered, "an evicting request was answered from its remembered refusal after the imports aged out of their protection");
@@ -1637,6 +1691,8 @@ void evictingRefusalAgingTests(const Context& context) {
     static_cast<void>(HostImportFor(importing, address(filled), 16));
     auto before = counted();
     Require(HostImportFor(importing, address(filled), 16) == nullptr && counted().remembered == before.remembered + 1, "a refusal while the imports were recent but no longer held by a build was not remembered");
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     for (int use = 0; use < 200; ++use) Require(HostImportFor(importing, address(filled - 1), 16) != nullptr, "a live import was not found");
     before = counted();
     Require(HostImportFor(importing, address(filled), 16) != nullptr && counted().remembered == before.remembered, "an evicting request was answered from its remembered refusal after imports no build held aged out of their protection");
@@ -4223,6 +4279,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
     importReportFloorTests(context, access, false);
     importReportRefusalMemoryTests(context, access);
     sparseImportedHeapTests(context, access);
+    importEvictionFramesTests(context);
     heapMirrorTests(context, access);
     partialHeapImportBudgetTests(context, access);
     importedHeapMirrorTests(context, access);
