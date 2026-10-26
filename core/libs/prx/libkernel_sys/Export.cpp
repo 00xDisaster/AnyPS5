@@ -62,6 +62,7 @@ static int GuestFstat(int fd, bool* withoutVnode = nullptr) {
 
 constexpr int GuestEnoent = 2;
 constexpr int GuestEperm = 1;
+constexpr int GuestEsrch = 3;
 constexpr int GuestEio = 5;
 constexpr int GuestEbadf = 9;
 constexpr int GuestEfault = 14;
@@ -335,6 +336,27 @@ int APS5_VABI setsid_nid_postfix(void) {
 
 std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
     return File::ExchangeCreationMask_nid_no_patch(mask);
+}
+
+int APS5_VABI sceKernelGetOpenPsIdForSystem(void* id) {
+    if (id == nullptr) return GuestEinval;
+    return sceKernelGetOpenPsId(id);
+}
+
+int APS5_VABI sceKernelIsCEX(void) {
+    return 1;
+}
+
+int APS5_VABI sceKernelIsDevKit(void) {
+    return 0;
+}
+
+int APS5_VABI get_authinfo_nid_postfix(int pid, KernelAuthInfo* info) {
+    if (info == nullptr) return static_cast<int>(Fail(GuestEperm));
+    if (pid != 0 && pid != getpid_nid_postfix()) return static_cast<int>(Fail(GuestEsrch));
+    *info = {};
+    info->capabilities[0] = 0x2000000000000000;
+    return 0;
 }
 
 int APS5_VABI fstatfs_nid_postfix(int d, KernelStatfs* buf) {
