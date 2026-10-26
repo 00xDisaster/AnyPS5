@@ -124,6 +124,36 @@ The advisor reads `titleId` and `contentVersion` from the specified `param.json`
 }
 ```
 
+Catalog entries may also contain these optional fields. Catalogs without them keep the same behavior and `format: 1`.
+
+| Field | Value |
+|-------|-------|
+| `id` | Stable patch identifier matching `[a-z0-9][a-z0-9_-]*`. It may be reused for another content version. Verified entries with the same ID for one title and version are rejected. |
+| `name` | User-facing name for the whole patch file. |
+| `category` | One of `compatibility`, `fps`, `graphics`, `memory` or `other`. |
+| `description` | What the patch file changes. |
+| `tested` | Nonempty array of test records, described below. |
+| `notes` | Limits or instructions for the user. |
+| `contributors` | Nonempty array of distinct contributor names. |
+| `source` | HTTPS link to the patch's provenance. The advisor only displays it; it does not fetch it. |
+| `revision` | Positive integer revision of the patch definition, separate from the game's `contentVersion`. |
+
+`name`, `description` and `notes` are nonempty single-line text when present. They describe the catalog entry as a whole; `name` and `description` inside a patch TOML's `[[patch]]` describe individual byte changes. Each `tested` record requires `stage` (`verification`, `conversion`, `launch` or `gameplay`), `result` (`passed`, `failed` or `partial`) and nonempty single-line `evidence`. Optional `environment` is single-line text, and optional `date` is a calendar date in `YYYY-MM-DD` form. For example:
+
+```json
+{
+  "tested": [{
+    "stage": "verification",
+    "result": "passed",
+    "environment": "CachyOS Linux",
+    "date": "2026-10-26",
+    "evidence": "Relinker reported 1 ok, 0 not-checked, 0 mismatch"
+  }]
+}
+```
+
+The advisor validates these fields for matching catalog entries and reports a malformed entry without stopping the remaining entries. It prints metadata only for entries that pass the hash and relinker checks. Test records are contributor-provided claims; the advisor does not independently confirm launch or gameplay evidence.
+
 The advisor validates patch files only for entries matching the requested title and version. It reports and skips a malformed matching entry or a relinker verification error, so another valid entry can still be recommended. Verification times out after 120 seconds per entry by default; use `--timeout-seconds <positive integer>` to change the limit. For synthetic inputs without system modules, use `--skip-sce-module` if conversion also uses it; this option conflicts with `--sce-module-path`. No matching entry or no verified patch exits `1`; invalid input or no verified patch after a relinker error exits `2`. If multiple entries verify, the advisor recommends none because it cannot choose or combine them, and points to `--list-verified` to inspect the matches. The tool does not fetch or apply patches. A recommendation prints `--patches` and the module and executable options to use when converting. Keep catalog patch files outside the input executable's directory to avoid automatic `relinker-patches.toml` discovery.
 
 With `--list-verified`, the advisor prints every entry that passes metadata, hash and relinker checks, in catalog order. Each result includes its catalog number, patch file, target hashes and conversion options. It exits `0` when at least one entry verifies, even if another entry was rejected; with no verified entries, the existing `1` or `2` exit status still applies. Without this option, a single verified entry is recommended and multiple verified entries remain ambiguous. The listing tells users to choose one patch file. It does not combine patch files or apply them during conversion; review the chosen patch before applying it.
