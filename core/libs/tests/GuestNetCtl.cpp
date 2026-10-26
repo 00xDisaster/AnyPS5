@@ -280,7 +280,7 @@ StunTxId ReceiveStunBindingRequest(TestSocket serverSocket, sockaddr_in& client)
     return txId;
 }
 
-void SendStunBindingResponse(TestSocket serverSocket, const sockaddr_in& client, const StunTxId& txId, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped) {
+void SendStunBindingResponse(TestSocket serverSocket, const sockaddr_in& client, const StunTxId& txId, std::uint32_t mappedAddr, std::uint16_t mappedHostPort, bool xorMapped, const sockaddr_in* otherServer = nullptr) {
     const std::uint16_t effectivePort = mappedHostPort != 0 ? mappedHostPort : ntohs(client.sin_port);
     const std::uint32_t effectiveAddr = mappedAddr != 0 ? mappedAddr : client.sin_addr.s_addr;
     std::vector<std::uint8_t> response(20, 0);
@@ -290,6 +290,9 @@ void SendStunBindingResponse(TestSocket serverSocket, const sockaddr_in& client,
     std::memcpy(response.data() + 4, &cookie, sizeof(cookie));
     std::memcpy(response.data() + 8, txId.data(), txId.size());
     AppendStunAddressAttribute(response, xorMapped ? 0x0020 : 0x0001, effectiveAddr, effectivePort, xorMapped);
+    if (otherServer) {
+        AppendStunAddressAttribute(response, 0x0005, otherServer->sin_addr.s_addr, ntohs(otherServer->sin_port), false);
+    }
     const auto attrLen = static_cast<std::uint16_t>(response.size() - 20);
     response[2] = static_cast<std::uint8_t>(attrLen >> 8);
     response[3] = static_cast<std::uint8_t>(attrLen & 0xFF);
@@ -352,49 +355,91 @@ void CheckNatDiscovery(in_addr address) {
     Require(natInfo.nat_type == 0);
     Require(natInfo.mapped_addr == 0);
 
-    const sockaddr_in bothServers[2] = {server1Addr, server2Addr};
-    NetCtlSetStunServers_nid_no_patch(bothServers, 2, 40);
-    StunTxId droppedTx{};
-    StunTxId fallbackTx{};
-    std::thread fallbackWorker([&] {
-        sockaddr_in droppedClient{};
-        droppedTx = ReceiveStunBindingRequest(server1, droppedClient);
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    StunTxId openTx{};
+    std::thread openWorker([&] {
         sockaddr_in client{};
-        fallbackTx = ReceiveStunBindingRequest(server2, client);
-        StunTxId wrongTx = fallbackTx;
-        wrongTx[11] ^= 0xA5u;
-        SendStunBindingResponse(server2, client, wrongTx, spoofedIp, 54321, true);
-        SendStunBindingResponse(server2, client, fallbackTx, externalIp, 54321, true);
+        openTx = ReceiveStunBindingRequest(server1, client);
+        SendStunBindingResponse(server1, client, openTx, address.s_addr, 0, true);
     });
     natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    fallbackWorker.join();
-    RecordUniqueTransactionId(seenIds, droppedTx);
-    RecordUniqueTransactionId(seenIds, fallbackTx);
+    openWorker.join();
+    RecordUniqueTransactionId(seenIds, openTx);
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 1);
+    Require(natInfo.mapped_addr == address.s_addr);
+
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
+    StunTxId incompleteTx{};
+    std::thread incompleteWorker([&] {
+        sockaddr_in client{};
+        incompleteTx = ReceiveStunBindingRequest(server1, client);
+        SendStunBindingResponse(server1, client, incompleteTx, externalIp, 54321, true);
+    });
+    natInfo = {sizeof(natInfo), 99, 99, 0xFFFFFFFFu};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    incompleteWorker.join();
+    RecordUniqueTransactionId(seenIds, incompleteTx);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 1);
     Require(natInfo.nat_type == 0);
+    Require(natInfo.mapped_addr == 0);
+
+    const sockaddr_in bothServers[2] = {server1Addr, server2Addr};
+    NetCtlSetStunServers_nid_no_patch(bothServers, 2, 1000);
+    StunTxId type2Tx1{};
+    StunTxId type2Tx2{};
+    std::thread type2Worker([&] {
+        sockaddr_in firstClient{};
+        type2Tx1 = ReceiveStunBindingRequest(server1, firstClient);
+        SendStunBindingResponse(server1, firstClient, type2Tx1, externalIp, 54321, true);
+        sockaddr_in secondClient{};
+        type2Tx2 = ReceiveStunBindingRequest(server2, secondClient);
+        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
+        Require(firstClient.sin_port == secondClient.sin_port);
+        StunTxId wrongTx = type2Tx2;
+        wrongTx[11] ^= 0xA5u;
+        SendStunBindingResponse(server2, secondClient, wrongTx, spoofedIp, 59999, true);
+        SendStunBindingResponse(server2, secondClient, type2Tx2, externalIp, 54321, true);
+    });
+    natInfo = {sizeof(natInfo), 99, 99, 0};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    type2Worker.join();
+    RecordUniqueTransactionId(seenIds, type2Tx1);
+    RecordUniqueTransactionId(seenIds, type2Tx2);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 2);
     Require(natInfo.mapped_addr == externalIp);
 
     NetCtlNatInfo cachedInfo{sizeof(cachedInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&cachedInfo) == 0);
-    Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 0 && cachedInfo.mapped_addr == externalIp);
+    Require(cachedInfo.stun_status == 2 && cachedInfo.nat_type == 2 && cachedInfo.mapped_addr == externalIp);
 
     NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
-    StunTxId legacyTx{};
-    std::thread legacyWorker([&] {
-        sockaddr_in client{};
-        legacyTx = ReceiveStunBindingRequest(server1, client);
-        SendStunBindingResponse(server1, client, legacyTx, address.s_addr, 0, false);
+    StunTxId type3Tx1{};
+    StunTxId type3Tx2{};
+    std::thread type3Worker([&] {
+        sockaddr_in firstClient{};
+        type3Tx1 = ReceiveStunBindingRequest(server1, firstClient);
+        SendStunBindingResponse(server1, firstClient, type3Tx1, externalIp, 54321, false, &server2Addr);
+        sockaddr_in secondClient{};
+        type3Tx2 = ReceiveStunBindingRequest(server2, secondClient);
+        Require(firstClient.sin_addr.s_addr == secondClient.sin_addr.s_addr);
+        Require(firstClient.sin_port == secondClient.sin_port);
+        SendStunBindingResponse(server2, secondClient, type3Tx2, externalIp, 54322, false);
     });
     natInfo = {sizeof(natInfo), 99, 99, 0};
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    legacyWorker.join();
-    RecordUniqueTransactionId(seenIds, legacyTx);
+    type3Worker.join();
+    RecordUniqueTransactionId(seenIds, type3Tx1);
+    RecordUniqueTransactionId(seenIds, type3Tx2);
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 0);
-    Require(natInfo.mapped_addr == address.s_addr);
+    Require(natInfo.nat_type == 3);
+    Require(natInfo.mapped_addr == externalIp);
 
     NetCtlSetStunServers_nid_no_patch(nullptr, 0, 0);
     CloseTestSocket(server1);
