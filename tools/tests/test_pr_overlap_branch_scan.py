@@ -103,6 +103,27 @@ class BranchScanTests(unittest.TestCase):
 
         self.assertCountEqual(merged, ["refs/pr/1", "refs/pr/2", "refs/pr/3", "refs/pr/4"])
 
+    def test_a_pull_request_on_a_path_the_base_renamed_is_still_compared(self):
+        old = run("rev-parse", "refs/pr/base")
+        older = commit_on_base(old, "older pull request", {"b.txt": "older\ntwo\nthree\n"})
+        run("checkout", "-q", "--detach", old)
+        run("mv", "b.txt", "renamed.txt")
+        run("commit", "-q", "-m", "rename on main")
+        base = run("rev-parse", "HEAD")
+        run("update-ref", "refs/pr/base", base)
+        branch = commit_on_base(base, "branch", {"renamed.txt": "branch\ntwo\nthree\n"})
+        run("update-ref", "refs/pr/5", older)
+        prs = {5: {"ref": "refs/pr/5", "sha": older, "author": "author5", "depends": set()},
+               0: {"ref": branch, "author": None, "depends": set()}}
+        everything = copy.deepcopy(prs)
+        for pr in everything.values():
+            pr_overlap.scan(pr)
+        pr_overlap.scan_all(prs, 2)
+        expected = pr_overlap.overlaps(everything, 0, 5)
+        self.assertIsNotNone(expected)
+        self.assertIn("renamed.txt", expected["conflicts"])
+        self.assertEqual(pr_overlap.overlaps(prs, 0, 5), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
