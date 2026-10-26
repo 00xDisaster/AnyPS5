@@ -5,6 +5,9 @@
 #include "SDL_video.h"
 #include <cmath>
 #include <cstdio>
+#ifdef __APPLE__
+#include "prx/libc/include/MainThread.hpp"
+#endif
 
 void MouseInput::HandleEvent(const SDL_Event& event, unsigned windowId) {
     MouseInputEvent input{};
@@ -87,8 +90,17 @@ void MouseInput::UpdateCapture(bool allowed) {
         return;
     }
     const bool wanted = CaptureWanted(allowed);
+#ifdef __APPLE__
+    bool relative = false;
+    RunOnMainThread([&] { relative = SDL_GetRelativeMouseMode() == SDL_TRUE; });
+    if (wanted == captured && relative == wanted) return;
+    int result = 0;
+    RunOnMainThread([&] { result = SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE); });
+    if (result != 0) {
+#else
     if (wanted == captured && (SDL_GetRelativeMouseMode() == SDL_TRUE) == wanted) return;
     if (SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE) != 0) {
+#endif
         static bool warned = false;
         if (!warned) {
             warned = true;

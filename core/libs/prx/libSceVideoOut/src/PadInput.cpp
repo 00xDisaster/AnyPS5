@@ -12,6 +12,9 @@
 #include "prx/libSceMouse/include/MouseState.hpp"
 #include "prx/libSceVideoOut/include/DisplayWindow.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Presentation.hpp"
+#ifdef __APPLE__
+#include "prx/libc/include/MainThread.hpp"
+#endif
 #include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
 #include "prx/libScePad/include/PadState.hpp"
 #include "prx/libScePad/include/Pad.hpp"
@@ -168,7 +171,13 @@ void PadInput::applyOutput() {
 void PadInput::setMouseMode(bool enabled) {
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0");
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0");
+#ifdef __APPLE__
+    int result = 0;
+    RunOnMainThread([&] { result = SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE); });
+    if (result != 0) throw std::runtime_error(std::string("Pad: relative mouse mode failed: ") + SDL_GetError());
+#else
     if (SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE) != 0) throw std::runtime_error(std::string("Pad: relative mouse mode failed: ") + SDL_GetError());
+#endif
     keyboardMouse.SetMouseMode(enabled);
 }
 
