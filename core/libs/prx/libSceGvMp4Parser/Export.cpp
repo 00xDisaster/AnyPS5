@@ -1,3 +1,4 @@
+#include "prx/libSceGvMp4Parser/include/Api.hpp"
 #include <cstddef>
 #include <cstdint>
 #include "SceTypes.hpp"
