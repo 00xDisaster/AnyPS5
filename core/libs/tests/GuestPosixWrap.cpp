@@ -1,7 +1,10 @@
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/RemoveTree.hpp"
-#include "prx/libSceLibcInternal/include/Statvfs.hpp"
+#include "prx/libSceLibcInternal/include/Api.hpp"
+#include "prx/libScePosixForWebKit/include/Api.hpp"
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -12,19 +15,6 @@
 #include <fstream>
 #include <source_location>
 #include <string>
-
-extern "C" {
-int APS5_VABI __wrap_fchown(int, std::uint32_t, std::uint32_t);
-int APS5_VABI __wrap_link(const char*, const char*);
-std::int64_t APS5_VABI __wrap_readlink(const char*, char*, std::size_t);
-int APS5_VABI __wrap_statvfs(const char*, LibcStatvfs*);
-int APS5_VABI __wrap_symlink(const char*, const char*);
-int APS5_VABI statvfs_nid_postfix(const char*, LibcStatvfs*);
-int APS5_VABI lstat_nid_postfix(const char*, FileStat*);
-int APS5_VABI open_nid_postfix(const char*, int, int);
-int APS5_VABI close_nid_postfix(int);
-int* APS5_VABI __error_nid_postfix();
-}
 
 namespace {
 
