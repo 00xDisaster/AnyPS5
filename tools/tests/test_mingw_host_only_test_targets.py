@@ -45,7 +45,8 @@ class HostOnlyTargets(unittest.TestCase):
 
     def test_selects_core_libs_test_executables_without_guest_libc(self):
         host = self.target("host_tests")
-        guest = self.target("guest_tests", dependencies=("libc-id",))
+        guest = self.target("guest_tests", dependencies=("libc-id",),
+                             fragment="C:/build/core/libs/prx/libc/libc.dll.a")
         libc = self.target("libc", target_type="SHARED_LIBRARY")
         libc["id"] = "libc-id"
         other = self.target("outside_tests", source="core/relinker/tests/Outside.cpp")
@@ -57,7 +58,8 @@ class HostOnlyTargets(unittest.TestCase):
     def test_excludes_a_transitive_guest_libc_dependency(self):
         helper = self.target("guest_helper", target_type="STATIC_LIBRARY", source="core/libs/tests/GuestHelper.cpp",
                              dependencies=("libc-id",))
-        guest = self.target("guest_tests", dependencies=("helper-id",))
+        guest = self.target("guest_tests", dependencies=("helper-id",),
+                             fragment="C:/build/core/libs/prx/libc/libc.dll.a")
         libc = self.target("libc", target_type="SHARED_LIBRARY")
         helper["id"] = "helper-id"
         libc["id"] = "libc-id"
@@ -65,19 +67,21 @@ class HostOnlyTargets(unittest.TestCase):
         source_root, targets = build_mingw_host_only_tests.read_reply(build_dir)
         self.assertEqual(build_mingw_host_only_tests.host_only_test_targets(source_root, targets), [])
 
-    def test_excludes_a_direct_libc_file_and_the_full_libraries_target(self):
+    def test_excludes_a_direct_libc_link_but_ignores_the_full_libraries_build_target(self):
         direct_file = self.target("direct_file_tests", fragment="/build/libs/libc.prx")
         all_libraries = self.target("all_libraries_tests", dependencies=("libs-id",))
         libraries = self.target("libs", target_type="UTILITY")
         libraries["id"] = "libs-id"
         build_dir = self.fixture([direct_file, all_libraries, libraries])
         source_root, targets = build_mingw_host_only_tests.read_reply(build_dir)
-        self.assertEqual(build_mingw_host_only_tests.host_only_test_targets(source_root, targets), [])
+        self.assertEqual(build_mingw_host_only_tests.host_only_test_targets(source_root, targets), ["all_libraries_tests"])
 
     def test_excludes_product_library_dependencies_but_keeps_test_helpers(self):
         product = self.target("product_lib", target_type="STATIC_LIBRARY", source="core/libs/utility/src/Utility.cpp")
+        product["artifacts"] = [{"path": "core/libs/utility/libproduct_lib.a"}]
         product["id"] = "product-id"
-        production_dependent = self.target("production_dependent", dependencies=("product-id",))
+        production_dependent = self.target("production_dependent", dependencies=("product-id",),
+                                            fragment="/build/core/libs/utility/libproduct_lib.a")
         helper = self.target("test_helper", target_type="STATIC_LIBRARY", source="core/libs/tests/GuestHelper.cpp")
         helper["paths"]["source"] = "core/libs/tests"
         helper["id"] = "helper-id"
@@ -89,6 +93,23 @@ class HostOnlyTargets(unittest.TestCase):
         build_dir = self.fixture([product, production_dependent, helper, helper_dependent, external, external_dependent])
         source_root, targets = build_mingw_host_only_tests.read_reply(build_dir)
         self.assertEqual(build_mingw_host_only_tests.host_only_test_targets(source_root, targets), ["external_dependent", "helper_dependent"])
+
+    def test_ignores_build_order_dependencies_that_are_not_linked(self):
+        host = self.target(
+            "guest_sigvec_modules_tests",
+            dependencies=("libc-id", "kernel-id", "internal-id", "patcher-id"),
+        )
+        libc = self.target("libc", target_type="SHARED_LIBRARY", source="core/libs/libc/src/libc.cpp")
+        kernel = self.target("libkernel", target_type="SHARED_LIBRARY", source="core/libs/libkernel/src/kernel.cpp")
+        internal = self.target("libSceLibcInternal", target_type="SHARED_LIBRARY", source="core/libs/internal/src/internal.cpp")
+        patcher = self.target("nid_patcher", target_type="STATIC_LIBRARY", source="core/libs/nid_patcher/src/patcher.cpp")
+        libc["id"], kernel["id"], internal["id"], patcher["id"] = "libc-id", "kernel-id", "internal-id", "patcher-id"
+        build_dir = self.fixture([host, libc, kernel, internal, patcher])
+        source_root, targets = build_mingw_host_only_tests.read_reply(build_dir)
+        self.assertEqual(
+            build_mingw_host_only_tests.host_only_test_targets(source_root, targets),
+            ["guest_sigvec_modules_tests"],
+        )
 
     def test_selects_only_changed_host_test_sources(self):
         first = self.target("first_tests")

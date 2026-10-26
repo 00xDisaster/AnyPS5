@@ -26,55 +26,70 @@ def read_reply(build_dir):
     return Path(model["paths"]["source"]).resolve(), targets
 
 
-def is_libc_link(name, target):
-    if name == "libc" or name == "libs":
-        return True
+def link_command(target):
     link = target.get("link", {})
     fragments = link.get("commandFragments", [])
-    command = " ".join(fragment.get("fragment", "") for fragment in fragments)
-    return re.search(r"(?i)(?:^|[/\\\s])libc(?:\.prx|\.dll\.a)(?:$|\s)", command) is not None
+    return " ".join(fragment.get("fragment", "") for fragment in fragments)
 
 
-def links_guest_libc(target, targets, visited=None):
-    visited = set() if visited is None else visited
-    target_id = target["id"]
-    if target_id in visited:
-        return False
-    visited.add(target_id)
-    if is_libc_link(target["name"], target):
+def is_libc_link(name, target):
+    if name == "libc":
         return True
-    for dependency in target.get("dependencies", []):
-        linked_target = targets.get(dependency["id"])
-        if linked_target is not None and links_guest_libc(linked_target, targets, visited):
-            return True
+    command = link_command(target)
+    return re.search(r"(?i)(?:^|[/\\\s])libc(?:\.prx|\.dll\.a)(?:$|[\s\"'])", command) is not None
+
+
+def links_guest_libc(target):
+    return is_libc_link(target["name"], target)
+
+
+def is_product_library(target, source_root):
+    if target.get("type") not in {"STATIC_LIBRARY", "SHARED_LIBRARY", "MODULE_LIBRARY"}:
+        return False
+    source_dir = (source_root / target["paths"]["source"]).resolve()
+    try:
+        source_dir.relative_to(source_root / "core" / "libs")
+    except ValueError:
+        return False
+    try:
+        source_dir.relative_to(source_root / "core" / "libs" / "tests")
+    except ValueError:
+        return True
     return False
 
 
-def has_product_library_dependency(target, targets, source_root, visited=None):
-    visited = set() if visited is None else visited
-    target_id = target["id"]
-    if target_id in visited:
+def link_command_mentions_target(command, target):
+    link_names = set()
+    for artifact in target.get("artifacts", []):
+        name = Path(artifact.get("path", "")).name
+        if name and name in command:
+            return True
+        for suffix in (".dll.a", ".dylib", ".prx", ".so", ".a", ".lib"):
+            if name.casefold().endswith(suffix):
+                name = name[:-len(suffix)]
+                break
+        if name.startswith("lib") and target.get("name", "").casefold() != "libc":
+            name = name[3:]
+        if name:
+            link_names.add(name)
+    target_name = target.get("name", "")
+    if target_name:
+        link_names.add(target_name)
+    return any(
+        re.search(rf"(?i)(?:^|\s)-l{re.escape(name)}(?=$|\s)", command) is not None
+        for name in link_names
+    )
+
+
+def links_product_library(target, targets, source_root):
+    # The File API dependency graph includes add_dependencies edges. The
+    # executable's link fragments contain the libraries actually passed to
+    # the linker, including transitive link libraries.
+    command = link_command(target)
+    if not command:
         return False
-    visited.add(target_id)
-    for dependency in target.get("dependencies", []):
-        linked_target = targets.get(dependency["id"])
-        if linked_target is None:
-            continue
-        if linked_target.get("type") in {"STATIC_LIBRARY", "SHARED_LIBRARY", "MODULE_LIBRARY"}:
-            source_dir = (source_root / linked_target["paths"]["source"]).resolve()
-            try:
-                source_dir.relative_to(source_root / "core" / "libs")
-                in_project_libs = True
-            except ValueError:
-                in_project_libs = False
-            try:
-                source_dir.relative_to(source_root / "core" / "libs" / "tests")
-                in_test_tree = True
-            except ValueError:
-                in_test_tree = False
-            if in_project_libs and not in_test_tree:
-                return True
-        if has_product_library_dependency(linked_target, targets, source_root, visited):
+    for linked_target in targets.values():
+        if is_product_library(linked_target, source_root) and link_command_mentions_target(command, linked_target):
             return True
     return False
 
@@ -99,7 +114,7 @@ def host_only_test_targets(source_root, targets, changed_paths=None):
         sources = [source_root / source["path"] for source in target.get("sources", []) if not source.get("isGenerated")]
         if not any("tests" in source.parts and source.is_relative_to(source_root / "core" / "libs") for source in sources):
             continue
-        if links_guest_libc(target, targets) or has_product_library_dependency(target, targets, source_root):
+        if links_guest_libc(target) or links_product_library(target, targets, source_root):
             continue
         selected.append(target["name"])
     selected = sorted(set(selected), key=str.casefold)
