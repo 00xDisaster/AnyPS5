@@ -1826,9 +1826,9 @@ bool ImportWatched(std::uint64_t address, std::size_t bytes, const std::function
         }
     }
     const auto saveBytes = [&](std::uint64_t begin, std::uint64_t end) {
-        lock.unlock();
+        lock.Suspend();
         beforeUnwatch(begin, static_cast<std::size_t>(end - begin));
-        lock.lock();
+        lock.Resume();
     };
     std::vector<std::pair<std::uint64_t, std::uint64_t>> leaving;
     std::erase_if(spans, [&](const auto& span) {
