@@ -52,6 +52,17 @@ static void TestPitchShift(std::uint32_t moduleIndex, bool checkBypassRejection 
         Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
     };
     setup();
+    for (const auto index : {moduleIndex + 1, 31u, 255u}) {
+        Ngs2CustomVoicePitchShiftParam invalid{};
+        invalid.header = {sizeof(invalid), 0, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT | index};
+        invalid.cents = 700;
+        Require(sceNgs2VoiceControl(voice, &invalid.header) == SCE_NGS2_ERROR_INVALID_PARAM_ID);
+    }
+    std::array<Ngs2CustomVoicePitchShiftParam, 2> invalidChain{};
+    invalidChain[0].header = {sizeof(invalidChain[0]), sizeof(invalidChain[0]), SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT | 31};
+    invalidChain[1].header.id = SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT;
+    Require(sceNgs2VoiceControl(voice, &invalidChain[0].header) == SCE_NGS2_ERROR_INVALID_PARAM_ID);
+
     const auto source = Voice(CreateRack(system, SCE_NGS2_RACK_ID_SUBMIXER));
     Control(source, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 2, 0});
     Signal signal;
@@ -74,7 +85,7 @@ static void TestPitchShift(std::uint32_t moduleIndex, bool checkBypassRejection 
         {.140000001f, .119999997f, -.114999995f, -.13499999f},
     };
     for (std::uint32_t grain = 0; grain < 90; ++grain) {
-        if (grain == 12) Control(voice, param, Ngs2CustomVoicePitchShiftParam{{}, 700, 0, 0, 0});
+        if (grain == 12) Control(voice, param | 0x20, Ngs2CustomVoicePitchShiftParam{{}, 700, 0, 0, 0});
         if (grain == 22) Control(voice, param, Ngs2CustomVoicePitchShiftParam{{}, -700, 0, 2, 0});
         if (grain == 32) Control(voice, param, Ngs2CustomVoicePitchShiftParam{{}, 0, 0, 0, 0});
         if (grain == 42) Event(voice, SCE_NGS2_VOICE_EVENT_PAUSE);

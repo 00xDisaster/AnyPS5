@@ -258,7 +258,7 @@ static void ProcessGain(Ngs2Voice& voice, Ngs2VoiceCustomGain& gain, const std::
 
 void Ngs2ApplyCustomParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
     const auto rackId = voice.rack->rackId;
-    if ((param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT) {
+    if ((param.id & ~0xffu) == SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT) {
         const auto index = param.id & 0x1fu;
         if (index >= voice.customPitchShift.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT) APS5_INVALID_ARG_EX;
         const auto& pitch = ParamAs<Ngs2CustomVoicePitchShiftParam>(param);

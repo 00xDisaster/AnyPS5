@@ -71,7 +71,7 @@ static int APS5_VABI UpdatePeer(Ngs2UserFxProcessContext* context) {
                 break;
             }
             case Update::Shift:
-                Control(state.voice, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT, Ngs2CustomVoicePitchShiftParam{{}, -1200, 0, 0, 0});
+                Control(state.voice, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT | 0x20, Ngs2CustomVoicePitchShiftParam{{}, -1200, 0, 0, 0});
                 break;
             case Update::ExternalShift:
             case Update::UnchangedShift: break;
@@ -222,7 +222,7 @@ static void TestBuffer(Update update, bool custom, bool commands, unsigned order
         }
         for (unsigned i = grainFrames; i < samples.size(); ++i) Require(samples[i] == -1234.0f);
         if (grain == 10 && update == Update::ExternalShift)
-            Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT, Ngs2CustomVoicePitchShiftParam{{}, -1200, 0, 0, 0});
+            Control(voice, SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT | 0x20, Ngs2CustomVoicePitchShiftParam{{}, -1200, 0, 0, 0});
     }
     Require(state.tick == grains && sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     ResetBuffers(firstBuffer);

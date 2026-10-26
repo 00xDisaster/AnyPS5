@@ -323,7 +323,7 @@ static Ngs2PendingControl CaptureParamControl(Ngs2Voice& voice, const Ngs2VoiceP
         if (!std::isfinite(value.fbw_level) || !std::isfinite(value.lfe_level)) APS5_INVALID_ARG_EX;
         return value;
     }
-    if ((param.id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT) {
+    if ((param.id & ~0xffu) == SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT) {
         const auto index = param.id & 0x1fu;
         if (index >= voice.customPitchShift.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT) APS5_INVALID_ARG_EX;
         return ParamAs<Ngs2CustomVoicePitchShiftParam>(param);
@@ -750,6 +750,12 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
     if (voice.rack->system == nullptr && !voice.pendingControls.empty()) voice.ApplyPendingControls();
     try {
         for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
+            if ((param->id & ~0xffu) == SCE_NGS2_CUSTOM_VOICE_PARAM_PITCH_SHIFT) {
+                const auto index = param->id & 0x1fu;
+                if (index >= voice.customPitchShift.size() || voice.rack->customModuleIds[index] != SCE_NGS2_CUSTOM_MODULE_ID_PITCH_SHIFT) {
+                    return SCE_NGS2_ERROR_INVALID_PARAM_ID;
+                }
+            }
             if ((param->id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
                 const auto index = param->id & 0x1fu;
                 if (index < voice.userFx.size() && voice.rack->customModuleIds[index] == SCE_NGS2_CUSTOM_MODULE_ID_USER_FX2 && voice.rack->userFx[index].control_handler != nullptr) {
