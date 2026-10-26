@@ -4,7 +4,6 @@
 #include <relinker/analysis/UnusedNidFilter/EhFrameReader.hpp>
 #include <relinker/analysis/SceCodeExtent.hpp>
 #include <relinker/analysis/RelativeJumpTables.hpp>
-#include <relinker/parsing/RelrRelocations.hpp>
 #include <algorithm>
 #include <iterator>
 #include <sstream>
@@ -14,6 +13,7 @@
 #include <tuple>
 #include <utility>
 #include <domain/ImportModule.hpp>
+#include <relinker/parsing/RelrRelocations.hpp>
 
 namespace Relinker {
 
