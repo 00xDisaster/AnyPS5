@@ -61,6 +61,11 @@ def main():
         output.mkdir()
         (title / 'eboot.bin').write_bytes(fixture('ExecFirst_nid_no_patch'))
         (title / 'picker' / 'second.bin').write_bytes(fixture('ExecSecond_nid_no_patch'))
+        (title / 'picker' / 'noexec.bin').write_bytes(b'no')
+        if not windows:
+            (title / 'eboot.bin').chmod(0o755)
+            (title / 'picker' / 'second.bin').chmod(0o755)
+            (title / 'picker' / 'noexec.bin').chmod(0o644)
         app = output / ('app.exe' if windows else 'app.elf')
         command = [str(relinker), 'unused-filter=0', '--executable', 'picker/second.bin']
         if windows:

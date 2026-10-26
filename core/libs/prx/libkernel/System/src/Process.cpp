@@ -74,6 +74,7 @@ constexpr int errnoNoChild = 10;
 constexpr int errnoBadAddress = 14;
 constexpr int errnoInvalidArgument = 22;
 constexpr int errnoTooBig = 7;
+constexpr int errnoNoExec = 8;
 constexpr int errnoNoEnt = 2;
 constexpr int errnoAccess = 13;
 constexpr int errnoBadFile = 9;
@@ -305,11 +306,12 @@ bool ExecProgramFound(std::string_view name, bool search, int& error, std::strin
         found = candidate;
         std::filesystem::path native;
         std::error_code probe;
-        if (ResolvePathError_nid_no_patch(candidate.c_str(), native) != 0 || !std::filesystem::exists(native, probe)) {
-            error = errnoNoEnt;
+        const int resolved = ResolvePathError_nid_no_patch(candidate.c_str(), native);
+        if (resolved != 0 || !std::filesystem::exists(native, probe)) {
+            error = resolved == 0 ? NotFoundError_nid_no_patch(native) : resolved;
             return false;
         }
-        if (!std::filesystem::is_regular_file(native, probe)) {
+        if (!std::filesystem::is_regular_file(native, probe) || !ExecutePermission_nid_no_patch(native)) {
             error = errnoAccess;
             return false;
         }
@@ -331,7 +333,7 @@ bool ExecProgramFound(std::string_view name, bool search, int& error, std::strin
         std::filesystem::path native;
         std::error_code probe;
         if (ResolvePathError_nid_no_patch(candidate.c_str(), native) == 0 && std::filesystem::exists(native, probe)) {
-            if (std::filesystem::is_regular_file(native, probe)) return true;
+            if (std::filesystem::is_regular_file(native, probe) && ExecutePermission_nid_no_patch(native)) return true;
             inaccessible = true;
         }
         if (separator == std::string_view::npos) {
@@ -444,6 +446,22 @@ void ExecDuplicate(HANDLE source, DWORD access, HANDLE* target) {
 }
 
 void ExecCloseHandle(HANDLE value) { CloseHandle(value); }
+
+bool ExecWindowsImage(const std::filesystem::path& target) {
+    std::ifstream image(target, std::ios::binary);
+    std::array<char, 64> dos{};
+    if (!image.read(dos.data(), dos.size()) || dos[0] != 'M' || dos[1] != 'Z') return false;
+    const auto header = static_cast<std::size_t>(static_cast<unsigned char>(dos[63])) << 24 |
+                        static_cast<std::size_t>(static_cast<unsigned char>(dos[62])) << 16 |
+                        static_cast<std::size_t>(static_cast<unsigned char>(dos[61])) << 8 |
+                        static_cast<std::size_t>(static_cast<unsigned char>(dos[60]));
+    if (header < dos.size()) return false;
+    image.seekg(static_cast<std::streamoff>(header));
+    std::array<char, 6> coff{};
+    if (!image.read(coff.data(), coff.size())) return false;
+    return coff[0] == 'P' && coff[1] == 'E' && coff[2] == '\0' && coff[3] == '\0' &&
+           static_cast<unsigned char>(coff[4]) == 0x64 && static_cast<unsigned char>(coff[5]) == 0x86;
+}
 
 [[noreturn]] void ExecReplaceWindows(const std::filesystem::path& target, const std::vector<std::string>& arguments, bool implicitEnvironment,
                                      char* const* environment) {
@@ -813,6 +831,7 @@ int ExecProgram(const char* file, char* const* arguments, char* const* environme
     if (!ExecProgramFound(file, search, error, program)) return fail(error);
     const auto target = ExecConvertedTarget(program);
 #ifdef _WIN32
+    if (!ExecWindowsImage(target)) return fail(errnoNoExec);
     ExecReplaceWindows(target, ExecArgumentVector(arguments), implicitEnvironment, entries);
 #elif defined(__linux__)
     const int descriptor = ::open(target.c_str(), O_RDONLY | O_CLOEXEC);
@@ -821,8 +840,14 @@ int ExecProgram(const char* file, char* const* arguments, char* const* environme
     if (::pread(descriptor, header.data(), header.size(), 0) != static_cast<ssize_t>(header.size()) || header[0] != 0x7f ||
         header[1] != 'E' || header[2] != 'L' || header[3] != 'F' || header[4] != 2 || header[5] != 1 ||
         (header[7] != 0 && header[7] != 3) || header[17] != 0 || (header[16] != 2 && header[16] != 3) || header[18] != 62 ||
-        header[19] != 0 || ::access(target.c_str(), X_OK) != 0)
-        throw std::runtime_error("exec: target is not an executable x86-64 Linux ELF");
+        header[19] != 0) {
+        ::close(descriptor);
+        return fail(errnoNoExec);
+    }
+    if (::access(target.c_str(), X_OK) != 0) {
+        ::close(descriptor);
+        return fail(errnoAccess);
+    }
     std::vector<std::string> merged;
     if (!implicitEnvironment)
         for (std::size_t index = 0; entries[index] != nullptr; ++index) merged.emplace_back(entries[index]);

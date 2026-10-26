@@ -140,11 +140,31 @@ extern "C" void APS5_VABI ExecFirst_nid_no_patch(const std::uintptr_t* block) {
     char* const largeEnvironment[] = {&largeEntry[0], nullptr};
     Require(execve_nid_postfix(absent, present, largeEnvironment) == -1 && *__error_nid_postfix() == 7,
             "an environment vector beyond the limit rejected with E2BIG");
+    char* const beyond[] = {const_cast<char*>("/app0/picker/second.bin/child"), nullptr};
+    Require(execv_nid_postfix("/app0/picker/second.bin/child", beyond) == -1 && *__error_nid_postfix() == 20,
+            "a path beyond a regular file rejected with ENOTDIR");
+#ifndef _WIN32
+    char* const stripped[] = {const_cast<char*>("/app0/picker/noexec.bin"), nullptr};
+    Require(execv_nid_postfix("/app0/picker/noexec.bin", stripped) == -1 && *__error_nid_postfix() == 13,
+            "a regular file without execute permission rejected with EACCES");
+#endif
 #ifdef _WIN32
     const auto second = Root() / L"picker.second.bin.exe";
 #else
     const auto second = Root() / "picker.second.bin.elf";
 #endif
+    auto intact = second;
+    intact += ".intact";
+    std::filesystem::rename(second, intact);
+    {
+        std::ofstream broken(second, std::ios::binary);
+        broken << "no image";
+        broken.close();
+        Require(execv_nid_postfix("/app0/picker/second.bin", present) == -1 && *__error_nid_postfix() == 8,
+                "a converted target without an executable image rejected with ENOEXEC");
+    }
+    std::filesystem::remove(second);
+    std::filesystem::rename(intact, second);
     auto saved = second;
     saved += ".saved";
     std::filesystem::rename(second, saved);
