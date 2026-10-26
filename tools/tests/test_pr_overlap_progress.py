@@ -56,9 +56,10 @@ class ProgressTests(unittest.TestCase):
 
         def fake_probe(pr):
             number = int(pr["ref"].rsplit("/", 1)[1])
-            return ({"shared.txt"} if number % 25 == 0 else {"other.txt"}), set()
+            return ({"shared.txt"} if number % 25 == 0 else {"other.txt"}), set(), set()
 
-        with patch.object(pr_overlap, "scan", side_effect=self.fake_scan), patch.object(pr_overlap, "probe", side_effect=fake_probe):
+        with patch.object(pr_overlap, "scan", side_effect=self.fake_scan), patch.object(pr_overlap, "probe", side_effect=fake_probe), \
+                patch.object(pr_overlap, "git", return_value="shared.txt\0other.txt\0"):
             _, lines = self.capture(pr_overlap.scan_all, prs, 2)
         self.assertEqual(lines, [
             "pr_overlap: probed 100/250 pull requests, 4 share files or exports with the branch",

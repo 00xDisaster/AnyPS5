@@ -330,20 +330,25 @@ def scan(pr):
 
 
 def probe(pr):
-    changes = git("diff", "--name-only", "--no-renames", "-z", f"refs/pr/base...{pr['ref']}").split("\0")
-    files = {path for path in changes if path}
+    changes = git("diff", "--name-status", "--no-renames", "-z", f"refs/pr/base...{pr['ref']}").split("\0")
+    files, existing = set(), set()
+    for status, path in zip(changes[::2], changes[1::2]):
+        files.add(path)
+        if status != "A":
+            existing.add(path)
     if not any(path.startswith("core/libs/prx/") and path.endswith(".cpp") for path in files):
-        return files, set()
-    return files, exports(git("diff", "-U0", "--no-color", f"refs/pr/base...{pr['ref']}", "--", "core/libs/prx/*.cpp"))
+        return files, set(), existing
+    return files, exports(git("diff", "-U0", "--no-color", f"refs/pr/base...{pr['ref']}", "--", "core/libs/prx/*.cpp")), existing
 
 
 def related(prs, executor):
     mine = prs[0]
     scan(mine)
     others = {n: pr for n, pr in prs.items() if n}
+    base_paths = set(git("ls-tree", "-r", "--name-only", "-z", "refs/pr/base").split("\0"))
     chosen = {}
-    for index, ((n, pr), (files, found)) in enumerate(zip(others.items(), executor.map(probe, others.values())), 1):
-        if files & mine["files"] or found & mine["exports"]:
+    for index, ((n, pr), (files, found, existing)) in enumerate(zip(others.items(), executor.map(probe, others.values())), 1):
+        if files & mine["files"] or found & mine["exports"] or existing - base_paths:
             chosen[n] = pr
         else:
             pr.update(tree=None, files=set(), added=set(), exports=set())
