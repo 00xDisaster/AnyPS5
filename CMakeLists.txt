@@ -296,12 +296,9 @@ if(BUILD_TESTING)
         add_test(NAME performance_compare COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_performance_compare.py)
         set_tests_properties(performance_compare PROPERTIES TIMEOUT 20)
+        add_test(NAME mingw_host_only_test_targets COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_mingw_host_only_test_targets.py)
     endif()
-endif()
-
-if(BUILD_TESTING AND Python3_Interpreter_FOUND)
-    add_test(NAME mingw_host_only_test_targets COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_mingw_host_only_test_targets.py)
 endif()
 
 if(ANYPS5_RELINKER_ONLY)
