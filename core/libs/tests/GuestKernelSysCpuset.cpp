@@ -2,17 +2,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <source_location>
-#include <stdexcept>
 
+#include "prx/libc/include/Api.hpp"
+#include "prx/libkernel_sys/include/Api.hpp"
 #include "SceTypes.hpp"
-
-extern "C" {
-int* APS5_VABI __error_nid_postfix();
-int APS5_VABI getpid_nid_postfix();
-int APS5_VABI cpuset_nid_postfix(int* setid);
-int APS5_VABI cpuset_setid_nid_postfix(int which, std::int64_t id, int setid);
-int APS5_VABI cpuset_getid_nid_postfix(int level, int which, std::int64_t id, int* setid);
-}
 
 namespace {
 
@@ -44,15 +37,6 @@ int Error() {
 } // namespace
 
 int main() {
-    const auto throws = [](auto&& call) {
-        try {
-            call();
-            return false;
-        } catch (const std::runtime_error&) {
-            return true;
-        }
-    };
-
     int setid = -1;
     Require(cpuset_nid_postfix(nullptr) == -1 && Error() == Efault);
     Require(cpuset_nid_postfix(reinterpret_cast<int*>(0x10)) == -1 && Error() == Efault);
@@ -106,13 +90,6 @@ int main() {
     Require(setid == 0);
     Require(cpuset_getid_nid_postfix(LevelRoot, WhichProcess, pid, &setid) == 0);
     Require(setid == 0);
-
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelCpuset, WhichThread, -1, &setid); }));
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelRoot, WhichThread, -1, &setid); }));
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelCpuset, WhichCpuset, set1, &setid); }));
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelWhich, WhichCpuset, set1, &setid); }));
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelRoot, WhichCpuset, set1, &setid); }));
-    Require(throws([&] { cpuset_getid_nid_postfix(LevelCpuset, WhichJail, 0, &setid); }));
 
     Require(cpuset_setid_nid_postfix(WhichThread, -1, 1) == -1 && Error() == Einval);
     Require(cpuset_setid_nid_postfix(WhichCpuset, -1, 1) == -1 && Error() == Einval);

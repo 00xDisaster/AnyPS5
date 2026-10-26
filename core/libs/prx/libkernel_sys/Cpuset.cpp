@@ -2,11 +2,11 @@
 #include <mutex>
 #include <unordered_set>
 
+#include "prx/libc/include/Api.hpp"
+#include "prx/libkernel_sys/include/Api.hpp"
 #include "SceTypes.hpp"
 
 extern "C" [[noreturn]] void NotImplemented_nid_no_patch(const char* funcName);
-extern "C" int* APS5_VABI __error_nid_postfix();
-extern "C" int APS5_VABI getpid_nid_postfix();
 extern "C" bool GuestCopyOut_nid_no_patch(void* destination, const void* source, std::size_t bytes);
 
 namespace {
@@ -47,14 +47,13 @@ int APS5_VABI cpuset_nid_postfix(int* setid) {
     int id = 0;
     {
         std::lock_guard lock(setMutex);
-        id = nextSetId;
+        id = nextSetId++;
     }
     if (!GuestCopyOut_nid_no_patch(setid, &id, sizeof(id))) {
         return Fail(GuestEfault);
     }
     {
         std::lock_guard lock(setMutex);
-        nextSetId++;
         validSets.insert(id);
         if (currentProcessSetId >= 2 && currentProcessSetId != id) {
             validSets.erase(currentProcessSetId);
