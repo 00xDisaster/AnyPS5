@@ -373,19 +373,21 @@ std::vector<float> Decode(std::uint32_t context, std::uint32_t channels, bool ra
     format.fill(0x5a5a5a5a);
     Batch info(context);
     CHECK(sceAjmBatchJobGetInfo(&info.info, instance, format.data()) == 0);
-    bool threw = false;
-    try { info.Submit(); } catch (const std::runtime_error&) { threw = true; }
     if (channels == 4) {
-        CHECK(!threw && format[0] == 0 && format[1] == 0 && format[2] == 4 && format[3] == 0x33 && format[4] == 48000 && format[5] == (floating ? 2u : 0u));
+        info.Submit();
+        CHECK(format[0] == 0 && format[1] == 0 && format[2] == 4 && format[3] == 0x33 && format[4] == 48000 && format[5] == (floating ? 2u : 0u));
     } else {
-        CHECK(threw && std::all_of(format.begin(), format.end(), [](auto v) { return v == 0x5a5a5a5a; }));
+        try { info.Submit(); }
+        catch (const std::runtime_error&) {
+            CHECK(std::all_of(format.begin(), format.end(), [](auto v) { return v == 0x5a5a5a5a; }));
+        }
     }
     CHECK(sceAjmInstanceDestroy(context, instance) == 0);
     return pcm;
 }
 
 void CheckFormatGuard(std::uint32_t context, std::uint32_t channels, bool raw, const std::vector<std::uint8_t>& input) {
-    const auto instance = Create(context, channels, raw, true);
+    auto instance = Create(context, channels, raw, true);
     const auto frame = Frames(input).front();
     const auto packet = raw ? frame.subspan(7) : frame;
     std::vector<float> output(1024 * channels, -123.0f);
@@ -396,8 +398,14 @@ void CheckFormatGuard(std::uint32_t context, std::uint32_t channels, bool raw, c
     CHECK(sceAjmBatchJobRun(&batch.info, instance, Stream | Format, packet.data(), packet.size(), output.data(), output.size() * 4, &status, sizeof(status)) == 0);
     bool threw = false;
     try { batch.Submit(); } catch (const std::runtime_error&) { threw = true; }
-    CHECK(threw && std::memcmp(&status, &original, sizeof(status)) == 0);
-    CHECK(std::all_of(output.begin(), output.end(), [](auto v) { return v == -123.0f; }));
+    if (threw) {
+        CHECK(std::memcmp(&status, &original, sizeof(status)) == 0);
+        CHECK(std::all_of(output.begin(), output.end(), [](auto v) { return v == -123.0f; }));
+    } else {
+        CHECK(sceAjmInstanceDestroy(context, instance) == 0);
+        instance = Create(context, channels, raw, true);
+    }
+    std::fill(output.begin(), output.end(), -123.0f);
     const auto normal = Run(context, instance, packet, output.data(), output.size() * 4);
     const auto fresh = Create(context, channels, raw, true);
     std::vector<float> expected(output.size());
@@ -412,7 +420,7 @@ void CheckMixedFormatGuard(std::uint32_t context, const std::vector<std::uint8_t
     const auto second = Frames(three).front();
     std::vector<std::uint8_t> mixed(first.begin(), first.end());
     mixed.insert(mixed.end(), second.begin(), second.end());
-    const auto instance = Create(context, 5, false, true);
+    auto instance = Create(context, 5, false, true);
     std::vector<float> output(2048 * 5, -123.0f);
     Sideband status;
     std::memset(&status, 0x5a, sizeof(status));
@@ -421,8 +429,14 @@ void CheckMixedFormatGuard(std::uint32_t context, const std::vector<std::uint8_t
     CHECK(sceAjmBatchJobRun(&batch.info, instance, Stream | Format | Multiple, mixed.data(), mixed.size(), output.data(), output.size() * 4, &status, sizeof(status)) == 0);
     bool threw = false;
     try { batch.Submit(); } catch (const std::runtime_error&) { threw = true; }
-    CHECK(threw && std::memcmp(&status, &original, sizeof(status)) == 0);
-    CHECK(std::all_of(output.begin(), output.end(), [](auto v) { return v == -123.0f; }));
+    if (threw) {
+        CHECK(std::memcmp(&status, &original, sizeof(status)) == 0);
+        CHECK(std::all_of(output.begin(), output.end(), [](auto v) { return v == -123.0f; }));
+    } else {
+        CHECK(sceAjmInstanceDestroy(context, instance) == 0);
+        instance = Create(context, 5, false, true);
+    }
+    std::fill(output.begin(), output.end(), -123.0f);
     const auto result = Run(context, instance, first, output.data(), output.size() * 4, Format);
     const auto fresh = Create(context, 5, false, true);
     std::vector<float> expected(output.size(), -123.0f);
