@@ -522,7 +522,7 @@ jobs:
         env:
           BASE: ${{ needs.eligibility.outputs.sha }}
         run: |
-          git diff --name-only "$BASE" HEAD > changed.txt
+          git diff --name-only -z "$BASE" HEAD -- > changed.txt
           python3 tools/select_tests.py select build test-graph.json changed.txt
       - id: build
         run: |
@@ -674,7 +674,7 @@ jobs:
           BASE: ${{ needs.eligibility.outputs.sha }}
         shell: cmd
         run: |
-          git diff --name-only %BASE% HEAD > changed.txt
+          git diff --name-only -z %BASE% HEAD -- > changed.txt
           python tools/select_tests.py select build test-graph.json changed.txt
       - id: build
         shell: cmd
