@@ -247,6 +247,7 @@ int main(int argc, char** argv) {
     auto query = reinterpret_cast<Query>(GetProcAddress(library, symbol));
 #else
     const auto library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+    if (!library) std::fprintf(stderr, "%s\n", dlerror());
     Require(library != nullptr, "load requested library");
     auto query = reinterpret_cast<Query>(dlsym(library, symbol));
 #endif

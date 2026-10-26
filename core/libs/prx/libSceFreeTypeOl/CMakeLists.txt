@@ -11,7 +11,7 @@ if(BUILD_TESTING)
     endif()
     configure_windows_unwind(guest_freetype_outline_border_tests)
     add_custom_target(freetype_outline_border_patched DEPENDS
-        ${PATCHED_DIR}/libSceFreeTypeOl.prx ${PATCHED_DIR}/libSceFreeTypeOt.prx ${LIBC_PATCHED})
+        ${PATCHED_DIR}/libSceFreeTypeOl.prx ${PATCHED_DIR}/libSceFreeTypeOt.prx ${PATCHED_DIR}/libkernel.prx ${LIBC_PATCHED})
     add_dependencies(guest_freetype_outline_border_tests freetype_outline_border_patched)
     add_test(NAME guest_freetype_outline_border_reference COMMAND guest_freetype_outline_border_tests reference)
     foreach(module IN ITEMS Ol Ot)
