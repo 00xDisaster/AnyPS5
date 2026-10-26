@@ -65,7 +65,7 @@ static std::uintptr_t Sampler(std::uintptr_t system, bool custom) {
     Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &query) == SCE_NGS2_OK);
     const auto buffer = Buffer(query);
     std::uintptr_t handle = 0;
-    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &buffer, &handle) == SCE_NGS2_OK);
+    Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &buffer, &handle) == SCE_NGS2_OK);
     return Voice(handle);
 }
 

@@ -408,6 +408,10 @@ struct Ngs2RackInfo {
     std::uint32_t max_inputs;
     std::uint32_t max_matrices;
     std::uint32_t max_ports;
+    std::uint32_t max_voice_channels;
+    std::uint32_t max_output_channels;
+    std::uint32_t num_modules;
+    std::uint32_t num_buffers;
     std::uint32_t state_flags;
     float last_process_ratio;
     std::uint64_t last_processed_tick;
@@ -415,7 +419,7 @@ struct Ngs2RackInfo {
     std::uint32_t active_voice_count;
     std::uint32_t active_channel_work_count;
 };
-static_assert(sizeof(Ngs2RackInfo) == 216);
+static_assert(sizeof(Ngs2RackInfo) == 232);
 
 struct Ngs2VoiceParamHeader {
     std::uint16_t size;

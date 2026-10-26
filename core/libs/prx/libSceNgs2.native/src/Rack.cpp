@@ -124,7 +124,6 @@ static int CheckedRackOption(std::uint32_t rackId, const Ngs2RackOption* option,
 
 static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackOptions& options, const Ngs2ContextBufferInfo& bufferInfo,
                       const Ngs2BufferAllocator& allocator, Ngs2Handle* handle) {
-    static std::uint32_t nextUid = 1;
     auto* system = Ngs2FindSystem(systemHandle);
     if (system != nullptr && system->jobsExecuting) throw std::runtime_error("NGS2: creating racks from active job handlers is not implemented");
     if (system == nullptr) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
@@ -138,7 +137,6 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
     rack->maxFilters = rackId == SCE_NGS2_RACK_ID_SAMPLER ? options.sampler.max_filters
                       : rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER ? options.customSampler.custom_rack_option.num_modules
                       : (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER || rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING) ? options.customSubmixer.custom_rack_option.num_modules : 0;
-    rack->uid = nextUid++;
     std::memcpy(rack->name, options.common.name, sizeof(rack->name));
     rack->name[sizeof(rack->name) - 1] = '\0';
     rack->maxGrainSamples = options.common.max_grain_samples;
@@ -148,6 +146,41 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
     if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER) rack->maxChannelWorks = options.customSampler.max_channel_works;
     if (rackId == SCE_NGS2_RACK_ID_SUBMIXER) rack->maxInputs = options.submixer.max_inputs;
     if (rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER || rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING) rack->maxInputs = options.customSubmixer.max_inputs;
+    rack->maxVoiceChannels = options.common.max_voice_channels == 0 ? 8 : options.common.max_voice_channels;
+    rack->maxOutputChannels = options.common.max_output_channels == 0 ? 8 : options.common.max_output_channels;
+    std::size_t extra = 0;
+    switch (rackId) {
+        case SCE_NGS2_RACK_ID_SAMPLER:
+            rack->numModules = 5 + options.sampler.max_filters;
+            extra = 32;
+            break;
+        case SCE_NGS2_RACK_ID_SUBMIXER:
+            rack->numModules = 5 + options.submixer.max_filters;
+            extra = 16;
+            break;
+        case SCE_NGS2_RACK_ID_MASTERING:
+            rack->numModules = 7;
+            rack->maxInputs = 1;
+            extra = 8;
+            break;
+        case SCE_NGS2_RACK_ID_REVERB:
+            rack->numModules = 1;
+            rack->maxInputs = 1;
+            extra = 8;
+            break;
+        default: {
+            const auto& custom = rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER ? options.customSampler.custom_rack_option : options.customSubmixer.custom_rack_option;
+            rack->numModules = custom.num_modules;
+            rack->numBuffers = custom.num_buffers;
+            extra = RackOptionSize(rackId) - sizeof(Ngs2RackOption);
+            break;
+        }
+    }
+    if (rackId != SCE_NGS2_RACK_ID_SAMPLER && rackId != SCE_NGS2_RACK_ID_CUSTOM_SAMPLER)
+        rack->maxChannelWorks = options.common.max_voices * rack->maxChannels;
+    const auto* extension = reinterpret_cast<const std::uint8_t*>(&options) + sizeof(Ngs2RackOption);
+    rack->infoExtension.assign(extension, extension + extra);
+    if (rackId == SCE_NGS2_RACK_ID_MASTERING) std::fill(rack->infoExtension.begin() + 4, rack->infoExtension.end(), std::uint8_t{0});
     rack->bufferInfo = bufferInfo;
     rack->allocator = allocator;
     rack->voices.resize(options.common.max_voices);
@@ -162,6 +195,7 @@ static int CreateRack(Ngs2Handle systemHandle, std::uint32_t rackId, const RackO
     if (setup < 0) return setup;
     system = Ngs2FindSystem(systemHandle);
     if (system == nullptr || system->uid != systemUid) return SCE_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
+    rack->uid = system->nextRackUid++;
     system->racks.push_back(rack);
     pending.release();
     *handle = reinterpret_cast<Ngs2Handle>(rack);
@@ -275,18 +309,18 @@ int APS5_VABI sceNgs2RackGetVoiceHandle(uintptr_t rack_handle, uint32_t voice_id
 }
 
 int APS5_VABI sceNgs2RackGetInfo(uintptr_t rack_handle, Ngs2RackInfo* info, size_t info_size) {
-    if (info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
-    if (info_size != sizeof(Ngs2RackInfo)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
     const Ngs2Lock lock;
     const auto* rack = Ngs2FindRack(rack_handle);
     if (rack == nullptr) return SCE_NGS2_ERROR_INVALID_RACK_HANDLE;
-    if (rack->system == nullptr) throw std::runtime_error("NGS2: information for a detached rack is not implemented");
-    *info = {};
-    std::memcpy(info->name, rack->name, sizeof(info->name));
+    if (info == nullptr) return SCE_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    if (info_size < sizeof(Ngs2RackInfo)) return SCE_NGS2_ERROR_INVALID_OUT_SIZE;
+    if (rack->system == nullptr) throw std::runtime_error("NGS2: information for a detached rack is rejected because the reference dereferences its absent system");
+    std::memcpy(info->name, rack->name, std::strlen(rack->name) + 1);
     info->rack_handle = rack_handle;
     info->buffer_info = rack->bufferInfo;
     info->owner_system_handle = reinterpret_cast<Ngs2Handle>(rack->system);
-    info->type = rack->rackId >> 12;
+    info->type = rack->rackId == SCE_NGS2_RACK_ID_SAMPLER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER ? 0 :
+        rack->rackId == SCE_NGS2_RACK_ID_MASTERING || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING ? 2 : 1;
     info->rack_id = rack->rackId;
     info->uid = rack->uid;
     info->min_grain_samples = MIN_GRAIN_SAMPLES;
@@ -296,10 +330,41 @@ int APS5_VABI sceNgs2RackGetInfo(uintptr_t rack_handle, Ngs2RackInfo* info, size
     info->max_inputs = rack->maxInputs;
     info->max_matrices = static_cast<std::uint32_t>(rack->voices.front().matrices.size());
     info->max_ports = static_cast<std::uint32_t>(rack->voices.front().ports.size());
-    info->state_flags = 1;
-    info->render_count = static_cast<std::uint64_t>(rack->system->renderCount);
-    info->active_voice_count = static_cast<std::uint32_t>(std::count_if(rack->voices.begin(), rack->voices.end(),
-                                                                        [](const Ngs2Voice& voice) { return voice.state != Ngs2PlayState::Empty; }));
+    info->max_voice_channels = rack->maxVoiceChannels;
+    info->max_output_channels = rack->maxOutputChannels;
+    info->num_modules = rack->numModules;
+    info->num_buffers = rack->numBuffers;
+    info->state_flags = rack->lockDepth == 0 ? 1 : 5;
+    info->last_process_ratio = 0;
+    info->last_processed_tick = 0;
+    info->render_count = rack->renderCount;
+    info->active_voice_count = 0;
+    info->active_channel_work_count = 0;
+    for (const auto& voice : rack->voices) {
+        if (!voice.pendingPlay && (voice.stateFlags & SCE_NGS2_VOICE_STATE_FLAG_INUSE) == 0) continue;
+        ++info->active_voice_count;
+        info->active_channel_work_count += voice.channels;
+    }
+    auto* tail = reinterpret_cast<std::uint8_t*>(info) + sizeof(Ngs2RackInfo);
+    if (rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER || rack->rackId == SCE_NGS2_RACK_ID_CUSTOM_MASTERING) {
+        if (info_size >= sizeof(Ngs2RackInfo) + rack->infoExtension.size())
+            std::memcpy(tail + 1104, rack->infoExtension.data() + 1104, rack->infoExtension.size() - 1104);
+        if (info_size >= 1280) {
+            const auto ports = rack->voices.front().ports.size();
+            if (info_size < 1208 + ports * sizeof(Ngs2CustomRackPortInfo)) throw std::runtime_error("NGS2: the reference custom rack info write exceeds this output size");
+            std::memcpy(tail, rack->infoExtension.data(), 8);
+            const std::uint64_t modules = rack->numModules;
+            std::memcpy(tail + 8, &modules, sizeof(modules));
+            for (std::size_t i = 0; i < rack->customModules.size(); ++i) {
+                Ngs2CustomRackModuleInfo module{};
+                std::memcpy(&module, rack->infoExtension.data() + 16 + i * sizeof(module), sizeof(module));
+                module.option = rack->customModuleOptions[i].empty() ? nullptr : reinterpret_cast<const Ngs2CustomModuleOption*>(rack->customModuleOptions[i].data());
+                std::memcpy(tail + 16 + i * sizeof(module), &module, sizeof(module));
+            }
+            std::memcpy(tail + 976, rack->infoExtension.data() + 976, ports * sizeof(Ngs2CustomRackPortInfo));
+        }
+    } else if (info_size >= sizeof(Ngs2RackInfo) + rack->infoExtension.size())
+        std::memcpy(tail, rack->infoExtension.data(), rack->infoExtension.size());
     return SCE_NGS2_OK;
 }
 

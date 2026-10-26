@@ -608,11 +608,13 @@ void Ngs2SetFilter(Ngs2Voice& voice, const Ngs2SamplerVoiceFilterParam& param) {
     if (!std::isfinite(param.frequency) || param.frequency < 0.0f || !std::isfinite(param.q) || param.q <= 0.0f || !std::isfinite(param.level) || param.level < 0.0f) {
         APS5_INVALID_ARG_EX;
     }
-    if (voice.rack->system == nullptr) throw std::runtime_error("NGS2: filter coefficients for a detached rack are not implemented");
-    const double rate = voice.rack->system->option.sample_rate;
+    filter.parameter = param;
+    filter.pending = voice.rack->system == nullptr;
     filter.enabled = true;
     filter.bypassMask = param.channel_mask;
     filter.history.resize(voice.channels);
+    if (filter.pending) return;
+    const double rate = voice.rack->system->option.sample_rate;
     if (param.frequency == 0.0f || param.frequency >= rate * 0.5) {
         filter.b0 = param.frequency == 0.0f ? 0.0 : param.level;
         filter.b1 = filter.b2 = filter.a1 = filter.a2 = 0.0;
@@ -755,6 +757,7 @@ int APS5_VABI sceNgs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHe
     auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
+    if (voice.rack->system == nullptr && !voice.pendingControls.empty()) voice.ApplyPendingControls();
     for (const auto* param = param_list;; param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<const std::uint8_t*>(param) + param->next)) {
         if ((param->id & ~0x1fu) == SCE_NGS2_CUSTOM_VOICE_PARAM_USER_FX2) {
             const auto index = param->id & 0x1fu;
@@ -801,6 +804,7 @@ int APS5_VABI sceNgs2VoiceRunCommands(uintptr_t voice_handle, const Ngs2VoiceCom
     auto* found = access.voice;
     if (found == nullptr) return SCE_NGS2_ERROR_INVALID_VOICE_HANDLE;
     auto& voice = *found;
+    if (voice.rack->system == nullptr && !voice.pendingControls.empty()) voice.ApplyPendingControls();
     if (commands == nullptr && num_commands != 0) APS5_INVALID_ARG_EX;
     if (DeferringControls(voice)) {
         if (num_commands > voice.pendingControls.max_size() - voice.pendingControls.size()) throw std::length_error("NGS2: too many buffered voice commands");

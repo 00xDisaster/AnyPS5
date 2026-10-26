@@ -149,6 +149,10 @@ static void RenderSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t s
         return;
     }
     for (auto& filter : voice.filters) {
+        if (filter.pending) {
+            const auto parameter = filter.parameter;
+            Ngs2SetFilter(voice, parameter);
+        }
         if (!filter.enabled || (!voice.hasSamples && !HasHistory(filter))) continue;
         ApplyFilter(voice, filter, grain);
         voice.hasSamples = true;
@@ -520,5 +524,6 @@ void Ngs2RenderSystem(Ngs2System& system, const Ngs2RenderBufferInfo* bufferInfo
             voice->callback(&info);
         }
     }
+    for (auto* rack : system.racks) ++rack->renderCount;
     system.renderCount++;
 }

@@ -76,6 +76,8 @@ struct Ngs2FilterHistory {
 
 struct Ngs2Filter {
     bool enabled = false;
+    bool pending = false;
+    Ngs2SamplerVoiceFilterParam parameter{};
     std::uint64_t bypassMask = 0;
     double b0 = 1.0;
     double b1 = 0.0;
@@ -217,6 +219,13 @@ struct Ngs2Rack {
     std::uintptr_t userData = 0;
     Ngs2ContextBufferInfo bufferInfo{};
     Ngs2BufferAllocator allocator{};
+    std::uint32_t maxVoiceChannels = 8;
+    std::uint32_t maxOutputChannels = 8;
+    std::uint32_t numModules = 0;
+    std::uint32_t numBuffers = 1;
+    std::uint64_t renderCount = 0;
+    std::vector<std::uint8_t> infoExtension;
+    std::vector<std::vector<std::uint8_t>> customModuleOptions;
     std::vector<Ngs2Voice> voices;
     std::vector<Ngs2CustomUserFx2ModuleOption> userFx;
     std::vector<std::vector<std::uint8_t>> userFxCommon;
@@ -241,6 +250,7 @@ struct Ngs2System {
     Ngs2BufferAllocator allocator{};
     std::uint32_t uid = 0;
     std::int64_t renderCount = 0;
+    std::uint32_t nextRackUid = 1;
     std::uint32_t renderDepth = 0;
     bool jobsExecuting = false;
     bool processingVoices = false;
