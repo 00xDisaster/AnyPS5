@@ -1,3 +1,4 @@
+#include "prx/libSceSaveData.native/include/Api.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 
@@ -12,20 +13,12 @@
 #include <string>
 #include <vector>
 
-extern "C" {
-int APS5_VABI sceSaveDataDirNameSearch(const SaveDataDirNameSearchCond*, SaveDataDirNameSearchResult*);
-int APS5_VABI sceSaveDataDirNameSearch2(const SaveDataDirNameSearchCond*, SaveDataDirNameSearchResult*);
-int APS5_VABI sceSaveDataMount3(const SaveDataMount3*, SaveDataMountResult*);
-int APS5_VABI sceSaveDataUmount2(std::uint32_t, const SaveDataMountPoint*);
-int APS5_VABI sceSaveDataSetParam(const SaveDataMountPoint*, std::uint32_t, const void*, std::size_t);
-int APS5_VABI sceSaveDataGetMountInfo(const SaveDataMountPoint*, SaveDataMountInfo*);
-}
-
 static constexpr int SaveDataErrorParameter = -2137063424;
 
 static void Require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
 }
+
 
 static std::vector<std::string> Search(std::uint32_t key, std::uint32_t order, std::uint32_t capacity, std::uint32_t* hits) {
     SceSaveDataDirName pattern{};
@@ -277,6 +270,18 @@ static void SaveSize() {
     Require(info.blocks == 96 && info.free_blocks == 95, "mount info must report the save's blocks and free blocks");
 }
 
+static void CheckNullArguments() {
+    SaveDataDirNameSearchCond cond{};
+    cond.user_id = 1;
+    SaveDataDirNameSearchResult result{};
+    Require(sceSaveDataDirNameSearch(nullptr, &result) == SaveDataErrorParameter, "null cond returns PARAMETER in sceSaveDataDirNameSearch");
+    Require(sceSaveDataDirNameSearch(&cond, nullptr) == SaveDataErrorParameter, "null result returns PARAMETER in sceSaveDataDirNameSearch");
+    Require(sceSaveDataDirNameSearch2(nullptr, &result) == SaveDataErrorParameter, "null cond returns PARAMETER in sceSaveDataDirNameSearch2");
+    Require(sceSaveDataDirNameSearch2(&cond, nullptr) == SaveDataErrorParameter, "null result returns PARAMETER in sceSaveDataDirNameSearch2");
+    cond.order = 2;
+    Require(sceSaveDataDirNameSearch2(&cond, &result) == SaveDataErrorParameter, "invalid order must be rejected in sceSaveDataDirNameSearch2");
+}
+
 static void BlockSize() {
     CreateSized("BLOCK_A", 48, 70000);
     auto info = MountInfo("BLOCK_A");
@@ -300,6 +305,7 @@ int main() {
         TrailingWildcards();
         SaveSize();
         BlockSize();
+        CheckNullArguments();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         status = 1;

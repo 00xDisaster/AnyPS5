@@ -150,7 +150,8 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
             }
 
             if (info.SegmentPrefix == 0x65 && !insidePrevious) {
-                gsTraps.emplace_back(rva, info.Length);
+                if (info.HasMemoryOperand)
+                    gsTraps.emplace_back(rva, info.Length);
                 continue;
             }
             if (info.SegmentPrefix != 0 && !(insidePrevious && info.SegmentPrefix != 0x64)) {
@@ -220,8 +221,14 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
     }
 
     report(9000);
-    for (const auto& [rva, length] : gsTraps)
+    std::sort(branchTargets.begin(), branchTargets.end());
+    branchTargets.erase(std::unique(branchTargets.begin(), branchTargets.end()), branchTargets.end());
+    for (const auto& [rva, length] : gsTraps) {
+        const auto target = std::upper_bound(branchTargets.begin(), branchTargets.end(), rva);
+        if (target != branchTargets.end() && *target < rva + length)
+            throw Domain::RelinkerException("Branch enters a guest GS instruction", *target);
         trapInstruction(sections, rva, length);
+    }
     if (tls == nullptr) {
         if (!accesses.empty())
             throw Domain::RelinkerException("Guest TLS access without PT_TLS");
@@ -272,9 +279,6 @@ PeDirectory WindowsTlsBuilder::Build(const std::vector<std::uint8_t>& source, co
     code.Emit({0x48, 0x89, 0x00});
     code.PatchBranch(skipCallback, code.GetRva());
     code.Emit({0xc3});
-
-    std::sort(branchTargets.begin(), branchTargets.end());
-    branchTargets.erase(std::unique(branchTargets.begin(), branchTargets.end()), branchTargets.end());
 
     std::uint64_t patched = 0;
     for (const auto& access : accesses) {
