@@ -1,13 +1,7 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include <cstdlib>
 #include <stdexcept>
-
-extern "C" {
-int APS5_VABI pthread_cond_init_nid_postfix(PthreadCond* cond, const PthreadCondattr* attr);
-int APS5_VABI pthread_cond_destroy_nid_postfix(PthreadCond* cond);
-int APS5_VABI pthread_cond_signal_nid_postfix(PthreadCond* cond);
-int APS5_VABI pthread_cond_setname_np_nid_postfix(PthreadCond* cond, const char* name);
-}
 
 static constexpr int GuestEinval = 22;
 
