@@ -26,3 +26,8 @@ The write watch can leave guest pages read-only between collections: every watch
 - Ordinary CPU stores from host C++ code need no bracket: the write watch records them (through a fault where the page is protected).
 - A GPU import of guest memory uses `HostImportAccess`, not `HostWrite`.
 - Third-party code that writes guest memory on its own (driver threads, library worker threads) can't be bracketed. List it in that library's debt file.
+### Host-only test executables
+
+A test executable that links no guest library and is built for the host on MinGW must call `configure_host_test_executable(<target>)` (root `CMakeLists.txt`) after `add_test_executable`. It supplies the two flags such an executable needs to link when one of its objects has an exception landing pad, and nothing else.
+
+The guest `libc` provides `__gxx_personality_v0`; a host-only link doesn't get it. On a DWARF-exception MinGW toolchain an object with a landing pad then fails to link. Whether a given target needs the fix depends on its code, so it can't be found by reading the CMake files: call the helper on every host-only test executable. It is not needed for test executables that link a guest library, and not on non-MinGW hosts.
