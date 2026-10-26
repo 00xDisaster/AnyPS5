@@ -17,7 +17,7 @@
 #include <dlfcn.h>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
-#else
+#elif !defined(__EMSCRIPTEN__)
 #include "prx/libc/include/specifics/linux/HostMapping.hpp"
 #endif
 

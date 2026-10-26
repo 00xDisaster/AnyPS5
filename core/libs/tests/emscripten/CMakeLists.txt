@@ -22,6 +22,7 @@ add_library(library_portability_sources OBJECT
         ${libs}/prx/libkernel/Equeue/src/FileEvent.cpp
         ${libs}/prx/libkernel/File/src/NativeStat.cpp
         ${libs}/prx/libkernel/File/src/Stdio.cpp
+        ${libs}/prx/libkernel/Module/src/Module.cpp
         ${libs}/prx/libkernel/System/src/Process.cpp
         ${libs}/prx/libkernel/System/src/UserContext.cpp
 )
@@ -34,6 +35,17 @@ if(EMSCRIPTEN)
     set(ANYPS5_NODE node CACHE FILEPATH "Node.js 26 or newer for memory64")
     add_test(NAME guest_long_double COMMAND ${ANYPS5_NODE} $<TARGET_FILE:guest_long_double_tests>)
     target_compile_options(library_portability_sources PRIVATE ${flags})
+    add_executable(emscripten_module_unwind_tests
+            ../EmscriptenModuleUnwind.cpp
+            ${libs}/prx/libkernel/Module/src/Module.cpp
+            ${libs}/prx/libSceSysmodule/Export.cpp)
+    target_include_directories(emscripten_module_unwind_tests PRIVATE ${libs})
+    target_compile_options(emscripten_module_unwind_tests PRIVATE ${flags})
+    target_link_options(emscripten_module_unwind_tests PRIVATE ${flags} -sENVIRONMENT=node -sEXIT_RUNTIME)
+    set_target_properties(emscripten_module_unwind_tests PROPERTIES SUFFIX .js)
+    add_test(NAME emscripten_module_unwind COMMAND ${ANYPS5_NODE} $<TARGET_FILE:emscripten_module_unwind_tests>)
+    set_tests_properties(emscripten_module_unwind PROPERTIES TIMEOUT 20)
 else()
     add_test(NAME guest_long_double COMMAND guest_long_double_tests)
 endif()
+set_tests_properties(guest_long_double PROPERTIES TIMEOUT 20)

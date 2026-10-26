@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '26'
-      - name: Compile portable library sources and test memory64 conversions
+      - name: Compile memory64 libraries and test conversions and module errors
         shell: bash
         run: |
           ANYPS5_TEST_NODE="$(command -v node)"
