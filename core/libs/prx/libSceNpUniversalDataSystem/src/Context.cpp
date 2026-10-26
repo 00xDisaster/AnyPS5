@@ -41,7 +41,7 @@ extern "C" {
 
 int APS5_VABI sceNpUniversalDataSystemCreateContext(int* context, int user_id, uint32_t service_label, uint64_t options) {
     if (context == nullptr) {
-        return SCE_NP_UNIVERSAL_DATA_SYSTEM_ERROR_INVALID_ARGUMENT;
+        throw std::invalid_argument(std::string(__func__) + ": invalid argument context");
     }
     auto& table = Uds::contexts();
     std::lock_guard lock(table.mutex);
