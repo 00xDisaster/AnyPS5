@@ -92,10 +92,15 @@ int APS5_VABI pthread_barrier_destroy_nid_postfix(PthreadBarrierPrivate** barrie
 }
 
 int APS5_VABI pthread_barrier_setname_np_nid_postfix(PthreadBarrierPrivate** barrier, const char* name) {
-    if (!barrier || !*barrier) return 22;
+    if (!barrier) throw std::invalid_argument("pthread_barrier_setname_np: null barrier");
+    if (!*barrier) throw std::invalid_argument("pthread_barrier_setname_np: barrier is not initialized or was destroyed");
     auto& value = **barrier;
     std::lock_guard lock(value.mutex);
-    if (name) value.name = name;
+    if (value.named) return 35;
+    if (name) {
+        value.name = name;
+        value.named = true;
+    }
     return 0;
 }
 

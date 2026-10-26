@@ -22,6 +22,7 @@ constexpr int sceDeadlock = static_cast<int>(0x8002000bu);
 constexpr int sceBusy = static_cast<int>(0x80020010u);
 constexpr int sceTimedOut = static_cast<int>(0x8002003cu);
 constexpr std::int32_t posixFailure = -1;
+constexpr int posixAgain = 35;
 std::mutex& InitializationMutex() {
     static std::mutex mutex;
     return mutex;
@@ -290,8 +291,12 @@ int APS5_VABI pthread_mutex_setname_np_nid_postfix(PthreadMutex* mutex, const ch
     const auto current = std::atomic_ref<PthreadMutex>(*mutex).load(std::memory_order_acquire);
     if (!isInitializedMutex(current))
         throw std::invalid_argument("pthread_mutex_setname_np: mutex is statically initialized or destroyed");
-    if (name)
+    if (current->_named)
+        return posixAgain;
+    if (name) {
         current->_name = name;
+        current->_named = true;
+    }
     return 0;
 }
 

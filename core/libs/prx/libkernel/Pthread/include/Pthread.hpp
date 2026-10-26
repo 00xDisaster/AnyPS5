@@ -48,6 +48,7 @@ struct PthreadMutexPrivate {
     int _spinloops = 0;
     int _yieldloops = 0;
     std::string _name;
+    bool _named = false;
 
     PthreadMutexPrivate() : _type(MutexType::ErrorCheck), _owner(std::thread::id{}), _count(0) {}
 
@@ -68,6 +69,7 @@ struct PthreadRwlockPrivate {
     std::atomic<int> _readers{0};
     int _waitingWriters = 0;
     std::string _name;
+    bool _named = false;
 };
 
 struct PthreadCondattrPrivate {

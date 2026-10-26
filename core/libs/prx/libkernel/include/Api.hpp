@@ -118,6 +118,7 @@ struct PthreadBarrierPrivate {
     unsigned active = 0;
     std::uint64_t generation = 0;
     std::string name;
+    bool named = false;
 };
 
 struct PthreadBarrierattrPrivate {
