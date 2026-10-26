@@ -67,10 +67,16 @@ void RaiseLibcError(int exceptions) {
     errno = range ? ERANGE : EDOM;
 }
 
+bool OverflowToInfinity(bool negative) {
+    const int mode = std::fegetround();
+    return mode == FE_UPWARD ? !negative : mode == FE_DOWNWARD ? negative : mode == FE_TOWARDZERO ? false : true;
+}
+
 short OverflowScaled(long double& value, long double multiplier) {
-    value = std::scalbnl(multiplier, std::numeric_limits<long double>::max_exponent + 1);
+    const bool toInfinity = OverflowToInfinity(std::signbit(multiplier));
+    value = std::copysign(toInfinity ? std::numeric_limits<long double>::infinity() : std::numeric_limits<long double>::max(), multiplier);
     RaiseLibcError(FE_OVERFLOW);
-    return std::isinf(value) ? Infinite : Finite;
+    return toInfinity ? Infinite : Finite;
 }
 
 short ScaleExtended(long double& value, long long exponent) {
@@ -89,8 +95,7 @@ short ScaleExtended(long double& value, long long exponent) {
     biased += exponent - shift;
     if (biased >= 0x7fff) {
         const bool negative = sign != 0;
-        const int mode = std::fegetround();
-        const bool toInfinity = mode == FE_UPWARD ? !negative : mode == FE_DOWNWARD ? negative : mode == FE_TOWARDZERO ? false : true;
+        const bool toInfinity = OverflowToInfinity(negative);
         value = toInfinity
             ? JoinExtended(1ull << 63, static_cast<std::uint16_t>(sign | 0x7fff))
             : JoinExtended(~0ull, static_cast<std::uint16_t>(sign | 0x7ffe));

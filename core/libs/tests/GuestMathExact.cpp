@@ -222,6 +222,34 @@ static void CheckLongDoubleExpCompensatingRange() {
     }
 }
 
+static void CheckLongDoubleExpTinyMultiplierOverflow() {
+    const long double tiny = std::numeric_limits<long double>::denorm_min();
+    const int saved = std::fegetround();
+    for (const int mode : {FE_TONEAREST, FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO}) {
+        Require(std::fesetround(mode) == 0);
+        for (const long double multiplier : {tiny, -tiny}) {
+            const bool negative = std::signbit(multiplier);
+            const bool infinite = mode == FE_TONEAREST || (mode == FE_UPWARD && !negative) || (mode == FE_DOWNWARD && negative);
+            const long double expected = std::copysign(infinite
+                ? std::numeric_limits<long double>::infinity()
+                : std::numeric_limits<long double>::max(), multiplier);
+            for (const long double x : {50000.0L, 50001.0L}) {
+                errno = 0;
+                std::feclearexcept(FE_ALL_EXCEPT);
+                long double result = x;
+                const short kind = _LExp_nid_postfix(&result, multiplier, 0);
+                Require(SameBits(result, expected));
+                Require(kind == (infinite ? 1 : -1));
+                Require(errno == ERANGE);
+                const int raised = std::fetestexcept(FE_ALL_EXCEPT);
+                Require((raised & (FE_OVERFLOW | FE_INEXACT)) == (FE_OVERFLOW | FE_INEXACT));
+                Require((raised & (FE_UNDERFLOW | FE_INVALID | FE_DIVBYZERO)) == 0);
+            }
+        }
+    }
+    Require(std::fesetround(saved) == 0);
+}
+
 static void CheckLongDoubleExpTinyRounding() {
     struct Case {
         int mode;
@@ -359,6 +387,7 @@ int main() {
     CheckRoundingModes();
     CheckLongDoubleExpOverflowRounding();
     CheckLongDoubleExpCompensatingRange();
+    CheckLongDoubleExpTinyMultiplierOverflow();
     CheckLongDoubleExpTinyRounding();
     CheckClassification();
     CheckLongDoubleExp();
