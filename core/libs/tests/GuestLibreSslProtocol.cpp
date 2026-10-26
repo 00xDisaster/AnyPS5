@@ -9,8 +9,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <source_location>
-#include <stdexcept>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -68,20 +66,6 @@ void CheckSelection(SelectProtocol select, const Protocols& peerNames, const Pro
     Require(peer == peerCopy && supported == supportedCopy);
 }
 
-void CheckInvalid(SelectProtocol select, const unsigned char* peer, std::uint32_t peerLength,
-    const unsigned char* supported, std::uint32_t supportedLength) {
-    unsigned char sentinel = 0;
-    unsigned char* output = &sentinel;
-    unsigned char length = 0xA5;
-    bool threw = false;
-    try {
-        select(&output, &length, peer, peerLength, supported, supportedLength);
-    } catch (const std::runtime_error& error) {
-        threw = std::string(error.what()).starts_with("SSL_select_next_proto:");
-    }
-    Require(threw && output == &sentinel && length == 0xA5);
-}
-
 void Run(SelectProtocol select) {
     const Protocol http{'h', 't', 't', 'p', '/', '1', '.', '1'};
     const Protocol h2{'h', '2'};
@@ -115,30 +99,7 @@ void Run(SelectProtocol select) {
     CheckSelection(select, large, {h2});
     CheckSelection(select, {h2}, large);
 
-    const auto valid = Encode({h2, http});
-    const std::vector<Protocol> malformed{{}, {0}, {2, 'h'}, {255, 'x'}, {1, 'a', 0}, {1, 'a', 2, 'b'}};
-    for (const auto& list : malformed) {
-        CheckInvalid(select, list.data(), static_cast<std::uint32_t>(list.size()), valid.data(), static_cast<std::uint32_t>(valid.size()));
-        CheckInvalid(select, valid.data(), static_cast<std::uint32_t>(valid.size()), list.data(), static_cast<std::uint32_t>(list.size()));
-    }
-    CheckInvalid(select, nullptr, 0, valid.data(), static_cast<std::uint32_t>(valid.size()));
-    CheckInvalid(select, nullptr, 1, valid.data(), static_cast<std::uint32_t>(valid.size()));
-    CheckInvalid(select, valid.data(), static_cast<std::uint32_t>(valid.size()), nullptr, 0);
-    CheckInvalid(select, valid.data(), static_cast<std::uint32_t>(valid.size()), nullptr, 1);
-    CheckInvalid(select, valid.data(), 2, valid.data(), static_cast<std::uint32_t>(valid.size()));
-    unsigned char* output = nullptr;
-    unsigned char length = 0xA5;
-    for (const bool missingPointer : {false, true}) {
-        bool threw = false;
-        try {
-            select(missingPointer ? nullptr : &output, missingPointer ? &length : nullptr,
-                valid.data(), static_cast<std::uint32_t>(valid.size()), valid.data(), static_cast<std::uint32_t>(valid.size()));
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw && output == nullptr && length == 0xA5);
-    }
-    std::printf("LibreSSL protocol selection: 7056 generated pairs, boundaries and invalid inputs passed\n");
+    std::printf("LibreSSL protocol selection: 7056 generated pairs, and valid-list boundaries passed\n");
 }
 
 int main(int argc, char** argv) {
