@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -145,7 +146,17 @@ std::vector<HostVolume> ScanSysfsVolumes(const std::filesystem::path& mountInfo,
     return volumes;
 }
 
+namespace {
+
+bool PassthroughEnabled() {
+    const char* configured = std::getenv("APS5_USB_STORAGE_PASSTHROUGH");
+    return configured != nullptr && configured[0] != '\0';
+}
+
+}
+
 std::vector<HostVolume> ScanHostVolumes() {
+    if (!PassthroughEnabled()) return {};
     std::optional<std::pair<std::filesystem::path, std::filesystem::path>> roots;
     {
         std::lock_guard lock(rootsMutex);

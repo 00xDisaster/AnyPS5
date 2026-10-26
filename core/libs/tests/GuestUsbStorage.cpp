@@ -190,6 +190,14 @@ void Inject(const FakeHost& host, bool first, bool second, bool firstMoved = fal
     SetUsbStorageHostVolumesForTest_nid_no_patch(volumes.empty() ? &none : volumes.data(), volumes.size());
 }
 
+void SetPassthrough(bool enabled) {
+#ifdef _WIN32
+    Require(_putenv_s("APS5_USB_STORAGE_PASSTHROUGH", enabled ? "1" : "") == 0, "set the passthrough switch");
+#else
+    Require((enabled ? ::setenv("APS5_USB_STORAGE_PASSTHROUGH", "1", 1) : ::unsetenv("APS5_USB_STORAGE_PASSTHROUGH")) == 0, "set the passthrough switch");
+#endif
+}
+
 FakeHost CreateHost() {
     FakeHost host;
     host.root = std::filesystem::temp_directory_path() / ("anyps5_usb_storage_" + std::to_string(std::random_device{}()));
@@ -483,6 +491,32 @@ void TestDeviceGetdents() {
     Require(ThrowsWith([&] { sceUsbStorageGetdentsClose(fd); }, "sceUsbStorageGetdentsClose not implemented"), "close a closed scan did not throw its marker");
 }
 
+void TestPassthroughOff(const FakeHost& host) {
+    SetPassthrough(false);
+    Inject(host, true, false);
+    Require(sceUsbStorageInit(nullptr) == 0, "initialize with the passthrough off");
+    std::uint32_t devices[UsbStorage::MaxDevices]{};
+    std::int32_t count = -1;
+    Require(sceUsbStorageGetDeviceList(devices, &count) == 0 && count == 0, "initialize listed a host volume with the passthrough off");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::MountEvent, &Record, &g_mountTag) == 0, "register the mount recorder with the passthrough off");
+    const auto seen = RecordedCount();
+    Inject(host, true, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    Require(RecordedCount() == seen, "a rescan raised a mount event with the passthrough off");
+    count = -1;
+    Require(sceUsbStorageGetDeviceList(devices, &count) == 0 && count == 0, "a rescan listed a host volume with the passthrough off");
+    UsbStorageDeviceInfo info{};
+    Require(sceUsbStorageGetDeviceInfo(0, &info) == UsbStorage::DeviceNotFound, "device 0 has info with the passthrough off");
+    std::uint8_t exists = 1;
+    Require(sceUsbStorageIsExist(0, nullptr, &exists) == true && exists == 0, "device 0 exists with the passthrough off");
+    Require(sceUsbStorageRequestMap(0, nullptr, 0, 0, nullptr, nullptr) == UsbStorage::DeviceNotFound, "device 0 maps with the passthrough off");
+    std::error_code error;
+    Require(!std::filesystem::equivalent(ResolvePath_nid_no_patch("/mnt/usb0/song.txt"), host.firstMount / "song.txt", error),
+            "/mnt/usb0 reaches a host volume with the passthrough off");
+    Require(sceUsbStorageUnregisterCallback(UsbStorage::MountEvent, &Record) == 0, "unregister the mount recorder with the passthrough off");
+    Require(sceUsbStorageTerm() == 0, "terminate with the passthrough off");
+}
+
 void TestDevices(const FakeHost& host) {
     Inject(host, true, false);
     Require(sceUsbStorageInit(nullptr) == 0, "initialize with a device");
@@ -638,6 +672,8 @@ int main() {
     TestMapRequests();
     TestGetdents();
     TestThrowingExports();
+    TestPassthroughOff(host);
+    SetPassthrough(true);
     TestDevices(host);
     TestHotplug(host);
     TestRootChange(host);
