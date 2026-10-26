@@ -533,9 +533,14 @@ std::array<ReturnBreak, 256>& ReturnBreaks() {
     return breaks;
 }
 
-std::array<std::atomic<DWORD64>, 256>& ArmedAddresses() {
-    static std::array<std::atomic<DWORD64>, 256> addresses{};
-    return addresses;
+struct ArmedBreak {
+    std::atomic<DWORD64> at{0};
+    std::atomic<DWORD> thread{0};
+};
+
+std::array<ArmedBreak, 256>& ArmedBreaks() {
+    static std::array<ArmedBreak, 256> armed;
+    return armed;
 }
 
 std::atomic<std::size_t>& ArmedCount() {
@@ -543,15 +548,32 @@ std::atomic<std::size_t>& ArmedCount() {
     return count;
 }
 
-void NoteArmedAddress(DWORD64 at) {
-    ArmedAddresses()[ArmedCount().fetch_add(1, std::memory_order_relaxed) % ArmedAddresses().size()].store(at, std::memory_order_release);
+void NoteArmedBreak(DWORD thread, DWORD64 at) {
+    auto& slot = ArmedBreaks()[ArmedCount().fetch_add(1, std::memory_order_relaxed) % ArmedBreaks().size()];
+    slot.at.store(0, std::memory_order_release);
+    slot.thread.store(thread, std::memory_order_release);
+    slot.at.store(at, std::memory_order_release);
 }
 
-bool ReturnBreakAddress(DWORD64 at) {
-    for (const auto& armed : ArmedAddresses()) {
-        if (armed.load(std::memory_order_acquire) == at) return true;
+bool ArmedOnThread(DWORD thread, DWORD64 at) {
+    if (at == 0) return false;
+    for (const auto& armed : ArmedBreaks()) {
+        if (armed.at.load(std::memory_order_acquire) != at) continue;
+        const DWORD owner = armed.thread.load(std::memory_order_acquire);
+        if (owner == thread && armed.at.load(std::memory_order_acquire) == at) return true;
     }
     return false;
+}
+
+bool DisarmedReturnBreak(const EXCEPTION_POINTERS& info) {
+    const auto& context = *info.ContextRecord;
+    constexpr DWORD TrapFlag = 0x100u;
+    constexpr DWORD64 BreakpointHits = 0xfu;
+    constexpr DWORD64 EnabledBreakpoints = 0xffu;
+    if ((context.EFlags & TrapFlag) != 0) return false;
+    if ((context.ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS && ((context.Dr6 & BreakpointHits) != 0 || (context.Dr7 & EnabledBreakpoints) != 0)) return false;
+    const auto at = reinterpret_cast<DWORD64>(info.ExceptionRecord->ExceptionAddress);
+    return at == context.Rip && ArmedOnThread(GetCurrentThreadId(), at);
 }
 
 QueuedDelivery* ClaimReturnBreak(ReturnBreak& entry, DWORD thread) {
@@ -579,7 +601,7 @@ LONG CALLBACK ReturnBreakHandler(EXCEPTION_POINTERS* info) {
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     if (info->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP) return EXCEPTION_CONTINUE_SEARCH;
-    if ((context->Dr6 & 1u) == 0) return EXCEPTION_CONTINUE_SEARCH;
+    if ((context->Dr6 & 1u) == 0) return DisarmedReturnBreak(*info) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
     const DWORD64 at = context->Dr0;
     const DWORD self = GetCurrentThreadId();
     QueuedDelivery* queued = nullptr;
@@ -588,7 +610,7 @@ LONG CALLBACK ReturnBreakHandler(EXCEPTION_POINTERS* info) {
         queued = ClaimReturnBreak(entry, self);
         if (queued != nullptr) break;
     }
-    if (queued == nullptr && !ReturnBreakAddress(at)) return EXCEPTION_CONTINUE_SEARCH;
+    if (queued == nullptr && !ArmedOnThread(self, at)) return EXCEPTION_CONTINUE_SEARCH;
     context->Dr0 = 0;
     context->Dr6 = 0;
     context->Dr7 &= ~ReturnBreakBits;
@@ -650,7 +672,7 @@ void ArmReturnBreak(HANDLE native, const CONTEXT& context, QueuedDelivery* queue
         entry.queued = queued;
         queued->references.fetch_add(1, std::memory_order_relaxed);
         entry.thread.store(thread, std::memory_order_release);
-        NoteArmedAddress(at);
+        NoteArmedBreak(thread, at);
         if (!SetReturnBreak(native, at, true)) {
             ReleaseQueued(ClaimReturnBreak(entry, thread));
             return;
