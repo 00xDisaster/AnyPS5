@@ -2,6 +2,7 @@
 #include "prx/libSceUsbStorage/include/HostVolumes.hpp"
 #include "prx/libc/include/General.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -80,6 +81,42 @@ RecordedEvent NextEvent(std::size_t index) {
     const bool arrived = recorder.changed.wait_for(lock, std::chrono::seconds(10), [&] { return recorder.events.size() > index; });
     Require(arrived, "no USB storage event arrived within 10 seconds");
     return recorder.events[index];
+}
+
+std::size_t RecordedCount() {
+    auto& recorder = Events();
+    std::lock_guard lock(recorder.mutex);
+    return recorder.events.size();
+}
+
+std::atomic<int> g_selfRemovalCalls{0};
+std::atomic<std::int32_t> g_selfRemovalResult{-1};
+
+void APS5_VABI RemoveSelf(const UsbStorageEvent*, void*) {
+    ++g_selfRemovalCalls;
+    g_selfRemovalResult = sceUsbStorageUnregisterCallback(UsbStorage::MountEvent, &RemoveSelf);
+}
+
+struct Blocker {
+    std::mutex mutex;
+    std::condition_variable changed;
+    int calls = 0;
+    bool entered = false;
+    bool released = false;
+};
+
+Blocker& Blocked() {
+    static Blocker blocker;
+    return blocker;
+}
+
+void APS5_VABI BlockInside(const UsbStorageEvent*, void*) {
+    auto& blocker = Blocked();
+    std::unique_lock lock(blocker.mutex);
+    ++blocker.calls;
+    blocker.entered = true;
+    blocker.changed.notify_all();
+    blocker.changed.wait_for(lock, std::chrono::seconds(10), [&] { return blocker.released; });
 }
 
 struct FakeHost {
@@ -515,6 +552,58 @@ void TestRootChange(const FakeHost& host) {
     Require(sceUsbStorageTerm() == 0, "terminate after a root change");
 }
 
+void TestUnregisterDuringDispatch(const FakeHost& host) {
+    Inject(host, false, false);
+    Require(sceUsbStorageInit(nullptr) == 0, "initialize for unregistrations during dispatch");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::MountEvent, &RemoveSelf, nullptr) == 0, "register a callback that unregisters itself");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::MountEvent, &Record, &g_mountTag) == 0, "register the mount recorder after it");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::UnmountEvent, &BlockInside, nullptr) == 0, "register a callback that blocks");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::UnmountEvent, &Record, &g_unmountTag) == 0, "register the unmount recorder after it");
+    const auto seen = RecordedCount();
+
+    Inject(host, true, false);
+    Require(NextEvent(seen).event.event == 1, "the first mount reached the recorder");
+    Require(g_selfRemovalCalls == 1 && g_selfRemovalResult == 0, "a callback unregistered itself without deadlocking");
+    Inject(host, true, true);
+    Require(NextEvent(seen + 1).event.device == 1, "the second mount reached the recorder");
+    Require(g_selfRemovalCalls == 1, "a callback that unregistered itself was called again");
+
+    Inject(host, false, true);
+    auto& blocker = Blocked();
+    {
+        std::unique_lock lock(blocker.mutex);
+        Require(blocker.changed.wait_for(lock, std::chrono::seconds(10), [&] { return blocker.entered; }), "the blocking callback was not called");
+    }
+    std::atomic<bool> unregistering{false};
+    std::atomic<bool> returned{false};
+    std::atomic<std::int32_t> result{-1};
+    std::thread other([&] {
+        unregistering = true;
+        result = sceUsbStorageUnregisterCallback(UsbStorage::UnmountEvent, &BlockInside);
+        returned = true;
+    });
+    while (!unregistering) std::this_thread::yield();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    Require(!returned, "an unregistration returned while its callback was still running");
+    {
+        std::lock_guard lock(blocker.mutex);
+        blocker.released = true;
+    }
+    blocker.changed.notify_all();
+    other.join();
+    Require(returned && result == 0, "the unregistration returned after its callback");
+    Require(NextEvent(seen + 2).event.device == 0, "the first unmount reached the recorder");
+    Inject(host, false, false);
+    Require(NextEvent(seen + 3).event.device == 1, "the second unmount reached the recorder");
+    {
+        std::lock_guard lock(blocker.mutex);
+        Require(blocker.calls == 1, "a callback was called after its unregistration returned");
+    }
+    Require(sceUsbStorageUnregisterCallback(UsbStorage::MountEvent, &Record) == 0, "unregister the mount recorder after dispatch");
+    Require(sceUsbStorageUnregisterCallback(UsbStorage::UnmountEvent, &Record) == 0, "unregister the unmount recorder after dispatch");
+    Require(sceUsbStorageTerm() == 0, "terminate after unregistrations during dispatch");
+}
+
 void TestSysfsScan(const FakeHost& host) {
     WriteMounts(host, FirstLine(host) + SecondLine(host) + MountLine("8_1", "/", host.root / "media" / "efi", "rw", "vfat") +
                           MountLine("8_49", "/", host.root / "media", "rw", "ext4") + MountLine("8_17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
@@ -552,6 +641,7 @@ int main() {
     TestDevices(host);
     TestHotplug(host);
     TestRootChange(host);
+    TestUnregisterDuringDispatch(host);
     if (CreateSysfs(host)) {
         TestSysfsScan(host);
     } else {
