@@ -59,6 +59,7 @@ std::uint32_t APS5_VABI FT_Get_Name_Index_nid_postfix(FreeType::GuestFaceRec* fa
 const char* APS5_VABI FT_Get_Postscript_Name_nid_postfix(FreeType::GuestFaceRec* face);
 int APS5_VABI FT_Get_PS_Font_Info_nid_postfix(FreeType::GuestFaceRec* face, FreeType::GuestPSFontInfo* info);
 int APS5_VABI FT_Has_PS_Glyph_Names_nid_postfix(FreeType::GuestFaceRec* face);
+int APS5_VABI sceFreeTypeOtHasPSGlyphNames_nid_no_patch();
 std::uint32_t APS5_VABI FT_Get_Sfnt_Name_Count_nid_postfix(FreeType::GuestFaceRec* face);
 int APS5_VABI FT_Get_Sfnt_Name_nid_postfix(FreeType::GuestFaceRec* face, std::uint32_t index, FreeType::GuestSfntName* name);
 int APS5_VABI FT_Outline_Check_nid_postfix(FreeType::GuestOutline* outline);
