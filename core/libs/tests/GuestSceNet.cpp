@@ -279,6 +279,37 @@ static void CheckRandom() {
     Require(std::any_of(values.begin() + 1, values.end(), [&](std::uint32_t value) { return value != values[0]; }));
 }
 
+static void CheckInitParam() {
+    alignas(8) std::array<std::uint8_t, 64> parameter{};
+    const auto* initialize = reinterpret_cast<const NetInitializeParameter*>(parameter.data());
+    std::uint32_t randomOutput = 0;
+    Require(sceNetTerm() == 0);
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    Require(Failed(sceNetInitParam(nullptr), 22));
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    Require(sceNetInitParam(initialize) == 0);
+    Require(sceNetGetRandom(&randomOutput) == 0);
+    Require(Failed(sceNetInitParam(initialize), 16));
+    Require(Failed(sceNetInitParam(nullptr), 16));
+    Require(sceNetTerm() == 0);
+    Require(Failed(sceNetInitParam(initialize), 16));
+    Require(Failed(sceNetGetRandom(&randomOutput), 200));
+    Require(sceNetInit_nid_postfix() == 0);
+}
+
+static void CheckIfFlags() {
+    std::uint32_t flags = 0x5a5a5a5a;
+    Require(sceNetConfigGetIfFlags(0, &flags) == 0);
+    Require(flags == 0x8049);
+    for (const std::uint32_t interfaceId : {10u, 0xffffffffu}) {
+        flags = 0x5a5a5a5a;
+        Require(sceNetConfigGetIfFlags(interfaceId, &flags) == -1);
+        Require(flags == 0x5a5a5a5a);
+    }
+    Require(sceNetConfigGetIfFlags(0, nullptr) == static_cast<int>(0x8041130Eu));
+    Require(sceNetConfigGetIfFlags(10, nullptr) == static_cast<int>(0x8041130Eu));
+}
+
 static void CheckNetMemory() {
     *sceNetErrnoLoc() = 33;
     for (const std::int32_t size : {0, -1, INT32_MIN}) {
@@ -505,6 +536,40 @@ static void CheckEmptyEpoll() {
     }
 }
 
+static void CheckRejectedArguments() {
+    Require(Failed(sceNetEpollCreate(nullptr, 0), 22));
+    for (const int flags : {1, 0x10000, -1}) Require(Failed(sceNetEpollCreate("rejected-epoll", flags), 22));
+
+    std::array<std::uint8_t, 6> untouched{};
+    untouched.fill(0xA5);
+    NetEtherAddr mac{};
+    std::memcpy(mac.data, untouched.data(), untouched.size());
+    for (const int flags : {1, 0x10000, -1}) {
+        Require(Failed(sceNetGetMacAddress(&mac, flags), 22));
+        Require(std::memcmp(mac.data, untouched.data(), untouched.size()) == 0);
+    }
+    Require(Failed(sceNetGetMacAddress(nullptr, 1), 22));
+
+    for (const int flags : {1, 0x10000, -1}) Require(Failed(sceNetResolverCreate("rejected-resolver", 0, flags), 22));
+
+    std::array<std::uint8_t, 4> ipv4{};
+    const int resolver = sceNetResolverCreate("rejected-ntoa", 0, 0);
+    Require(resolver >= 0);
+    Require(sceNetResolverAbort(resolver, 1) == 0);
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), -1, 1, 0), 22));
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 5000000, -1, 0), 22));
+    for (const int flags : {2, 0x20000, 0x10003, static_cast<int>(0x80000000u), -1})
+        Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 5000000, 1, flags), 22));
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 5000000, 1, 0), 4));
+    Require(sceNetResolverDestroy(resolver) == 0);
+
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), -1, 0, 0), 22));
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 0, -1, 0), 22));
+    Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 0, 0, 2), 22));
+    for (const int flags : {0, 1, 0x10000, 0x10001})
+        Require(Failed(sceNetResolverStartNtoa(resolver, "localhost", ipv4.data(), 0, 0, flags), 9));
+}
+
 static void CheckDontWait() {
     constexpr int DontWait = 0x80;
     constexpr int Peek = 0x2;
@@ -548,6 +613,42 @@ static void CheckDontWait() {
     Require(Failed(sceNetRecv(receiver, buffer, sizeof(buffer), 0x1), 45));
     Require(Failed(sceNetSend(sender, "x", 1, Peek), 45));
     Require(sceNetSocketClose(receiver) == 0 && sceNetSocketClose(sender) == 0);
+}
+
+static void CheckNoSignal() {
+    constexpr int NoSignal = 0x20000;
+    constexpr int DontWait = 0x80;
+    const int listener = sceNetSocket("nosignal-listener", 2, 1, 6);
+    Require(listener >= 0);
+    std::array<std::uint8_t, 16> address{16, 2, 0, 0, 127, 0, 0, 1};
+    Require(sceNetBind_nid_postfix(listener, address.data(), address.size()) == 0);
+    Require(sceNetListen(listener, 1) == 0);
+    std::uint32_t size = address.size();
+    Require(sceNetGetsockname(listener, address.data(), &size) == 0);
+    const int client = sceNetSocket("nosignal-client", 2, 1, 6);
+    Require(client >= 0);
+    Require(sceNetConnect(client, address.data(), address.size()) == 0);
+    const int accepted = sceNetAccept(listener, nullptr, nullptr);
+    Require(accepted >= 0);
+    char reply[] = "nosignal reply";
+    Require(sceNetSend(accepted, reply, 4, NoSignal) == 4);
+    Require(sceNetSendto(accepted, reply + 4, 4, NoSignal | DontWait, nullptr, 0) == 4);
+    NetIovec out[] = {{reply + 8, sizeof(reply) - 8}};
+    NetMsghdr message{nullptr, 0, out, 1, nullptr, 0, 0};
+    Require(sceNetSendmsg(accepted, &message, NoSignal) == static_cast<std::int64_t>(sizeof(reply) - 8));
+    char received[sizeof(reply)]{};
+    std::size_t total = 0;
+    while (total < sizeof(reply)) {
+        const auto count = sceNetRecv(client, received + total, sizeof(received) - total, 0);
+        Require(count > 0);
+        total += static_cast<std::size_t>(count);
+    }
+    Require(std::memcmp(received, reply, sizeof(reply)) == 0);
+    Require(Failed(sceNetSend(accepted, reply, 1, NoSignal | 0x2), 45));
+    Require(sceNetShutdown(accepted, 1) == 0);
+    Require(Failed(sceNetSend(accepted, reply, 1, NoSignal), 32));
+    Require(Failed(sceNetSendto(accepted, reply, 1, NoSignal, nullptr, 0), 32));
+    Require(sceNetSocketClose(client) == 0 && sceNetSocketClose(accepted) == 0 && sceNetSocketClose(listener) == 0);
 }
 
 static void CheckReceiveTimeout(int receiver, int sender, const std::array<std::uint8_t, 16>& address) {
@@ -1856,6 +1957,7 @@ int main() {
     Require(Failed(sceNetShowNetstat(), 200));
     Require(Failed(sceNetShowIfconfig(), 200));
     Require(sceNetInit_nid_postfix() == 0);
+    CheckInitParam();
     CheckEpollWritable();
     CheckSocketHostErrors();
     CheckPoolStats();
@@ -1864,7 +1966,10 @@ int main() {
     CheckNetMemory();
     CheckNetstat();
     CheckEmptyEpoll();
+    CheckIfFlags();
+    CheckRejectedArguments();
     CheckDontWait();
+    CheckNoSignal();
     CheckAddressText(2, "127.0.0.1");
     CheckAddressText(2, "255.255.255.255");
     CheckAddressText(28, "::1");
