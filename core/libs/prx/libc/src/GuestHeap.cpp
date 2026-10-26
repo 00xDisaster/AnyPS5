@@ -259,6 +259,28 @@ void rawFree(void* raw, std::size_t blockBytes) {
     }
 }
 
+struct Block {
+    void* raw;
+    std::size_t bytes;
+};
+
+std::unordered_map<const void*, Block>& blocks() {
+    static std::unordered_map<const void*, Block> value;
+    return value;
+}
+
+Block validatedBlock(const void* pointer, std::size_t bytes) {
+    const auto found = blocks().find(pointer);
+    if (found == blocks().end()) throw std::runtime_error("guest heap allocation metadata is missing");
+    const auto block = found->second;
+    if (reinterpret_cast<void* const*>(pointer)[-2] != block.raw || reinterpret_cast<const std::size_t*>(pointer)[-1] != block.bytes)
+        throw std::runtime_error("guest heap block header differs from allocation metadata");
+    const auto offset = reinterpret_cast<std::uintptr_t>(pointer) - reinterpret_cast<std::uintptr_t>(block.raw);
+    if (offset > block.bytes || bytes > block.bytes - offset)
+        throw std::runtime_error("guest heap allocation exceeds its block");
+    return block;
+}
+
 void* allocate(GuestAllocations::Mutation& mutation, std::size_t alignment, std::size_t bytes, bool gpu) {
     if (alignment == 0 || (alignment & (alignment - 1)) != 0) throw std::invalid_argument("invalid guest heap alignment");
     alignment = std::max(alignment, MinimumAlignment);
@@ -271,7 +293,13 @@ void* allocate(GuestAllocations::Mutation& mutation, std::size_t alignment, std:
     reinterpret_cast<void**>(pointer)[-2] = raw;
     reinterpret_cast<std::size_t*>(pointer)[-1] = blockBytes;
     try {
-        mutation.Add(pointer, bytes, true, true, gpu);
+        blocks().emplace(pointer, Block{raw, blockBytes});
+        try {
+            mutation.Add(pointer, bytes, true, true, gpu);
+        } catch (...) {
+            blocks().erase(pointer);
+            throw;
+        }
     } catch (...) {
         rawFree(raw, blockBytes);
         throw;
@@ -287,19 +315,11 @@ void* emptyInPlace(GuestAllocations::Mutation& mutation, void* pointer, bool gpu
 }
 
 void free(GuestAllocations::Mutation& mutation, void* pointer, std::size_t bytes) {
-    const auto raw = reinterpret_cast<void**>(pointer)[-2];
-    const auto blockBytes = reinterpret_cast<std::size_t*>(pointer)[-1];
-    const auto rawAddress = reinterpret_cast<std::uintptr_t>(raw);
-    const auto pointerAddress = reinterpret_cast<std::uintptr_t>(pointer);
-    if (rawAddress > pointerAddress || pointerAddress - rawAddress < HeaderBytes)
-        throw std::runtime_error("guest heap block header does not precede its allocation");
-    if (rawAddress > std::numeric_limits<std::uintptr_t>::max() - blockBytes || pointerAddress > rawAddress + blockBytes || bytes > rawAddress + blockBytes - pointerAddress)
-        throw std::runtime_error("guest heap block header does not cover its allocation");
-    if (GuestArena::GuestArenaAvailable_nid_postfix() && !GuestArena::GuestArenaContains_nid_postfix(raw, blockBytes))
-        throw std::runtime_error("guest heap block lies outside the guest arena");
+    const auto block = validatedBlock(pointer, bytes);
     mutation.Remove(pointer);
-    shrink(usage().inUse, blockBytes);
-    rawFree(raw, blockBytes);
+    blocks().erase(pointer);
+    shrink(usage().inUse, block.bytes);
+    rawFree(block.raw, block.bytes);
 }
 
 }
@@ -322,6 +342,7 @@ void* GuestHeapReallocate_nid_postfix(void* pointer, std::size_t bytes) {
     GuestAllocations::Mutation mutation;
     const auto range = mutation.Find(pointer);
     mutation.RequireUnpinned(pointer, range.bytes);
+    validatedBlock(pointer, range.bytes);
     if (bytes == 0) return emptyInPlace(mutation, pointer, range.gpu);
     void* result = allocate(mutation, MinimumAlignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
@@ -334,6 +355,7 @@ void* GuestHeapRealign_nid_postfix(void* pointer, std::size_t bytes, std::size_t
     GuestAllocations::Mutation mutation;
     const auto range = mutation.Find(pointer);
     mutation.RequireUnpinned(pointer, range.bytes);
+    validatedBlock(pointer, range.bytes);
     if (bytes == 0) {
         if (alignment == 0 || (alignment & (alignment - 1)) != 0) throw std::invalid_argument("invalid guest heap alignment");
         if (reinterpret_cast<std::uintptr_t>(pointer) % alignment != 0)
