@@ -923,4 +923,20 @@ int APS5_VABI wcscat_s_nid_postfix(char16_t* dest, size_t destsz, const char16_t
     return wcsncat_s_nid_postfix(dest, destsz, src, static_cast<size_t>(-1));
 }
 
+int APS5_VABI timingsafe_memcmp_nid_postfix(const void* b1, const void* b2, size_t len) {
+    const auto* p1 = static_cast<const unsigned char*>(b1);
+    const auto* p2 = static_cast<const unsigned char*>(b2);
+    int result = 0;
+    int done = 0;
+    for (size_t i = 0; i < len; ++i) {
+        const int diff = static_cast<int>(p1[i]) - static_cast<int>(p2[i]);
+        const int isLess = diff < 0 ? -1 : 0;
+        const int isGreater = diff > 0 ? -1 : 0;
+        const int cmp = isLess - isGreater;
+        result |= cmp & ~done;
+        done |= isLess | isGreater;
+    }
+    return result;
+}
+
 }
