@@ -249,6 +249,18 @@ bool hintMappingHistoryTests() {
 #endif
 }
 
+void gpuTimingKeyTests() {
+    constexpr std::uint64_t variant = 0x2;
+    const auto key = Recorder::DrawTimingKey(variant);
+    Require(key != variant && (key & Recorder::DrawTimingFlag) != 0, "a draw's timing key is not flagged apart from the other keys");
+    char named[64];
+    std::snprintf(named, sizeof(named), "0x%llx", static_cast<unsigned long long>(variant));
+    Require(Recorder::TimingKeyLabel(key) == std::string("draw ") + named, "a draw's timing label is not 'draw ' plus the id [drawvariant] prints");
+    Require(Recorder::TimingKeyLabel(variant) == named, "a key that is not a draw's is labelled with the draw prefix");
+    Require(Recorder::TimingKeyLabel(Recorder::DrawTimingKey(0)) == "draw 0x0", "a draw with no program is not labelled as a draw");
+    Require(Recorder::TimingKeyLabel(Recorder::DrawTimingKey(0x123456789abcdefull)) == "draw 0x123456789abcdef", "a wide variant id was cut in the label");
+}
+
 void deviceSelectionTests() {
     const auto properties = [](const char* name, VkPhysicalDeviceType type) {
         VkPhysicalDeviceProperties result{};
@@ -11430,6 +11442,11 @@ int main(int argc, char** argv) {
         if (argc == 2 && std::string_view(argv[1]) == "--partial-watch-restoration-only") {
             if (!partialWatchRestorationTests()) return 77;
             std::cout << "partial private write-watch restoration tests passed\n";
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--gpu-timing-key-only") {
+            gpuTimingKeyTests();
+            std::cout << "gpu timing key tests passed\n";
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--device-selection-only") {

@@ -2332,7 +2332,7 @@ void recordDraw(const Context& context, const State& state, const Pm4::DrawParam
         for (const auto& shader : shaders) {
             if (shader.program != nullptr && (key == 0 || shader.stage == ShaderRecompiler::ShaderStage::Fragment)) key = shader.program->variantId;
         }
-        eachDrawTiming = recorder->BeginInPassGpuTiming(key | (1ull << 63));
+        eachDrawTiming = recorder->BeginInPassGpuTiming(Recorder::DrawTimingKey(key));
     }
     if (record.stencilReplay.empty()) recordDrawCommands(context, commands, state, draw, inputs, record.indirect, argumentBuffer, argumentOffset, trace, subdraw);
     else {
