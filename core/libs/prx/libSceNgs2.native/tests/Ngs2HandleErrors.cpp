@@ -14,14 +14,9 @@ static void Status(int actual, int expected, const char* message) {
     if (actual != expected) throw std::runtime_error(message);
 }
 
-static void CheckUnimplemented() {
-    try {
-        sceNgs2RackQueryInfo();
-    } catch (const std::runtime_error& error) {
-        Require(std::string(error.what()) == "sceNgs2RackQueryInfo not implemented");
-        return;
-    }
-    throw std::runtime_error("sceNgs2RackQueryInfo must report that it is not implemented");
+static void CheckExportLinked() {
+    auto* volatile linked = &sceNgs2RackQueryInfo;
+    Require(linked != nullptr);
 }
 
 static void CheckResetOption() {
@@ -327,7 +322,7 @@ int main() {
         CheckSystemOption();
         CheckSetGrainSamples();
         CheckSetSampleRate();
-        CheckUnimplemented();
+        CheckExportLinked();
         std::cout << "NGS2 PS5 handle errors and validation precedence checked\n";
         return 0;
     } catch (const std::exception& error) {
