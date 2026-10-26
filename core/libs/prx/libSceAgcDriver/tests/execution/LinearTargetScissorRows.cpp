@@ -281,6 +281,11 @@ void Check(AgcDriver::VulkanDevice& device, std::uint32_t height, VkRect2D sciss
 
 int main() {
     try {
+#ifdef _WIN32
+        _putenv_s("APS5_NO_RESIDENT_LINEAR", "1");
+#else
+        setenv("APS5_NO_RESIDENT_LINEAR", "1", 1);
+#endif
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
         Check(*device, 64, {{0, 0}, {Width, 64}}, {}, "whole-target scissor");
