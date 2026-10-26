@@ -35,17 +35,23 @@ bool SameComponent(std::string_view left, std::string_view right) {
 
 Archive& Opened() {
     auto& archive = State();
-    std::lock_guard lock(archive.mutex);
-    if (archive.opened) return archive;
+    {
+        std::lock_guard lock(archive.mutex);
+        if (archive.opened) return archive;
+    }
     const auto app0 = ResolveDiskPath_nid_no_patch("/app0").lexically_normal();
     auto candidate = app0;
     candidate += ".zar";
     std::error_code error;
+    std::unique_ptr<ZArchiveReader> reader;
     if (std::filesystem::is_regular_file(candidate, error)) {
-        archive.reader.reset(ZArchiveReader::OpenFromFile(candidate));
-        if (!archive.reader) throw std::runtime_error("app0.zar is not a readable ZArchive: " + candidate.string());
-        archive.path = candidate;
+        reader.reset(ZArchiveReader::OpenFromFile(candidate));
+        if (!reader) throw std::runtime_error("app0.zar is not a readable ZArchive: " + candidate.string());
     }
+    std::lock_guard lock(archive.mutex);
+    if (archive.opened) return archive;
+    archive.reader = std::move(reader);
+    if (archive.reader) archive.path = candidate;
     archive.app0 = app0;
     archive.opened = true;
     return archive;
