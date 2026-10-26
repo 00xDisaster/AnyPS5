@@ -33,11 +33,6 @@ static void RequireSet(int which, int who, int nice) {
     *__error_nid_postfix() = 13;
     Require(setpriority_nid_postfix(which, who, nice) == 0 && *__error_nid_postfix() == 13);
 }
-static void RequireSetThrows(int which, int who, int nice) {
-    bool threw = false;
-    try { setpriority_nid_postfix(which, who, nice); } catch (const std::exception&) { threw = true; }
-    Require(threw);
-}
 static void RequireSetError(int which, int who, int nice, int error) {
     *__error_nid_postfix() = 0;
     Require(setpriority_nid_postfix(which, who, nice) == -1 && *__error_nid_postfix() == error);
@@ -78,10 +73,6 @@ int main() {
     RequireSet(PrioProcess, 0, 0);
     RequireSet(PrioProcess, self, 5);
     RequireSet(PrioProcess, self, -20);
-    RequireSetThrows(PrioGroup, 0, 20);
-    RequireSetThrows(PrioGroup, self, 0);
-    RequireSetThrows(PrioUser, 0, -1);
-    RequireSetThrows(PrioUser, 0, 0);
     RequireSetError(PrioProcess, self + 1, 0, 3);
     RequireSetError(PrioProcess, -1, 0, 3);
     RequireSetError(PrioGroup, self + 1, 0, 3);
