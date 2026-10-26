@@ -1,10 +1,12 @@
 import contextlib
 import io
 import os
+import stat
 import tempfile
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import check_conventions
@@ -29,8 +31,70 @@ class StubgenTests(unittest.TestCase):
         self.assertIn("APS5_VABI", code)
         self.assertIn("NotImplemented_nid_no_patch", code)
 
+    def test_prx_suffix_is_stripped_from_module_name(self):
+        nids = ["AAAAAAAAAAA", "BBBBBBBBBBB"]
+        expected = stubgen.generate("libSceAmpr", nids, {})
+        self.assertIn("sceAmprUnknown00", expected[0])
+        self.assertIn("core/libs/prx/libSceAmpr/", expected[1])
+        for spelling in ("libSceAmpr.prx", "libSceAmpr.PRX"):
+            with self.subTest(spelling=spelling):
+                self.assertEqual(stubgen.generate(spelling, nids, {}), expected)
+
 
 class StubGeneratorTests(unittest.TestCase):
+    def test_long_output_names(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            if os.name == "nt":
+                root = Path("\\\\?\\" + str(root))
+            limit = os.pathconf(root, "PC_NAME_MAX") if os.name == "posix" else 255
+            nids = root / "nids.txt"
+            nids.write_text("AAAAAAAAAAA\n", encoding="utf-8")
+            expected = stubgen.generate("libSceExample", ["AAAAAAAAAAA"], {})
+            for option, extra, content in (("--out", [], expected[0]),
+                                           ("--td-out", ["--td-only"], expected[1])):
+                for existing in (False, True):
+                    with self.subTest(option=option, existing=existing):
+                        output = root / ("a" * (limit - 4) + ".txt")
+                        output.write_bytes(b"previous output\n")
+                        if not existing:
+                            output.unlink()
+                        result = subprocess.run(
+                            [sys.executable, str(Path(stubgen.__file__)), "--module", "libSceExample",
+                             "--nids", str(nids), option, str(output), *extra],
+                            capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(output.read_text(encoding="utf-8"), content)
+                        self.assertEqual(nids.read_text(encoding="utf-8"), "AAAAAAAAAAA\n")
+                        self.assertEqual(set(root.iterdir()), {nids, output})
+                        output.unlink()
+
+    @unittest.skipUnless(os.name == "nt", "Windows denies replacing read-only output files")
+    def test_readonly_second_output_preserves_both_outputs(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nids = root / "nids.txt"
+            code = root / "Export.cpp"
+            debt = root / "debt.md"
+            nids.write_text("AC1FtjqMCL0\n", encoding="utf-8")
+            code.write_bytes(b"original code\n")
+            debt.write_bytes(b"original debt\n")
+            debt.chmod(stat.S_IREAD)
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(Path(stubgen.__file__)), "--module", "libSceTest",
+                     "--nids", str(nids), "--out", str(code), "--td-out", str(debt)],
+                    capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(code.read_bytes(), b"original code\n")
+                self.assertEqual(debt.read_bytes(), b"original debt\n")
+                self.assertEqual(sorted(path.name for path in root.iterdir()), ["Export.cpp", "debt.md", "nids.txt"])
+            finally:
+                debt.chmod(stat.S_IREAD | stat.S_IWRITE)
+
     def test_default_stdout_contains_only_cpp(self):
         with tempfile.TemporaryDirectory() as directory:
             nids = Path(directory) / "nids.txt"
@@ -105,6 +169,12 @@ class StubGeneratorTests(unittest.TestCase):
             path.write_text("# imports\nAAAAAAAAAAA#A#B\nAAAAAAAAAAA\nBBBBBBBBBBB\n", encoding="utf-8-sig")
             self.assertEqual(stubgen.parse_nids(path), ["AAAAAAAAAAA", "BBBBBBBBBBB"])
 
+    def test_named_stub_reports_its_function_name(self):
+        code = stubgen.generate("libSceAmpr", ["tNn5WBkta60", "AAAAAAAAAAA"], {"tNn5WBkta60": "sceAmprCommandBufferNop"})[0]
+        named = code.split("sceAmprCommandBufferNop(void) {\n", 1)[1].split("\n", 1)[0]
+        self.assertEqual(named, "    NotImplemented_nid_no_patch(__func__);")
+        self.assertIn('NotImplemented_nid_no_patch("AAAAAAAAAAA");', code)
+
     def test_valid_generation_keeps_the_code_and_debt(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -119,6 +189,76 @@ class StubGeneratorTests(unittest.TestCase):
                 mask = os.umask(0o022)
                 os.umask(mask)
                 self.assertEqual(code.stat().st_mode & 0o777, 0o666 & ~mask)
+
+
+class ReadOnlyOutputTests(unittest.TestCase):
+    def test_later_staging_failure_preserves_original_error_and_cleans_readonly_temporary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nids, output = root / "nids.txt", root / "Export.cpp"
+            nids.write_text("AAAAAAAAAAA\n", encoding="utf-8")
+            original = "existing source\n"
+            output.write_text(original, encoding="utf-8")
+            output.chmod(0o444)
+            errors = io.StringIO()
+            arguments = ["--module", "libSceExample", "--nids", str(nids), "--out", str(output),
+                         "--td-out", str(root / "absent" / "debt.txt")]
+            with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as error:
+                stubgen.main(arguments)
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn("absent", errors.getvalue())
+            self.assertNotIn("Export.cpp.", errors.getvalue())
+            self.assertEqual(output.read_text(encoding="utf-8"), original)
+            self.assertFalse(output.stat().st_mode & stat.S_IWRITE)
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["Export.cpp", "nids.txt"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows denies replacing read-only output files")
+    def test_denied_replace_preserves_readonly_output_without_leaking_temporary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nids, output = root / "nids.txt", root / "Export.cpp"
+            nids.write_text("AAAAAAAAAAA\n", encoding="utf-8")
+            original = "existing source\n"
+            output.write_text(original, encoding="utf-8")
+            output.chmod(0o444)
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                stubgen.main(["--module", "libSceExample", "--nids", str(nids), "--out", str(output)])
+            self.assertEqual(error.exception.code, 2)
+            self.assertEqual(output.read_text(encoding="utf-8"), original)
+            self.assertFalse(output.stat().st_mode & stat.S_IWRITE)
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["Export.cpp", "nids.txt"])
+
+
+    def test_main_reconfigures_streams(self):
+        class Stream:
+            def __init__(self):
+                self.encoding = None
+                self.errors = None
+                self.newline = None
+
+            def reconfigure(self, encoding=None, errors=None, newline=None):
+                self.encoding = encoding
+                self.errors = errors
+                self.newline = newline
+
+            def write(self, text):
+                pass
+
+            def flush(self):
+                pass
+
+        out, err = Stream(), Stream()
+        with patch.object(stubgen.sys, "stdout", out), patch.object(stubgen.sys, "stderr", err):
+            try:
+                stubgen.main([])
+            except SystemExit:
+                pass
+        self.assertEqual(out.encoding, "utf-8")
+        self.assertEqual(out.errors, "backslashreplace")
+        self.assertEqual(out.newline, "\n")
+        self.assertEqual(err.encoding, "utf-8")
+        self.assertEqual(err.errors, "backslashreplace")
+        self.assertEqual(err.newline, "\n")
 
 
 if __name__ == "__main__":
