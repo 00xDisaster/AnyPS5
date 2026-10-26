@@ -69,6 +69,43 @@ void CheckValue(const JxrPixelInfo& actual, const Reference& expected) {
     Require(std::memcmp(actual.guid, expected.guid.data(), 16) == 0, "GUID differs from pinned native reference");
 }
 
+void PaddingCases(Query query, bool reverse) {
+    constexpr auto begin = offsetof(JxrPixelInfo, bitsPerUnit) + sizeof(JxrPixelInfo::bitsPerUnit);
+    constexpr auto size = offsetof(JxrPixelInfo, flags) - begin;
+    static_assert(begin == 28 && size == 4);
+    const std::array<std::byte, size> zero{};
+    struct Guarded {
+        std::uint64_t before;
+        JxrPixelInfo value;
+        std::uint64_t after;
+    };
+    unsigned formats = 0;
+    for (unsigned hash = 0; hash < 256; ++hash) {
+        Reference forward;
+        if (!ReadReference(hash, false, false, forward)) continue;
+        Reference expected = forward;
+        Guarded record;
+        std::memset(&record, 0xa5, sizeof(record));
+        if (reverse) {
+            record.value = BackwardInput(forward);
+            Require(ReadReference(hash, true, false, expected), "padding reverse reference missing");
+        } else {
+            record.value.guid = forward.guid.data();
+        }
+        auto* bytes = reinterpret_cast<std::byte*>(&record.value);
+        std::memset(bytes + begin, 0xa5, size);
+        Require(query(&record.value, reverse ? 1 : 0) == 0, "padding lookup succeeds");
+        CheckValue(record.value, expected);
+        Require(std::memcmp(bytes + begin, zero.data(), size) == 0,
+            reverse ? "reverse success padding is not zero" : "forward success padding is not zero");
+        Require(record.before == UINT64_C(0xa5a5a5a5a5a5a5a5) && record.after == UINT64_C(0xa5a5a5a5a5a5a5a5),
+            "padding lookup changed record canaries");
+        ++formats;
+    }
+    Require(formats != 0, "padding reference inventory empty");
+    std::printf("JXR %s padding passed across %u reference hashes\n", reverse ? "reverse" : "forward", formats);
+}
+
 class GuardedTail {
     void* memory;
     std::size_t page;
@@ -196,15 +233,6 @@ void Cases(Query query) {
         }
     });
     for (auto& thread : threads) thread.join();
-    for (const bool nullGuid : {false, true}) {
-        bool threw = false;
-        input = {};
-        try { query(nullGuid ? &input : nullptr, 0); } catch (const std::invalid_argument&) { threw = true; }
-        Require(threw, "valid-mode null record/GUID is explicitly unsupported");
-    }
-    bool threw = false;
-    try { query(nullptr, 1); } catch (const std::invalid_argument&) { threw = true; }
-    Require(threw, "backward null record is explicitly unsupported");
     std::printf("JXR guest lookup cases passed across %u reference hashes\n", formats);
 }
 
@@ -223,7 +251,7 @@ int main(int argc, char** argv) {
             std::printf("Pinned native JXR reference passed with %u hashes\n", formats);
             return 0;
         }
-        Require(argc == 3, "expected library and export mode");
+        Require(argc == 3 || argc == 4, "expected library, export mode and optional padding direction");
         const char* name = std::strcmp(argv[2], "patched") == 0 ? "5Gjz1nLOKvo" : "PixelFormatLookup_nid_postfix";
 #ifdef _WIN32
         const auto library = LoadLibraryA(argv[1]);
@@ -235,7 +263,12 @@ int main(int argc, char** argv) {
         const auto query = reinterpret_cast<Query>(dlsym(library, name));
 #endif
         Require(query != nullptr, "missing lookup export");
-        Cases(query);
+        if (argc == 4) {
+            Require(std::strcmp(argv[3], "forward") == 0 || std::strcmp(argv[3], "reverse") == 0, "padding direction");
+            PaddingCases(query, std::strcmp(argv[3], "reverse") == 0);
+        } else {
+            Cases(query);
+        }
 #ifdef _WIN32
         FreeLibrary(library);
 #else

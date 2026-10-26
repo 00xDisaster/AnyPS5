@@ -27,6 +27,19 @@ if(BUILD_TESTING)
     add_test(NAME guest_jxr_lookup COMMAND guest_jxr_lookup_tests $<TARGET_FILE:libSceJxr> raw)
     add_test(NAME guest_jxr_lookup_patched COMMAND guest_jxr_lookup_tests ${PATCHED_DIR}/libSceJxr.prx patched)
     set_tests_properties(guest_jxr_lookup_reference guest_jxr_lookup guest_jxr_lookup_patched PROPERTIES TIMEOUT 20)
+    foreach(direction IN ITEMS forward reverse)
+        add_test(NAME guest_jxr_lookup_padding_${direction}
+            COMMAND guest_jxr_lookup_tests $<TARGET_FILE:libSceJxr> raw ${direction})
+        add_test(NAME guest_jxr_lookup_padding_${direction}_patched
+            COMMAND guest_jxr_lookup_tests ${PATCHED_DIR}/libSceJxr.prx patched ${direction})
+        set_tests_properties(guest_jxr_lookup_padding_${direction} guest_jxr_lookup_padding_${direction}_patched PROPERTIES TIMEOUT 20)
+        if(WIN32)
+            set_tests_properties(guest_jxr_lookup_padding_${direction} PROPERTIES
+                ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceJxr>")
+            set_tests_properties(guest_jxr_lookup_padding_${direction}_patched PROPERTIES
+                ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${PATCHED_DIR}")
+        endif()
+    endforeach()
     if(WIN32)
         set_tests_properties(guest_jxr_lookup_reference guest_jxr_lookup PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceJxr>")
