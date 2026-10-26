@@ -247,6 +247,9 @@ int main() {
     parameter[0] = 0x21;
     Require(sceVrTracker2QueryMemory(reinterpret_cast<const VrTracker2MemoryParameter*>(parameter.data()), reinterpret_cast<VrTracker2MemoryRequirement*>(requirement.data())) == InvalidArgument, "query size");
 
+    VrTracker2MeshRequirement meshRequirement{};
+    Require(Throws([&] { sceVrTracker2GetRawCameraMeshSize(&meshRequirement, 0); }), "mesh size query throws unimplemented");
+
     std::vector<std::uint8_t> memory(TrackerMemory + WorkMemoryTail);
     CheckInitializeValidation(memory);
     const auto previous = std::filesystem::current_path();
