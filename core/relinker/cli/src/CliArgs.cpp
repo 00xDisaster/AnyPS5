@@ -193,6 +193,8 @@ Args ParseArgs(int argc, char* argv[]) {
         throw std::runtime_error("--to-rosetta conflicts with --windows");
     if (args.windowsDiagnostics && !args.toWindows)
         throw std::runtime_error("--windows-diagnostics requires --windows");
+    if (args.frameRedZone && !args.toWindows)
+        throw std::runtime_error("--frame-red-zone requires --windows");
 
     if (args.windowsGui && !args.toWindows)
         throw std::runtime_error("--windows-gui requires --windows");
