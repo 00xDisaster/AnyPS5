@@ -339,6 +339,7 @@ static void CheckFacetGetcat() {
 }
 
 static void CheckNumPutVtableObject() {
+    Require(sizeof(_ZTVSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix) == kNumPutCharVtableSlots * sizeof(std::uintptr_t));
     for (std::uintptr_t& slot : _ZTVSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix) {
         Require(slot == 0);
         slot = 0x1111;
