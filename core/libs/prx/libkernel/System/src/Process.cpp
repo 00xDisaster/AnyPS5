@@ -76,6 +76,7 @@ constexpr int errnoInvalidArgument = 22;
 constexpr int errnoTooBig = 7;
 constexpr int errnoNoEnt = 2;
 constexpr int errnoAccess = 13;
+constexpr int errnoBadFile = 9;
 constexpr int freebsdGroupsMax = 1023;
 std::mutex supplementaryGroupsMutex;
 std::vector<std::uint32_t> supplementaryGroups{0};
@@ -801,7 +802,8 @@ int APS5_VABI wait_nid_postfix(int* status) {
 
 int ExecProgram(const char* file, char* const* arguments, char* const* environment, bool search, bool implicitEnvironment) {
     const auto fail = [](int error) { *__error_nid_postfix() = error; return -1; };
-    if (file == nullptr || arguments == nullptr) return fail(errnoBadAddress);
+    if (file == nullptr) return fail(errnoBadFile);
+    if (arguments == nullptr) return fail(errnoBadAddress);
     if (file[0] == '\0') return fail(errnoNoEnt);
     static char* const noEnvironment[] = {nullptr};
     char* const* entries = implicitEnvironment ? static_cast<char* const*>(environ) : (environment != nullptr ? environment : noEnvironment);

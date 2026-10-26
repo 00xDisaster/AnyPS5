@@ -121,7 +121,7 @@ extern "C" void APS5_VABI ExecFirst_nid_no_patch(const std::uintptr_t* block) {
     char* const empty[] = {nullptr};
     char* const unpaired[] = {const_cast<char*>("EXEC_SECOND"), nullptr};
     const char* const absent = "/app0/picker/absent.bin";
-    Require(execv_nid_postfix(nullptr, present) == -1 && *__error_nid_postfix() == 14, "null path rejected with EFAULT");
+    Require(execv_nid_postfix(nullptr, present) == -1 && *__error_nid_postfix() == 9, "null path rejected with EBADF");
     Require(execv_nid_postfix("/app0/picker/second.bin", nullptr) == -1 && *__error_nid_postfix() == 14,
             "null arguments rejected with EFAULT");
     Require(execv_nid_postfix(absent, empty) == -1 && *__error_nid_postfix() == 2,
