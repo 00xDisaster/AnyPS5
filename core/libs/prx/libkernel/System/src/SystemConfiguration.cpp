@@ -599,7 +599,7 @@ int APS5_VABI sysctlbyname_nid_postfix(const char* name, void* oldValue, std::si
 
 int APS5_VABI sceKernelGetSystemSwVersion_nid_postfix(SceKernelSystemSwVersion* version) {
     if (version == nullptr) {
-        return SCE_KERNEL_ERROR_EFAULT;
+        return 0;
     }
     std::memset(version->versionString, 0, sizeof(version->versionString));
     std::memcpy(version->versionString, "01.000.000", sizeof("01.000.000"));
