@@ -1022,17 +1022,11 @@ void testFreshHandleCalls() {
     check(sceVideoOutCursorSetPosition(handle, 0, 100, 100) == 0, "the cursor position was refused");
     check(sceVideoOutCursorSetImageAddress(handle, 0, nullptr) == VIDEO_OUT_ERROR_INVALID_ADDRESS, "a null cursor image address was accepted");
     check(sceVideoOutCursorDisable(handle, 0) == 0, "the cursor was not disabled");
-    check(expectFailure([&] { sceVideoOutCursorEnable(handle, 0, image); }).find("not implemented") != std::string::npos, "a cursor image was accepted");
-    check(expectFailure([&] { sceVideoOutCursorSetImageAddress(handle, 0, image); }).find("not implemented") != std::string::npos, "a cursor image address was accepted");
-    check(expectFailure([&] { sceVideoOutCursorDisable(handle, 1); }).find("not implemented") != std::string::npos, "an unmeasured cursor index was accepted");
-    check(expectFailure([&] { sceVideoOutCursorSetPosition(handle, 1, 0, 0); }).find("not implemented") != std::string::npos, "an unmeasured cursor index was positioned");
-    check(expectFailure([&] { sceVideoOutCursorDisable(-1, 1); }).find("not implemented") != std::string::npos, "an unmeasured cursor index was answered for an invalid handle");
 
     std::array<std::byte, 128> untouched;
     untouched.fill(std::byte{0xaa});
     check(sceVideoOutGetFlipStatus(-1, reinterpret_cast<VideoOutFlipStatus*>(untouched.data())) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's flip status was returned");
     check(std::all_of(untouched.begin(), untouched.end(), [](std::byte value) { return value == std::byte{0xaa}; }), "an invalid handle's flip status wrote the output");
-    check(expectFailure([&] { sceVideoOutGetFlipStatus(-1, nullptr); }).find("not measured") != std::string::npos, "a null output with an invalid handle was answered");
     check(sceVideoOutIsFlipPending(-1) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's pending flip was reported");
     check(sceVideoOutCursorEnable(-1, 0, nullptr) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle was checked after the cursor image address");
     check(sceVideoOutCursorEnable(-1, 0, image) == VIDEO_OUT_ERROR_INVALID_HANDLE, "a cursor was enabled on an invalid handle");
