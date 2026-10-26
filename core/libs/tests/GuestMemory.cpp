@@ -96,6 +96,27 @@ static void CheckReleaseFlexibleMemory() {
     Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(again), length) == 0);
 }
 
+static void CheckPrtApertures() {
+    void* address = reinterpret_cast<void*>(0x5a5a);
+    std::size_t length = 0x5a5a;
+    for (const int index : {-1, 3}) {
+        Require(sceKernelSetPrtAperture(index, reinterpret_cast<void*>(0x1000000000), 0x10000) == SCE_KERNEL_ERROR_EINVAL);
+        Require(sceKernelGetPrtAperture(index, &address, &length) == SCE_KERNEL_ERROR_EINVAL);
+    }
+    Require(address == reinterpret_cast<void*>(0x5a5a) && length == 0x5a5a);
+    Require(sceKernelGetPrtAperture(0, nullptr, &length) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelGetPrtAperture(0, &address, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    for (int index = 0; index < 3; ++index) {
+        void* const base = reinterpret_cast<void*>(0x1000000000 + 0x100000000 * index);
+        const std::size_t size = 0x10000 << index;
+        Require(sceKernelSetPrtAperture(index, base, size) == 0);
+        Require(sceKernelGetPrtAperture(index, &address, &length) == 0 && address == base && length == size);
+    }
+    Require(sceKernelSetPrtAperture(1, nullptr, 0) == 0);
+    Require(sceKernelGetPrtAperture(1, &address, &length) == 0 && address == nullptr && length == 0);
+    Require(sceKernelGetPrtAperture(0, &address, &length) == 0 && address == reinterpret_cast<void*>(0x1000000000) && length == 0x10000);
+}
+
 static void CheckFlexibleMappingIgnoresFlag8000() {
     constexpr std::size_t length = 0x10000;
     std::size_t before = 0;
@@ -3325,6 +3346,7 @@ int main(int argc, char** argv) {
     CheckVirtualQueryForNonReadableGuestRange();
     CheckReleaseFlexibleMemory();
     CheckFlexibleMappingIgnoresFlag8000();
+    CheckPrtApertures();
     CheckSceKernelMmap();
     CheckInternalMemoryAvailableSize();
     CheckVirtualQueryPartialMunmap();
