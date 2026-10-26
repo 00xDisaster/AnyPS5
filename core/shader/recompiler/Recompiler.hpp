@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <ranges>
+#include <functional>
 #include <utility>
 #include <string_view>
 #include <vector>
@@ -127,7 +128,8 @@ enum class ColorExportPacking : std::uint8_t {
     None,
     Unorm10_11_11,
     Float11_11_10,
-    Unorm4_4_4_4
+    Unorm4_4_4_4,
+    Uint
 };
 
 enum class RasterPrimitive : std::uint8_t {
@@ -163,6 +165,17 @@ inline constexpr std::uint32_t Zero = 2u;
 inline constexpr std::uint32_t One = 3u;
 
 }
+
+struct TargetMerge {
+    std::uint8_t target = 0;
+    std::uint16_t mask = 0;
+    std::uint8_t samples = 1;
+    std::array<std::uint32_t, 8> descriptor{};
+    bool depthStencilWrites = false;
+    bool depthStencilTests = false;
+
+    bool operator==(const TargetMerge&) const = default;
+};
 
 struct ShaderPixelStageInfo {
     std::uint32_t interpolatorCount;
@@ -204,6 +217,7 @@ struct ShaderPixelStageInfo {
     bool iteratesSamples = false;
     PixelPositionLocation positionLocation = PixelPositionLocation::Center;
     std::array<std::uint8_t, 32> sampleLocations{};
+    TargetMerge targetMerge{};
     std::array<std::uint32_t, 4> sampleOrder{};
 };
 
@@ -314,6 +328,7 @@ struct SpirvTarget {
     bool fusedExactArithmetic = false;
     bool largePixelFunctionLdsBuffer = false;
     std::uint32_t pixelFunctionStorageDwords = 4096u;
+    bool deviceScopeLdsMemoryBarriers = false;
 };
 
 struct BindingLayout {
@@ -590,6 +605,8 @@ inline std::uint64_t HashSpirvWords(std::span<const std::uint32_t> words, std::u
 // reference, or the per-dispatch copy this class removes comes back without a compiler hint.
 // ContentHash is computed once per shared holder, on first use, and dropped by a write.
 class SharedSpirv {
+    struct Holder;
+
 public:
     SharedSpirv() = default;
     SharedSpirv(std::vector<std::uint32_t> words) : holder(std::make_shared<Holder>(std::move(words), nullptr, std::span<const std::uint32_t>{})) {}
@@ -625,6 +642,25 @@ public:
     void resize(std::size_t count) { Mutable().resize(count); }
     std::vector<std::uint32_t>::iterator insert(std::vector<std::uint32_t>::const_iterator where, std::initializer_list<std::uint32_t> values) { return Mutable().insert(where, values); }
     friend bool operator==(const SharedSpirv& left, const SharedSpirv& right) { return std::ranges::equal(left.Words(), right.Words()); }
+
+    class Weak {
+    public:
+        [[nodiscard]] SharedSpirv Lock() const {
+            SharedSpirv spirv;
+            spirv.holder = holder.lock();
+            return spirv;
+        }
+        [[nodiscard]] bool Expired() const { return holder.expired(); }
+
+    private:
+        friend class SharedSpirv;
+        std::weak_ptr<Holder> holder;
+    };
+    [[nodiscard]] Weak Weaken() const {
+        Weak weak;
+        weak.holder = holder;
+        return weak;
+    }
 
 private:
     struct Holder {
@@ -679,6 +715,7 @@ struct CompiledShaderArtifact {
     std::vector<std::uint32_t> runtimeImageResources;
     bool registrationModule = false;
     std::uint32_t bdaAbiVersion = 0;
+    std::uint32_t windowLaneGuards = 0;
     std::uint32_t runtimeAbiVersion = RuntimeAbi::Version;
     std::vector<VertexInput> vertexInputs;
     std::int32_t vertexOffsetSgpr = -1;
@@ -791,6 +828,9 @@ struct MeshOutputBudget {
 
 struct ResourceCapture;
 [[nodiscard]] std::shared_ptr<const RecompileResult> Recompile(const RecompileRequest& request, const ResourceCapture& capture, bool* memoHit = nullptr);
+void SetResultMemoBudget(std::uint64_t bytes);
+[[nodiscard]] std::uint64_t ResultMemoBytes();
+void SetResultMemoTrimHook(std::function<void()> hook);
 
 // Debug aid (see DebugProbe in Translation/TranslationContext.hpp): the APS5_PROBE register probe is
 // only applied while a driver has it active, so it can be limited to one dispatch; the recompile
