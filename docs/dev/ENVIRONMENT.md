@@ -194,7 +194,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_LDS_SLACK` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/ShaderInputState.cpp` | 0 | dwords added to every dispatch's LDS allocation |
 | `APS5_LOCKED_BUILD` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | builds the whole dispatch preparation under the GpuMutex, skipping the split path |
 | `APS5_LOCKED_DRAW_PREPARE` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Draw/Draw.cpp` |  | takes the GpuMutex before preparing a draw |
-| `APS5_LOG_STATS` | presence | `core/libs/prx/libSceAgcDriver/Execution/include/AsyncLog.hpp` |  | prints the AGC log's line, byte and coalescing statistics every window; 0 turns them off |
+| `APS5_LOG_STATS` | presence | `core/libs/prx/libSceAgcDriver/Execution/include/AsyncLog.hpp` |  | prints the AGC log's line, byte and coalescing statistics every 10 s window by default, when unset or set to anything but `0`; `0` turns them off |
 | `APS5_LOG_SYNC` | presence | `core/libs/prx/libSceAgcDriver/Execution/include/AsyncLog.hpp` |  | writes AGC log lines on the calling thread instead of through the asynchronous sink thread |
 | `APS5_LOOP_GUARD` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/ShaderResources.cpp` |  | enables the fault buffer that guards shader loops running past their bound |
 | `APS5_MIMALLOC` | presence | `core/relinker/elfpatcher/src/windows/WindowsEntryStubBuilder.cpp` |  | loads `mimalloc.dll` in the Windows entry stub, so the process allocates through mimalloc instead of the C runtime's heap |
