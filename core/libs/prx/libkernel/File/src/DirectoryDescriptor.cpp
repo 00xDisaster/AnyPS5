@@ -35,6 +35,7 @@
 
 namespace {
 
+constexpr std::uint8_t GuestUnknownType = 0;
 constexpr std::uint8_t GuestDirectoryType = 4;
 constexpr std::uint8_t GuestRegularType = 8;
 constexpr std::uint8_t GuestSymbolicLinkType = 10;
@@ -79,6 +80,7 @@ std::shared_ptr<DirectoryState> Find(int fd) {
     return found == g_directories.end() ? nullptr : found->second;
 }
 
+#ifndef _WIN32
 std::uint8_t DirectoryEntryType(const std::filesystem::file_status& status) {
     switch (status.type()) {
     case std::filesystem::file_type::regular: return GuestRegularType;
@@ -91,6 +93,53 @@ std::uint8_t DirectoryEntryType(const std::filesystem::file_status& status) {
     default: return 0;
     }
 }
+#else
+bool InsideApp0(const std::filesystem::path& directory) {
+    const auto root = ResolveDiskPath_nid_no_patch("/app0");
+    const auto handle = CreateFileW(root.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+    const int descriptor = ::_open_osfhandle(reinterpret_cast<std::intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    if (descriptor < 0) {
+        CloseHandle(handle);
+        return false;
+    }
+    const auto app0 = File::WindowsDescriptorPath_nid_no_patch(descriptor);
+    ::_close(descriptor);
+    if (!app0) return false;
+    auto entry = directory.begin();
+    for (const auto& component : *app0) {
+        if (entry == directory.end()) return false;
+        const auto& left = entry->native();
+        const auto& right = component.native();
+        if (CompareStringOrdinal(left.c_str(), static_cast<int>(left.size()),
+                right.c_str(), static_cast<int>(right.size()), TRUE) != CSTR_EQUAL) return false;
+        ++entry;
+    }
+    return true;
+}
+
+std::uint8_t EntryType(const std::filesystem::path& path, bool followLinks) {
+    FileStat status{};
+    if (!File::FillLinkStat(path, &status))
+        return GuestUnknownType;
+    if (followLinks && (status.st_mode & 0170000) == 0120000) {
+        FileStat target{};
+        const int savedErrno = errno;
+        const bool found = File::TryFillFileStat(path, &target);
+        errno = savedErrno;
+        if (found && ((target.st_mode & 0170000) == 0040000 || (target.st_mode & 0170000) == 0100000))
+            status = target;
+    }
+    switch (status.st_mode & 0170000) {
+        case 0040000: return GuestDirectoryType;
+        case 0100000: return GuestRegularType;
+        case 0120000: return GuestSymbolicLinkType;
+        default: NotImplemented_nid_no_patch("getdents of a Windows file type other than a directory, regular file or symbolic link");
+    }
+}
+#endif
 
 void Add(DirectoryState& state, const std::string& name, std::uint64_t fileNumber, std::uint8_t type) {
     if (name.size() > 255) throw DirectoryEntryNameTooLong();
@@ -126,13 +175,22 @@ void Load(DirectoryState& state, int fd) {
     Add(state, "..", parentNumber, GuestDirectoryType);
     if (hasHostDirectory) {
         std::error_code error;
+#ifdef _WIN32
+        const int savedErrno = errno;
+        const bool followLinks = InsideApp0(directoryPath);
+        errno = savedErrno;
+#endif
         for (std::filesystem::directory_iterator it(directoryPath, error), end; it != end; it.increment(error)) {
             if (error) throw std::system_error(error, "read directory descriptor");
             const auto utf8Name = it->path().filename().u8string();
             const std::string name(reinterpret_cast<const char*>(utf8Name.data()), utf8Name.size());
             FileStat entryStatus{};
             if (!File::FillLinkStat(it->path(), &entryStatus)) throw std::system_error(errno, std::generic_category(), "stat directory entry");
+#ifdef _WIN32
+            Add(state, name, static_cast<std::uint64_t>(entryStatus.st_ino), EntryType(it->path(), followLinks));
+#else
             Add(state, name, static_cast<std::uint64_t>(entryStatus.st_ino), DirectoryEntryType(it->symlink_status(error)));
+#endif
             if (error) throw std::system_error(error, "stat directory entry");
         }
         if (error) throw std::system_error(error, "read directory descriptor");

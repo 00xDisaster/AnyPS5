@@ -1048,6 +1048,7 @@ int64_t APS5_VABI pwrite_nid_disambig1_nid_postfix(int d, const void* buf, size_
     if (ExceedsTransferLimit(nbytes)) return PosixFailure(GUEST_EINVAL);
     if (const int error = PositionedArgumentError(d, buf == nullptr && nbytes != 0, offset)) return PosixFailure(error);
     if (FailPosixPositionedGuestSocket(d)) return -1;
+    const File::WriteSync sync(d);
     GuestArena::GuestArenaPrepareHostRead_nid_no_patch(buf, nbytes);
     char empty = 0;
     const auto result = NativePwrite(d, buf == nullptr ? &empty : buf, nbytes, offset);
@@ -1389,6 +1390,7 @@ int64_t APS5_VABI sceKernelPwrite(int d, const void* buf, size_t nbytes, int64_t
     if (File::IsVirtualDirectoryDescriptor(d)) return SceErrorFromErrno(GUEST_EISDIR);
     if (const int error = PositionedArgumentError(d, buf == nullptr && nbytes != 0, offset)) return SceErrorFromErrno(error);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
+    const File::WriteSync sync(d);
     GuestArena::GuestArenaPrepareHostRead_nid_no_patch(buf, nbytes);
     char empty = 0;
     const auto result = NativePwrite(d, nbytes == 0 && buf == nullptr ? &empty : buf, nbytes, offset);
@@ -1418,6 +1420,7 @@ static std::int64_t TransferIovecs(int d, const KernelIovec* guestIov, int iovcn
                                   : GuestSockets::Readv(d, reinterpret_cast<const GuestSockets::Iovec*>(iov), iovcnt);
         return result < 0 ? SceKernelError(*__error_nid_postfix()) : result;
     }
+    const File::WriteSync sync(write ? d : -1);
     if (write) PrepareWriteIovecs(iov, iovcnt);
     if (!write && File::IsRandomDevice(d)) return ReadRandomIovecs(d, iov, iovcnt);
     if (!write) {
@@ -1495,6 +1498,7 @@ int64_t APS5_VABI sceKernelPwrite(int d, const void* buf, size_t nbytes, int64_t
     if (File::IsVirtualDirectoryDescriptor(d)) return SceErrorFromErrno(GUEST_EISDIR);
     if (const int error = PositionedArgumentError(d, buf == nullptr && nbytes != 0, offset)) return SceErrorFromErrno(error);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
+    const File::WriteSync sync(d);
     GuestArena::GuestArenaPrepareHostRead_nid_no_patch(buf, nbytes);
     const auto result = NativePwrite(d, buf, nbytes, offset);
     return result < 0 ? SceErrorFromErrno(errno) : result;
@@ -1526,6 +1530,7 @@ int64_t APS5_VABI sceKernelWritev(int d, const KernelIovec* guestIov, int iovcnt
         const auto result = GuestSockets::Writev(d, reinterpret_cast<const GuestSockets::Iovec*>(iov), iovcnt);
         return result < 0 ? SceKernelError(*__error_nid_postfix()) : result;
     }
+    const File::WriteSync sync(d);
     PrepareWriteIovecs(iov, iovcnt);
     const auto sharedResult = File::WritevSharedMemory_nid_no_patch(d, NativeIovecs(iov), iovcnt);
     if (sharedResult != -2) return sharedResult < 0 ? SceErrorFromErrno(errno) : sharedResult;
@@ -1555,6 +1560,7 @@ int64_t APS5_VABI sceKernelPwritev(int d, const KernelIovec* guestIov, int iovcn
     const auto* iov = vectors.data();
     if (offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
+    const File::WriteSync sync(d);
     PrepareWriteIovecs(iov, iovcnt);
     const auto sharedResult = File::PwritevSharedMemory_nid_no_patch(d, NativeIovecs(iov), iovcnt, offset);
     if (sharedResult != -2) return sharedResult < 0 ? SceErrorFromErrno(errno) : sharedResult;
@@ -1578,8 +1584,6 @@ int APS5_VABI sceKernelRename(const char* from, const char* to) {
     if (!from) return SceErrorFromErrno(GUEST_EFAULT);
     const int result = RenameGuestPath_nid_no_patch(from, to);
     return result == 0 ? 0 : SceKernelError(errno);
-    if (const int dot = RenameDotError_nid_no_patch(from)) return SceKernelError(dot);
-    if (const int dot = RenameDotError_nid_no_patch(to)) return SceKernelError(dot);
 }
 
 int APS5_VABI sceKernelRmdir(const char* path) {
