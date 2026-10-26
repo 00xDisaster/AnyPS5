@@ -152,6 +152,20 @@ void APS5_VABI __std_reverse_trivially_swappable_1_nid_postfix(void* first, void
 void APS5_VABI __std_reverse_trivially_swappable_2_nid_postfix(void* first, void* last) { Reverse<2>(first, last); }
 void APS5_VABI __std_reverse_trivially_swappable_4_nid_postfix(void* first, void* last) { Reverse<4>(first, last); }
 void APS5_VABI __std_reverse_trivially_swappable_8_nid_postfix(void* first, void* last) { Reverse<8>(first, last); }
+std::uint32_t APS5_VABI __std_max_4u_nid_postfix(const void* first, const void* last) {
+    const auto beginAddress = reinterpret_cast<std::uintptr_t>(first);
+    const auto endAddress = reinterpret_cast<std::uintptr_t>(last);
+    if (!first || !last || endAddress <= beginAddress || (endAddress - beginAddress) % sizeof(std::uint32_t) != 0) NotImplemented_nid_no_patch(__func__);
+    auto* current = static_cast<const unsigned char*>(first);
+    const auto* end = static_cast<const unsigned char*>(last);
+    std::uint32_t maximum = Read<std::uint32_t>(current);
+    for (current += sizeof(std::uint32_t); current != end; current += sizeof(std::uint32_t)) {
+        const auto value = Read<std::uint32_t>(current);
+        if (value > maximum) maximum = value;
+    }
+    return maximum;
+}
+
 void APS5_VABI __std_reverse_copy_trivially_copyable_1_nid_postfix(const void* first, const void* last, void* destination) { ReverseCopy<1>(first, last, destination); }
 void APS5_VABI __std_reverse_copy_trivially_copyable_2_nid_postfix(const void* first, const void* last, void* destination) { ReverseCopy<2>(first, last, destination); }
 void APS5_VABI __std_reverse_copy_trivially_copyable_4_nid_postfix(const void* first, const void* last, void* destination) { ReverseCopy<4>(first, last, destination); }

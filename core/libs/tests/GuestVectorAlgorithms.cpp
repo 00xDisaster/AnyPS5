@@ -137,6 +137,44 @@ static void CheckUnsizedRescan() {
     Require(__std_find_trivial_unsized_8_nid_postfix(wides + 1, 99) == wides + 6);
 }
 
+static void CheckUnsignedMax32Value() {
+    const std::uint32_t edges[] = {0, 1, 0xffff, 0x10000, 0x7fffffff, 0x80000000, 0xfffffffe, 0xffffffff};
+    for (const auto& left : edges) {
+        Require(__std_max_4u_nid_postfix(&left, &left + 1) == left);
+        for (const auto& right : edges) {
+            const std::uint32_t pair[] = {left, right};
+            Require(__std_max_4u_nid_postfix(pair, pair + 2) == std::max(left, right));
+        }
+    }
+    std::uint32_t state = 0x8e47396b;
+    for (const std::size_t count : {1, 2, 3, 4, 5, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 257}) {
+        std::vector<std::uint32_t> values(count);
+        for (auto& value : values) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            value = state;
+        }
+        const auto expected = *std::max_element(values.begin(), values.end());
+        for (std::size_t offset = 0; offset < 32; ++offset) {
+            std::vector<unsigned char> storage(count * sizeof(std::uint32_t) + 64, 0xff);
+            std::memcpy(storage.data() + offset, values.data(), count * sizeof(std::uint32_t));
+            const auto original = storage;
+            Require(__std_max_4u_nid_postfix(storage.data() + offset, storage.data() + offset + count * sizeof(std::uint32_t)) == expected);
+            Require(storage == original);
+        }
+        std::fill(values.begin(), values.end(), 0);
+        Require(__std_max_4u_nid_postfix(values.data(), values.data() + count) == 0);
+        for (std::size_t position = 0; position < count; ++position) {
+            values[position] = 0x10005;
+            Require(__std_max_4u_nid_postfix(values.data(), values.data() + count) == 0x10005);
+            values[position] = 0;
+        }
+    }
+    const std::uint32_t repeated[] = {9, 9, 9, 9};
+    Require(__std_max_4u_nid_postfix(repeated, repeated + 4) == 9);
+}
+
 static void CheckMinMax() {
     const unsigned char bytes[] = {3, 0x80, 1, 0x80, 1, 0xff};
     Require(__std_min_element_1_nid_postfix(bytes, bytes + 6, false) == bytes + 2);
@@ -180,6 +218,7 @@ static void CheckReverseAndSwap() {
 int main() {
     CheckMinValue();
     CheckSizedHelpers();
+    CheckUnsignedMax32Value();
     CheckFindAndCount();
     CheckUnsizedRescan();
     CheckMinMax();

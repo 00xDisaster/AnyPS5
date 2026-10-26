@@ -1126,6 +1126,7 @@ void APS5_VABI __std_reverse_trivially_swappable_1_nid_postfix(void* first, void
 void APS5_VABI __std_reverse_trivially_swappable_2_nid_postfix(void* first, void* last);
 void APS5_VABI __std_reverse_trivially_swappable_4_nid_postfix(void* first, void* last);
 void APS5_VABI __std_reverse_trivially_swappable_8_nid_postfix(void* first, void* last);
+std::uint32_t APS5_VABI __std_max_4u_nid_postfix(const void* first, const void* last);
 void APS5_VABI __std_reverse_copy_trivially_copyable_1_nid_postfix(const void* first, const void* last, void* destination);
 void APS5_VABI __std_reverse_copy_trivially_copyable_2_nid_postfix(const void* first, const void* last, void* destination);
 void APS5_VABI __std_reverse_copy_trivially_copyable_4_nid_postfix(const void* first, const void* last, void* destination);
