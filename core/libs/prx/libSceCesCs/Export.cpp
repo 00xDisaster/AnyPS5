@@ -507,7 +507,7 @@ const void* contextProfile(const void* context) {
 constexpr uint8_t EUC_KR_TAG[8] = {'E', 'U', 'C', 'K', 'R', '9', '4', '9'};
 constexpr uint8_t UHC_TAG[8] = {'U', 'H', 'C', 'C', 'P', '9', '4', '9'};
 constexpr uint8_t BIG5_TAG[8] = {'B', 'I', 'G', '5', 'C', '9', '5', '0'};
-constexpr uint16_t BIG5_LAST_CELL[6] = {0x2550, 0x255E, 0x2561, 0x256A, 0x5341, 0x5345};
+constexpr uint16_t BIG5_LAST_CELL[2] = {0x5341, 0x5345};
 
 bool isEucKr(const void* profile) {
     return profile != nullptr && std::memcmp(profile, EUC_KR_TAG, sizeof(EUC_KR_TAG)) == 0;
@@ -1242,6 +1242,10 @@ const uint8_t* APS5_VABI sceCesRefersUcsProfileCp775(void) {
 
 const uint8_t* APS5_VABI sceCesRefersUcsProfileCp850(void) {
     return singleByteProfile(SingleByte::Cp850);
+}
+
+const uint8_t* APS5_VABI sceCesRefersUcsProfileCp858(void) {
+    return singleByteProfile(SingleByte::Cp858);
 }
 
 const uint8_t* APS5_VABI sceCesRefersUcsProfileCp852(void) {
