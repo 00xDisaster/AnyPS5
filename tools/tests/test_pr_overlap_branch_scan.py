@@ -124,6 +124,28 @@ class BranchScanTests(unittest.TestCase):
         self.assertIn("renamed.txt", expected["conflicts"])
         self.assertEqual(pr_overlap.overlaps(prs, 0, 5), expected)
 
+    def test_a_pull_request_on_a_path_the_base_deleted_is_merged(self):
+        old = run("rev-parse", "refs/pr/base")
+        older = commit_on_base(old, "older pull request", {"c.txt": "one\ntwo\nolder\n"})
+        run("checkout", "-q", "--detach", old)
+        run("rm", "-q", "c.txt")
+        run("commit", "-q", "-m", "delete on main")
+        base = run("rev-parse", "HEAD")
+        run("update-ref", "refs/pr/base", base)
+        run("update-ref", "refs/pr/6", older)
+        prs = {6: {"ref": "refs/pr/6", "sha": older, "author": "author6", "depends": set()},
+               0: {"ref": commit_on_base(base, "branch", {"a.txt": "branch\ntwo\nthree\n"}), "author": None, "depends": set()}}
+        merged = []
+        real = pr_overlap.merge
+
+        def record(*args):
+            merged.append(args[1])
+            return real(*args)
+
+        with patch.object(pr_overlap, "merge", side_effect=record):
+            pr_overlap.scan_all(prs, 2)
+        self.assertIn("refs/pr/6", merged)
+
 
 if __name__ == "__main__":
     unittest.main()
