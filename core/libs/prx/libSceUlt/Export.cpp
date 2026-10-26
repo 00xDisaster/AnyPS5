@@ -133,6 +133,14 @@ void* APS5_VABI ulthreadRunner(void* arg) {
 
 }
 
+UltThreadIdentity UltCurrentThreadIdentity_nid_no_patch() {
+    if (gCurrentUlthread != nullptr) return {};
+    const auto self = scePthreadSelf();
+    std::uintptr_t thread;
+    std::memcpy(&thread, self, sizeof(thread));
+    return {reinterpret_cast<void*>(thread), 1};
+}
+
 bool UltWaitingPoolExists(void* pool) {
     std::lock_guard<std::mutex> lock(gMutex);
     return gResourcePools.contains(pool);
@@ -323,6 +331,7 @@ int APS5_VABI sceUltMutexLock(void* mutex) {
     if (!state->_alive) {
         return ULT_ERROR_STATE;
     }
+    state->_ownerIdentity = UltCurrentThreadIdentity_nid_no_patch();
     state->_owner = self;
     state->_lockCount = 1;
     return ULT_OK;
@@ -350,6 +359,7 @@ int APS5_VABI sceUltMutexTryLock(void* mutex) {
     if (state->_lockCount != 0) {
         return ULT_ERROR_BUSY;
     }
+    state->_ownerIdentity = UltCurrentThreadIdentity_nid_no_patch();
     state->_owner = self;
     state->_lockCount = 1;
     return ULT_OK;
@@ -376,6 +386,7 @@ int APS5_VABI sceUltMutexUnlock(void* mutex) {
     --state->_lockCount;
     if (state->_lockCount == 0) {
         state->_owner = {};
+        state->_ownerIdentity = {};
         state->_available.notify_one();
     }
     return ULT_OK;
@@ -451,12 +462,14 @@ int APS5_VABI sceUltConditionVariableWait(void* condition) {
     std::unique_lock lock(held->_mutex);
     if (!state->_alive || !held->_alive || held->_owner != owner || held->_lockCount == 0) return ULT_ERROR_STATE;
     if (held->_lockCount != 1) throw std::runtime_error("ULT condition wait with a recursively held mutex is not implemented");
+    const auto ownerIdentity = held->_ownerIdentity;
     UltConditionWaiter waiter;
     state->_queue.push_back(&waiter);
     ++state->_waiters;
     ++held->_conditionWaiters;
     held->_lockCount = 0;
     held->_owner = {};
+    held->_ownerIdentity = {};
     held->_available.notify_one();
     try {
         waiter._available.wait(lock, [&] { return waiter._signaled || !state->_alive || !held->_alive; });
@@ -481,6 +494,7 @@ int APS5_VABI sceUltConditionVariableWait(void* condition) {
     --held->_conditionWaiters;
     if (!held->_alive || !state->_alive) return ULT_ERROR_STATE;
     held->_owner = owner;
+    held->_ownerIdentity = ownerIdentity;
     held->_lockCount = 1;
     return ULT_OK;
 }
@@ -1029,17 +1043,13 @@ int APS5_VABI sceUltGetConditionVariableInfo(void* object, UltConditionVariableI
     }
     std::lock_guard stateLock(state->_mutex->_mutex);
     if (!state->_alive) return ULT_ERROR_STATE;
+    if (capacity != 0 && !state->_queue.empty()) NotImplemented_nid_no_patch(__func__);
     std::memset(info, 0, sizeof(*info));
     info->size = sizeof(UltConditionVariableInfo);
     info->object = object;
     std::memcpy(info->name, state->_name, sizeof(info->name));
     info->mutex = state->_mutexObject;
     info->waitingThreads = static_cast<std::uint32_t>(state->_queue.size());
-    const auto toCopy = std::min(capacity, info->waitingThreads);
-    for (std::uint32_t i = 0; i < toCopy; ++i) {
-        std::memset(&waitingThreads[i], 0, sizeof(UltWaitingThreadInfo));
-        waitingThreads[i].size = sizeof(UltWaitingThreadInfo);
-    }
     return ULT_OK;
 }
 
@@ -1055,19 +1065,20 @@ int APS5_VABI sceUltGetMutexInfo(void* object, UltMutexInfo* info, UltWaitingThr
     }
     std::lock_guard stateLock(state->_mutex);
     if (!state->_alive) return ULT_ERROR_STATE;
+    for (std::uint32_t index = 0; index < capacity; ++index) {
+        if (waitingThreads[index].size != sizeof(UltWaitingThreadInfo)) return ULT_ERROR_INVALID;
+    }
+    if (capacity != 0 && state->_waiters != 0) NotImplemented_nid_no_patch(__func__);
+    if (state->_lockCount != 0 && (state->_attribute != 0 || state->_lockCount > 1 || state->_ownerIdentity.type != 1)) NotImplemented_nid_no_patch(__func__);
     std::memset(info, 0, sizeof(*info));
     info->size = sizeof(UltMutexInfo);
     info->object = object;
     std::memcpy(info->name, state->_name, sizeof(info->name));
     info->waitingQueuePool = state->_waitingPool;
+    info->owner = state->_ownerIdentity.thread;
+    info->ownerType = state->_ownerIdentity.type;
     info->attributes = state->_attribute;
-    info->lockCount = state->_lockCount;
     info->waitingThreads = state->_waiters;
-    const auto toCopy = std::min(capacity, info->waitingThreads);
-    for (std::uint32_t i = 0; i < toCopy; ++i) {
-        std::memset(&waitingThreads[i], 0, sizeof(UltWaitingThreadInfo));
-        waitingThreads[i].size = sizeof(UltWaitingThreadInfo);
-    }
     return ULT_OK;
 }
 
@@ -1111,6 +1122,7 @@ int APS5_VABI sceUltGetQueueInfo(void* object, UltQueueInfo* info, UltWaitingThr
     auto& pool = *state->_pool;
     std::lock_guard poolLock(pool._mutex);
     if (!state->_alive) return ULT_ERROR_STATE;
+    if (capacity != 0 && (state->_waitingPushers != 0 || state->_waitingPoppers != 0)) NotImplemented_nid_no_patch(__func__);
     std::memset(info, 0, sizeof(*info));
     info->size = sizeof(UltQueueInfo);
     info->object = object;
@@ -1121,12 +1133,6 @@ int APS5_VABI sceUltGetQueueInfo(void* object, UltQueueInfo* info, UltWaitingThr
     info->queuedItems = state->_queuedItems;
     info->waitingPushers = state->_waitingPushers;
     info->waitingPoppers = state->_waitingPoppers;
-    const auto waitingCount = info->waitingPushers + info->waitingPoppers;
-    const auto toCopy = std::min(capacity, waitingCount);
-    for (std::uint32_t i = 0; i < toCopy; ++i) {
-        std::memset(&waitingThreads[i], 0, sizeof(UltWaitingThreadInfo));
-        waitingThreads[i].size = sizeof(UltWaitingThreadInfo);
-    }
     return ULT_OK;
 }
 
@@ -1142,6 +1148,7 @@ int APS5_VABI sceUltGetSemaphoreInfo(void* object, UltSemaphoreInfo* info, UltWa
     }
     std::lock_guard stateLock(state->_mutex);
     if (!state->_alive) return ULT_ERROR_STATE;
+    if (capacity != 0 && state->_waiters != 0) NotImplemented_nid_no_patch(__func__);
     std::memset(info, 0, sizeof(*info));
     info->size = sizeof(UltSemaphoreInfo);
     info->object = object;
@@ -1149,11 +1156,6 @@ int APS5_VABI sceUltGetSemaphoreInfo(void* object, UltSemaphoreInfo* info, UltWa
     info->waitingQueuePool = state->_waitingPool;
     info->resources = static_cast<std::uint32_t>(state->_resources);
     info->waitingThreads = state->_waiters;
-    const auto toCopy = std::min(capacity, info->waitingThreads);
-    for (std::uint32_t i = 0; i < toCopy; ++i) {
-        std::memset(&waitingThreads[i], 0, sizeof(UltWaitingThreadInfo));
-        waitingThreads[i].size = sizeof(UltWaitingThreadInfo);
-    }
     return ULT_OK;
 }
 

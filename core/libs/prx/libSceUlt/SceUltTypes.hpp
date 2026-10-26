@@ -265,10 +265,16 @@ static_assert(offsetof(UltUlthreadInfo, runtime) == 56);
 static_assert(offsetof(UltUlthreadInfo, fiber) == 64);
 static_assert(offsetof(UltUlthreadInfo, reserved) == 192);
 
+struct UltThreadIdentity {
+    void* thread = nullptr;
+    std::uint32_t type = 0;
+};
+
 struct UltMutexState {
     std::mutex _mutex;
     std::condition_variable _available;
     std::thread::id _owner{};
+    UltThreadIdentity _ownerIdentity;
     std::uint32_t _lockCount = 0;
     std::uint32_t _waiters = 0;
     std::uint32_t _conditions = 0;
