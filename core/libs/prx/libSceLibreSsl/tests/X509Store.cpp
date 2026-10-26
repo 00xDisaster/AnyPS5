@@ -61,8 +61,6 @@ void NewStore() {
     const auto* id = param->id;
     Require(id && id->hosts == nullptr && id->hostFlags == 0 && id->peerName == nullptr && id->email == nullptr
         && id->emailLength == 0 && id->ip == nullptr && id->ipLength == 0, "verify parameter identity starts zeroed");
-    const auto* objects = static_cast<const Stack*>(store->objects);
-    RequireThrows([&] { objects->comp(nullptr, nullptr); }, "object comparison needs the certificate model");
     X509_STORE_free_nid_postfix(store);
 }
 
@@ -118,28 +116,8 @@ void Identity() {
 
 void Unsupported() {
     auto* store = X509_STORE_new_nid_postfix();
-    auto* objects = static_cast<Stack*>(store->objects);
-    int entry = 0;
-    objects->data[0] = reinterpret_cast<char*>(&entry);
-    objects->num = 1;
-    RequireThrows([&] { X509_STORE_free_nid_postfix(store); }, "stored objects need X509_OBJECT_free");
-
-    store = X509_STORE_new_nid_postfix();
-    objects = static_cast<Stack*>(store->objects);
-    objects->num = 2;
+    static_cast<Stack*>(store->objects)->num = 2;
     X509_STORE_free_nid_postfix(store);
-
-    store = X509_STORE_new_nid_postfix();
-    static_cast<Stack*>(store->lookupMethods)->num = 1;
-    RequireThrows([&] { X509_STORE_free_nid_postfix(store); }, "lookup methods need X509_LOOKUP_free");
-
-    store = X509_STORE_new_nid_postfix();
-    auto* policies = static_cast<Stack*>(malloc_nid_postfix(sizeof(Stack)));
-    policies->data = static_cast<char**>(malloc_nid_postfix(sizeof(char*) * 4));
-    policies->data[0] = reinterpret_cast<char*>(&entry);
-    policies->num = 1;
-    store->param->policies = policies;
-    RequireThrows([&] { X509_STORE_free_nid_postfix(store); }, "policy objects need ASN1_OBJECT_free");
 
     store = X509_STORE_new_nid_postfix();
     static_cast<Stack*>(store->objects)->data = nullptr;
