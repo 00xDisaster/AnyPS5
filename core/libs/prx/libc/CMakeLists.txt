@@ -175,6 +175,14 @@ endif()
 
 if(APPLE)
     target_link_libraries(libc PRIVATE "-framework CoreFoundation")
+    if(BUILD_TESTING)
+        add_test_executable(macos_guest_tls_first_access_tests
+            ${LIBS_INCLUDE_DIR}/tests/MacOsGuestTlsFirstAccess.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/specifics/macos/GuestTls.cpp)
+        target_include_directories(macos_guest_tls_first_access_tests PRIVATE ${LIBS_INCLUDE_DIR})
+        add_test(NAME macos_guest_tls_first_access COMMAND macos_guest_tls_first_access_tests)
+        set_tests_properties(macos_guest_tls_first_access PROPERTIES TIMEOUT 60)
+    endif()
 endif()
 
 if(BUILD_TESTING)

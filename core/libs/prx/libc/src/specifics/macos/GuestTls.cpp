@@ -2,6 +2,7 @@
 
 
 #include "prx/libc/include/general/AsmMacros.hpp"
+#include <atomic>
 #include <cpuid.h>
 #include <cstdint>
 #include <cstdio>
@@ -43,6 +44,23 @@ void FreeBlock(void* threadPointer) {
     std::free(block);
 }
 
+std::atomic_ref<std::uint64_t> KeyOf(GuestTlsDescriptor* descriptor) {
+    static_assert(std::atomic_ref<std::uint64_t>::is_always_lock_free);
+    return std::atomic_ref<std::uint64_t>(descriptor->Key);
+}
+
+pthread_key_t RegisteredKey(GuestTlsDescriptor* descriptor) {
+    auto key = KeyOf(descriptor);
+    if (const auto value = key.load(std::memory_order_acquire); value != 0) return static_cast<pthread_key_t>(value);
+    std::lock_guard lock(RegistrationLock());
+    if (const auto value = key.load(std::memory_order_relaxed); value != 0) return static_cast<pthread_key_t>(value);
+    pthread_key_t created{};
+    if (pthread_key_create(&created, FreeBlock) != 0) Fatal("pthread_key_create failed");
+    if (created == 0) Fatal("pthread_key_create returned key 0");
+    key.store(created, std::memory_order_release);
+    return created;
+}
+
 std::uint64_t StackGuardValue() {
     static const std::uint64_t value = [] {
         std::uint64_t guard = 0;
@@ -61,17 +79,11 @@ extern "C" std::uint8_t Aps5GuestTlsUseXsave = [] {
 }();
 
 extern "C" void Aps5GuestTlsRegister_nid_no_patch(GuestTlsDescriptor* descriptor) {
-    std::lock_guard lock(RegistrationLock());
-    if (descriptor->Key != 0) return;
-    pthread_key_t key{};
-    if (pthread_key_create(&key, FreeBlock) != 0) Fatal("pthread_key_create failed");
-    if (key == 0) Fatal("pthread_key_create returned key 0");
-    descriptor->Key = key;
+    RegisteredKey(descriptor);
 }
 
 extern "C" void* Aps5GuestTlsAllocateBlock_nid_no_patch(GuestTlsDescriptor* descriptor) {
-    if (descriptor->Key == 0) Aps5GuestTlsRegister_nid_no_patch(descriptor);
-    const auto key = static_cast<pthread_key_t>(descriptor->Key);
+    const auto key = RegisteredKey(descriptor);
     if (void* existing = pthread_getspecific(key)) return existing;
     const std::size_t alignment = descriptor->Alignment > 16 ? descriptor->Alignment : 16;
     const std::size_t tlsSize = (descriptor->BlockSize + alignment - 1) & ~(alignment - 1);
@@ -101,8 +113,7 @@ struct GuestTlsIndex {
 extern "C" void* Aps5GuestTlsGetAddr_nid_no_patch(const GuestTlsIndex* index) {
     auto* descriptor = reinterpret_cast<GuestTlsDescriptor*>(index->Module);
     if (descriptor == nullptr) Fatal("__tls_get_addr with no module");
-    auto* threadPointer = static_cast<std::uint8_t*>(
-        descriptor->Key != 0 ? pthread_getspecific(static_cast<pthread_key_t>(descriptor->Key)) : nullptr);
+    auto* threadPointer = static_cast<std::uint8_t*>(pthread_getspecific(RegisteredKey(descriptor)));
     if (threadPointer == nullptr) threadPointer = static_cast<std::uint8_t*>(Aps5GuestTlsAllocateBlock_nid_no_patch(descriptor));
     return threadPointer - descriptor->BlockSize + index->Offset;
 }
