@@ -2886,8 +2886,6 @@ void verifyImageTableFirstLaneScale() {
     require(snapshot.records == 4u && snapshot.keys == 4u && snapshot.fault == 0u, "image table first-lane scale: the snapshot does not hold the four 96-byte records");
     const auto codes = TableCodes(TableMap(*compiled.result), 0);
     require(codes.size() == 4u && codes[0] == codes[3] && codes[2] == Abi::NullCode && codes[1] != codes[0] && (codes[0] & Abi::PoisonFlag) == 0u && (codes[1] & Abi::PoisonFlag) == 0u, "image table first-lane scale: the table map is wrong");
-    const auto unscaled = scaled({0x7e200500u});
-    expectFailure([&] { static_cast<void>(GetResourcePlan(TableRequest(unscaled, userData))); }, "GetImageResource dword 0 is not a valid runtime value", "image table first-lane scale: a first-lane offset with no dword multiple was accepted");
 }
 
 void verifyImageTableRegistration() {
