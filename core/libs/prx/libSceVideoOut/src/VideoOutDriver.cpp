@@ -740,7 +740,7 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 processFlip(*current);
                 int windowWidth = 0;
                 int windowHeight = 0;
-                if (window.Handle() != nullptr) SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight);
+                if (window.Handle() != nullptr) OnMainThread([&] { SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight); });
                 if (windowWidth > 0 && windowHeight > 0) {
                     const auto presented = AgcDriver::ComputeContainSize_nid_postfix(current->width, current->height, static_cast<std::uint32_t>(windowWidth), static_cast<std::uint32_t>(windowHeight), true);
                     mouseInput->SetPresentation(current->width, current->height, presented.width, presented.height);
