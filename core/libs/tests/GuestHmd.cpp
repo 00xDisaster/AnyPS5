@@ -1,5 +1,6 @@
 #include "ProcessParametersFixture.hpp"
 #include "prx/libSceHmd/Hmd.hpp"
+#include "prx/libSceHmd/include/Api.hpp"
 
 #include <array>
 #include <cstddef>
