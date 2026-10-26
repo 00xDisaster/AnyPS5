@@ -124,7 +124,7 @@ The advisor reads `titleId` and `contentVersion` from the specified `param.json`
 }
 ```
 
-Catalog entries may also contain these optional fields. Catalogs without them keep the same behavior and `format: 1`.
+Catalog entries may also contain these optional fields. Catalogs without them keep the same behavior and `format: 1`. Older advisor versions reject matching entries containing these fields; use an advisor version that supports them.
 
 | Field | Value |
 |-------|-------|
@@ -137,6 +137,8 @@ Catalog entries may also contain these optional fields. Catalogs without them ke
 | `contributors` | Nonempty array of distinct contributor names. |
 | `source` | HTTPS link to the patch's provenance. The advisor only displays it; it does not fetch it. |
 | `revision` | Positive integer revision of the patch definition, separate from the game's `contentVersion`. |
+
+`category` describes the patch's area, not whether its effect is a fix or an enhancement; use `description` to explain the effect. `revision` does not select the newest entry automatically. To replace a patch definition with the same `id` for one title and content version, remove the old entry from the catalog. If both revisions verify, the advisor rejects both as duplicate IDs.
 
 `name`, `description` and `notes` are nonempty single-line text when present. They describe the catalog entry as a whole; `name` and `description` inside a patch TOML's `[[patch]]` describe individual byte changes. Each `tested` record requires `stage` (`verification`, `conversion`, `launch` or `gameplay`), `result` (`passed`, `failed` or `partial`) and nonempty single-line `evidence`. Optional `environment` is single-line text, and optional `date` is a calendar date in `YYYY-MM-DD` form. For example:
 
