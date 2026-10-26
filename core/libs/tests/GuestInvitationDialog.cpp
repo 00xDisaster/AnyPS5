@@ -1,4 +1,6 @@
 #include "prx/libSceInvitationDialog/include/Api.hpp"
+#include "prx/libSceCommonDialog/include/Api.hpp"
+#include "prx/libSceCommonDialog/include/DialogUse.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -13,9 +15,11 @@ namespace {
 constexpr int StatusNone = 0;
 constexpr int StatusInitialized = 1;
 constexpr int StatusFinished = 3;
+constexpr int NotSystemInitialized = static_cast<int>(0x80B80001u);
 constexpr int NotInitialized = static_cast<int>(0x80B80003u);
 constexpr int AlreadyInitialized = static_cast<int>(0x80B80004u);
 constexpr int NotFinished = static_cast<int>(0x80B80005u);
+constexpr int Busy = static_cast<int>(0x80B80008u);
 constexpr int ArgNull = static_cast<int>(0x80B8000Du);
 constexpr std::int32_t ResultUserCanceled = 1;
 constexpr std::int32_t ModeSend = 1;
@@ -60,10 +64,26 @@ void TestBeforeInitialize() {
     RequireUnsettled([&] { sceInvitationDialogOpen(&param); }, "open before initialization");
 }
 
+void TestCommonDialogPreconditions() {
+    Require(sceInvitationDialogInitialize() == NotSystemInitialized, "initialize before sceCommonDialogInitialize");
+    Require(sceInvitationDialogUpdateStatus() == StatusNone && !sceCommonDialogIsUsed(), "a failed initialization leaves no state");
+    Require(sceCommonDialogInitialize() == 0, "initialize the common dialog system");
+
+    Require(CommonDialogAcquire_nid_no_patch(), "another common dialog takes the system");
+    Require(sceInvitationDialogInitialize() == Busy, "initialize while another common dialog is in use");
+    Require(sceInvitationDialogUpdateStatus() == StatusNone, "a busy initialization leaves the status");
+    CommonDialogRelease_nid_no_patch();
+
+    Require(sceInvitationDialogInitialize() == 0 && sceCommonDialogIsUsed(), "the dialog takes the system");
+    Require(!CommonDialogAcquire_nid_no_patch(), "another common dialog is busy while this one is initialized");
+    Require(sceInvitationDialogTerminate() == 0 && !sceCommonDialogIsUsed(), "termination frees the system");
+}
+
 void TestOpenChecks() {
     InvitationDialogResult result{};
     Require(sceInvitationDialogInitialize() == 0, "initialize");
     Require(sceInvitationDialogInitialize() == AlreadyInitialized, "initialize twice");
+    Require(sceCommonDialogIsUsed(), "the system stays in use after a repeated initialization");
     Require(sceInvitationDialogUpdateStatus() == StatusInitialized, "status after initialization");
     Require(sceInvitationDialogGetResult(&result) == NotFinished, "result before the dialog opened");
     Require(sceInvitationDialogGetResult(nullptr) == NotFinished, "null result before the dialog finished");
@@ -115,7 +135,7 @@ void TestCanceled() {
     result = InvitationDialogResult{};
     Require(sceInvitationDialogGetResult(&result) == 0 && result.callbackArg == &second, "the second open carries its own callback argument");
 
-    Require(sceInvitationDialogTerminate() == 0, "terminate");
+    Require(sceInvitationDialogTerminate() == 0 && !sceCommonDialogIsUsed(), "terminate");
     Require(sceInvitationDialogUpdateStatus() == StatusNone, "status after termination");
     Require(sceInvitationDialogGetResult(&result) == NotInitialized, "result after termination");
     Require(sceInvitationDialogInitialize() == 0 && sceInvitationDialogGetResult(&result) == NotFinished, "a new initialization forgets the result");
@@ -126,6 +146,7 @@ void TestCanceled() {
 
 int main() {
     TestBeforeInitialize();
+    TestCommonDialogPreconditions();
     TestOpenChecks();
     TestCanceled();
     return 0;

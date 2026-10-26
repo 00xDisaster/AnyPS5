@@ -11,4 +11,4 @@
 
 ### Functional
 
-- [sceInvitationDialogInitialize](../../../core/libs/prx/libSceInvitationDialog/Export.cpp) (libSceInvitationDialog, PS4) - never returns shadPS4's `NOT_SYSTEM_INITIALIZED` (`sceCommonDialogInitialize` not called) or `BUSY` (another common dialog in use): libSceCommonDialog shares neither state here.
+- [sceInvitationDialogInitialize, sceInvitationDialogTerminate](../../../core/libs/prx/libSceInvitationDialog/Export.cpp) (libSceInvitationDialog, PS4) - `Initialize` returns `NOT_SYSTEM_INITIALIZED` before `sceCommonDialogInitialize`, then `ALREADY_INITIALIZED`, then `BUSY` while another dialog holds the common dialog system, in [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/2cdefaa1298c6e4ece6c74bd84e90f3906282d51/src/core/libraries/invitation_dialog/invitation_dialog.cpp)'s order, and `Terminate` frees the system. Only this library takes the system through [libSceCommonDialog](libSceCommonDialog.md) so far, so the other common dialogs neither return `BUSY` because of it nor make it return `BUSY`. Not measured on a console.

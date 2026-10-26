@@ -1,4 +1,5 @@
 #include "prx/libSceInvitationDialog/include/Api.hpp"
+#include "prx/libSceCommonDialog/include/DialogUse.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include <algorithm>
@@ -13,7 +14,9 @@ namespace {
 constexpr int COMMON_DIALOG_STATUS_NONE = 0;
 constexpr int COMMON_DIALOG_STATUS_INITIALIZED = 1;
 constexpr int COMMON_DIALOG_STATUS_FINISHED = 3;
+constexpr int COMMON_DIALOG_ERROR_NOT_SYSTEM_INITIALIZED = static_cast<int>(0x80B80001u);
 constexpr int COMMON_DIALOG_ERROR_NOT_INITIALIZED = static_cast<int>(0x80B80003u);
+constexpr int COMMON_DIALOG_ERROR_BUSY = static_cast<int>(0x80B80008u);
 constexpr int COMMON_DIALOG_ERROR_NOT_FINISHED = static_cast<int>(0x80B80005u);
 constexpr int COMMON_DIALOG_ERROR_ARG_NULL = static_cast<int>(0x80B8000Du);
 constexpr int COMMON_DIALOG_RESULT_USER_CANCELED = 1;
@@ -43,7 +46,9 @@ extern "C" {
 int APS5_VABI sceInvitationDialogInitialize(void) {
     DialogState& dialog = Dialog();
     std::lock_guard lock(dialog.mutex);
+    if (!CommonDialogSystemInitialized_nid_no_patch()) return COMMON_DIALOG_ERROR_NOT_SYSTEM_INITIALIZED;
     if (dialog.status != COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_ALREADY_INITIALIZED;
+    if (!CommonDialogAcquire_nid_no_patch()) return COMMON_DIALOG_ERROR_BUSY;
     dialog.status = COMMON_DIALOG_STATUS_INITIALIZED;
     dialog.callbackArg = nullptr;
     return COMMON_DIALOG_OK;
@@ -55,6 +60,7 @@ int APS5_VABI sceInvitationDialogTerminate(void) {
     if (dialog.status == COMMON_DIALOG_STATUS_NONE) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
     dialog.status = COMMON_DIALOG_STATUS_NONE;
     dialog.callbackArg = nullptr;
+    CommonDialogRelease_nid_no_patch();
     return COMMON_DIALOG_OK;
 }
 
