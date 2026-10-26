@@ -50,6 +50,7 @@ MAX_OUTPUT_FACTOR = 4
 MIN_OUTPUT_LIMIT = 256 * 1024 * 1024
 PT_LOAD = 1
 PT_NOTE = 4
+PT_PHDR = 6
 ENTROPY_LIMIT = 7.5
 ENTROPY_SAMPLE = 0x10000
 
@@ -58,7 +59,7 @@ PHDR_NAMES = {
     2: "PT_DYNAMIC",
     3: "PT_INTERP",
     4: "PT_NOTE",
-    6: "PT_PHDR",
+    PT_PHDR: "PT_PHDR",
     7: "PT_TLS",
     0x6474E550: "PT_GNU_EH_FRAME",
     0x6474E551: "PT_GNU_STACK",
@@ -206,7 +207,7 @@ def place_segments(data, headers, records):
             if header["size"] and (tail is None or header["offset"] > tail[0]):
                 tail = (header["offset"], header["source"] - header["offset"])
             continue
-        if header["vaddr"] != 0:
+        if header["vaddr"] != 0 or header["type"] == PT_PHDR:
             host = load_for(header["vaddr"], header["size"])
             if host is None:
                 if header["size"] == 0:
@@ -266,7 +267,18 @@ def unwrap(path, output, verbose=False):
 
     records = read_records(data)
     inner, elf_header, headers = parse_elf(data)
+    phdrs = [header for header in headers if header["type"] == PT_PHDR]
+    if len(phdrs) > 1:
+        raise Refused("more than one PT_PHDR segment")
+    phdr = phdrs[0] if phdrs else None
+    if phdr is not None:
+        if phdr["size"] < len(headers) * 56 or phdr["memory"] < len(headers) * 56:
+            raise Refused("PT_PHDR does not cover the program header table")
+        if any(header["type"] == PT_LOAD and header["index"] < phdr["index"] for header in headers):
+            raise Refused("PT_PHDR must precede the load segments")
     place_segments(data, headers, records)
+    if phdr is not None and phdr["host"] is None:
+        raise Refused("PT_PHDR is not in a file-backed load segment")
     check_decrypted(data, headers)
 
     regions = []
@@ -350,6 +362,9 @@ def unwrap(path, output, verbose=False):
         if header["new"] + header["size"] > len(result):
             raise Refused("segment %d escaped the output" % header["index"])
 
+    if phdr is not None:
+        program_offset = phdr["new"]
+        struct.pack_into("<Q", elf_header, 0x20, program_offset)
     result[0:0x40] = elf_header
     struct.pack_into("<Q", result, 0x28, 0)
     struct.pack_into("<H", result, 0x3C, 0)
