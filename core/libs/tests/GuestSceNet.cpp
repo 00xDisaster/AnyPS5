@@ -15,6 +15,7 @@
 #include <unistd.h>
 #endif
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/Socket/include/SocketSelectDeadline.hpp"
 #include "prx/libkernel/Time/include/Time.hpp"
 #include "prx/libSceNet/src/ResolverTestHooks.hpp"
@@ -1400,6 +1401,84 @@ static void CheckKernelSocketOption() {
     Require(Failed(sceNetSetsockopt(kernel, 0xffff, 0x1001, &size, sizeof(size)), 9));
 }
 
+static void CheckEpollKernelSocket() {
+    std::array<std::uint8_t, 16> address{16, 2, 0, 0, 127, 0, 0, 1};
+    const int receiver = socket_nid_postfix(2, 2, 0);
+    const int sender = socket_nid_postfix(2, 2, 0);
+    const int unpolled = socket_nid_postfix(2, 2, 0);
+    Require(receiver >= 0 && sender >= 0 && unpolled >= 0);
+    Require(GuestSocketIsOpen_nid_no_patch(receiver) && GuestSocketIsOpen_nid_no_patch(sender));
+    Require(bind_nid_postfix(receiver, address.data(), address.size()) == 0);
+    std::uint32_t size = address.size();
+    Require(getsockname_nid_postfix(receiver, address.data(), &size) == 0 && size == address.size());
+    const int epoll = sceNetEpollCreate("epoll-kernel-socket", 0);
+    Require(epoll >= 0);
+    NetEpollEvent registration{};
+    registration.events = 1;
+    registration.data.u32 = 77;
+    Require(sceNetEpollControl(epoll, 1, receiver, &registration) == 0);
+    Require(Failed(sceNetEpollControl(epoll, 1, receiver, &registration), 48));
+    NetEpollEvent ready{};
+    Require(sceNetEpollWait(epoll, &ready, 1, 0) == 0);
+    const char payload[] = "kernel";
+    Require(sendto_nid_postfix(sender, payload, sizeof(payload), 0, address.data(), address.size()) == sizeof(payload));
+    Require(sceNetEpollWait(epoll, &ready, 1, 1000000) == 1);
+    Require(ready.events == 1 && ready.ident == static_cast<std::uint64_t>(receiver) && ready.data.u32 == 77);
+    char received[sizeof(payload)]{};
+    Require(recv_nid_postfix(receiver, received, sizeof(received), 0) == sizeof(payload));
+    Require(sceNetEpollWait(epoll, &ready, 1, 0) == 0);
+    registration.events = 2;
+    registration.data.u32 = 78;
+    Require(sceNetEpollControl(epoll, 2, receiver, &registration) == 0);
+    Require(sceNetEpollWait(epoll, &ready, 1, 1000000) == 1);
+    Require(ready.events == 2 && ready.ident == static_cast<std::uint64_t>(receiver) && ready.data.u32 == 78);
+    Require(sceNetEpollControl(epoll, 3, receiver, nullptr) == 0);
+    Require(Failed(sceNetEpollControl(epoll, 3, receiver, nullptr), 2));
+    Require(Failed(sceNetEpollControl(epoll, 2, receiver, &registration), 2));
+    Require(sceNetEpollWait(epoll, &ready, 1, 0) == 0);
+
+    Require(sceNetEpollControl(epoll, 1, sender, &registration) == 0);
+    Require(sceNetEpollControl(epoll, 1, unpolled, &registration) == 0);
+    Require(close_nid_postfix(sender) == 0);
+    Require(sceKernelClose(unpolled) == 0);
+    Require(sceNetEpollWait(epoll, &ready, 1, 1000) == 0);
+    Require(sceNetEpollWait(epoll, &ready, 1, 0) == 0);
+    Require(Failed(sceNetEpollControl(epoll, 3, sender, nullptr), 9));
+    Require(Failed(sceNetEpollControl(epoll, 1, unpolled, &registration), 9));
+    Require(Failed(sceNetEpollControl(epoll, 1, 0x7ffffff0, &registration), 9));
+    const int stale = socket_nid_postfix(2, 2, 0);
+    Require(stale >= 0);
+    registration.events = 1;
+    registration.data.u32 = 79;
+    Require(sceNetEpollControl(epoll, 1, stale, &registration) == 0);
+    Require(sceKernelClose(stale) == 0);
+    std::vector<int> spare;
+    int reused = -1;
+    for (int attempt = 0; attempt < 64 && reused != stale; ++attempt) {
+        reused = socket_nid_postfix(2, 2, 0);
+        Require(reused >= 0);
+        if (reused != stale) spare.push_back(reused);
+    }
+    Require(reused == stale);
+    std::array<std::uint8_t, 16> reusedAddress{16, 2, 0, 0, 127, 0, 0, 1};
+    Require(bind_nid_postfix(reused, reusedAddress.data(), reusedAddress.size()) == 0);
+    size = reusedAddress.size();
+    Require(getsockname_nid_postfix(reused, reusedAddress.data(), &size) == 0 && size == reusedAddress.size());
+    const int reusedSender = socket_nid_postfix(2, 2, 0);
+    Require(reusedSender >= 0);
+    Require(sendto_nid_postfix(reusedSender, payload, sizeof(payload), 0, reusedAddress.data(), reusedAddress.size()) == sizeof(payload));
+    Require(sceNetEpollWait(epoll, &ready, 1, 100000) == 0);
+    registration.data.u32 = 80;
+    Require(sceNetEpollControl(epoll, 1, reused, &registration) == 0);
+    Require(sceNetEpollWait(epoll, &ready, 1, 1000000) == 1);
+    Require(ready.events == 1 && ready.ident == static_cast<std::uint64_t>(reused) && ready.data.u32 == 80);
+    Require(close_nid_postfix(reusedSender) == 0);
+    Require(close_nid_postfix(reused) == 0);
+    for (const int descriptor : spare) Require(close_nid_postfix(descriptor) == 0);
+    Require(sceNetEpollDestroy(epoll) == 0);
+    Require(close_nid_postfix(receiver) == 0);
+}
+
 static void CheckBufferSizes() {
     const int socket = sceNetSocket("buffer-sizes", 2, 2, 17);
     Require(socket >= 0);
@@ -2052,6 +2131,7 @@ int main() {
     CheckBufferSizes();
     CheckOnesBroadcast();
     CheckKernelSocketOption();
+    CheckEpollKernelSocket();
 
     const int epoll = sceNetEpollCreate("guest-sce-net", 0);
     Require(epoll >= 0);
