@@ -535,7 +535,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 
 | Name | Kind | Source | Default | Description |
 |------|------|--------|---------|-------------|
-| `ANYPS5_LANGUAGE` | integer | `core/libs/prx/libSceSystemService/SystemService.hpp` | 1 | console language number returned by sceSystemServiceParamGetInt, defaulting to English US |
+| `ANYPS5_LANGUAGE` | integer | `core/libs/prx/libSceSystemService/SystemService.hpp` | 1 | console language number from 0 to 30 returned by sceSystemServiceParamGetInt, defaulting to English US; any other value throws |
 
 ### libSceVideoOut
 
