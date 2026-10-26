@@ -24,6 +24,7 @@
 #endif
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -37,6 +38,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 // Network-control state reflects host interface addressing, not PSN sign-in status.
@@ -70,6 +72,8 @@ static constexpr std::uint16_t STUN_ATTR_OTHER_ADDRESS = 0x802b;
 static constexpr std::size_t STUN_HEADER_SIZE = 20;
 static constexpr std::size_t STUN_TRANSACTION_ID_SIZE = 12;
 static constexpr int STUN_DEFAULT_TIMEOUT_MS = 300;
+static constexpr int STUN_TOTAL_BUDGET_MS = 1000;
+static constexpr int STUN_CACHE_TTL_MS = 60000;
 static constexpr int NET_CTL_INFO_DEVICE = 1;
 static constexpr int NET_CTL_INFO_ETHER_ADDR = 2;
 static constexpr int NET_CTL_INFO_MTU = 3;
@@ -515,6 +519,7 @@ struct StunConfig {
     std::uint64_t configGeneration = 1;
     std::uint64_t cachedConfigGeneration = 0;
     std::uint32_t cachedLocalAddr = 0;
+    std::chrono::steady_clock::time_point cachedUntil{};
     bool hasCachedResult = false;
     NetCtlNatInfo cachedResult{};
 };
@@ -548,7 +553,7 @@ static void AppendUniqueStunServer(std::vector<sockaddr_in>& servers, const sock
     servers.push_back(candidate);
 }
 
-static std::vector<sockaddr_in> ResolveStunServers(int& timeoutMs, std::uint64_t& generationOut) {
+static std::vector<sockaddr_in> ResolveStunServers(int& timeoutMs, std::uint64_t& generationOut, std::chrono::steady_clock::time_point totalDeadline) {
     auto& config = GetStunConfig();
     {
         std::lock_guard guard(config.lock);
@@ -569,23 +574,45 @@ static std::vector<sockaddr_in> ResolveStunServers(int& timeoutMs, std::uint64_t
         {"stun.l.google.com", "19302"},
         {"stun1.l.google.com", "19302"},
     };
-    std::vector<sockaddr_in> servers;
-    if (!EnsureSocketRuntime()) return servers;
-    for (const auto& entry : kDefaultHosts) {
-        addrinfo hints{};
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_protocol = IPPROTO_UDP;
-        addrinfo* list = nullptr;
-        if (getaddrinfo(entry.host, entry.port, &hints, &list) != 0 || !list) continue;
-        for (auto* item = list; item; item = item->ai_next) {
-            if (item->ai_addr && item->ai_addrlen >= sizeof(sockaddr_in) && item->ai_addr->sa_family == AF_INET) {
-                AppendUniqueStunServer(servers, *reinterpret_cast<const sockaddr_in*>(item->ai_addr));
+    struct DnsQueryState {
+        std::mutex lock;
+        std::condition_variable cv;
+        std::vector<sockaddr_in> servers;
+        bool done = false;
+    };
+    const auto now = std::chrono::steady_clock::now();
+    if (!EnsureSocketRuntime() || now >= totalDeadline) return {};
+    const auto dnsCap = now + std::chrono::milliseconds(STUN_DEFAULT_TIMEOUT_MS * 2);
+    const auto dnsDeadline = dnsCap < totalDeadline ? dnsCap : totalDeadline;
+    auto state = std::make_shared<DnsQueryState>();
+    std::thread([state, dnsDeadline] {
+        for (const auto& entry : kDefaultHosts) {
+            if (std::chrono::steady_clock::now() >= dnsDeadline) break;
+            addrinfo hints{};
+            hints.ai_family = AF_INET;
+            hints.ai_socktype = SOCK_DGRAM;
+            hints.ai_protocol = IPPROTO_UDP;
+            addrinfo* list = nullptr;
+            if (getaddrinfo(entry.host, entry.port, &hints, &list) != 0 || !list) continue;
+            {
+                std::lock_guard guard(state->lock);
+                for (auto* item = list; item; item = item->ai_next) {
+                    if (item->ai_addr && item->ai_addrlen >= sizeof(sockaddr_in) && item->ai_addr->sa_family == AF_INET) {
+                        AppendUniqueStunServer(state->servers, *reinterpret_cast<const sockaddr_in*>(item->ai_addr));
+                    }
+                }
             }
+            freeaddrinfo(list);
         }
-        freeaddrinfo(list);
-    }
-    return servers;
+        {
+            std::lock_guard guard(state->lock);
+            state->done = true;
+        }
+        state->cv.notify_one();
+    }).detach();
+    std::unique_lock lock(state->lock);
+    state->cv.wait_until(lock, dnsDeadline, [&] { return state->done; });
+    return state->servers;
 }
 
 static StunEndpoint DecodeStunIpv4Endpoint(const std::uint8_t* value, std::uint16_t length, bool xorMask) {
@@ -636,7 +663,9 @@ static bool ParseStunBindingResponse(const std::uint8_t* packet, std::size_t siz
     return response.mapped.valid;
 }
 
-static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, int timeoutMs, StunProbeResponse& response) {
+static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, int timeoutMs, std::chrono::steady_clock::time_point totalDeadline, StunProbeResponse& response) {
+    const auto start = std::chrono::steady_clock::now();
+    if (start >= totalDeadline) return false;
     std::uint8_t request[STUN_HEADER_SIZE] = {};
     request[0] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST >> 8);
     request[1] = static_cast<std::uint8_t>(STUN_BINDING_REQUEST & 0xFF);
@@ -646,7 +675,8 @@ static bool ProbeStunServer(StunSocket descriptor, const sockaddr_in& server, in
     const auto sent = sendto(descriptor, reinterpret_cast<const char*>(request), sizeof(request), 0,
                              reinterpret_cast<const sockaddr*>(&server), sizeof(server));
     if (sent != static_cast<int>(sizeof(request))) return false;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs > 0 ? timeoutMs : 1);
+    const auto probeDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs > 0 ? timeoutMs : 1);
+    const auto deadline = probeDeadline < totalDeadline ? probeDeadline : totalDeadline;
     for (;;) {
         const auto now = std::chrono::steady_clock::now();
         if (now >= deadline) return false;
@@ -693,9 +723,10 @@ static NetCtlNatInfo DiscoverNatInfo(in_addr localAddress) {
     result.nat_type = NET_CTL_NAT_TYPE_NONE;
     result.mapped_addr = 0;
 
+    const auto totalDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(STUN_TOTAL_BUDGET_MS);
     int timeoutMs = STUN_DEFAULT_TIMEOUT_MS;
     std::uint64_t generation = 0;
-    const auto servers = ResolveStunServers(timeoutMs, generation);
+    const auto servers = ResolveStunServers(timeoutMs, generation, totalDeadline);
     if (servers.empty() || !EnsureSocketRuntime()) return result;
 
     const StunSocket descriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -732,7 +763,7 @@ static NetCtlNatInfo DiscoverNatInfo(in_addr localAddress) {
     sockaddr_in primaryServer{};
     std::size_t primaryIndex = servers.size();
     for (std::size_t i = 0; i < servers.size(); ++i) {
-        if (ProbeStunServer(descriptor, servers[i], timeoutMs, firstResponse)) {
+        if (ProbeStunServer(descriptor, servers[i], timeoutMs, totalDeadline, firstResponse)) {
             primaryServer = servers[i];
             primaryIndex = i;
             break;
@@ -775,7 +806,7 @@ static NetCtlNatInfo DiscoverNatInfo(in_addr localAddress) {
 
     for (const auto& secondary : secondaryServers) {
         StunProbeResponse secondResponse{};
-        if (ProbeStunServer(descriptor, secondary, timeoutMs, secondResponse)) {
+        if (ProbeStunServer(descriptor, secondary, timeoutMs, totalDeadline, secondResponse)) {
             CloseStunSocket(descriptor);
             result.stun_status = NET_CTL_STUN_STATUS_OK;
             result.nat_type = (secondResponse.mapped.address == firstResponse.mapped.address &&
@@ -912,20 +943,23 @@ int APS5_VABI sceNetCtlGetNatInfo(NetCtlNatInfo* info) {
     if (!FindHostIpv4Interface(host)) return SCE_NET_CTL_ERROR_NOT_CONNECTED;
     auto& config = GetStunConfig();
     std::uint64_t generation = 0;
+    const auto now = std::chrono::steady_clock::now();
     {
         std::lock_guard guard(config.lock);
         generation = config.configGeneration;
-        if (config.hasCachedResult && config.cachedConfigGeneration == generation && config.cachedLocalAddr == host.address.s_addr) {
+        if (config.hasCachedResult && config.cachedConfigGeneration == generation &&
+            config.cachedLocalAddr == host.address.s_addr && now < config.cachedUntil) {
             *info = config.cachedResult;
             return 0;
         }
     }
     const NetCtlNatInfo discovered = DiscoverNatInfo(host.address);
-    {
+    if (discovered.stun_status == NET_CTL_STUN_STATUS_OK) {
         std::lock_guard guard(config.lock);
         if (config.configGeneration == generation) {
             config.cachedConfigGeneration = generation;
             config.cachedLocalAddr = host.address.s_addr;
+            config.cachedUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(STUN_CACHE_TTL_MS);
             config.cachedResult = discovered;
             config.hasCachedResult = true;
         }

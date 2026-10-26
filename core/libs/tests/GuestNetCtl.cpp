@@ -323,7 +323,7 @@ void CheckNatDiscovery(in_addr address) {
     natInfo.stun_status = 99;
     natInfo.nat_type = 99;
     natInfo.mapped_addr = 0xFFFFFFFFu;
-    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 20);
+    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 40);
     Require(sceNetCtlGetNatInfo(&natInfo) == 0);
     Require(natInfo.size == sizeof(natInfo));
     Require(natInfo.stun_status == 1);
@@ -333,6 +333,21 @@ void CheckNatDiscovery(in_addr address) {
         sockaddr_in from{};
         RecordUniqueTransactionId(seenIds, ReceiveStunBindingRequest(server1, from));
     }
+
+    StunTxId openTx{};
+    std::thread openWorker([&] {
+        sockaddr_in client{};
+        openTx = ReceiveStunBindingRequest(server1, client);
+        SendStunBindingResponse(server1, client, openTx, address.s_addr, 0, true);
+    });
+    natInfo = {sizeof(natInfo), 99, 99, 0};
+    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
+    openWorker.join();
+    RecordUniqueTransactionId(seenIds, openTx);
+    Require(natInfo.size == sizeof(natInfo));
+    Require(natInfo.stun_status == 2);
+    Require(natInfo.nat_type == 1);
+    Require(natInfo.mapped_addr == address.s_addr);
 
     const std::uint32_t externalIp = (ntohl(address.s_addr) == 0xCB00712Au) ? htonl(0xCB00712Bu) : htonl(0xCB00712Au);
     const std::uint32_t spoofedIp = htonl(0xC0000201u);
@@ -354,22 +369,6 @@ void CheckNatDiscovery(in_addr address) {
     Require(natInfo.stun_status == 1);
     Require(natInfo.nat_type == 0);
     Require(natInfo.mapped_addr == 0);
-
-    NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
-    StunTxId openTx{};
-    std::thread openWorker([&] {
-        sockaddr_in client{};
-        openTx = ReceiveStunBindingRequest(server1, client);
-        SendStunBindingResponse(server1, client, openTx, address.s_addr, 0, true);
-    });
-    natInfo = {sizeof(natInfo), 99, 99, 0};
-    Require(sceNetCtlGetNatInfo(&natInfo) == 0);
-    openWorker.join();
-    RecordUniqueTransactionId(seenIds, openTx);
-    Require(natInfo.size == sizeof(natInfo));
-    Require(natInfo.stun_status == 2);
-    Require(natInfo.nat_type == 1);
-    Require(natInfo.mapped_addr == address.s_addr);
 
     NetCtlSetStunServers_nid_no_patch(&server1Addr, 1, 1000);
     StunTxId incompleteTx{};
