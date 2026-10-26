@@ -124,6 +124,7 @@ struct Socket : KernelSocketPoll::NativeOwner {
     GuestSockets::SocketOptionState options;
     bool receiveShut = false;
     bool sendShut = false;
+    std::uint32_t inode = 0;
     std::weak_ptr<Socket> peer;
     Socket(NativeSocket value, int family, int type) : value(value), family(family), type(type) {}
     ~Socket() {
@@ -723,6 +724,8 @@ namespace {
 constexpr int GuestUnix = 1;
 constexpr int GuestCloseOnExec = 0x10000000;
 constexpr int GuestNonBlocking = 0x20000000;
+constexpr std::uint32_t NoDevice = 0xFFFFFFFFu;
+std::uint32_t lastUnixInode = 0;
 int SetNonBlocking(Socket& socket) {
 #ifdef _WIN32
     unsigned long value = 1;
@@ -883,11 +886,14 @@ int UnnamedAddress(void* address, std::uint32_t* length) {
 
 int GuestSockets::Stat(int descriptor, FileStat* status) {
     std::shared_ptr<Socket> socket;
+    std::uint32_t inode = 0;
     {
         std::lock_guard lock(socketsMutex);
         const auto found = sockets.find(descriptor);
         if (found == sockets.end()) return 9;
         socket = found->second;
+        if (socket->family == GuestUnix && socket->inode == 0) socket->inode = ++lastUnixInode != 0 ? lastUnixInode : ++lastUnixInode;
+        inode = socket->inode;
     }
     bool receiveShut = false;
     bool sendShut = false;
@@ -908,6 +914,10 @@ int GuestSockets::Stat(int descriptor, FileStat* status) {
     socklen_t length = sizeof(sendBuffer);
     if (getsockopt(socket->value, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<char*>(&sendBuffer), &length) != 0) sendBuffer = 0;
     *status = FileStat{};
+    if (socket->family == GuestUnix) {
+        status->st_dev = NoDevice;
+        status->st_ino = inode;
+    }
     status->st_mode = 0140000;
     if (!receiveShut || available > 0) status->st_mode |= 0444;
     if (!sendShut) status->st_mode |= 0222;
