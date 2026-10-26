@@ -1,4 +1,5 @@
 #include "prx/libSceVideodec2/include/Api.hpp"
+#include "prx/libSceVideodec2/include/PictureMetadata.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -205,7 +206,15 @@ void testVp9PictureMetadata() {
         struct Guarded { Vp9PictureInfo info{sizeof(Vp9PictureInfo)}; std::uint64_t guard = 0x123456789abcdef0ull; } guarded;
         check(sceVideodec2GetVp9PictureInfo_nid_postfix(&output, &guarded.info) == 0, "VP9 metadata query failed");
         check(guarded.guard == 0x123456789abcdef0ull && guarded.info.thisSize == sizeof(Vp9PictureInfo), "VP9 info overwrote caller storage");
-        return guarded.info;
+        struct Snapshot { Vp9PictureInfo info{}; std::uint64_t guard = 0xfedcba9876543210ull; } snapshot;
+        Videodec2Vp9PictureInfo_nid_no_patch(handle, output.frameBuffer, &snapshot.info);
+        check(snapshot.info.thisSize == sizeof(Vp9PictureInfo) && snapshot.guard == 0xfedcba9876543210ull, "internal VP9 snapshot size or boundary differs");
+        const auto& same = snapshot.info;
+        const auto& expected = guarded.info;
+        check(same.isValid && same.ptsData == expected.ptsData && same.dtsData == expected.dtsData && same.attachedData == expected.attachedData && same.profile == expected.profile && same.level == expected.level &&
+            same.keyFrameFlag == expected.keyFrameFlag && same.intraOnly == expected.intraOnly && same.bitDepth == expected.bitDepth && same.colorRange == expected.colorRange && same.colorSpace == expected.colorSpace && same.numFrames == expected.numFrames &&
+            same.frameWidth == expected.frameWidth && same.frameHeight == expected.frameHeight && same.renderWidth == expected.renderWidth && same.renderHeight == expected.renderHeight, "internal VP9 snapshot differs from decoded picture metadata");
+        return snapshot.info;
     };
     const auto observeUntracked = [&](const OutputInfo& output) {
         struct Guarded { Vp9PictureInfo info{sizeof(Vp9PictureInfo)}; std::uint64_t guard = 0x123456789abcdef0ull; } guarded;

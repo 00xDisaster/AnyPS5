@@ -29,7 +29,6 @@ struct PictureHeader {
 extern "C" {
 
 void Videodec2PictureHeader_nid_no_patch(std::uint64_t handle, const void* frameBuffer, SceVideodec2::Internal::PictureHeader* header);
-void Videodec2PictureCrop_nid_no_patch(std::uint64_t handle, const void* frameBuffer, SceVideodec2::Internal::Crop* crop);
 void Videodec2Vp9PictureInfo_nid_no_patch(std::uint64_t handle, const void* frameBuffer, SceVideodec2::Vp9PictureInfo* info);
 
 }

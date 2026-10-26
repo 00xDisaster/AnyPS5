@@ -133,8 +133,6 @@ PictureInfo pictureInfo(std::uint64_t handle, const SceVideodec2::OutputInfo& ou
 SceVideodec2::Vp9PictureInfo vp9PictureInfo(std::uint64_t handle, const SceVideodec2::OutputInfo& output) {
     SceVideodec2::Vp9PictureInfo info{sizeof(SceVideodec2::Vp9PictureInfo)};
     Videodec2Vp9PictureInfo_nid_no_patch(handle, output.frameBuffer, &info);
-
-    if (!info.isValid) throw std::runtime_error("Vdecsw: decoded picture has no VP9 picture info");
     return info;
 }
 
