@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
 #include <barrier>
@@ -17,24 +18,6 @@
 #include <unistd.h>
 #endif
 
-extern "C" {
-int* APS5_VABI __error_nid_postfix();
-void APS5_VABI _Feraise_nid_postfix(int);
-int APS5_VABI fegetround_nid_postfix();
-int APS5_VABI fesetround_nid_postfix(int);
-int APS5_VABI fetestexcept_nid_postfix(int);
-int APS5_VABI feclearexcept_nid_postfix(int);
-int APS5_VABI fegetexceptflag_nid_postfix(std::uint16_t*, int);
-int APS5_VABI fesetexceptflag_nid_postfix(const std::uint16_t*, int);
-int APS5_VABI feenableexcept_nid_postfix(int);
-int APS5_VABI fedisableexcept_nid_postfix(int);
-int APS5_VABI __feenableexcept_nid_postfix(int);
-int APS5_VABI __fedisableexcept_nid_postfix(int);
-int APS5_VABI fegettrapenable_nid_postfix();
-int APS5_VABI fegetexcept_nid_postfix();
-int APS5_VABI fesettrapenable_nid_postfix(int);
-}
-
 namespace {
 
 struct Environment {
@@ -52,6 +35,10 @@ Environment ReadEnvironment() {
 void WriteEnvironment(const Environment& state) {
     asm volatile("fldenv %0" : : "m"(state.x87));
     _mm_setcsr(state.sse);
+}
+
+bool SameControlState(const Environment& left, const Environment& right) {
+    return left.x87[0] == right.x87[0] && left.x87[1] == right.x87[1] && left.sse == right.sse;
 }
 
 void Require(bool value, const char* message) {
@@ -135,6 +122,7 @@ void CheckFeraise() {
         const auto seeded = SeedFlags(0, 0);
         *__error_nid_postfix() = 0;
         _Feraise_nid_postfix(static_cast<int>(requested));
+
         const unsigned raised = (requested & 0x18) != 0 ? requested | 0x20 : requested;
         const auto state = ReadEnvironment();
         Require((state.x87[1] & 0x3f) == raised && (state.sse & 0x3f) == raised, "_Feraise raises the flags on both units");
@@ -301,7 +289,7 @@ void CheckHoldExcept(HoldExcept hold) {
     try { hold(nullptr); } catch (const std::invalid_argument&) { threw = true; }
     Require(threw, "feholdexcept rejects null storage");
     const auto afterNull = ReadEnvironment();
-    Require(std::memcmp(&original, &afterNull, sizeof(original)) == 0, "null feholdexcept preserves the environment");
+    Require(SameControlState(original, afterNull), "null feholdexcept preserves the environment");
 #ifdef _WIN32
     SYSTEM_INFO info{};
     GetSystemInfo(&info);
@@ -344,7 +332,7 @@ void CheckHoldExcept(HoldExcept hold) {
     first.join();
     second.join();
     const auto afterThreads = ReadEnvironment();
-    Require(std::memcmp(&original, &afterThreads, sizeof(original)) == 0, "feholdexcept workers preserve the main environment");
+    Require(SameControlState(original, afterThreads), "feholdexcept workers preserve the main environment");
 }
 
 int main(int argc, char** argv) {
