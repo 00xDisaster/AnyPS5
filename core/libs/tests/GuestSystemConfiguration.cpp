@@ -18,7 +18,6 @@ static_assert(offsetof(SceKernelSystemSwVersion, versionString) == 0x08);
 static_assert(offsetof(SceKernelSystemSwVersion, version) == 0x24);
 static_assert(sizeof(SceKernelSystemSwVersion) == 0x28);
 extern "C" {
-
 extern char** environ_nid_postfix;
 }
 static void Require(bool value) { if (!value) std::abort(); }
@@ -553,6 +552,14 @@ static void CheckVersionLimits() {
     } update{0xaaaaaaaau, 0xaaaaaaaau};
     Require(sysKernelGetLowerLimitUpdVersion_nid_postfix(&update.version) == 0 && update.version == 0 && update.after == 0xaaaaaaaau);
     Require(sysKernelGetLowerLimitUpdVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    update = {0xaaaaaaaau, 0xaaaaaaaau};
+    Require(sysKernelGetUpdVersion_nid_postfix(&update.version) == 0 && update.version == 0 && update.after == 0xaaaaaaaau);
+    Require(sysKernelGetUpdVersion_nid_postfix(nullptr) == SCE_KERNEL_ERROR_EINVAL && *__error_nid_postfix() == 13);
+
+    Require(sysKernelGetManufacturingMode_nid_postfix() == 0 && *__error_nid_postfix() == 13);
+    Require(sysKernelGetIntdevModeForInternalLibc_nid_postfix() == 0 && *__error_nid_postfix() == 13);
+    Require(sysKernelGetIntdevModeForRcmgr_nid_postfix() == 0 && *__error_nid_postfix() == 13);
 }
 static void CheckSystemSwVersion() {
     *__error_nid_postfix() = 13;

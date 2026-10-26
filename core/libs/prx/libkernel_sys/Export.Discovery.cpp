@@ -2271,26 +2271,6 @@ int APS5_VABI symlinkat_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sysKernelGetUpdVersion_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sysc_e00_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
