@@ -731,6 +731,10 @@ int APS5_VABI chmod_nid_postfix(const char* path, int mode) {
     return 0;
 }
 
+int ChmodNative_nid_no_patch(const std::filesystem::path& native, int mode) {
+    return NativeChmod(native, mode);
+}
+
 int APS5_VABI chflags_nid_postfix(const char* path, std::uint64_t flags) {
     std::string copy;
     if (const int error = PathError(path, copy)) return PosixFailure(error);
