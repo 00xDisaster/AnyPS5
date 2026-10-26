@@ -927,14 +927,17 @@ int APS5_VABI timingsafe_memcmp_nid_postfix(const void* b1, const void* b2, size
     const auto* p1 = static_cast<const unsigned char*>(b1);
     const auto* p2 = static_cast<const unsigned char*>(b2);
     int result = 0;
-    int done = 0;
+    std::uint32_t done = 0;
     for (size_t i = 0; i < len; ++i) {
-        const int diff = static_cast<int>(p1[i]) - static_cast<int>(p2[i]);
-        const int isLess = diff < 0 ? -1 : 0;
-        const int isGreater = diff > 0 ? -1 : 0;
-        const int cmp = isLess - isGreater;
-        result |= cmp & ~done;
-        done |= isLess | isGreater;
+        const std::uint32_t a = p1[i];
+        const std::uint32_t b = p2[i];
+        const std::uint32_t lt = (a - b) >> 31;
+        const std::uint32_t gt = (b - a) >> 31;
+        const int cmp = static_cast<int>(gt) - static_cast<int>(lt);
+        const std::uint32_t d = a ^ b;
+        const std::uint32_t diffMask = static_cast<std::uint32_t>(-static_cast<std::int32_t>((d | -d) >> 31));
+        result |= cmp & static_cast<int>(~done);
+        done |= diffMask;
     }
     return result;
 }
