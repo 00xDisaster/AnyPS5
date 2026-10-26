@@ -50,6 +50,7 @@ static std::uint64_t ParseFixedBase(std::string_view value, const std::uint64_t 
 Args ParseArgs(int argc, char* argv[]) {
     Args args;
     bool unusedFilterSpecified = false;
+    bool runPathSpecified = false;
     bool sceModulePathSpecified = false;
     std::vector<std::string> givenOptions;
 
@@ -131,9 +132,11 @@ Args ParseArgs(int argc, char* argv[]) {
         } else if (arg == "--registry") {
             args.writeRegistry = true;
         } else if (arg == "--rpath") {
+            if (runPathSpecified) throw std::runtime_error("--rpath cannot be repeated");
             if (i + 1 >= argc)
                 throw std::runtime_error("--rpath requires a value");
             args.runPath = argv[++i];
+            runPathSpecified = true;
         } else if (arg == "--windows") {
             args.toWindows = true;
         } else if (arg == "--macos") {
