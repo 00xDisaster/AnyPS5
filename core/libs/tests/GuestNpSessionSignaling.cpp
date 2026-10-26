@@ -78,6 +78,18 @@ int main() {
     Require(sceNpSessionSignalingGetLocalNetInfo(netContextId, nullptr) == InvalidArgument, "null info");
     Require(sceNpSessionSignalingGetLocalNetInfo(netContextId, reinterpret_cast<SessionSignalingLocalNetInfo*>(info)) == Unavailable, "local net info without network");
     Require(std::memcmp(info, untouched, sizeof(info)) == 0, "failed query modified the info");
+    const unsigned char userPeer[40] = {};
+    const auto* userPeerAddress = reinterpret_cast<const SessionSignalingPeerAddress*>(userPeer);
+    std::uint32_t userConnection = 0xa5a5a5a5u;
+    Require(sceNpSessionSignalingActivateUser(contextId, nullptr, &userConnection) == InvalidArgument, "activate user with a null peer address");
+    Require(sceNpSessionSignalingActivateUser(contextId, userPeerAddress, nullptr) == InvalidArgument, "activate user with a null connection id");
+    Require(sceNpSessionSignalingActivateUser(firstId, userPeerAddress, &userConnection) == ContextNotFound, "activate user on a stale context");
+    Require(sceNpSessionSignalingActivateUser(contextId, userPeerAddress, &userConnection) == Unavailable, "activate user without network");
+    Require(userConnection == 0xa5a5a5a5u, "a failed user activation wrote a connection id");
+    Require(sceNpSessionSignalingGetConnectionInfo(contextId, 1, 1, nullptr) == InvalidArgument, "null connection info");
+    Require(sceNpSessionSignalingGetConnectionInfo(firstId, 1, 1, reinterpret_cast<SessionSignalingConnectionInfo*>(info)) == ContextNotFound, "connection info on a stale context");
+    Require(sceNpSessionSignalingGetConnectionInfo(contextId, 1, 1, reinterpret_cast<SessionSignalingConnectionInfo*>(info)) == ConnectionNotFound, "connection info without a session");
+    Require(std::memcmp(info, untouched, sizeof(info)) == 0, "a failed connection info query modified the info");
 
     std::int32_t status = 0x5a5a5a5a;
     std::uint32_t peerAddress = 0xa5a5a5a5u;
@@ -119,6 +131,8 @@ int main() {
 
     Require(sceNpSessionSignalingTerminate() == 0, "terminate failed");
     Require(sceNpSessionSignalingDestroyContext(contextId) == NotInitialized, "destroy after terminate");
+    Require(sceNpSessionSignalingActivateUser(contextId, nullptr, nullptr) == NotInitialized, "activate user after terminate");
+    Require(sceNpSessionSignalingGetConnectionInfo(contextId, 1, 1, nullptr) == NotInitialized, "connection info after terminate");
     Require(sceNpSessionSignalingGetGroupInfo(netContextId, 1, nullptr) == NotInitialized, "group info after terminate");
     Require(sceNpSessionSignalingGetGroupFromSessionId(netContextId, nullptr, nullptr) == NotInitialized, "group from session id after terminate");
     Require(sceNpSessionSignalingGetConnectionFromNetAddress(netContextId, 0, 0, nullptr) == NotInitialized, "connection from net address after terminate");
