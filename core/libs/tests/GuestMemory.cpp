@@ -231,6 +231,25 @@ static void CheckMprotectIgnoresUndefinedBits() {
     Require(sceKernelReleaseDirectMemory(physical, length) == 0);
 }
 
+static void CheckDirectMapRefusesExecute() {
+    constexpr std::size_t length = 0x4000;
+    constexpr int invalid = static_cast<int>(0x80020016u);
+    std::int64_t physical = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, length, 0, 0, &physical) == 0);
+    for (const int protection : {5, 7, 0x35, 0x37}) {
+        void* refused = nullptr;
+        Require(sceKernelMapDirectMemory(&refused, length, protection, 0, physical, 0) == invalid);
+        Require(refused == nullptr);
+    }
+    void* mapping = nullptr;
+    Require(sceKernelMapDirectMemory(&mapping, length, 3, 0, physical, 0) == 0);
+    Require(sceKernelMprotect(mapping, length, 7) == 0);
+    VirtualQueryInfo info{};
+    Require(sceKernelVirtualQuery(mapping, 0, &info, sizeof(info)) == 0 && info.protection == 7);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapping), length) == 0);
+    Require(sceKernelReleaseDirectMemory(physical, length) == 0);
+}
+
 static void CheckStrictMemoryProtectionBits() {
     constexpr std::size_t length = 0x4000;
     std::int64_t physical = 0;
@@ -3342,6 +3361,7 @@ int main(int argc, char** argv) {
     CheckAudioCoprocessorProtection();
     CheckMprotectIgnoresUndefinedBits();
     CheckStrictMemoryProtectionBits();
+    CheckDirectMapRefusesExecute();
     CheckPosixMprotectIgnoresUndefinedBits();
     CheckDirectMemoryFollowsPhysicalPages();
     CheckSparseDirectMemoryBacking();
