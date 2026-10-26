@@ -1,3 +1,6 @@
+#include "prx/libkernel/Time/include/Time.hpp"
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libkernel/DirectMemory/DirectMemory.hpp"
@@ -21,22 +24,6 @@
 #include <unistd.h>
 #endif
 
-extern "C" int* APS5_VABI __error_nid_postfix();
-extern "C" int APS5_VABI getpid_nid_postfix();
-extern "C" std::uint64_t APS5_VABI sceKernelGetTscFrequency(void);
-struct GuestRlimit {
-    std::int64_t rlim_cur;
-    std::int64_t rlim_max;
-};
-extern "C" int APS5_VABI getrlimit_nid_postfix(int resource, GuestRlimit* limit);
-
-struct SceKernelSystemSwVersion {
-    std::uint64_t size;
-    char versionString[0x1C];
-    std::uint32_t version;
-};
-extern "C" int APS5_VABI sceKernelVirtualQuery(const void* addr, int flags, VirtualQueryInfo* info, uint64_t info_size);
-
 namespace {
 
 int CopyOut(const void* value, std::size_t size, void* oldValue, std::size_t* oldLength) {
@@ -45,7 +32,7 @@ int CopyOut(const void* value, std::size_t size, void* oldValue, std::size_t* ol
         return 0;
     }
     const std::size_t copied = std::min(oldLength != nullptr ? *oldLength : 0, size);
-    std::memcpy(oldValue, value, copied);
+    if (copied != 0) std::memcpy(oldValue, value, copied);
     if (oldLength != nullptr) *oldLength = copied;
     if (copied < size) {
         *__error_nid_postfix() = 12;
@@ -204,7 +191,7 @@ std::int64_t APS5_VABI sysconf_nid_postfix(int name) {
             result = 128;
             break;
         case 5: { // _SC_OPEN_MAX
-            GuestRlimit limit{};
+            GuestResourceLimit limit{};
             if (getrlimit_nid_postfix(8, &limit) == 0) {
                 result = limit.rlim_cur;
             }

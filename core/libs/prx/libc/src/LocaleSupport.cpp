@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include <climits>
 #include <clocale>
 #include <cstddef>
@@ -23,11 +24,6 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
 #include "SceTypes.hpp"
-
-extern "C" {
-void* APS5_VABI _Znwm_nid_postfix(std::size_t size);
-void APS5_VABI _ZdlPv_nid_postfix(void* pointer);
-}
 
 namespace {
 
@@ -110,6 +106,7 @@ void APS5_VABI DestroyCollate(GuestLocale::Facet*) {}
 void APS5_VABI DeleteCollate(GuestLocale::Facet* self) {
     if (self == nullptr) throw std::invalid_argument("collate delete: null facet");
     _ZdlPv_nid_postfix(self);
+
 }
 
 void APS5_VABI RetainFacet(GuestLocale::Facet* self) {
@@ -304,6 +301,7 @@ constexpr std::array<short, 257> MakeClassificationTable() {
         if (value < 32 || value == 127) mask |= 0x80;
         if (value == ' ') mask |= 0x04;
         if (value >= '\t' && value <= '\r') mask |= 0x40;
+        if (value == '\t') mask |= 0x400;
         if (value >= 'A' && value <= 'Z') mask |= 0x02;
         if (value >= 'a' && value <= 'z') mask |= 0x10;
         if (value >= '0' && value <= '9') mask |= 0x20;
@@ -331,18 +329,18 @@ constexpr auto g_lowerTable = MakeCaseTable(false);
 constexpr auto g_upperTable = MakeCaseTable(true);
 
 void ValidateCharacter(int value) {
-    if (value != EOF && (value < 0 || value > UCHAR_MAX)) throw std::invalid_argument("Invalid character value");
+    if (value < SCHAR_MIN || value > UCHAR_MAX) throw std::invalid_argument("Invalid character value");
 }
 
-int ClassifyCharacter(int value, std::ctype_base::mask mask) {
+int ClassifyCharacter(int value, short mask) {
     ValidateCharacter(value);
     if (value == EOF) return 0;
-    return std::use_facet<std::ctype<char>>(std::locale::classic()).is(mask, static_cast<char>(value));
+    return g_classificationTable[static_cast<std::size_t>(value < 0 ? value + UCHAR_MAX + 1 : value) + 1] & mask;
 }
 
 int ConvertCharacter(int value, bool upper) {
     ValidateCharacter(value);
-    if (value == EOF) return EOF;
+    if (value < 0) return value;
     const auto& facet = std::use_facet<std::ctype<char>>(std::locale::classic());
     const auto character = static_cast<char>(value);
     return static_cast<unsigned char>(upper ? facet.toupper(character) : facet.tolower(character));
@@ -352,18 +350,18 @@ int ConvertCharacter(int value, bool upper) {
 
 extern "C" {
 
-int APS5_VABI isupper_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::upper); }
-int APS5_VABI islower_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::lower); }
-int APS5_VABI isalpha_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::alpha); }
-int APS5_VABI isdigit_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::digit); }
-int APS5_VABI isalnum_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::alnum); }
-int APS5_VABI isspace_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::space); }
-int APS5_VABI isblank_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::blank); }
-int APS5_VABI iscntrl_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::cntrl); }
-int APS5_VABI isprint_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::print); }
-int APS5_VABI isgraph_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::graph); }
-int APS5_VABI ispunct_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::punct); }
-int APS5_VABI isxdigit_nid_postfix(int c) { return ClassifyCharacter(c, std::ctype_base::xdigit); }
+int APS5_VABI isupper_nid_postfix(int c) { return ClassifyCharacter(c, 0x02); }
+int APS5_VABI islower_nid_postfix(int c) { return ClassifyCharacter(c, 0x10); }
+int APS5_VABI isalpha_nid_postfix(int c) { return ClassifyCharacter(c, 0x12); }
+int APS5_VABI isdigit_nid_postfix(int c) { return ClassifyCharacter(c, 0x20); }
+int APS5_VABI isalnum_nid_postfix(int c) { return ClassifyCharacter(c, 0x32); }
+int APS5_VABI isspace_nid_postfix(int c) { return ClassifyCharacter(c, 0x44); }
+int APS5_VABI isblank_nid_postfix(int c) { return ClassifyCharacter(c, 0x404); }
+int APS5_VABI iscntrl_nid_postfix(int c) { return ClassifyCharacter(c, 0x80); }
+int APS5_VABI isprint_nid_postfix(int c) { return ClassifyCharacter(c, 0x3e); }
+int APS5_VABI isgraph_nid_postfix(int c) { return ClassifyCharacter(c, 0x3a); }
+int APS5_VABI ispunct_nid_postfix(int c) { return ClassifyCharacter(c, 0x08); }
+int APS5_VABI isxdigit_nid_postfix(int c) { return ClassifyCharacter(c, 0x01); }
 int APS5_VABI isascii_nid_postfix(int c) { return (c & ~0x7F) == 0; }
 int APS5_VABI toascii_nid_postfix(int c) { return c & 0x7F; }
 int APS5_VABI toupper_nid_postfix(int c) { return ConvertCharacter(c, true); }
@@ -386,6 +384,8 @@ std::uint64_t _ZNSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE2idE_n
 std::uintptr_t _ZTVSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE_nid_postfix[14] {};
 std::uint64_t _ZNSt8numpunctIcE2idE_nid_postfix = 0;
 std::uint64_t _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE2idE_nid_postfix = 0;
+std::uintptr_t _ZTVSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix[13] {};
+std::uintptr_t _ZTVSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEE_nid_postfix[13] {};
 
 std::streamoff _ZSt7_BADOFF_nid_postfix = -1;
 std::fpos_t _ZSt4_Fpz_nid_postfix {};
@@ -410,11 +410,6 @@ GuestLocale::IosBase* APS5_VABI SetStreamWidth(GuestLocale::IosBase* stream, std
     stream->width = width;
     return stream;
 }
-
-struct StreamManipulator {
-    GuestLocale::IosBase* (APS5_VABI* function)(GuestLocale::IosBase*, std::int32_t);
-    std::int32_t argument;
-};
 
 static_assert(sizeof(StreamManipulator) == 0x10);
 
@@ -455,9 +450,7 @@ GuestLocale::Implementation* APS5_VABI _ZNSt6locale16_GetgloballocaleEv_nid_post
 }
 
 namespace {
-struct GuestLocaleFacade {
-    GuestLocale::Implementation* implementation;
-};
+
 GuestLocaleFacade g_classicLocaleFacade{&g_classicLocale};
 }
 
@@ -638,6 +631,7 @@ void APS5_VABI _init_env_nid_postfix() {
 void APS5_VABI init_env_nid_postfix(const InitEnvParams* params) {
     (void)params;
     _init_env_nid_postfix();
+
 }
 
 SonyLconv* APS5_VABI localeconv_nid_postfix(void) {
