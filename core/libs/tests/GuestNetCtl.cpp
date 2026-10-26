@@ -232,12 +232,17 @@ void CheckIpcIntCallbacks() {
     Require(sceNetCtlUnregisterCallback(internal) == 0);
     Require(sceNetCtlUnregisterCallbackIpcInt(internal) == idNotFound);
 
+    int stateV6 = -1;
+    Require(sceNetCtlGetStateV6(&stateV6) == 0);
+    const int eventV6 = stateV6 == kStateIpObtained ? kEventIpObtained : kEventDisconnected;
     int internalV6 = -1;
     Require(sceNetCtlRegisterCallbackV6IpcInt(RecordIpcInt, &probe, &internalV6) == 0 && internalV6 == 0);
     int sharedV6 = -1;
     Require(sceNetCtlRegisterCallbackV6(RecordIpcInt, &probe, &sharedV6) == 0 && sharedV6 == 1);
     Require(sceNetCtlCheckCallback() == 0);
-    Require(g_ipcInt.calls == 2);
+    Require(g_ipcInt.calls == 4 && g_ipcInt.event == eventV6 && g_ipcInt.arg == &probe);
+    Require(sceNetCtlCheckCallback() == 0);
+    Require(g_ipcInt.calls == 4 && g_ipcInt.event == eventV6 && g_ipcInt.arg == &probe);
     Require(sceNetCtlUnregisterCallbackV6IpcInt(sharedV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6(internalV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6IpcInt(internalV6) == idNotFound);
