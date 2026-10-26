@@ -1163,8 +1163,13 @@ void importEvictionFramesTests(const Context& context) {
         for (int lookup = 0; lookup < 300; ++lookup) static_cast<void>(HostImportFor(importing, at[index], 16));
         return HostImportSerial(importing, at[index], 16, false);
     };
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     std::array<std::uint64_t, 2> serials{use(0), use(1)};
     Require(serials[0] != 0 && serials[1] != 0, "two ranges under a budget for two were not imported");
+    const auto epoch = HostImportEpoch();
+    NoteHostImportFrame();
+    Require(HostImportEpoch() == epoch, "a frame end with no import change moved the imports epoch");
     for (int frame = 0; frame < 10; ++frame) {
         Require(use(2) == 0, "a range over the budget evicted an import used in the same frame (frame " + std::to_string(frame) + ")");
         NoteHostImportFrame();
@@ -3544,7 +3549,7 @@ void RunHeapMirrorRunUnwatchTests(const Context& context, const BdaTestAccess& a
     std::cout << "an address-based build refreshes the unwatched heap of a run in full and its watched neighbour by its writes\n";
 }
 
-void RunAddressCopyCapTests(const Context& context, const BdaTestAccess& access, bool remembered) {
+void RunAddressCopyCapTests(const Context& context, const BdaTestAccess& access, bool remembered, int frames) {
     constexpr std::size_t block = 65536;
     constexpr std::size_t heapBytes = 32 * block;
     constexpr std::size_t idleBytes = 16 * block;
@@ -3639,8 +3644,7 @@ void RunAddressCopyCapTests(const Context& context, const BdaTestAccess& access,
         SetAddressCopyLimit(0);
         unrelated(true);
     }
-    NoteHostImportFrame();
-    NoteHostImportFrame();
+    for (int frame = 0; frame < frames; ++frame) NoteHostImportFrame();
     for (int use = 0; use < 300; ++use) Require(HostImportFor(importing, busy, 64) != nullptr, "the busy range lost its import");
     if (!remembered) unwatch();
     const auto refused = builds();
