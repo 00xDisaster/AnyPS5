@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -536,22 +537,25 @@ def branch_variants(body):
     root.append(body[position:])
 
     def expand(items):
-        variants = [""]
+        parts = []
         for item in items:
             if isinstance(item, str):
-                variants = [variant + item for variant in variants]
+                parts.append((item,))
                 continue
             choices = [choice for alternative in item["alternatives"] for choice in expand(alternative)]
-            variants = [variant + choice for variant in variants for choice in choices]
-            if len(variants) > BRANCH_VARIANT_LIMIT:
+            if len(choices) > BRANCH_VARIANT_LIMIT:
                 raise AuditError(f"more than {BRANCH_VARIANT_LIMIT} preprocessor branch combinations in one function")
-        return variants
+            parts.append(choices)
+        for count, variant in enumerate(itertools.product(*parts), 1):
+            if count > BRANCH_VARIANT_LIMIT:
+                raise AuditError(f"more than {BRANCH_VARIANT_LIMIT} preprocessor branch combinations in one function")
+            yield "".join(variant)
 
     return expand(root)
 
 
 def variant_calls(body):
-    return [unconditional_calls(variant) for variant in branch_variants(body)]
+    return (unconditional_calls(variant) for variant in branch_variants(body))
 
 
 def unconditional_calls(body):
