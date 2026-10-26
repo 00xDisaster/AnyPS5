@@ -3971,11 +3971,6 @@ void multisampleTests() {
     for (const auto [packedInfo, name] : {std::pair{6u << 2u, "10_11_11 unorm"}, std::pair{(7u << 2u) | (7u << 8u) | (2u << 11u) | 0x40000u, "11_11_10 float"}}) {
         auto packed = rasterizedResolve;
         for (const auto offset : {0x31cu, 0x32bu}) packed.context[offset] = (packed.context[offset] & ~0x41f7cu) | packedInfo;
-        if (std::string_view(name) == "11_11_10 float") {
-            const auto packedPass = DecodeColorMetadataPass(packed);
-            Require(packedPass.has_value() && packedPass->mode == ColorMetadataPass::Mode::Resolve && packedPass->source.has_value() && packedPass->source->packing == ShaderRecompiler::ColorExportPacking::Float11_11_10 && packedPass->source->samples == 2 && packedPass->targets.size() == 1 && packedPass->targets[0].samples == 1, "a CB resolve of an 11_11_10 float target must decode into a resolve pass");
-            continue;
-        }
         expectFailure([&] { DecodeColorMetadataPass(packed); }, std::string("CB resolves of ") + name + " color targets");
     }
     queue = rasterizedResolve;

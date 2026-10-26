@@ -219,19 +219,6 @@ foreach(agcFirstSampleClass IN ITEMS Float Uint Sint)
     )
     list(APPEND agcPresentationShaderHeaders ${agcFirstSampleShaderHeader})
 endforeach()
-set(agcPackedFloatResolveShaderSource ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/shaders/PackedFloatResolve.frag)
-set(agcPackedFloatResolveShaderSpv ${agcTextureDetileGeneratedDir}/PackedFloatResolve.spv)
-set(agcPackedFloatResolveShaderHeader ${agcTextureDetileGeneratedDir}/PackedFloatResolve_spv.h)
-add_custom_command(
-        OUTPUT "${agcPackedFloatResolveShaderHeader}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTextureDetileGeneratedDir}"
-        COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcPackedFloatResolveShaderSpv}" "${agcPackedFloatResolveShaderSource}"
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${agcPackedFloatResolveShaderSpv} -DOUTPUT=${agcPackedFloatResolveShaderHeader}
-        -DSYMBOL=PACKED_FLOAT_RESOLVE_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
-        DEPENDS "${agcPackedFloatResolveShaderSource}" glslang-standalone
-        VERBATIM
-)
-list(APPEND agcPresentationShaderHeaders ${agcPackedFloatResolveShaderHeader})
 foreach(agcOverlayStage IN ITEMS Vert Frag)
     string(TOLOWER "${agcOverlayStage}" agcOverlayExtension)
     string(TOUPPER "${agcOverlayStage}" agcOverlaySymbol)
@@ -333,7 +320,6 @@ set(agcDriverSources
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/DepthSurface.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/MultisampleTarget.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/FirstSampleCopy.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/PackedFloatResolve.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/ColorTargetLayout.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/ColorTargetTransfer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/Pipeline.cpp
@@ -2392,28 +2378,6 @@ foreach(agcReadbackTestKind IN ITEMS Vertex Uint Depth)
     target_sources(agc_driver_multisample_readback_tests PRIVATE ${agcReadbackTestHeader})
 endforeach()
 target_include_directories(agc_driver_multisample_readback_tests PRIVATE ${agcTestShaderGeneratedRoot})
-
-foreach(agcPackedResolveTestStage IN ITEMS Vertex Fill)
-    if(agcPackedResolveTestStage STREQUAL "Vertex")
-        set(agcPackedResolveTestSource ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/MultisampleReadback.vert)
-    else()
-        set(agcPackedResolveTestSource ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/PackedFloatResolveFill.frag)
-    endif()
-    string(TOUPPER "${agcPackedResolveTestStage}" agcPackedResolveTestSymbol)
-    set(agcPackedResolveTestSpv ${agcTestShaderGeneratedRoot}/PackedFloatResolveTest${agcPackedResolveTestStage}.spv)
-    set(agcPackedResolveTestHeader ${agcTestShaderGeneratedRoot}/PackedFloatResolveTest${agcPackedResolveTestStage}_spv.h)
-    add_custom_command(
-        OUTPUT "${agcPackedResolveTestHeader}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTestShaderGeneratedRoot}"
-        COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcPackedResolveTestSpv}" "${agcPackedResolveTestSource}"
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${agcPackedResolveTestSpv} -DOUTPUT=${agcPackedResolveTestHeader}
-        -DSYMBOL=PACKED_FLOAT_RESOLVE_TEST_${agcPackedResolveTestSymbol}_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
-        DEPENDS "${agcPackedResolveTestSource}" glslang-standalone
-        VERBATIM
-    )
-    target_sources(agc_driver_packed_float_resolve_tests PRIVATE ${agcPackedResolveTestHeader})
-endforeach()
-target_include_directories(agc_driver_packed_float_resolve_tests PRIVATE ${agcTestShaderGeneratedRoot})
 
 target_include_directories(agc_driver_dual_source_blend_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
 
