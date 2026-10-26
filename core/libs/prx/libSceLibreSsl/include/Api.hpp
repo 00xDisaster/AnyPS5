@@ -9,6 +9,14 @@ struct Asn1String {
     std::int64_t flags;
 };
 
+struct LibreSslExData {
+    void* stack;
+};
+
+using LibreSslExNew = int (APS5_VABI*)(void* parent, void* pointer, LibreSslExData* data, int index, std::int64_t argl, void* argp);
+using LibreSslExFree = void (APS5_VABI*)(void* parent, void* pointer, LibreSslExData* data, int index, std::int64_t argl, void* argp);
+using LibreSslExDup = int (APS5_VABI*)(LibreSslExData* to, LibreSslExData* from, void* fromData, int index, std::int64_t argl, void* argp);
+
 inline constexpr int MaxRounds = 14;
 
 struct AesKey {
@@ -263,7 +271,7 @@ int APS5_VABI SSL_CTX_ctrl_nid_postfix(void);
 int APS5_VABI SSL_CTX_free_nid_postfix(void);
 int APS5_VABI SSL_CTX_get_cert_store_nid_postfix(void);
 int APS5_VABI SSL_CTX_get_ex_data_nid_postfix(void);
-int APS5_VABI SSL_CTX_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, void* newFunction, void* dupFunction, void* freeFunction);
+int APS5_VABI SSL_CTX_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, LibreSslExNew newFunction, LibreSslExDup dupFunction, LibreSslExFree freeFunction);
 int APS5_VABI SSL_CTX_get_verify_mode_nid_postfix(void);
 int APS5_VABI SSL_CTX_load_verify_locations_nid_postfix(void);
 int APS5_VABI SSL_CTX_load_verify_mem_nid_postfix(void);
@@ -308,7 +316,7 @@ int APS5_VABI SSL_get_current_cipher_nid_postfix(void);
 int APS5_VABI SSL_get_error_nid_postfix(void);
 int APS5_VABI SSL_get_ex_data_nid_postfix(void);
 int APS5_VABI SSL_get_ex_data_X509_STORE_CTX_idx_nid_postfix(void);
-int APS5_VABI SSL_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, void* newFunction, void* dupFunction, void* freeFunction);
+int APS5_VABI SSL_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, LibreSslExNew newFunction, LibreSslExDup dupFunction, LibreSslExFree freeFunction);
 int APS5_VABI SSL_get_fd_nid_postfix(void);
 int APS5_VABI SSL_get_peer_cert_chain_nid_postfix(void);
 int APS5_VABI SSL_get_peer_certificate_nid_postfix(void);

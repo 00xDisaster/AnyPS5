@@ -18,9 +18,9 @@ constexpr int ClassCount = 16;
 struct ExDataFunctions {
     std::int64_t argl;
     void* argp;
-    void* newFunction;
-    void* dupFunction;
-    void* freeFunction;
+    LibreSslExNew newFunction;
+    LibreSslExDup dupFunction;
+    LibreSslExFree freeFunction;
 };
 
 std::mutex classesLock;
@@ -43,11 +43,11 @@ int NewIndex(int classIndex, const ExDataFunctions& functions) {
 
 extern "C" {
 
-int APS5_VABI SSL_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, void* newFunction, void* dupFunction, void* freeFunction) {
+int APS5_VABI SSL_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, LibreSslExNew newFunction, LibreSslExDup dupFunction, LibreSslExFree freeFunction) {
     return NewIndex(SslClass, {argl, argp, newFunction, dupFunction, freeFunction});
 }
 
-int APS5_VABI SSL_CTX_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, void* newFunction, void* dupFunction, void* freeFunction) {
+int APS5_VABI SSL_CTX_get_ex_new_index_nid_postfix(std::int64_t argl, void* argp, LibreSslExNew newFunction, LibreSslExDup dupFunction, LibreSslExFree freeFunction) {
     return NewIndex(SslContextClass, {argl, argp, newFunction, dupFunction, freeFunction});
 }
 

@@ -1,4 +1,5 @@
 #include "prx/libSceLibreSsl/libSceLibreSsl.hpp"
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -9,6 +10,18 @@ namespace {
 void Require(bool condition, const char* message) {
     if (condition) return;
     std::fprintf(stderr, "failed: %s\n", message);
+    std::abort();
+}
+
+int APS5_VABI NewCallback(void*, void*, LibreSslExData*, int, std::int64_t, void*) {
+    std::abort();
+}
+
+void APS5_VABI FreeCallback(void*, void*, LibreSslExData*, int, std::int64_t, void*) {
+    std::abort();
+}
+
+int APS5_VABI DupCallback(LibreSslExData*, LibreSslExData*, void*, int, std::int64_t, void*) {
     std::abort();
 }
 
@@ -37,6 +50,11 @@ int main() {
     CRYPTO_cleanup_all_ex_data_nid_postfix();
     Require(NewContextIndex() == 0, "cleanup can be repeated");
 
+    CRYPTO_cleanup_all_ex_data_nid_postfix();
+    int argument = 0;
+    Require(SSL_get_ex_new_index_nid_postfix(-5, &argument, NewCallback, DupCallback, FreeCallback) == 0, "typed SSL callbacks are accepted and stored");
+    Require(SSL_CTX_get_ex_new_index_nid_postfix(9, &argument, NewCallback, DupCallback, FreeCallback) == 0, "typed SSL_CTX callbacks are accepted and stored");
+    Require(NewSslIndex() == 1 && NewContextIndex() == 1, "indices with callbacks count like any other");
     CRYPTO_cleanup_all_ex_data_nid_postfix();
     std::vector<std::thread> threads;
     std::vector<int> indices(64, -1);
