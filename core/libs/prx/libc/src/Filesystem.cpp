@@ -98,7 +98,7 @@ extern "C" int APS5_VABI access_nid_postfix(const char* path, int mode) {
     }
 }
 
-bool ExecutePermission_nid_no_patch(const std::filesystem::path& native) {
+extern "C" bool ExecutePermission_nid_no_patch(const std::filesystem::path& native) {
 #ifdef _WIN32
     const auto target = FollowedPath(native);
     if (target.empty() || GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) return false;
