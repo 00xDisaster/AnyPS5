@@ -6,6 +6,7 @@ if(BUILD_TESTING)
     add_test_executable(guest_disc_id_tests ${LIBS_INCLUDE_DIR}/tests/GuestDiscId.cpp)
     target_include_directories(guest_disc_id_tests PRIVATE ${LIBS_INCLUDE_DIR})
     target_link_libraries(guest_disc_id_tests PRIVATE libSceDiscId libc)
+    configure_windows_unwind(guest_disc_id_tests)
     add_test(NAME guest_disc_id COMMAND guest_disc_id_tests)
     if(WIN32)
         set_tests_properties(guest_disc_id PROPERTIES ENVIRONMENT_MODIFICATION
