@@ -67,12 +67,24 @@ std::optional<std::uint32_t> configuredResolution() {
 }
 
 std::vector<const char*> windowExtensions(SDL_Window* window) {
+#ifdef __APPLE__
+    std::vector<const char*> extensions;
+    RunOnMainThread([&] {
+        unsigned extensionCount = 0;
+        if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr)) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
+        extensions.resize(extensionCount);
+        if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, extensions.data())) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
+        extensions.resize(extensionCount);
+    });
+    return extensions;
+#else
     unsigned extensionCount = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr)) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
     std::vector<const char*> extensions(extensionCount);
     if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, extensions.data())) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
     extensions.resize(extensionCount);
     return extensions;
+#endif
 }
 
 VkSurfaceKHR createWindowSurface(void* context, VkInstance instance) {
@@ -88,6 +100,20 @@ VkSurfaceKHR createWindowSurface(void* context, VkInstance instance) {
 }
 
 void windowDrawableSize(void* context, std::uint32_t* width, std::uint32_t* height) {
+#ifdef __APPLE__
+    bool minimized = false;
+    int drawableWidth = 0;
+    int drawableHeight = 0;
+    RunOnMainThread([&] {
+        minimized = (SDL_GetWindowFlags(static_cast<SDL_Window*>(context)) & SDL_WINDOW_MINIMIZED) != 0;
+        if (!minimized) SDL_Vulkan_GetDrawableSize(static_cast<SDL_Window*>(context), &drawableWidth, &drawableHeight);
+    });
+    if (minimized) {
+        *width = 0;
+        *height = 0;
+        return;
+    }
+#else
     if ((SDL_GetWindowFlags(static_cast<SDL_Window*>(context)) & SDL_WINDOW_MINIMIZED) != 0) {
         *width = 0;
         *height = 0;
@@ -96,6 +122,7 @@ void windowDrawableSize(void* context, std::uint32_t* width, std::uint32_t* heig
     int drawableWidth = 0;
     int drawableHeight = 0;
     SDL_Vulkan_GetDrawableSize(static_cast<SDL_Window*>(context), &drawableWidth, &drawableHeight);
+#endif
     *width = drawableWidth > 0 ? static_cast<std::uint32_t>(drawableWidth) : 0;
     *height = drawableHeight > 0 ? static_cast<std::uint32_t>(drawableHeight) : 0;
 }
@@ -532,10 +559,19 @@ std::uint32_t VideoOutDriver::GetDisplayResolution() {
 }
 
 void VideoOutDriver::updateDisplayRefreshRate() {
+#ifdef __APPLE__
+    SDL_DisplayMode mode{};
+    RunOnMainThread([&] {
+        const int display = SDL_GetWindowDisplayIndex(window.Handle());
+        if (display < 0) throw std::runtime_error(std::string("SDL_GetWindowDisplayIndex failed: ") + SDL_GetError());
+        if (SDL_GetCurrentDisplayMode(display, &mode) != 0) throw std::runtime_error(std::string("SDL_GetCurrentDisplayMode failed: ") + SDL_GetError());
+    });
+#else
     const int display = SDL_GetWindowDisplayIndex(window.Handle());
     if (display < 0) throw std::runtime_error(std::string("SDL_GetWindowDisplayIndex failed: ") + SDL_GetError());
     SDL_DisplayMode mode{};
     if (SDL_GetCurrentDisplayMode(display, &mode) != 0) throw std::runtime_error(std::string("SDL_GetCurrentDisplayMode failed: ") + SDL_GetError());
+#endif
     displayRefreshRate.store(mode.refresh_rate);
     displayResolution.store(resolutionIndex(mode.w, mode.h));
 }
@@ -739,7 +775,11 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 processFlip(*current);
                 int windowWidth = 0;
                 int windowHeight = 0;
+#ifdef __APPLE__
+                if (window.Handle() != nullptr) RunOnMainThread([&] { SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight); });
+#else
                 if (window.Handle() != nullptr) SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight);
+#endif
                 if (windowWidth > 0 && windowHeight > 0) {
                     const auto presented = AgcDriver::ComputeContainSize_nid_postfix(current->width, current->height, static_cast<std::uint32_t>(windowWidth), static_cast<std::uint32_t>(windowHeight), true);
                     mouseInput.SetPresentation(current->width, current->height, presented.width, presented.height);
