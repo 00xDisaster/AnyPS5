@@ -57,10 +57,6 @@ int main() {
     CheckClock(&attr, 0);
     CheckClockRefused(&attr, nullptr);
     CheckClock(&attr, 0);
-    for (const KernelClockid clock : {0, 1, 2, Monotonic, 5, 12}) {
-        Require(scePthreadCondattrSetclock(&attr, clock) == SCE_OK);
-        Require(pthread_condattr_setclock_nid_postfix(&attr, clock) == 0);
-    }
     PthreadCondattr other = nullptr;
     Require(pthread_condattr_init_nid_postfix(&other) == 0);
     for (const KernelClockid clock : {0, 1, 2, Monotonic}) {
@@ -82,7 +78,9 @@ int main() {
     Require(pthread_condattr_getpshared_nid_postfix(&attr, &sharing) == 0 && sharing == 0);
     for (const KernelClockid clock : {-1, 3, 5, 12, 13, 14, 15}) {
         Require(scePthreadCondattrSetclock(&attr, clock) == SceEinval);
+        CheckClock(&attr, Monotonic);
         Require(pthread_condattr_setclock_nid_postfix(&attr, clock) == GuestEinval);
+        CheckClock(&attr, Monotonic);
     }
     for (const int invalid : {1, 2, -1}) {
         Require(pthread_condattr_setpshared_nid_postfix(&attr, invalid) == GuestEinval);
