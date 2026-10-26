@@ -2,7 +2,7 @@
 
 ### Functional
 
-- [SSL_select_next_proto](../../../core/libs/prx/libSceLibreSsl/src/ProtocolSelection.cpp) rejects null outputs, empty lists, zero-length names and truncated encodings instead of implementing the reported firmware behavior. [Independent firmware 13.42 evidence](https://github.com/boykopovar/AnyPS5/pull/9785#issuecomment-6406712390) reports host-PC execution of `libSceLibreSsl.sprx` at `0xda6d0`, with matching six-argument valid-list selection, status, borrowed pointer and length. That report also observes negotiation of zero-length entries, unchecked fallback lengths and an empty-supported-list read; these paths remain unsupported here. Null outputs and console-hardware behavior remain unmeasured. The author-sourced signature and valid-list contract follow LibreSSL 3.4.1.
+- [SSL_select_next_proto](../../../core/libs/prx/libSceLibreSsl/src/ProtocolSelection.cpp) leaves empty lists, zero-length names and truncated encodings unsupported and throws instead of following the reported firmware behavior. Null outputs also throw; their firmware behavior is unmeasured. [Independent firmware 13.42 evidence](https://github.com/boykopovar/AnyPS5/pull/9785#issuecomment-6406712390) reports host-PC execution of `libSceLibreSsl.sprx` at `0xda6d0`, with matching six-argument valid-list selection, status, borrowed pointer and length. That report also observes negotiation of zero-length entries, unchecked fallback lengths and an empty-supported-list read; these paths remain unsupported here. Null outputs and console-hardware behavior remain unmeasured. The author-sourced signature and valid-list contract follow LibreSSL 3.4.1.
 
 ### Unknown function info
 
