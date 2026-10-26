@@ -447,6 +447,7 @@ python3 tools/import_audit.py app.registry.json app.libc.prx.guest.prx.registry.
 | Class | Meaning |
 |-------|---------|
 | `implemented` | A built library exports the NID and its function is not a throwing stub. |
+| `partial` | Exported, but the function throws for inputs whose behaviour is unknown. |
 | `stub` | Exported, but the whole function calls `NotImplemented_nid_no_patch`: the game loads and throws when it calls it. |
 | `absent` | No built library exports the NID: the loader fails. |
 | `module` | The import names a file found in `--modules` (the title's own library), which is trusted to provide it. |
