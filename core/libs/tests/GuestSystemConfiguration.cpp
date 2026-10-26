@@ -1004,6 +1004,17 @@ int main() {
     GuestResourceLimit nofileLimit{};
     Require(getrlimit_nid_postfix(8, &nofileLimit) == 0);
     Require(sysconf_nid_postfix(5) == nofileLimit.rlim_cur);
+    GuestResourceLimit nprocLimit{};
+    Require(getrlimit_nid_postfix(7, &nprocLimit) == 0);
+    Require(nprocLimit.rlim_cur == 1604);
+    Require(sysconf_nid_postfix(2) == nprocLimit.rlim_cur);
+    GuestResourceLimit stackLimit{};
+    Require(getrlimit_nid_postfix(3, &stackLimit) == 0);
+    Require(sysconf_nid_postfix(2) != stackLimit.rlim_cur);
+    Require(sysconf_nid_postfix(4) == 1023);
+    Require(sysconf_nid_postfix(26) == std::min<std::int64_t>(nofileLimit.rlim_cur, 32767));
+    Require(sysconf_nid_postfix(72) == 255);
+    Require(sysconf_nid_postfix(73) == 33);
     Require(sysconf_nid_postfix(47) == 0x4000);
     Require(sysconf_nid_postfix(56) == 1024);
     Require(getpagesize_nid_postfix() == sysconf_nid_postfix(47));
