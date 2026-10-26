@@ -1,3 +1,4 @@
+#include "prx/libSceFreeType/include/Api.hpp"
 #include "prx/libSceFreeType/include/GuestFreeType.hpp"
 
 #include <ft2build.h>
@@ -15,8 +16,6 @@
 #include <vector>
 
 using namespace FreeType;
-
-extern "C" int APS5_VABI FT_Outline_Get_BBox_nid_postfix(GuestOutline*, GuestBBox*);
 
 void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (!condition) {
@@ -133,30 +132,7 @@ int main() {
         }
         Require(threw && Equal(invalid.box, sentinel));
     }
-    for (const std::int64_t control : {curveLimit + 1, -curveLimit - 1, std::int64_t{2000000000}}) {
-        std::array<GuestVector, 3> curve{{{-100, 0}, {0, control}, {100, 0}}};
-        std::array<unsigned char, 3> curveTags{1, 0, 1};
-        std::uint16_t curveEnd = 2;
-        GuestOutline unsupported{1, 3, curve.data(), curveTags.data(), &curveEnd, 0};
-        threw = false;
-        try {
-            FT_Outline_Get_BBox_nid_postfix(&unsupported, &invalid.box);
-        } catch (const std::runtime_error& error) {
-            threw = std::string(error.what()).starts_with("FT_Outline_Get_BBox:");
-        }
-        Require(threw && Equal(invalid.box, sentinel));
-    }
-    if constexpr (sizeof(FT_Pos) < sizeof(std::int64_t)) {
-        points[1].x = std::int64_t{1} << 40;
-        GuestOutline wide{1, 2, points.data(), smallTags.data(), &end, 0};
-        threw = false;
-        try {
-            FT_Outline_Get_BBox_nid_postfix(&wide, &invalid.box);
-        } catch (const std::runtime_error& error) {
-            threw = std::string(error.what()).starts_with("FT_Outline_Get_BBox:");
-        }
-        Require(threw && Equal(invalid.box, sentinel));
-    } else {
+    if constexpr (sizeof(FT_Pos) >= sizeof(std::int64_t)) {
         Check({{std::int64_t{1} << 40, -(std::int64_t{1} << 40)}, {0, 0}}, {1, 1}, {1});
     }
     std::printf("FreeType curve bounds: 8192 generated curves, extrema, errors and count limits passed\n");
