@@ -2004,6 +2004,11 @@ if(BUILD_TESTING)
         add_test(NAME guest_raise_in_system_call COMMAND guest_raise_in_system_call_tests)
         set_tests_properties(guest_raise_in_system_call PROPERTIES TIMEOUT 30 ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
+        foreach(delay IN ITEMS raise return)
+            add_test(NAME guest_raise_in_system_call_delay_${delay} COMMAND guest_raise_in_system_call_tests --delay-${delay})
+            set_tests_properties(guest_raise_in_system_call_delay_${delay} PROPERTIES TIMEOUT 30 ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
+        endforeach()
         add_test_executable(guest_raise_in_host_code_tests ${LIBS_INCLUDE_DIR}/tests/GuestRaiseInHostCode.cpp)
         target_include_directories(guest_raise_in_host_code_tests PRIVATE ${LIBS_INCLUDE_DIR})
         target_link_libraries(guest_raise_in_host_code_tests PRIVATE libkernel libc)

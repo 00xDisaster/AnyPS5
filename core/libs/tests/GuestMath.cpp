@@ -651,6 +651,26 @@ static void CheckTanhConsoleBits() {
     }
 }
 
+static void CheckRoundingNaNConsoleBits() {
+    constexpr std::uint64_t cases[][2] = {
+        {0x7ff0000000000001ull, 0x7ff8000000000001ull}, {0xfff4000000000123ull, 0xfffc000000000123ull}, {0x7ff8000000000456ull, 0x7ff8000000000456ull},
+        {0x7ff0000000000000ull, 0x7ff0000000000000ull}, {0xfff0000000000000ull, 0xfff0000000000000ull},
+    };
+    constexpr std::uint32_t floatCases[][2] = {
+        {0x7f800001u, 0x7fc00001u}, {0xffa00123u, 0xffe00123u}, {0x7fc00456u, 0x7fc00456u}, {0x7f800000u, 0x7f800000u}, {0xff800000u, 0xff800000u},
+    };
+    for (const auto function : {trunc_nid_postfix, ceil_nid_postfix, floor_nid_postfix, nearbyint_nid_postfix}) {
+        for (const auto& [input, expected] : cases) {
+            Require(std::bit_cast<std::uint64_t>(function(std::bit_cast<double>(input))) == expected);
+        }
+    }
+    for (const auto function : {truncf_nid_postfix, ceilf_nid_postfix, floorf_nid_postfix, nearbyintf_nid_postfix}) {
+        for (const auto& [input, expected] : floatCases) {
+            Require(std::bit_cast<std::uint32_t>(function(std::bit_cast<float>(input))) == expected);
+        }
+    }
+}
+
 static void CheckAsinl() {
     const struct { std::uint64_t inputMantissa; std::uint16_t inputSignExponent; std::uint64_t outputMantissa; std::uint16_t outputSignExponent; } cases[] = {
         {0, 0x0000, 0, 0x0000}, {0, 0x8000, 0, 0x8000},
@@ -1744,6 +1764,7 @@ int main() {
     CheckLog1pConsoleBits();
     CheckNextafterConsoleBits();
     CheckTanhConsoleBits();
+    CheckRoundingNaNConsoleBits();
     CheckAsinl();
     Require(scalbn_nid_postfix(0.75, -2) == 0.1875);
     Require(scalbnf_nid_postfix(0.75f, 4) == 12.f);
