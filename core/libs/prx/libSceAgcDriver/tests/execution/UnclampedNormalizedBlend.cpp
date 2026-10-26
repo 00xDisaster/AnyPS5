@@ -106,6 +106,7 @@ struct DrawSetup {
     std::span<const std::array<float, 4>> vertices = Triangle;
     std::uint64_t depth = 0;
     bool depthWrite = false;
+    bool withoutInterlock = false;
 };
 
 struct Block {
@@ -180,7 +181,10 @@ struct BlendCase {
 
 
 void Draw(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ColorTarget color, const BlendCase& blendCase, std::uint32_t exportFormat, std::span<const std::uint32_t> pixelCode, const DrawSetup& setup = {}) {
-    const auto target = device.Target();
+    auto target = device.Target();
+    std::vector<std::uint32_t> capabilities(target.supportedCapabilities.begin(), target.supportedCapabilities.end());
+    if (setup.withoutInterlock) std::erase(capabilities, static_cast<std::uint32_t>(spv::CapabilityFragmentShaderPixelInterlockEXT));
+    target.supportedCapabilities = capabilities;
     constexpr std::uint32_t waveSize = 64;
     std::vector<std::uint32_t> vertexUserData(4, 0u);
     const auto address = reinterpret_cast<std::uintptr_t>(setup.vertices.data());
@@ -475,9 +479,16 @@ int main() {
         std::uint32_t seed = 1;
         for (const auto& testCase : unormCases) RunCase(*device, block, layout, unorm, testCase, seed++);
         for (const auto& testCase : snormCases) RunCase(*device, block, layout, snorm, testCase, seed++);
+        std::string refusal;
+        try {
+            Draw(*device, unorm, unormCases[0].blend, Float32Export, Float32Program(unormCases[0].rgba), {.withoutInterlock = true});
+        } catch (const std::exception& error) {
+            refusal = error.what();
+        }
+        Require(refusal.find("blending into an unclamped normalized color target needs the fragmentShaderPixelInterlock feature, which the device lacks") != std::string::npos, "a device without fragmentShaderPixelInterlock did not refuse the unclamped blend: " + refusal);
         Overdraw(*device, block, layout, unorm, 0.2f, 0.8f, 401u);
         Overdraw(*device, block, layout, unorm, 0.8f, 0.2f, 402u);
-        std::printf("unclamped normalized color blend tests passed: %zu UNORM draws, %zu SNORM draws, 2 same-draw overdraws of 16 layers\n", unormCases.size(), snormCases.size());
+        std::printf("unclamped normalized color blend tests passed: %zu UNORM draws, %zu SNORM draws, 2 same-draw overdraws of 16 layers, 1 refusal without pixel interlock\n", unormCases.size(), snormCases.size());
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -1794,6 +1794,14 @@ void UnclampedNormalizedColorTests() {
     queue.context[0x1e0] = blending;
     state = DecodeState(queue);
     Require(state.colors.at(0).partialWriteMask == AgcDriver::Graphics::UnclampedBlendMask && AgcDriver::Graphics::ExportTargetMerge(state).blend.snorm, "an unclamped SNORM target that blends was not routed to the pixel shader as signed");
+    auto signedMasked = queue;
+    signedMasked.context[0x8e] = 0x1u;
+    expectFailure([&] { DecodeState(signedMasked); }, "blending unclamped signed normalized color with a write mask that skips a component is not implemented");
+    auto unsignedMasked = target(0x0000000cu);
+    unsignedMasked.context[0x1e0] = blending;
+    unsignedMasked.context[0x8e] = 0x1u;
+    state = DecodeState(unsignedMasked);
+    Require(state.colors.at(0).partialWriteMask == AgcDriver::Graphics::UnclampedBlendMask && state.blends.at(0).colorWriteMask == VK_COLOR_COMPONENT_R_BIT, "an unclamped UNORM target that blends with a write mask that skips a component was not routed to the pixel shader");
     queue.context[0x1e0] = (1u << 30u) | 15u | (15u << 8u);
     expectFailure([&] { DecodeState(queue); }, "dual-source blending of unclamped normalized color is not implemented (CB_COLOR_INFO 0x0000010c, CB_BLEND0_CONTROL 0x40000f0f)");
     queue = target(0x00000604u);
