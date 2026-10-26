@@ -474,7 +474,7 @@ The audit also walks the built libraries' own host dependencies: each `.prx` und
 
 Registry `nid` fields may contain either encoded NIDs or ordinary ELF symbol names such as `strcmp`. Imports are matched against literal exports first, then against their computed NIDs when the literal lookup misses. Reports retain the original import name. Export availability does not establish that every platform loader supports that lookup path.
 
-Exit codes: `0` nothing blocks loading, `1` there are `absent` imports or needed libraries without a file, `2` an input could not be read; the message names the file and the value.
+Exit codes: `0` nothing blocks loading, `1` there are `absent` imports, import name mismatches, needed libraries or library host dependencies without a file, or, with `--strict-stubs` or `--strict-providers`, `stub` imports or imports exported only by another library, `2` an input could not be read; the message names the file and the value.
 
 A module registry lists `nid`, `library` and `targetOffset` for each relocation against a function that no other bundled module exports, without the `#` suffix of the executable's NIDs.
 
