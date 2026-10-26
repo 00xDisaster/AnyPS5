@@ -184,7 +184,7 @@ int APS5_VABI scePthreadRwlockattrInit(PthreadRwlockattr* attr) {
 }
 
 int APS5_VABI scePthreadRwlockattrSettype(PthreadRwlockattr* attr, int type) {
-    if (!attr || !*attr || type < FIRST_STORED_RWLOCK_TYPE || type > LAST_STORED_RWLOCK_TYPE) return SCE_KERNEL_ERROR_EINVAL;
+    if (!attr || !*attr || *attr == DESTROYED_RWLOCKATTR || type < FIRST_STORED_RWLOCK_TYPE || type > LAST_STORED_RWLOCK_TYPE) return SCE_KERNEL_ERROR_EINVAL;
     (*attr)->type = type;
     return SCE_OK;
 }
