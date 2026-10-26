@@ -753,11 +753,11 @@ int APS5_VABI mergesort_nid_postfix(void* base, size_t count, size_t size, Guest
 }
 
 int APS5_VABI heapsort_nid_postfix(void* base, size_t count, size_t size, GuestCompare compare) {
+    if (count <= 1) return 0;
     if (size == 0) {
         errno = 22;
         return -1;
     }
-    if (count <= 1) return 0;
     if (!compare) throw std::invalid_argument("heapsort: null comparator");
     if (!base) throw std::invalid_argument("heapsort: null base");
     if (count > std::numeric_limits<size_t>::max() / size) throw std::overflow_error("heapsort: array size overflow");

@@ -225,6 +225,9 @@ bool CheckHeapsort() {
     }
     unsigned char bytes[3] = {3, 1, 2};
     *__error_nid_postfix() = 0;
+    correct &= heapsort_nid_postfix(nullptr, 0, 0, nullptr) == 0;
+    unsigned char single = 42;
+    correct &= heapsort_nid_postfix(&single, 1, 0, nullptr) == 0;
     correct &= heapsort_nid_postfix(bytes, 3, 0, CompareFirstByte) == -1 && *__error_nid_postfix() == 22 && bytes[0] == 3;
     correct &= heapsort_nid_postfix(nullptr, 0, 4, CompareKeys) == 0;
     if (!correct) std::fprintf(stderr, "heapsort failed\n");
