@@ -1697,7 +1697,7 @@ std::int64_t APS5_VABI recvmsg_nid_postfix(int descriptor, GuestMsghdr* message,
     const std::size_t controlCapacity = header.controlLength;
     const std::size_t copied = std::min(stamps.size(), controlCapacity);
     if (copied != 0 && !WriteGuest(header.control, stamps.data(), copied)) return Fail(14);
-    if (copied < stamps.size() && controlCapacity != 0) header.flags |= 0x20;
+    if (copied < stamps.size()) header.flags |= 0x20;
     header.controlLength = static_cast<std::uint32_t>(copied);
     constexpr auto results = offsetof(GuestMsghdr, controlLength);
     if (!WriteGuest(reinterpret_cast<char*>(message) + results, reinterpret_cast<const char*>(&header) + results, sizeof(header) - results)) return Fail(14);

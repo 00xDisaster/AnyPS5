@@ -195,7 +195,7 @@ static void CheckArrivalTimestamps(int family) {
             Require(std::memcmp(received, payload, sizeof(payload)) == 0);
             const std::uint32_t copied = std::min(capacity, expected);
             Require(message.controlLength == copied);
-            Require(message.flags == (capacity != 0 && capacity < expected ? 0x20 : 0));
+            Require(message.flags == (capacity < expected ? 0x20 : 0));
             Require(std::all_of(control.begin() + copied, control.end(), [](auto byte) { return byte == 0xa5; }));
             std::array<unsigned char, 64> whole{};
             std::memcpy(whole.data(), control.data(), copied);
@@ -224,6 +224,13 @@ static void CheckArrivalTimestamps(int family) {
                 Require(length == 32);
             }
         }
+        const char payload[] = "unstamped";
+        Require(sendto_nid_postfix(sender, payload, sizeof(payload), 0, nullptr, 0) == sizeof(payload));
+        char received[sizeof(payload)]{};
+        KernelIovec vector{received, sizeof(received)};
+        GuestMsghdr message{nullptr, 0, &vector, 1, nullptr, 0, -1};
+        Require(recvmsg_nid_postfix(receiver, &message, 0) == sizeof(payload));
+        Require(message.controlLength == 0 && message.flags == 0);
     }
     Require(close_nid_postfix(sender) == 0 && close_nid_postfix(receiver) == 0);
 }
