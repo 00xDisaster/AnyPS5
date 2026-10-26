@@ -1012,6 +1012,7 @@ int APS5_VABI sceNgs2VoiceGetMatrixInfo(uintptr_t voice_handle, uint32_t matrix_
     const auto* levels = &found->matrices[matrix_id];
     for (const auto& control : found->pendingControls)
         if (const auto* value = std::get_if<Ngs2MatrixControl>(&control); value && value->index == matrix_id) levels = &value->levels;
+    if (levels->size() > sizeof(info->levels) / sizeof(info->levels[0])) APS5_INVALID_ARG_EX;
     if (levels->empty()) *info = {};
     info->num_levels = static_cast<std::uint32_t>(levels->size());
     std::copy(levels->begin(), levels->end(), info->levels);
