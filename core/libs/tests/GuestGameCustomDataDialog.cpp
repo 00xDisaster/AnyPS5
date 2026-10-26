@@ -23,6 +23,7 @@ int main() {
     std::int32_t result[2] = {-1, -1};
 
     Require(sceGameCustomDataDialogTerminate() == kErrNotInitialized);
+    Require(sceGameCustomDataDialogOpenA(nullptr) == kErrNotInitialized);
     Require(sceGameCustomDataDialogOpenA(&param) == kErrNotInitialized);
     Require(sceGameCustomDataDialogClose() == kErrNotInitialized);
     Require(sceGameCustomDataDialogGetResultA(result) == kErrNotInitialized);
