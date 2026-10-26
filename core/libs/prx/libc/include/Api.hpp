@@ -1122,6 +1122,7 @@ MinMaxPointers APS5_VABI __std_minmax_element_1_nid_postfix(const void* first, c
 MinMaxPointers APS5_VABI __std_minmax_element_2_nid_postfix(const void* first, const void* last, bool isSigned);
 MinMaxPointers APS5_VABI __std_minmax_element_4_nid_postfix(const void* first, const void* last, bool isSigned);
 MinMaxPointers APS5_VABI __std_minmax_element_8_nid_postfix(const void* first, const void* last, bool isSigned);
+std::uint32_t APS5_VABI __std_min_4u_nid_postfix(const void* first, const void* last);
 void APS5_VABI __std_reverse_trivially_swappable_1_nid_postfix(void* first, void* last);
 void APS5_VABI __std_reverse_trivially_swappable_2_nid_postfix(void* first, void* last);
 void APS5_VABI __std_reverse_trivially_swappable_4_nid_postfix(void* first, void* last);
