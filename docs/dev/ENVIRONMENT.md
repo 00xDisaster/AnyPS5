@@ -472,7 +472,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_WRITE_EVIDENCE_AFTER` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/WriteEvidence.cpp` | 4 | consecutive unchanged observations before a dword's written-element evidence is trusted |
 | `APS5_WRITE_EVIDENCE_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/WriteEvidence.cpp` | 16 | largest written range in KiB that the evidence may serve |
 | `APS5_WRITE_EVIDENCE_SAMPLE` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/WriteEvidence.cpp` | 16 | reads one in this many pending writes to sample them |
-| `APS5_WRITE_WATCH_IMPORTS` | string | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` |  | how host imports are write-tracked: `probe`, `watch` or `unwatch` |
+| `APS5_WRITE_WATCH_IMPORTS` | string | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | probe | how host imports are write-tracked, not on Windows: `probe`, `watch` or `unwatch`; any other value throws |
 | `APS5_WRITTEN_SHADOW_MAX_KIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | 2048 (8192 on a discrete GPU) | upper bound in KiB of the written staging window; a set value is used as given on both device types |
 | `APS5_WRITTEN_SHADOW_MIN_KIB` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/GuestBufferMemory.cpp` | 16 | lower bound in KiB of the written staging window |
 
