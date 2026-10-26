@@ -3,7 +3,6 @@ agc_driver_graphics_maps_fallback undefined UBSan stops on the misaligned guest 
 agc_driver_pm4 undefined UBSan stops on the misaligned guest word loads of the ASan build's CopyGuestBytes (Execution/src/GuestMemory.cpp); #10973 fixes them.
 agc_performance_overlay address,undefined Runs past its 30 s ctest TIMEOUT in the sanitizer build on ubuntu-latest (timed out at 30.18 s); it passes without sanitizers.
 guest_backtrace address Fails only in ASan builds, with 'guest backtrace: first frame is not in the calling module'.
-guest_convert_keycode undefined LookUp in libSceConvertKeycode/ImeKeyboardType.hpp subtracts 16 from an INT32_MIN keyboard type (signed integer overflow); #10968 fixes it.
 guest_getrlimit address The test lowers RLIMIT_DATA to 1 TiB, below the private memory ASan has already mapped, so ASan's next internal mapping fails with ENOMEM ('failed to allocate ... DTLS_NextBlock').
 guest_math address,undefined ubuntu-latest's GCC 15 targets x86-64-v3 and fuses libc's float multiply-adds into FMA, so atanf misses the console bits by one ulp; #11059 builds libc with -ffp-contract=off.
 guest_posix_spawn address The child raises SIGBUS on purpose to test waitpid, but ASan handles SIGBUS in it and aborts instead; #11239 sets handle_sigbus=0 for this test.
