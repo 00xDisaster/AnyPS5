@@ -1153,7 +1153,7 @@ void CheckBufferWrite(Context context, VkFormat format, std::uint32_t fragments,
     Require(resident(), "an unrelated buffer write retired a native depth surface");
     if (write == BufferWrite::Written) {
         NoteDepthSurfaceWrite(context, target);
-        TargetRefuses([&] { upload(target.address, 256u); }, "sample-preserving guest publication");
+        TargetRefuses([&] { upload(target.address, 256u); }, "guest publication");
         Require(resident(), "a refused buffer write retired a written native depth surface");
         return;
     }
