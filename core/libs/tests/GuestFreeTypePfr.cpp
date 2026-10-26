@@ -1,5 +1,5 @@
 #include "FreeTypeFontFixture.hpp"
-#include "prx/libSceFreeType/include/GuestFreeType.hpp"
+#include "prx/libSceFreeType/include/Api.hpp"
 #include <nid/NidCompute.hpp>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -152,15 +152,19 @@ static TFunction Resolve(Module module, const std::string& name, bool patched) {
     return reinterpret_cast<TFunction>(address);
 }
 
-using Metrics = int (APS5_VABI*)(GuestFaceRec*, std::uint32_t*, std::uint32_t*, std::int64_t*, std::int64_t*);
-using Advance = int (APS5_VABI*)(GuestFaceRec*, std::uint32_t, std::int64_t*);
-using Kerning = int (APS5_VABI*)(GuestFaceRec*, std::uint32_t, std::uint32_t, GuestVector*);
+using Metrics = decltype(&FT_Get_PFR_Metrics_nid_postfix);
+using Advance = decltype(&FT_Get_PFR_Advance_nid_postfix);
+using Kerning = decltype(&FT_Get_PFR_Kerning_nid_postfix);
 
 static void MetricsCases(Metrics call, GuestFaceRec* face, bool pfr) {
     Guarded<std::uint32_t> outline{.value = 0xDEADBEEFu}, metrics{.value = 0xDEADBEEFu};
     Guarded<std::int64_t> x{.value = 0x123456789ABCll}, y{.value = 0x123456789ABCll};
-    Require(call(nullptr, &outline.value, &metrics.value, &x.value, &y.value) == FT_Err_Invalid_Face_Handle);
-    Require(outline.value == 0xDEADBEEFu && metrics.value == 0xDEADBEEFu && x.value == 0x123456789ABCll && y.value == 0x123456789ABCll);
+    for (unsigned mask = 0; mask < 16; ++mask) {
+        Require(call(nullptr, mask & 1 ? &outline.value : nullptr, mask & 2 ? &metrics.value : nullptr,
+                     mask & 4 ? &x.value : nullptr, mask & 8 ? &y.value : nullptr) == FT_Err_Invalid_Argument);
+        Require(outline.value == 0xDEADBEEFu && metrics.value == 0xDEADBEEFu && x.value == 0x123456789ABCll && y.value == 0x123456789ABCll);
+        outline.Verify(); metrics.Verify(); x.Verify(); y.Verify();
+    }
     const auto expectedX = pfr ? FT_DivFix(20 * 64, 2000) : face->size->metrics.x_scale;
     const auto expectedY = pfr ? FT_DivFix(30 * 64, 2000) : face->size->metrics.y_scale;
     for (unsigned mask = 0; mask < 16; ++mask) {
@@ -180,8 +184,9 @@ static void MetricsCases(Metrics call, GuestFaceRec* face, bool pfr) {
 
 static void AdvanceCases(Advance call, GuestFaceRec* face, bool pfr) {
     Guarded<std::int64_t> value{.value = 0x123456789ABCll};
-    Require(call(nullptr, 1, nullptr) == FT_Err_Invalid_Face_Handle);
-    Require(call(nullptr, 1, &value.value) == FT_Err_Invalid_Face_Handle && value.value == 0x123456789ABCll);
+    Require(call(nullptr, 1, nullptr) == FT_Err_Invalid_Argument);
+    Require(call(nullptr, 1, &value.value) == FT_Err_Invalid_Argument && value.value == 0x123456789ABCll);
+    value.Verify();
     Require(call(face, 1, nullptr) == FT_Err_Invalid_Argument);
     for (const auto index : {0u, 1u, 2u, 3u, std::numeric_limits<std::uint32_t>::max()}) {
         value.value = 0x123456789ABCll;
@@ -194,9 +199,10 @@ static void AdvanceCases(Advance call, GuestFaceRec* face, bool pfr) {
 
 static void KerningCases(Kerning call, GuestFaceRec* face, bool pfr) {
     Guarded<GuestVector> value{.value = {0x123456789ABCll, -0x123456789ABCll}};
-    Require(call(nullptr, 1, 2, nullptr) == FT_Err_Invalid_Face_Handle);
-    Require(call(nullptr, 1, 2, &value.value) == FT_Err_Invalid_Face_Handle);
+    Require(call(nullptr, 1, 2, nullptr) == FT_Err_Invalid_Argument);
+    Require(call(nullptr, 1, 2, &value.value) == FT_Err_Invalid_Argument);
     Require(value.value.x == 0x123456789ABCll && value.value.y == -0x123456789ABCll);
+    value.Verify();
     Require(call(face, 1, 2, nullptr) == FT_Err_Invalid_Argument);
     for (const auto [left, right] : {std::pair{1u, 2u}, std::pair{2u, 1u}, std::pair{0u, 2u}, std::pair{0xFFFFFFFFu, 1u}}) {
         value.value = {0x123456789ABCll, -0x123456789ABCll};

@@ -6,6 +6,13 @@ target_link_libraries(libSceFreeTypeOptOl PRIVATE libSceFreeType)
 configure_windows_unwind(libSceFreeTypeOptOl)
 
 if(BUILD_TESTING)
+    add_test_executable(guest_freetype_pfr_null_face_tests ${LIBS_INCLUDE_DIR}/tests/GuestFreeTypePfrNull.cpp
+        ${LIBS_INCLUDE_DIR}/prx/libSceFreeType/src/Pfr.cpp ${CMAKE_CURRENT_SOURCE_DIR}/Export.cpp)
+    target_include_directories(guest_freetype_pfr_null_face_tests PRIVATE
+        ${LIBS_INCLUDE_DIR} $<TARGET_PROPERTY:freetype,INTERFACE_INCLUDE_DIRECTORIES>)
+    configure_windows_unwind(guest_freetype_pfr_null_face_tests)
+    add_test(NAME guest_freetype_pfr_null_face COMMAND guest_freetype_pfr_null_face_tests)
+    set_tests_properties(guest_freetype_pfr_null_face PROPERTIES TIMEOUT 10)
     add_test_executable(guest_freetype_pfr_tests ${LIBS_INCLUDE_DIR}/tests/GuestFreeTypePfr.cpp
         ${LIBS_INCLUDE_DIR}/nid/src/NidCompute.cpp ${LIBS_INCLUDE_DIR}/nid/src/Sha1.cpp)
     target_include_directories(guest_freetype_pfr_tests PRIVATE ${LIBS_INCLUDE_DIR} ${LIBS_INCLUDE_DIR}/nid/include)
