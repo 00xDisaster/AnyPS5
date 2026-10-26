@@ -7,7 +7,6 @@ namespace {
 
 constexpr std::uint32_t CHANNEL_0 = 1;
 constexpr std::uint32_t CHANNEL_BOTH = 3;
-constexpr std::uint32_t AECAGC_TARGET_2_0 = 0x20;
 
 constexpr std::uint32_t DEFAULT_CONTRAST = 32;
 constexpr std::uint32_t DEFAULT_SATURATION = 64;
@@ -34,7 +33,15 @@ int RefuseSet(std::int32_t handle, std::uint32_t channel, bool valid) {
 
 bool ValidTarget(const CameraAutoExposureGainTarget* option) {
     if (!option) return true;
-    return option->sizeThis == sizeof(CameraAutoExposureGainTarget) && option->target % 2 == 0 && option->target <= AECAGC_TARGET_2_0;
+    if (option->sizeThis != sizeof(CameraAutoExposureGainTarget)) return false;
+    switch (option->target) {
+    case 0x0: case 0x2: case 0x4: case 0x6: case 0x8:
+    case 0x10: case 0x12: case 0x14: case 0x16:
+    case 0x20:
+        return true;
+    default:
+        return false;
+    }
 }
 
 template <typename TValue>

@@ -140,9 +140,13 @@ void CheckSetters() {
     CameraAutoExposureGainTarget target{sizeof(CameraAutoExposureGainTarget), 0x20};
     Require(sceCameraSetAutoExposureGain(1, Channel0, 1, &target) == ErrorNotConnected, "the largest exposure target must be accepted");
     Require(sceCameraSetAutoExposureGain(1, Channel0, 1, nullptr) == ErrorNotConnected, "automatic exposure without a target must be accepted");
-    for (const std::uint32_t refused : {0x11u, 0x22u}) {
+    for (const std::uint32_t accepted : {0x0u, 0x2u, 0x4u, 0x6u, 0x8u, 0x10u, 0x12u, 0x14u, 0x16u, 0x20u}) {
+        target.target = accepted;
+        Require(sceCameraSetAutoExposureGain(1, Channel0, 1, &target) == ErrorNotConnected, "a listed exposure target must be accepted");
+    }
+    for (const std::uint32_t refused : {0x1u, 0xAu, 0xCu, 0xEu, 0x11u, 0x18u, 0x1Au, 0x1Cu, 0x1Eu, 0x22u}) {
         target.target = refused;
-        Require(sceCameraSetAutoExposureGain(1, Channel0, 1, &target) == ErrorParam, "an odd or too large exposure target must be rejected");
+        Require(sceCameraSetAutoExposureGain(1, Channel0, 1, &target) == ErrorParam, "an unlisted exposure target must be rejected");
     }
     target = {4, 0x10};
     Require(sceCameraSetAutoExposureGain(1, Channel0, 1, &target) == ErrorParam, "an exposure target of the wrong size must be rejected");
