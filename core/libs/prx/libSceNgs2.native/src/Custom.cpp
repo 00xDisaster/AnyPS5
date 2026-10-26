@@ -404,7 +404,7 @@ void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t samp
 
 void Ngs2ProcessLegacyUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate) {
     if (voice.userFxHandler == nullptr) return;
-    std::array<float*, NGS2_MAX_CHANNELS> channels{};
+    std::array<float*, NGS2_MAX_RACK_CHANNELS> channels{};
     for (std::uint32_t c = 0; c < voice.channels; ++c) channels[c] = voice.samples.data() + static_cast<std::size_t>(c) * grain;
     Ngs2UserFxProcessContext context{channels.data(), voice.userFxData[0], voice.userFxData[1], voice.userFxData[2],
                                     voice.UserFxFlags(voice.userFxFlags), voice.channels, grain, sampleRate};

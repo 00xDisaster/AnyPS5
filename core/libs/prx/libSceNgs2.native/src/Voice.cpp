@@ -258,7 +258,7 @@ static void SetMatrixLevels(Ngs2Voice& voice, std::uint32_t matrixId, const floa
         voice.matrices[matrixId].clear();
         return;
     }
-    if (matrixId >= voice.matrices.size() || numLevels == 0 || numLevels > NGS2_MAX_CHANNELS * NGS2_MAX_CHANNELS || levels == nullptr) {
+    if (matrixId >= voice.matrices.size() || numLevels == 0 || numLevels > NGS2_MAX_RACK_CHANNELS * NGS2_MAX_RACK_CHANNELS || levels == nullptr) {
         APS5_INVALID_ARG_EX;
     }
     auto& matrix = voice.matrices[matrixId];
