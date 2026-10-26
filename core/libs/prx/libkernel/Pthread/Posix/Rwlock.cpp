@@ -73,7 +73,7 @@ int APS5_VABI pthread_rwlockattr_setpshared_nid_postfix(PthreadRwlockattr* attr,
 }
 
 int APS5_VABI pthread_rwlockattr_gettype_np_nid_postfix(const PthreadRwlockattr* attr, int* type) {
-    if (!attr || !*attr) throw std::runtime_error("pthread_rwlockattr_gettype_np: null attr");
+    if (!attr || !*attr || *attr == DESTROYED_RWLOCKATTR) throw std::runtime_error("pthread_rwlockattr_gettype_np: null attr");
     if (!type) throw std::runtime_error("pthread_rwlockattr_gettype_np: null type");
     *type = (*attr)->type;
     return 0;
