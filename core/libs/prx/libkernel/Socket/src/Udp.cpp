@@ -1188,7 +1188,11 @@ int APS5_VABI getsockopt_nid_postfix(int descriptor, int level, int option,
     if (!socket) return -1;
     if (level != 0xffff && level != 0 && level != 6 && level != 41) return Fail(22);
     if (!length) return Fail(22);
-    if (!value) *length = 0;
+    if (!value) {
+        const GuestArena::HostWrite lengthOutput(length, sizeof(*length));
+        if (!lengthOutput.Open()) return Fail(14);
+        *length = 0;
+    }
     std::lock_guard lock(socket->modeMutex);
     const auto native = static_cast<std::uintptr_t>(socket->value);
     const int error = level == 0    ? GuestSockets::GetIpLevelOption(socket->options, socket->family == 2, socket->type == 2, option, value, length)
