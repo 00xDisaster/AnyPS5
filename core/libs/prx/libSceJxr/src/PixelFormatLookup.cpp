@@ -24,7 +24,11 @@ extern "C" std::int64_t APS5_VABI PixelFormatLookup_nid_postfix(JxrPixelInfo* va
     }
     const auto result = JxrLookup_nid_no_patch(&local, mode);
     if (result == 0) {
-        std::memcpy(bytes, &local, offsetof(JxrPixelInfo, bitsPerUnit) + sizeof(local.bitsPerUnit));
+        constexpr auto paddingBegin = offsetof(JxrPixelInfo, bitsPerUnit) + sizeof(local.bitsPerUnit);
+        constexpr auto paddingSize = offsetof(JxrPixelInfo, flags) - paddingBegin;
+        static_assert(paddingBegin == 28 && paddingSize == 4);
+        std::memcpy(bytes, &local, paddingBegin);
+        std::memset(bytes + paddingBegin, 0, paddingSize);
         std::memcpy(bytes + offsetof(JxrPixelInfo, flags), &local.flags, sizeof(local) - offsetof(JxrPixelInfo, flags));
     }
     return result;
