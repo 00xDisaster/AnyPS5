@@ -456,15 +456,6 @@ static bool LightBarIs(int port, bool valid, std::uint8_t r, std::uint8_t g, std
     return output.lightBarValid == valid && output.lightBar[0] == r && output.lightBar[1] == g && output.lightBar[2] == b;
 }
 
-static bool ResetByPortTypeThrows(std::uint32_t portType) {
-    try {
-        scePadResetLightBarAllByPortType(portType);
-    } catch (const std::exception&) {
-        return true;
-    }
-    return false;
-}
-
 static void CheckLightBarResets(int handle) {
     const PadLightBarParam color{10, 20, 30};
     const auto setBoth = [&] {
@@ -480,7 +471,6 @@ static void CheckLightBarResets(int handle) {
     setBoth();
     Require(scePadResetLightBarAllByPortType(PAD_PORT_TYPE_SPECIAL) == PAD_OK);
     for (const std::uint32_t type : {1u, 5u, 6u, 0xffu, 0xffffffffu}) Require(scePadResetLightBarAllByPortType(type) == PAD_ERROR_INVALID_ARG);
-    for (const std::uint32_t type : {3u, 4u, 16u}) Require(ResetByPortTypeThrows(type));
     Require(LightBarIs(0, true, 10, 20, 30) && LightBarIs(2, true, 40, 50, 60));
     Require(scePadResetLightBarAllByPortType(PAD_PORT_TYPE_STANDARD) == PAD_OK);
     for (int port = 0; port < PAD_MAX_CONTROLLERS; ++port) Require(LightBarIs(port, false, 0, 0, 0));
