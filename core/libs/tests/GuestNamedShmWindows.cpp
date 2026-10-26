@@ -124,15 +124,19 @@ void VerifyAnonymousDescriptorClassification() {
     Require(close_nid_postfix(descriptor) == 0, "closing the original anonymous descriptor failed");
     Require(!File::IsSharedMemoryDescriptor_nid_no_patch(descriptor),
             "the closed anonymous descriptor remained classified as shared memory");
+    const int reusedOriginal = ::_open("NUL", _O_RDONLY | _O_BINARY);
+    Require(reusedOriginal == descriptor && !File::IsSharedMemoryDescriptor_nid_no_patch(reusedOriginal),
+            "reusing the original descriptor retained its shared-memory classification");
     Require(File::IsSharedMemoryDescriptor_nid_no_patch(duplicate),
             "closing the original anonymous descriptor invalidated its duplicate");
     Require(close_nid_postfix(duplicate) == 0, "closing the anonymous descriptor duplicate failed");
     Require(!File::IsSharedMemoryDescriptor_nid_no_patch(duplicate),
             "the closed anonymous descriptor duplicate remained classified as shared memory");
-    const int reused = ::_open("NUL", _O_RDONLY | _O_BINARY);
-    Require(reused >= 0 && !File::IsSharedMemoryDescriptor_nid_no_patch(reused),
-            "a reused descriptor was classified as anonymous shared memory");
-    Require(::_close(reused) == 0, "closing the reused descriptor failed");
+    const int reusedDuplicate = ::_open("NUL", _O_RDONLY | _O_BINARY);
+    Require(reusedDuplicate == duplicate && !File::IsSharedMemoryDescriptor_nid_no_patch(reusedDuplicate),
+            "reusing the duplicate descriptor retained its shared-memory classification");
+    Require(close_nid_postfix(reusedOriginal) == 0, "closing the reused original descriptor failed");
+    Require(close_nid_postfix(reusedDuplicate) == 0, "closing the reused duplicate descriptor failed");
 }
 
 void VerifyConcurrentDescriptorReuse(const std::string& name) {
