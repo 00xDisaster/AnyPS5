@@ -3082,6 +3082,7 @@ static void CheckPosixFixedAnonymousMapping() {
     memory[page - 1] = 0x42;
     Require(mmap_nid_postfix(memory + page, page, 3, exclusive, -1, 0) == memory + page);
     Require(std::all_of(memory + page, memory + page * 2, [](unsigned char value) { return value == 0; }));
+    Require(memory[0] == 0x41 && memory[page - 1] == 0x42);
     Require(mmap_nid_postfix(memory + page, page * 2, 3, fixed, -1, 0) == memory + page);
     memory[page] = 0x51;
     memory[page * 2 - 1] = 0x52;
@@ -3089,6 +3090,7 @@ static void CheckPosixFixedAnonymousMapping() {
     Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(memory + page * 3), page) == 0);
     Require(mmap_nid_postfix(memory + page * 3, page, 3, exclusive, -1, 0) == memory + page * 3);
     Require(std::all_of(memory + page * 3, memory + page * 4, [](unsigned char value) { return value == 0; }));
+    Require(memory[page * 2] == 0x61 && memory[page] == 0x51 && memory[page * 2 - 1] == 0x52);
     memory[page * 4 - 1] = 0x62;
     Require(memory[page * 4 - 1] == 0x62);
     Require(mmap_nid_postfix(memory + page * 2, page + 1, 3, fixed, -1, 0) == memory + page * 2);
