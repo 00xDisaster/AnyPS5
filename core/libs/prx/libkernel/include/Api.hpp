@@ -425,6 +425,7 @@ int APS5_VABI pthread_cond_setname_np_nid_postfix(PthreadCond* cond, const char*
 int APS5_VABI pthread_condattr_destroy_nid_postfix(PthreadCondattr* attr);
 int APS5_VABI pthread_condattr_init_nid_postfix(PthreadCondattr* attr);
 int APS5_VABI pthread_condattr_setclock_nid_postfix(PthreadCondattr* attr, KernelClockid clockId);
+int APS5_VABI pthread_condattr_getclock_nid_postfix(const PthreadCondattr* attr, KernelClockid* clockId);
 int APS5_VABI pthread_condattr_setpshared_nid_postfix(PthreadCondattr* attr, int pshared);
 int APS5_VABI pthread_condattr_getpshared_nid_postfix(const PthreadCondattr* attr, int* pshared);
 int APS5_VABI pthread_mutex_destroy_nid_postfix(PthreadMutex* mutex);
@@ -808,5 +809,9 @@ int APS5_VABI setpgrp_nid_postfix(int pid, int pgrp);
 int APS5_VABI sceKernelGetSystemExVersion(char* first, char* second);
 int APS5_VABI sysKernelGetLowerLimitSysexVersion_nid_postfix(char* version);
 int APS5_VABI sysKernelGetLowerLimitUpdVersion_nid_postfix(std::uint32_t* version);
+int APS5_VABI sysKernelGetUpdVersion_nid_postfix(std::uint32_t* version);
+int APS5_VABI sysKernelGetManufacturingMode_nid_postfix(void);
+int APS5_VABI sysKernelGetIntdevModeForInternalLibc_nid_postfix(void);
+int APS5_VABI sysKernelGetIntdevModeForRcmgr_nid_postfix(void);
 
 }

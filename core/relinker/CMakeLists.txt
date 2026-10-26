@@ -364,6 +364,18 @@ if(BUILD_TESTING)
     add_test(NAME file_identity COMMAND file_identity_tests)
     set_tests_properties(file_identity PROPERTIES TIMEOUT 20)
 
+    add_test_executable(file_reader_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/tests/FileReaderTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/FileReader.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/src/NativePath.cpp
+    )
+    target_include_directories(file_reader_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/io/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+    )
+    add_test(NAME file_reader_prefix COMMAND file_reader_tests)
+    set_tests_properties(file_reader_prefix PROPERTIES TIMEOUT 20)
+
     add_test_executable(param_json_utf8_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/../libs/tests/ParamJsonParser.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../libs/prx/libkernel/AppMetadata/src/ParamJsonParser.cpp)
@@ -942,12 +954,6 @@ if(BUILD_TESTING)
         )
         add_test(NAME reloc_table_bounds COMMAND reloc_table_bounds_tests $<TARGET_FILE:relinker>)
     endif()
-
-    set(relinkerTestTemp ${CMAKE_CURRENT_BINARY_DIR}/test-temp)
-    file(MAKE_DIRECTORY ${relinkerTestTemp})
-    get_property(relinkerTests DIRECTORY PROPERTY TESTS)
-    set_property(TEST ${relinkerTests} APPEND PROPERTY ENVIRONMENT_MODIFICATION
-        "TMPDIR=set:${relinkerTestTemp};TEMP=set:${relinkerTestTemp};TMP=set:${relinkerTestTemp}")
 endif()
 
 if(BUILD_TESTING AND Python3_Interpreter_FOUND)
@@ -957,4 +963,12 @@ if(BUILD_TESTING AND Python3_Interpreter_FOUND)
     add_test(NAME macos_guest_weak_imports COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_macos_guest_weak_imports.py $<TARGET_FILE:relinker>)
     set_property(TEST macos_guest_weak_imports APPEND PROPERTY LABELS relinker)
+endif()
+
+if(BUILD_TESTING)
+    set(relinkerTestTemp ${CMAKE_CURRENT_BINARY_DIR}/test-temp)
+    file(MAKE_DIRECTORY ${relinkerTestTemp})
+    get_property(relinkerTests DIRECTORY PROPERTY TESTS)
+    set_property(TEST ${relinkerTests} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+        "TMPDIR=set:${relinkerTestTemp};TEMP=set:${relinkerTestTemp};TMP=set:${relinkerTestTemp};PYTHONUTF8=set:1")
 endif()
