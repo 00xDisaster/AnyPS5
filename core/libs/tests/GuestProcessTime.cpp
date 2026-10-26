@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libkernel/Time/include/Time.hpp"
 #include <chrono>
 #include <cstdint>
@@ -22,6 +23,18 @@ int main(int argc, char** argv) {
     const auto minimumElapsedMicros = elapsedMicros * 19 / 20;
     const auto slept = std::chrono::steady_clock::now() + std::chrono::microseconds(sleptMicros);
     while (std::chrono::steady_clock::now() < slept) std::this_thread::sleep_until(slept);
+    if (argc > 1 && std::strcmp(argv[1], "tsc") == 0) {
+        const std::uint64_t frequency = sceKernelGetTscFrequency();
+        const std::uint64_t before = sceKernelReadTsc();
+        const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds(sleptMicros);
+        while (std::chrono::steady_clock::now() < until) std::this_thread::sleep_until(until);
+        const std::uint64_t ticks = sceKernelReadTsc() - before;
+        const std::uint64_t tscMicros = ticks / frequency * 1000000 + ticks % frequency * 1000000 / frequency;
+        Require(tscMicros >= minimumElapsedMicros, "TSC advanced less than the sleep at the TSC frequency");
+        Require(tscMicros < minuteMicros, "TSC advanced more than a minute across the sleep");
+        Require(sceKernelReadTsc() >= before + ticks, "TSC went backwards");
+        return 0;
+    }
     if (argc > 1 && std::strcmp(argv[1], "counter") == 0) {
         const std::uint64_t counter = sceKernelGetProcessTimeCounter();
         const std::uint64_t frequency = sceKernelGetProcessTimeCounterFrequency();
