@@ -26,6 +26,7 @@ int main() {
     Require(sceGameCustomDataDialogOpenA(nullptr) == kErrNotInitialized);
     Require(sceGameCustomDataDialogOpenA(&param) == kErrNotInitialized);
     Require(sceGameCustomDataDialogClose() == kErrNotInitialized);
+    Require(sceGameCustomDataDialogGetResultA(nullptr) == kErrNotInitialized);
     Require(sceGameCustomDataDialogGetResultA(result) == kErrNotInitialized);
     Require(sceGameCustomDataDialogGetStatus() == kStatusNone);
     Require(sceGameCustomDataDialogUpdateStatus() == kStatusNone);
