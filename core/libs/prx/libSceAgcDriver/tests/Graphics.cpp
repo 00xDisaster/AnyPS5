@@ -11141,10 +11141,17 @@ void meshLimitTests() {
     context.meshLimits.maxMeshOutputVertices = 256;
     context.meshLimits.maxMeshOutputPrimitives = 512;
     context.meshLimits.maxMeshSharedMemorySize = 12284;
-    ShaderRecompiler::MeshConfiguration mesh{4u, 32u, 96u, 96u, 32u, 128u, 2048u, 0u, 4u};
-    mesh.maxVertices = 256;
-    mesh.maxPrimitives = 512;
-    mesh.ldsSizeDwords = 3071;
+    ShaderRecompiler::MeshConfiguration mesh{
+        .inputPrimitive = 4u,
+        .primitivesPerGroup = 32u,
+        .verticesPerGroup = 96u,
+        .maxVertices = 256u,
+        .maxPrimitives = 512u,
+        .threadsPerGroup = 128u,
+        .ldsSizeDwords = 3071u,
+        .provokingVertex = 0u,
+        .esgsItemSize = 4u,
+    };
     AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 96);
     expectFailure([&] { AgcDriver::Graphics::ValidateMeshLimits(context, mesh, 97); }, "mesh workgroup of 97 invocations exceeds device limits (128 invocations, 96 wide)");
     mesh.maxVertices = 257;
