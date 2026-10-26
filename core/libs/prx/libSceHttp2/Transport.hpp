@@ -55,6 +55,10 @@ private:
 
 int AddHeader(Settings& settings, const char* name, const char* value, std::uint32_t mode);
 std::shared_ptr<Capacity> CreateCapacity_nid_no_patch(int maximum);
+using LookupHook = int (*)(const char* host);
+void SetLookupHook(LookupHook hook);
 std::shared_ptr<Request> CreateRequest_nid_no_patch(int sslContext, std::shared_ptr<Capacity> capacity, Settings settings, std::string method, std::string url);
 
 }
+
+extern "C" void Http2SetLookupHook_nid_no_patch(Http2::LookupHook hook);

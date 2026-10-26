@@ -15,6 +15,7 @@
 #include <nghttp2/nghttp2.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
@@ -118,6 +119,11 @@ struct Lookup {
     std::exception_ptr failure;
 };
 
+std::atomic<LookupHook>& LookupHookSlot() {
+    static std::atomic<LookupHook> hook{nullptr};
+    return hook;
+}
+
 class Resolver {
 public:
     Resolver() {
@@ -163,6 +169,7 @@ private:
                 hints.ai_family = AF_UNSPEC;
                 addrinfo* raw = nullptr;
                 const auto service = std::to_string(job->port);
+                if (const auto hook = LookupHookSlot().load(std::memory_order_acquire)) Require(hook(job->host.c_str()) == 0, "sceHttp2: DNS failed; console error mapping is unknown");
                 const int result = getaddrinfo(job->host.c_str(), service.c_str(), &hints, &raw);
                 std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> addresses(raw, freeaddrinfo);
                 Require(result == 0, "sceHttp2: DNS failed; console error mapping is unknown");
@@ -636,6 +643,10 @@ void Request::Stop() {
 
 std::shared_ptr<Capacity> CreateCapacity_nid_no_patch(int maximum) {
     return std::make_shared<Capacity>(maximum);
+}
+
+void SetLookupHook(LookupHook hook) {
+    LookupHookSlot().store(hook, std::memory_order_release);
 }
 
 std::shared_ptr<Request> CreateRequest_nid_no_patch(int sslContext, std::shared_ptr<Capacity> capacity, Settings settings, std::string method, std::string url) {
