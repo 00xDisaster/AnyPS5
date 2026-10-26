@@ -338,6 +338,7 @@ int APS5_VABI vsnwprintf_s_nid_postfix(char16_t* buffer, std::size_t size, const
 
 int APS5_VABI wprintf_nid_postfix(const char16_t* format, ...) {
     if (!__stdoutp_nid_postfix->IsOpen()) { errno = 9; return -1; }
+    if (!__stdoutp_nid_postfix->SwitchToWriting()) return -1;
     APS5_VA_BEGIN(format);
     int result = -1;
     try {
@@ -354,6 +355,7 @@ int APS5_VABI wprintf_nid_postfix(const char16_t* format, ...) {
 int APS5_VABI vfwprintf_nid_postfix(FileStream* stream, const char16_t* format, VaList* args) {
     if (stream == nullptr || format == nullptr) { errno = 22; return -1; }
     if (!stream->IsOpen()) { errno = 9; return -1; }
+    if (!stream->SwitchToWriting()) return -1;
     int result = -1;
     try {
         const std::u16string text = FormatWide(format, args);
@@ -380,6 +382,7 @@ int APS5_VABI vwprintf_nid_postfix(const char16_t* format, VaList* args) {
 int APS5_VABI vfwprintf_s_nid_postfix(FileStream* stream, const char16_t* format, VaList* args) {
     if (stream == nullptr || format == nullptr || args == nullptr) return -1;
     if (!stream->IsOpen()) { errno = 9; return -1; }
+    if (!stream->SwitchToWriting()) return -1;
     int result = -1;
     try {
         const std::u16string text = FormatWide(format, args, true);
@@ -416,6 +419,7 @@ int APS5_VABI fputwc_nid_postfix(char16_t value, FileStream* stream) {
     try {
         const std::string bytes = ToUtf8(std::u16string(1, value));
         auto* native = GetNativeStream(stream);
+        if (!stream->SwitchToWriting()) return -1;
         if (std::fwrite(bytes.data(), 1, bytes.size(), native) != bytes.size()) throw std::runtime_error("stream write failed");
         stream->SyncStatus();
         return value;
@@ -432,6 +436,7 @@ int APS5_VABI fputws_nid_postfix(const char16_t* str, FileStream* stream) {
         const std::u16string text(str);
         const std::string bytes = ToUtf8(text);
         auto* native = GetNativeStream(stream);
+        if (!stream->SwitchToWriting()) return -1;
         if (std::fwrite(bytes.data(), 1, bytes.size(), native) != bytes.size()) throw std::runtime_error("stream write failed");
         stream->SyncStatus();
         return static_cast<int>(text.size());
