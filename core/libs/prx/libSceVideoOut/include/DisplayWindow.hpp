@@ -22,9 +22,6 @@ public:
     void UpdateTitle();
     std::uint64_t FrameNumber() const { return frameNum; }
     void ToggleFullscreen();
-#ifdef __APPLE__
-    Uint32 Id() const { return windowId; }
-#endif
 
 private:
     void create(std::uint32_t sourceWidth, std::uint32_t sourceHeight);
@@ -39,9 +36,6 @@ private:
     std::uint32_t aspectWidth = 0;
     std::uint32_t aspectHeight = 0;
     std::uint64_t frameNum = 0;
-#ifdef __APPLE__
-    Uint32 windowId = 0;
-#endif
 };
 
 #endif

@@ -5,10 +5,6 @@
 #include "SDL_video.h"
 #include <cmath>
 #include <cstdio>
-#ifdef __APPLE__
-#include <string>
-#include "prx/libc/include/MainThread.hpp"
-#endif
 
 void MouseInput::HandleEvent(const SDL_Event& event, unsigned windowId) {
     MouseInputEvent input{};
@@ -91,25 +87,6 @@ void MouseInput::UpdateCapture(bool allowed) {
         return;
     }
     const bool wanted = CaptureWanted(allowed);
-#ifdef __APPLE__
-    bool relative = false;
-    RunOnMainThread([&] { relative = SDL_GetRelativeMouseMode() == SDL_TRUE; });
-    if (wanted == captured && relative == wanted) return;
-    int result = 0;
-    std::string error;
-    RunOnMainThread([&] {
-        result = SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE);
-        if (result != 0) error = SDL_GetError();
-    });
-    if (result != 0) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::fprintf(stderr, "[mouse] relative mouse mode unavailable: %s\n", error.c_str());
-        }
-        return;
-    }
-#else
     if (wanted == captured && (SDL_GetRelativeMouseMode() == SDL_TRUE) == wanted) return;
     if (SDL_SetRelativeMouseMode(wanted ? SDL_TRUE : SDL_FALSE) != 0) {
         static bool warned = false;
@@ -119,7 +96,6 @@ void MouseInput::UpdateCapture(bool allowed) {
         }
         return;
     }
-#endif
     int ignoredX = 0;
     int ignoredY = 0;
     SDL_GetRelativeMouseState(&ignoredX, &ignoredY);

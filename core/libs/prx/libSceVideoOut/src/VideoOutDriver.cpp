@@ -33,9 +33,6 @@
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libc/include/PreciseWait.hpp"
 #include "prx/libc/include/Shutdown.hpp"
-#ifdef __APPLE__
-#include "prx/libc/include/MainThread.hpp"
-#endif
 
 namespace {
 
@@ -67,53 +64,21 @@ std::optional<std::uint32_t> configuredResolution() {
 }
 
 std::vector<const char*> windowExtensions(SDL_Window* window) {
-#ifdef __APPLE__
-    std::vector<const char*> extensions;
-    RunOnMainThread([&] {
-        unsigned extensionCount = 0;
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr)) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
-        extensions.resize(extensionCount);
-        if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, extensions.data())) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
-        extensions.resize(extensionCount);
-    });
-    return extensions;
-#else
     unsigned extensionCount = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr)) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
     std::vector<const char*> extensions(extensionCount);
     if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, extensions.data())) throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
     extensions.resize(extensionCount);
     return extensions;
-#endif
 }
 
 VkSurfaceKHR createWindowSurface(void* context, VkInstance instance) {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-#ifdef __APPLE__
-    RunOnMainThread([&] {
-        if (!SDL_Vulkan_CreateSurface(static_cast<SDL_Window*>(context), instance, &surface)) throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface failed: ") + SDL_GetError());
-    });
-#else
     if (!SDL_Vulkan_CreateSurface(static_cast<SDL_Window*>(context), instance, &surface)) throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface failed: ") + SDL_GetError());
-#endif
     return surface;
 }
 
 void windowDrawableSize(void* context, std::uint32_t* width, std::uint32_t* height) {
-#ifdef __APPLE__
-    bool minimized = false;
-    int drawableWidth = 0;
-    int drawableHeight = 0;
-    RunOnMainThread([&] {
-        minimized = (SDL_GetWindowFlags(static_cast<SDL_Window*>(context)) & SDL_WINDOW_MINIMIZED) != 0;
-        if (!minimized) SDL_Vulkan_GetDrawableSize(static_cast<SDL_Window*>(context), &drawableWidth, &drawableHeight);
-    });
-    if (minimized) {
-        *width = 0;
-        *height = 0;
-        return;
-    }
-#else
     if ((SDL_GetWindowFlags(static_cast<SDL_Window*>(context)) & SDL_WINDOW_MINIMIZED) != 0) {
         *width = 0;
         *height = 0;
@@ -122,7 +87,6 @@ void windowDrawableSize(void* context, std::uint32_t* width, std::uint32_t* heig
     int drawableWidth = 0;
     int drawableHeight = 0;
     SDL_Vulkan_GetDrawableSize(static_cast<SDL_Window*>(context), &drawableWidth, &drawableHeight);
-#endif
     *width = drawableWidth > 0 ? static_cast<std::uint32_t>(drawableWidth) : 0;
     *height = drawableHeight > 0 ? static_cast<std::uint32_t>(drawableHeight) : 0;
 }
@@ -335,17 +299,9 @@ VideoOutDriver::VideoOutDriver() {
 #ifdef __linux__
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
 #endif
-#ifdef __APPLE__
-    std::string initError;
-    RunOnMainThread([&] {
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) initError = SDL_GetError();
-    });
-    if (!initError.empty()) throw std::runtime_error("SDL_InitSubSystem(VIDEO | GAMECONTROLLER) failed: " + initError);
-#else
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) {
         throw std::runtime_error(std::string("SDL_InitSubSystem(VIDEO | GAMECONTROLLER) failed: ") + SDL_GetError());
     }
-#endif
     try {
         AgcDriverWaitIdle_nid_postfix();
         std::promise<void> started;
@@ -561,19 +517,10 @@ std::uint32_t VideoOutDriver::GetDisplayResolution() {
 }
 
 void VideoOutDriver::updateDisplayRefreshRate() {
-#ifdef __APPLE__
-    SDL_DisplayMode mode{};
-    RunOnMainThread([&] {
-        const int display = SDL_GetWindowDisplayIndex(window.Handle());
-        if (display < 0) throw std::runtime_error(std::string("SDL_GetWindowDisplayIndex failed: ") + SDL_GetError());
-        if (SDL_GetCurrentDisplayMode(display, &mode) != 0) throw std::runtime_error(std::string("SDL_GetCurrentDisplayMode failed: ") + SDL_GetError());
-    });
-#else
     const int display = SDL_GetWindowDisplayIndex(window.Handle());
     if (display < 0) throw std::runtime_error(std::string("SDL_GetWindowDisplayIndex failed: ") + SDL_GetError());
     SDL_DisplayMode mode{};
     if (SDL_GetCurrentDisplayMode(display, &mode) != 0) throw std::runtime_error(std::string("SDL_GetCurrentDisplayMode failed: ") + SDL_GetError());
-#endif
     displayRefreshRate.store(mode.refresh_rate);
     displayResolution.store(resolutionIndex(mode.w, mode.h));
 }
@@ -749,27 +696,16 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
             }
 
             SDL_Event event;
-#ifdef __APPLE__
-            RunOnMainThread([] { SDL_PumpEvents(); });
-            while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) > 0) {
-#else
             while (SDL_PollEvent(&event)) {
-#endif
                 if (event.type == SDL_QUIT) {
                     LibcRequestExit_nid_postfix(0);
                     throw ProcessShutdown{};
                 }
                 padInput.HandleEvent(event, window);
                 if (window.Handle() != nullptr) {
-#ifdef __APPLE__
-                    mouseInput.HandleEvent(event, window.Id());
-                    keyboardInput.HandleEvent(event, window.Id());
-                    imeTextInput.HandleEvent(event, window.Id());
-#else
                     mouseInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
                     keyboardInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
                     imeTextInput.HandleEvent(event, SDL_GetWindowID(window.Handle()));
-#endif
                 }
             }
             padInput.Update(window);
@@ -783,11 +719,7 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 processFlip(*current);
                 int windowWidth = 0;
                 int windowHeight = 0;
-#ifdef __APPLE__
-                if (window.Handle() != nullptr) RunOnMainThread([&] { SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight); });
-#else
                 if (window.Handle() != nullptr) SDL_GetWindowSize(window.Handle(), &windowWidth, &windowHeight);
-#endif
                 if (windowWidth > 0 && windowHeight > 0) {
                     const auto presented = AgcDriver::ComputeContainSize_nid_postfix(current->width, current->height, static_cast<std::uint32_t>(windowWidth), static_cast<std::uint32_t>(windowHeight), true);
                     mouseInput.SetPresentation(current->width, current->height, presented.width, presented.height);

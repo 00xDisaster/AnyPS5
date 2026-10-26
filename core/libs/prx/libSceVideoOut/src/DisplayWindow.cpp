@@ -16,10 +16,6 @@
 #include <windows.h>
 #include <commctrl.h>
 #endif
-#ifdef __APPLE__
-#include "prx/libc/include/MainThread.hpp"
-
-#endif
 
 namespace {
 
@@ -55,9 +51,6 @@ void DisplayWindow::Ensure(std::uint32_t sourceWidth, std::uint32_t sourceHeight
 }
 
 void DisplayWindow::create(std::uint32_t sourceWidth, std::uint32_t sourceHeight) {
-#ifdef __APPLE__
-    RunOnMainThread([&] {
-#endif
     SDL_Rect usable{};
     require(SDL_GetDisplayUsableBounds(0, &usable) == 0, SDL_GetError());
     require(DisplayWindowInitialSizePercent > 0 && DisplayWindowInitialSizePercent <= 100, "initial window size percent must be between 1 and 100");
@@ -71,15 +64,9 @@ void DisplayWindow::create(std::uint32_t sourceWidth, std::uint32_t sourceHeight
     window = SDL_CreateWindow(title.value, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, static_cast<int>(initialSize.width), static_cast<int>(initialSize.height), SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     AgcDriverUnlockVulkanLoader_nid_postfix();
     require(window != nullptr, SDL_GetError());
-#ifdef __APPLE__
-    windowId = SDL_GetWindowID(window);
-#endif
     SDL_SetWindowMinimumSize(window, static_cast<int>(DisplayWindowMinimumWidth), static_cast<int>(DisplayWindowMinimumHeight));
     applyAppIcon(window);
     installSubclass();
-#ifdef __APPLE__
-    });
-#endif
 }
 
 void DisplayWindow::updateAspectRatio(std::uint32_t sourceWidth, std::uint32_t sourceHeight) {
@@ -90,12 +77,7 @@ void DisplayWindow::updateAspectRatio(std::uint32_t sourceWidth, std::uint32_t s
 void DisplayWindow::Destroy() noexcept {
     if (window == nullptr) return;
     removeSubclass();
-#ifdef __APPLE__
-    RunOnMainThread([&] { SDL_DestroyWindow(window); });
-    windowId = 0;
-#else
     SDL_DestroyWindow(window);
-#endif
     window = nullptr;
 }
 
@@ -105,15 +87,8 @@ SDL_Window* DisplayWindow::Handle() const {
 
 void DisplayWindow::ToggleFullscreen() {
     require(window != nullptr, "window must exist before toggling fullscreen");
-#ifdef __APPLE__
-    RunOnMainThread([&] {
-        const auto flags = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 ? 0u : static_cast<Uint32>(SDL_WINDOW_FULLSCREEN_DESKTOP);
-        require(SDL_SetWindowFullscreen(window, flags) == 0, SDL_GetError());
-    });
-#else
     const auto flags = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0 ? 0u : static_cast<Uint32>(SDL_WINDOW_FULLSCREEN_DESKTOP);
     require(SDL_SetWindowFullscreen(window, flags) == 0, SDL_GetError());
-#endif
 }
 
 void DisplayWindow::DrawableSize(std::uint32_t& width, std::uint32_t& height) const {
@@ -146,11 +121,7 @@ void DisplayWindow::UpdateTitle() {
     }
     char text[160];
     std::snprintf(text, sizeof(text), "%s | FPS: %.2f (%llu)", title.value, currentFps, static_cast<unsigned long long>(frameNum));
-#ifdef __APPLE__
-    RunOnMainThread([&] { SDL_SetWindowTitle(window, text); });
-#else
     SDL_SetWindowTitle(window, text);
-#endif
     if (auto* telemetry = VideoOutTelemetry::Instance(); telemetry != nullptr && (frameNum == 1 || frameNum % 30 == 0)) telemetry->EmitPresent(frameNum, currentFps);
 }
 

@@ -12,9 +12,6 @@
 #include "prx/libSceMouse/include/MouseState.hpp"
 #include "prx/libSceVideoOut/include/DisplayWindow.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Presentation.hpp"
-#ifdef __APPLE__
-#include "prx/libc/include/MainThread.hpp"
-#endif
 #include "prx/libSceAgcDriver/Execution/include/Driver.hpp"
 #include "prx/libScePad/include/PadState.hpp"
 #include "prx/libScePad/include/Pad.hpp"
@@ -171,15 +168,7 @@ void PadInput::applyOutput() {
 void PadInput::setMouseMode(bool enabled) {
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0");
     SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0");
-#ifdef __APPLE__
-    std::string error;
-    RunOnMainThread([&] {
-        if (SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE) != 0) error = SDL_GetError();
-    });
-    if (!error.empty()) throw std::runtime_error("Pad: relative mouse mode failed: " + error);
-#else
     if (SDL_SetRelativeMouseMode(enabled ? SDL_TRUE : SDL_FALSE) != 0) throw std::runtime_error(std::string("Pad: relative mouse mode failed: ") + SDL_GetError());
-#endif
     keyboardMouse.SetMouseMode(enabled);
 }
 
@@ -302,15 +291,9 @@ void PadInput::HandleEvent(const SDL_Event& event, DisplayWindow& window) {
     if (event.type == SDL_KEYDOWN && ImeCapturesKeyboard_nid_postfix()) return;
     keyboardMouse.SetTitleReadsMouse(MouseIsOpen_nid_no_patch());
     const auto requests = keyboardMouse.HandleEvent(event, std::chrono::steady_clock::now());
-#ifdef __APPLE__
-    if (requests.toggleFullscreen && window.Handle() != nullptr && event.key.windowID == window.Id()) window.ToggleFullscreen();
-    if (requests.togglePerformanceOverlay && window.Handle() != nullptr && event.key.windowID == window.Id()) AgcDriverTogglePerformanceOverlay_nid_postfix();
-    if (requests.screenshot && window.Handle() != nullptr && event.key.windowID == window.Id()) AgcDriverRequestScreenshot_nid_postfix();
-#else
     if (requests.toggleFullscreen && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) window.ToggleFullscreen();
     if (requests.togglePerformanceOverlay && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverTogglePerformanceOverlay_nid_postfix();
     if (requests.screenshot && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverRequestScreenshot_nid_postfix();
-#endif
     if (requests.toggleMouse) setMouseMode(!keyboardMouse.MouseMode());
     if (event.type != SDL_MOUSEMOTION) publish(window.FrameNumber(), 0);
 }
