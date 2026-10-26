@@ -169,7 +169,7 @@ int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
     const auto handle = static_cast<NativeHandle>(native);
     if (option == GuestAcceptFilter) {
         bool listening = false;
-        if (!NativeListening(native, listening)) return HostError();
+        if (type != 2 && !NativeListening(native, listening)) return HostError();
         if (!listening) return ErrorInvalid;
         NotImplemented_nid_no_patch("setsockopt: SO_ACCEPTFILTER on a listening socket");
     }
@@ -284,7 +284,7 @@ int GetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int fa
     const auto handle = static_cast<NativeHandle>(native);
     if (option == GuestAcceptFilter) {
         bool listening = false;
-        if (!NativeListening(native, listening)) return HostError();
+        if (type != 2 && !NativeListening(native, listening)) return HostError();
         if (!listening) return ErrorInvalid;
         NotImplemented_nid_no_patch("getsockopt: SO_ACCEPTFILTER on a listening socket");
     }
