@@ -6,7 +6,9 @@
 
 namespace {
 
-OpusEncoderLibrary library("OpusCeltEnc", OPUS_APPLICATION_RESTRICTED_CELT, 0x81400000u);
+constexpr EncoderCodes codes{0x813F0000u, 1u, 0x10u, 0x0Du, 0x11u, 0x16u, 0x19u, 728, 0xCCu, 0x17B2u};
+
+OpusEncoderLibrary library("OpusCeltEnc", OPUS_APPLICATION_RESTRICTED_LOWDELAY, OPUS_APPLICATION_RESTRICTED_CELT, codes);
 
 } // namespace
 

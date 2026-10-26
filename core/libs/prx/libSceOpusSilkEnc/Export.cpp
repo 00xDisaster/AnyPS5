@@ -6,7 +6,9 @@
 
 namespace {
 
-OpusEncoderLibrary library("OpusSilkEnc", OPUS_APPLICATION_RESTRICTED_SILK, 0x81740000u);
+constexpr EncoderCodes codes{0x81770000u, 1u, 0x0Fu, 0x0Cu, 0x10u, 0x15u, 0x18u, 752, 0xE8u, 0x17B2u};
+
+OpusEncoderLibrary library("OpusSilkEnc", OPUS_APPLICATION_VOIP, OPUS_APPLICATION_RESTRICTED_SILK, codes);
 
 } // namespace
 
