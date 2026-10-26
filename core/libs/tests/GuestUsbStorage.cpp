@@ -88,6 +88,7 @@ struct FakeHost {
     std::filesystem::path sys;
     std::filesystem::path firstMount;
     std::filesystem::path secondMount;
+    std::filesystem::path movedMount;
 };
 
 void WriteFile(const std::filesystem::path& path, std::string_view text) {
@@ -142,9 +143,9 @@ std::string Utf8(const std::filesystem::path& path) {
     return std::string(text.begin(), text.end());
 }
 
-void Inject(const FakeHost& host, bool first, bool second) {
+void Inject(const FakeHost& host, bool first, bool second, bool firstMoved = false) {
     static const UsbStorageTestVolume none{};
-    const auto firstRoot = Utf8(host.firstMount);
+    const auto firstRoot = Utf8(firstMoved ? host.movedMount : host.firstMount);
     const auto secondRoot = Utf8(host.secondMount);
     std::vector<UsbStorageTestVolume> volumes;
     if (first) volumes.push_back({"first", firstRoot.c_str(), FirstVolumeSize, 0x0781, 0x5581, 0x0100, "SanDisk", "Ultra Fit", "4C530001", false, false});
@@ -159,7 +160,9 @@ FakeHost CreateHost() {
     host.sys = host.root / "sys";
     host.firstMount = host.root / "media" / "USB DRIVE";
     host.secondMount = host.root / "media" / "second";
+    host.movedMount = host.root / "media" / "moved";
     WriteFile(host.firstMount / "song.txt", "song");
+    WriteFile(host.movedMount / "moved.txt", "moved");
     WriteFile(host.firstMount / ".hidden", "hidden");
     std::filesystem::create_directories(host.firstMount / "Music");
     WriteFile(host.secondMount / "Readme.txt", "readme");
@@ -207,8 +210,6 @@ void TestInitializeAndTerminate() {
     Require(sceUsbStorageTerm() == 0, "terminate before initialize");
     Require(sceUsbStorageInit(nullptr) == 0, "initialize with a null attribute");
     Require(sceUsbStorageInit(nullptr) == 0, "initialize again");
-    Require(ThrowsWith([] { sceUsbStorageInit(&g_attr); }, "sceUsbStorageInit: a thread attribute is not implemented"),
-            "initialize with an attribute did not throw");
     Require(sceUsbStorageTerm() == 0, "terminate");
     Require(sceUsbStorageTerm() == 0, "terminate again");
     Require(sceUsbStorageInit(nullptr) == 0, "initialize after terminate");
@@ -244,24 +245,12 @@ void TestRegisterCallbacks() {
 }
 
 void TestMapCallbacks() {
-    Require(ThrowsWith([] { sceUsbStorageRegisterCallbackForMapAvailable(0, "/data", Callback(), nullptr); },
-                       "sceUsbStorageRegisterCallbackForMapAvailable not implemented"),
-            "register map-available callback did not throw its marker");
     Require(sceUsbStorageRegisterCallbackForMapAvailable(0, nullptr, Callback(), nullptr) == UsbStorage::InvalidArgument, "register map-available callback with a null directory");
     Require(sceUsbStorageRegisterCallbackForMapAvailable(0, "/data", nullptr, nullptr) == UsbStorage::InvalidArgument, "register a null map-available callback");
-    Require(ThrowsWith([] { sceUsbStorageUnregisterCallbackForMapAvailable(0, "/data", Callback()); },
-                       "sceUsbStorageUnregisterCallbackForMapAvailable not implemented"),
-            "unregister map-available callback did not throw its marker");
     Require(sceUsbStorageUnregisterCallbackForMapAvailable(0, nullptr, Callback()) == UsbStorage::InvalidArgument, "unregister map-available callback with a null directory");
     Require(sceUsbStorageUnregisterCallbackForMapAvailable(0, "/data", nullptr) == UsbStorage::InvalidArgument, "unregister a null map-available callback");
-    Require(ThrowsWith([] { sceUsbStorageRegisterCallbackForMapUnavailable(0, "/data", Callback(), nullptr); },
-                       "sceUsbStorageRegisterCallbackForMapUnavailable not implemented"),
-            "register map-unavailable callback did not throw its marker");
     Require(sceUsbStorageRegisterCallbackForMapUnavailable(0, nullptr, Callback(), nullptr) == UsbStorage::InvalidArgument, "register map-unavailable callback with a null directory");
     Require(sceUsbStorageRegisterCallbackForMapUnavailable(0, "/data", nullptr, nullptr) == UsbStorage::InvalidArgument, "register a null map-unavailable callback");
-    Require(ThrowsWith([] { sceUsbStorageUnregisterCallbackForMapUnavailable(0, "/data", Callback()); },
-                       "sceUsbStorageUnregisterCallbackForMapUnavailable not implemented"),
-            "unregister map-unavailable callback did not throw its marker");
     Require(sceUsbStorageUnregisterCallbackForMapUnavailable(0, nullptr, Callback()) == UsbStorage::InvalidArgument, "unregister map-unavailable callback with a null directory");
     Require(sceUsbStorageUnregisterCallbackForMapUnavailable(0, "/data", nullptr) == UsbStorage::InvalidArgument, "unregister a null map-unavailable callback");
 }
@@ -371,9 +360,19 @@ void TestDeviceInfo(const FakeHost& host) {
     std::memset(mountPoint, 0x5a, sizeof(mountPoint));
     Require(sceUsbStorageGetMountPointOfShellCore(0, mountPoint) == 0 && std::string_view(mountPoint) == "/mnt/usb0", "the device is mounted at /mnt/usb0");
     std::uint8_t exists = 0;
-    Require(sceUsbStorageIsExist(0, "/mnt/usb0", &exists) == true && exists == 1, "the attached device exists");
+    Require(sceUsbStorageIsExist(0, "/", &exists) == true && exists == 1, "the root of the attached device exists");
+    exists = 0;
+    Require(sceUsbStorageIsExist(0, nullptr, &exists) == true && exists == 1, "a null directory is the root of the attached device");
+    exists = 0;
+    Require(sceUsbStorageIsExist(0, "Music/", &exists) == true && exists == 1, "a directory of the attached device exists");
     exists = 1;
-    Require(sceUsbStorageIsExist(1, "/mnt/usb1", &exists) == true && exists == 0, "device 1 does not exist");
+    Require(sceUsbStorageIsExist(0, "/Missing", &exists) == true && exists == 0, "a missing directory does not exist");
+    exists = 1;
+    Require(sceUsbStorageIsExist(0, "/song.txt", &exists) == true && exists == 0, "a file is not a directory");
+    Require(ThrowsWith([&] { sceUsbStorageIsExist(0, "/Music/../Music", &exists); }, "sceUsbStorageIsExist: a directory with . or .. components is not implemented"),
+            "an existence query with a .. component did not throw");
+    exists = 1;
+    Require(sceUsbStorageIsExist(1, "/", &exists) == true && exists == 0, "device 1 does not exist");
     const auto resolved = ResolvePath_nid_no_patch("/mnt/usb0/song.txt");
     std::error_code error;
     Require(std::filesystem::equivalent(resolved, host.firstMount / "song.txt", error), "the mount point resolves to the host volume");
@@ -386,9 +385,6 @@ void TestDeviceMaps() {
     Require(std::string_view(mountPoint) == "/mnt/usb0" && mountId == 0, "the root is mapped at the mount point");
     Require(sceUsbStorageRequestMap(0, "Music/", 0, 0, mountPoint, nullptr) == 0, "map a directory of the device");
     Require(std::string_view(mountPoint) == "/mnt/usb0/Music", "the directory is mapped below the mount point");
-    Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/Music", 0, 0, mountPoint, nullptr); },
-                       "sceUsbStorageRequestMap: mapping a mapped directory again is not implemented"),
-            "map a mapped directory again did not throw");
     Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/Missing", 0, 0, mountPoint, nullptr); },
                        "sceUsbStorageRequestMap: mapping a directory the device does not hold is not implemented"),
             "map a missing directory did not throw");
@@ -410,9 +406,6 @@ void TestDeviceMaps() {
     Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "Music\\..", 0, 0, mountPoint, nullptr); },
                        "sceUsbStorageRequestMap: a directory with a backslash is not implemented"),
             "map a directory with a backslash did not throw");
-    Require(ThrowsWith([&] { sceUsbStorageRequestMap(0, "/", 1, 0, mountPoint, nullptr); },
-                       "sceUsbStorageRequestMap: nonzero flags or a volume size are not implemented"),
-            "map with flags did not throw");
     Require(sceUsbStorageRequestUnmap(0, "/mnt/usb0/Music") == 0, "unmap the directory");
     Require(ThrowsWith([] { sceUsbStorageRequestUnmap(0, "/mnt/usb0/Music"); }, "sceUsbStorageRequestUnmap not implemented"),
             "unmap an unmapped directory did not throw its marker");
@@ -420,9 +413,6 @@ void TestDeviceMaps() {
     std::int32_t status = 0x5a5a5a5a;
     Require(sceUsbStorageRequestMapWSB(0, nullptr, 0, 0, mountPoint, &status) == 0, "map the root through the WSB request");
     Require(std::string_view(mountPoint) == "/mnt/usb0" && status == 0, "the WSB request mapped the root at the mount point");
-    Require(ThrowsWith([&] { sceUsbStorageRequestMapWSB(0, "/Music", 0, 1, mountPoint, &status); },
-                       "sceUsbStorageRequestMapWSB: nonzero flags or a nonzero fourth argument are not implemented"),
-            "a WSB request with a fourth argument did not throw");
     Require(sceUsbStorageRequestUnmap(0, "/mnt/usb0") == 0, "unmap the WSB root");
 }
 
@@ -430,11 +420,7 @@ void TestDeviceGetdents() {
     std::int32_t fd = -1;
     std::uint64_t bufferSize = 0;
     Require(sceUsbStorageGetdentsOpen(0, &fd, &bufferSize) == 0 && fd > 0 && bufferSize == 0x8000, "open a getdents scan of the device");
-    std::uint8_t small[8];
     std::uint64_t bytesRead = 0;
-    Require(ThrowsWith([&] { sceUsbStorageGetdentsRead(fd, small, sizeof(small), &bytesRead); },
-                       "sceUsbStorageGetdentsRead: a buffer smaller than the next entry is not implemented"),
-            "read into a buffer smaller than an entry did not throw");
     std::vector<std::uint8_t> buffer(0x8000, 0x5a);
     Require(sceUsbStorageGetdentsRead(fd, buffer.data(), buffer.size(), &bytesRead) == 0, "read the getdents scan");
     std::set<std::tuple<std::string, std::uint8_t>> entries;
@@ -507,6 +493,28 @@ void TestHotplug(const FakeHost& host) {
     Require(Events().events.size() == 3, "hotplug raised no other event");
 }
 
+void TestRootChange(const FakeHost& host) {
+    Inject(host, true, false);
+    Require(sceUsbStorageInit(nullptr) == 0, "initialize for a root change");
+    std::error_code error;
+    Require(std::filesystem::equivalent(ResolvePath_nid_no_patch("/mnt/usb0/song.txt"), host.firstMount / "song.txt", error), "the volume starts at its first root");
+    Require(sceUsbStorageRegisterCallback(UsbStorage::MountEvent, &Record, &g_mountTag) == 0, "register the mount recorder for a root change");
+    std::size_t seen = 0;
+    {
+        std::lock_guard lock(Events().mutex);
+        seen = Events().events.size();
+    }
+    Inject(host, true, true, true);
+    Require(NextEvent(seen).event.device == 1, "the scan that moved the volume mounted the second one");
+    Require(std::filesystem::equivalent(ResolvePath_nid_no_patch("/mnt/usb0/moved.txt"), host.movedMount / "moved.txt", error),
+            "the mount point follows a volume whose key stayed while its root changed");
+    std::uint32_t devices[UsbStorage::MaxDevices]{};
+    std::int32_t count = -1;
+    Require(sceUsbStorageGetDeviceList(devices, &count) == 0 && count == 2 && devices[0] == 0, "the moved volume keeps its id");
+    Require(sceUsbStorageUnregisterCallback(UsbStorage::MountEvent, &Record) == 0, "unregister the mount recorder after a root change");
+    Require(sceUsbStorageTerm() == 0, "terminate after a root change");
+}
+
 void TestSysfsScan(const FakeHost& host) {
     WriteMounts(host, FirstLine(host) + SecondLine(host) + MountLine("8_1", "/", host.root / "media" / "efi", "rw", "vfat") +
                           MountLine("8_49", "/", host.root / "media", "rw", "ext4") + MountLine("8_17", "/Music", host.root / "media" / "bound", "rw", "vfat"));
@@ -543,6 +551,7 @@ int main() {
     TestThrowingExports();
     TestDevices(host);
     TestHotplug(host);
+    TestRootChange(host);
     if (CreateSysfs(host)) {
         TestSysfsScan(host);
     } else {

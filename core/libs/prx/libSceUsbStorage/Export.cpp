@@ -71,6 +71,7 @@ struct DirectoryScan {
 
 struct Service {
     std::mutex mutex;
+    std::mutex dispatch;
     std::condition_variable wake;
     bool initialized = false;
     bool stopping = false;
@@ -111,6 +112,7 @@ void Update(Service& service, std::vector<UsbStorage::HostVolume> volumes, std::
         if (!device) continue;
         const auto found = std::find_if(volumes.begin(), volumes.end(), [&](const auto& volume) { return volume.key == device->volume.key; });
         if (found != volumes.end()) {
+            if (found->root != device->volume.root) AddPathAlias_nid_no_patch(MountPoint(slot).c_str(), found->root.string().c_str());
             device->volume = std::move(*found);
             volumes.erase(found);
             continue;
@@ -129,10 +131,29 @@ void Update(Service& service, std::vector<UsbStorage::HostVolume> volumes, std::
     }
 }
 
-void Dispatch(const std::vector<UsbStorageEvent>& events, const std::vector<Registration>& registrations) {
+std::vector<Registration>::iterator Registered(Service& service, std::int32_t eventType, UsbStorageCallback callback) {
+    return std::find_if(service.registrations.begin(), service.registrations.end(),
+                        [&](const auto& registration) { return registration.eventType == eventType && registration.callback == callback; });
+}
+
+void Dispatch(Service& service, const std::vector<UsbStorageEvent>& events) {
     for (const auto& event : events) {
+        std::vector<Registration> registrations;
+        {
+            std::lock_guard lock(service.mutex);
+            registrations = service.registrations;
+        }
         for (const auto& registration : registrations) {
-            if (registration.eventType == static_cast<std::int32_t>(event.event)) registration.callback(&event, registration.arg);
+            if (registration.eventType != static_cast<std::int32_t>(event.event)) continue;
+            std::lock_guard calling(service.dispatch);
+            void* arg = nullptr;
+            {
+                std::lock_guard lock(service.mutex);
+                const auto current = Registered(service, registration.eventType, registration.callback);
+                if (current == service.registrations.end()) continue;
+                arg = current->arg;
+            }
+            registration.callback(&event, arg);
         }
     }
 }
@@ -147,17 +168,11 @@ void* APS5_VABI Monitor(void*) {
         if (service.stopping) break;
         std::vector<UsbStorageEvent> events;
         Update(service, std::move(volumes), events);
-        const auto registrations = service.registrations;
         lock.unlock();
-        Dispatch(events, registrations);
+        Dispatch(service, events);
         lock.lock();
     }
     return nullptr;
-}
-
-std::vector<Registration>::iterator Registered(Service& service, std::int32_t eventType, UsbStorageCallback callback) {
-    return std::find_if(service.registrations.begin(), service.registrations.end(),
-                        [&](const auto& registration) { return registration.eventType == eventType && registration.callback == callback; });
 }
 
 std::filesystem::path HostName(std::string_view name) {
@@ -181,15 +196,20 @@ std::vector<std::string> DirectoryNames(const char* directory, const char* funct
     return names;
 }
 
-std::string Map(Device& device, std::uint32_t slot, const char* directory, const char* function) {
+std::filesystem::path HostDirectory(const Device& device, const std::vector<std::string>& names) {
     auto host = device.volume.root;
+    for (const auto& name : names) host /= HostName(name);
+    return host;
+}
+
+std::string Map(Device& device, std::uint32_t slot, const char* directory, const char* function) {
+    const auto names = DirectoryNames(directory, function);
     auto path = MountPoint(slot);
-    for (const auto& name : DirectoryNames(directory, function)) {
-        host /= HostName(name);
-        path += "/" + name;
-    }
+    for (const auto& name : names) path += "/" + name;
     std::error_code error;
-    if (!std::filesystem::is_directory(host, error)) throw std::runtime_error(std::string(function) + ": mapping a directory the device does not hold is not implemented");
+    if (!std::filesystem::is_directory(HostDirectory(device, names), error)) {
+        throw std::runtime_error(std::string(function) + ": mapping a directory the device does not hold is not implemented");
+    }
     if (path.size() >= UsbStorage::MountPointSize) throw std::runtime_error(std::string(function) + ": a mount point longer than 127 bytes is not implemented");
     if (std::find(device.maps.begin(), device.maps.end(), path) != device.maps.end()) {
         throw std::runtime_error(std::string(function) + ": mapping a mapped directory again is not implemented");
@@ -286,6 +306,13 @@ std::int32_t APS5_VABI sceUsbStorageUnregisterCallback(std::int32_t eventType, U
         return UsbStorage::InvalidArgument;
     }
     auto& service = State();
+    bool fromCallback = false;
+    {
+        std::lock_guard lock(service.mutex);
+        fromCallback = service.monitor != nullptr && scePthreadEqual(scePthreadSelf(), service.monitor) != 0;
+    }
+    std::unique_lock calling(service.dispatch, std::defer_lock);
+    if (!fromCallback) calling.lock();
     std::lock_guard lock(service.mutex);
     const auto found = Registered(service, eventType, callback);
     if (found != service.registrations.end()) {
@@ -383,11 +410,12 @@ int APS5_VABI sceUsbStorageGetMountPointOfShellCore(uint32_t device, char* mount
 }
 
 bool APS5_VABI sceUsbStorageIsExist(std::uint32_t device, const char* directory, std::uint8_t* exists) {
-    (void)directory;
     if (exists == nullptr) throw std::runtime_error("sceUsbStorageIsExist: a null output is not implemented");
     auto& service = State();
     std::lock_guard lock(service.mutex);
-    *exists = Find(service, device) != nullptr ? 1 : 0;
+    const auto* found = Find(service, device);
+    std::error_code error;
+    *exists = found != nullptr && std::filesystem::is_directory(HostDirectory(*found, DirectoryNames(directory, __func__)), error) ? 1 : 0;
     return true;
 }
 
