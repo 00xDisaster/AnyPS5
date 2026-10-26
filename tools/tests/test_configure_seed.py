@@ -203,10 +203,18 @@ class ConfigureSeedTests(ConfigureSeedProject):
 
 
 class ConfigureSeedRoundTripTests(ConfigureSeedProject):
+    def configure_cache_only(self, name, *extra):
+        source = self.root / "cache-only-source"
+        source.mkdir(exist_ok=True)
+        (source / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.20)\nproject(cache_round_trip NONE)\n", encoding="utf-8")
+        return subprocess.run(["cmake", *extra, "-S", str(source), "-B", str(self.root / name), "-G", "Ninja"],
+                              check=True, capture_output=True, text=True).stdout
+
     def test_check_names_with_spaces_round_trip_through_cmake(self):
         cache = self.root / "named-check.txt"
         cache.write_text('//Test HAVE FEATURE\nHAVE FEATURE:INTERNAL=1\n', encoding="utf-8")
-        output = self.configure("named-check", "-C", str(self.seed(cache, "named-check.cmake")))
+        output = self.configure_cache_only("named-check", "-C", str(self.seed(cache, "named-check.cmake")))
         self.assertNotRegex(output, r"CMake Error")
         seeded = self.root / "named-check" / "CMakeCache.txt"
         self.assertEqual(configure_seed.checks(seeded)["HAVE FEATURE"][0], "1")
@@ -230,7 +238,7 @@ class ConfigureSeedRoundTripTests(ConfigureSeedProject):
         cache.parent.mkdir()
         value = r'a;b "c" \d ${e} $f'
         cache.write_text(f"//Test MINI_ODD\nMINI_ODD:INTERNAL={value}\n", encoding="utf-8")
-        self.configure("odd-seeded", "-C", str(self.seed(cache, "odd.cmake")))
+        self.configure_cache_only("odd-seeded", "-C", str(self.seed(cache, "odd.cmake")))
         seeded = (self.root / "odd-seeded" / "CMakeCache.txt").read_text(encoding="utf-8")
         self.assertIn(f"MINI_ODD:INTERNAL={value}\n", seeded)
         self.assertEqual(configure_seed.checks(self.root / "odd-seeded" / "CMakeCache.txt")["MINI_ODD"][0], value)
