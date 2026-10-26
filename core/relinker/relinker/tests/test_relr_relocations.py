@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
+import platform
+import signal
 import struct
 import subprocess
 import sys
 import tempfile
 
 from guest_import_fixtures import dynamic, executable
+from signal_run import run_without_core_dump
 from test_guest_symbol_names import dynamic_tags, elf_loads, file_offset
 from test_optional_plt import fixture
 from test_windows_import_modules import provider
@@ -83,6 +86,19 @@ def linux_relocations(path):
     return [struct.unpack_from("<QQQ", image, position) for position in range(offset, offset + tags[8], 24)]
 
 
+def linux_checked_entry(image, expected):
+    image = bytearray(image)
+    entry = struct.unpack_from("<Q", image, 24)[0]
+    checked_entry = entry + 0x40
+    code = b"\xe8" + struct.pack("<i", entry - checked_entry - 5)
+    code += b"\x3d" + struct.pack("<I", expected) + b"\x74\x02\x0f\x0b\xcc"
+    offset = file_offset(image, checked_entry)
+    assert offset + len(code) <= len(image)
+    image[offset:offset + len(code)] = code
+    struct.pack_into("<Q", image, 24, checked_entry)
+    return image
+
+
 def main():
     relinker = Path(sys.argv[1]).resolve()
     guest = len(sys.argv) > 2 and sys.argv[2] == "guest"
@@ -106,9 +122,12 @@ def main():
                     modules.mkdir()
                     module = modules / "provider.prx"
                     module.write_bytes(image)
-                    source.write_bytes(executable("provider.prx"))
+                    input_image = executable("provider.prx")
                 else:
-                    source.write_bytes(image)
+                    input_image = image
+                if system.startswith("linux"):
+                    input_image = linux_checked_entry(input_image, 11 if guest else 42)
+                source.write_bytes(input_image)
                 output = case / ("output.exe" if system == "windows" else "output.bin")
                 result = subprocess.run([str(relinker), *options, *([] if guest else ["--skip-sce-module"]),
                                          str(source), str(output)], capture_output=True, text=True, timeout=10)
@@ -124,9 +143,13 @@ def main():
                     observed = linux_relocations(artifact)
                     wanted = {(target + 0x400000, kind, addend + 0x400000) for target, kind, addend in expected} if system == "linux" and not guest else expected
                     assert set(observed) == wanted and len(observed) == len(wanted), (label, observed, wanted)
-                if (system == "windows" and os.name == "nt") or (system.startswith("linux") and sys.platform == "linux"):
+                if system == "windows" and os.name == "nt":
                     executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=10)
                     assert executed.returncode == (11 if guest else 42), (label, system, executed.returncode, executed.stderr)
+                if system.startswith("linux") and sys.platform == "linux" and platform.machine() in ("x86_64", "AMD64"):
+                    output.chmod(0o755)
+                    executed = run_without_core_dump([str(output)], capture_output=True, text=True, timeout=10)
+                    assert executed.returncode == -signal.SIGTRAP, (label, system, executed.returncode, executed.stderr)
 
         for label, words, mixed in positive:
             if guest:
