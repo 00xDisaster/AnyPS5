@@ -1,5 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/Shutdown.hpp"
+#include "prx/libc/include/Api.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -16,13 +18,6 @@
 #include <unistd.h>
 #endif
 
-extern "C" int APS5_VABI execv_nid_postfix(const char*, char* const*);
-extern "C" int APS5_VABI execvp_nid_postfix(const char*, char* const*);
-extern "C" int APS5_VABI execve_nid_postfix(const char*, char* const*, char* const*);
-extern "C" int* APS5_VABI __error_nid_postfix();
-extern "C" int APS5_VABI getargc_nid_postfix();
-extern "C" const char** APS5_VABI getargv_nid_postfix();
-extern "C" int APS5_VABI __cxa_atexit_nid_postfix(void (APS5_VABI*)(void*), void*, void*);
 
 namespace {
 
