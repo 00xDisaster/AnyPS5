@@ -82,9 +82,6 @@ def link_command_mentions_target(command, target):
 
 
 def links_product_library(target, targets, source_root):
-    # The File API dependency graph includes add_dependencies edges. The
-    # executable's link fragments contain the libraries actually passed to
-    # the linker, including transitive link libraries.
     command = link_command(target)
     if not command:
         return False
