@@ -27,6 +27,13 @@ int SceV2Selector = 0;
 const void* SceV2Caught = nullptr;
 }
 
+struct LocinfoCall { GuestLocale::SceV2Locinfo* self; const char* name; };
+
+extern "C" void APS5_VABI SceV2ConstructLocinfo(const void* argument) {
+    const auto* call = static_cast<const LocinfoCall*>(argument);
+    _ZNSt8__sce_v28_Locinfo13_Locinfo_ctorEPS0_PKc_nid_postfix(call->self, call->name);
+}
+
 static unsigned failures = 0;
 
 static void Require(bool value, const char* what) {
@@ -173,6 +180,32 @@ static void CheckSyserrorMap() {
     Require(_ZSt13_Syserror_mapi_nid_postfix(99999) == nullptr, "unversioned _Syserror_map(unknown) stays null");
 }
 
+static void CheckLocinfo() {
+    GuestLocale::SceV2Locinfo locinfo {};
+    _ZNSt8__sce_v28_Locinfo13_Locinfo_ctorEPS0_PKc_nid_postfix(&locinfo, nullptr);
+    Require(locinfo.name != nullptr && std::strcmp(locinfo.name, "C") == 0, "_Locinfo(nullptr) stores C");
+    Require(locinfo.name == locinfo.classicName, "_Locinfo stores the classic name twice");
+    _ZNSt8__sce_v28_Locinfo13_Locinfo_ctorEPS0_PKc_nid_postfix(&locinfo, "");
+    Require(locinfo.name != nullptr && std::strcmp(locinfo.name, "C") == 0, "_Locinfo(empty) stores C");
+    _ZNSt8__sce_v28_Locinfo13_Locinfo_ctorEPS0_PKc_nid_postfix(&locinfo, "C");
+    Require(locinfo.classicName != nullptr && std::strcmp(locinfo.classicName, "C") == 0, "_Locinfo(C) stores C");
+    _ZNSt8__sce_v28_Locinfo13_Locinfo_dtorEPS0__nid_postfix(&locinfo);
+
+    const TypeRecord runtimeError = Named("NSt8__sce_v213runtime_errorE");
+    const TypeRecord logicError = Named("NSt8__sce_v211logic_errorE");
+    GuestLocale::SceV2Locinfo invalid {};
+    LocinfoCall call {&invalid, "en_US.UTF-8"};
+    SceV2CatchType = &runtimeError;
+    SceV2OtherType = &logicError;
+    SceV2Selector = 0;
+    inspected[0] = 0;
+    inspectBytes = sizeof(void*);
+    SceV2Catch(reinterpret_cast<Thrower>(SceV2ConstructLocinfo), &call);
+    Require(SceV2Selector == 2, "_Locinfo(non-C) throws");
+    Require(std::strcmp(inspected, "NSt8__sce_v213runtime_errorE|bad locale name") == 0, "_Locinfo(non-C) message");
+    inspectBytes = sizeof(LibcException::ExceptionObject);
+}
+
 static void CheckTicks() {
     const auto before = _Xtime_get_ticks_nid_postfix();
     const auto ticks = _ZNSt8__sce_v216_Xtime_get_ticksEv_nid_postfix();
@@ -185,6 +218,7 @@ int main() {
     CheckThrowers();
     CheckCopies();
     CheckSyserrorMap();
+    CheckLocinfo();
     CheckTicks();
     if (failures) return 1;
     std::puts("guest std::__sce_v2 exceptions: PASS");

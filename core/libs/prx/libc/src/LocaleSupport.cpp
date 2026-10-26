@@ -776,6 +776,21 @@ void APS5_VABI _ZNSt8_LocinfoD1Ev_nid_postfix(GuestLocale::LocinfoStorage* self)
     if (self == nullptr) throw std::invalid_argument("_Locinfo destructor: null object");
 }
 
+static const char g_sceV2ClassicLocaleName[] = "C";
+
+void APS5_VABI _ZNSt8__sce_v28_Locinfo13_Locinfo_ctorEPS0_PKc_nid_postfix(GuestLocale::SceV2Locinfo* self, const char* localeName) {
+    if (self == nullptr) throw std::invalid_argument("_Locinfo: null object");
+    if (localeName != nullptr && *localeName != 0 && std::strcmp(localeName, "C") != 0)
+        _ZNSt8__sce_v215_Xruntime_errorEPKc_nid_postfix("bad locale name");
+    self->name = g_sceV2ClassicLocaleName;
+    self->classicName = g_sceV2ClassicLocaleName;
+}
+
+void APS5_VABI _ZNSt8__sce_v28_Locinfo13_Locinfo_dtorEPS0__nid_postfix(GuestLocale::SceV2Locinfo* self) {
+    if (self == nullptr) throw std::invalid_argument("_Locinfo destructor: null object");
+    (void)self;
+}
+
 int APS5_VABI _Mbtowcx_nid_postfix(std::uint16_t* dst, const char* src, std::size_t count, mbstate_t* st) {
     if (dst == nullptr || src == nullptr || st == nullptr || count == 0) throw std::invalid_argument("_Mbtowcx: invalid conversion arguments");
     wchar_t converted{};
