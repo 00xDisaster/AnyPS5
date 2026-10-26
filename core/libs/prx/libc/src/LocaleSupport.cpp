@@ -422,10 +422,20 @@ GuestLocale::IosBase* APS5_VABI SetStreamWidth(GuestLocale::IosBase* stream, std
     return stream;
 }
 
+GuestLocale::IosBase* APS5_VABI SetStreamPrecision(GuestLocale::IosBase* stream, std::int32_t precision) {
+    if (stream == nullptr) throw std::invalid_argument("setprecision: null stream");
+    stream->precision = precision;
+    return stream;
+}
+
 static_assert(sizeof(StreamManipulator) == 0x10);
 
 StreamManipulator APS5_VABI _ZSt4setwi_nid_postfix(std::int32_t width) {
     return {&SetStreamWidth, width};
+}
+
+StreamManipulator APS5_VABI _ZSt12setprecisioni_nid_postfix(std::int32_t precision) {
+    return {&SetStreamPrecision, precision};
 }
 
 void APS5_VABI _ZNSt8ios_base7_AddstdEPS__nid_postfix(GuestLocale::IosBase* self) {
