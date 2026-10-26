@@ -511,7 +511,7 @@ if(BUILD_TESTING)
     endif()
 
     if(WIN32)
-        add_test_executable(agc_private_collect_tests EXCLUDE_FROM_ALL tests/PrivateCollect.cpp)
+        add_test_executable(agc_private_collect_tests tests/PrivateCollect.cpp)
         target_include_directories(agc_private_collect_tests PRIVATE ${LIBS_INCLUDE_DIR})
         target_link_libraries(agc_private_collect_tests PRIVATE libc)
         target_compile_definitions(agc_private_collect_tests PRIVATE APS5_COUNT_MAPPING_QUERIES=1)
