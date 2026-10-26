@@ -1,29 +1,10 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "SceTypes.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
-
-extern "C" {
-int APS5_VABI pthread_attr_init_nid_postfix(PthreadAttr* attr);
-int APS5_VABI pthread_attr_destroy_nid_postfix(PthreadAttr* attr);
-int APS5_VABI pthread_attr_getdetachstate_nid_postfix(const PthreadAttr* attr, int* state);
-int APS5_VABI pthread_attr_setdetachstate_nid_postfix(PthreadAttr* attr, int state);
-int APS5_VABI pthread_attr_getguardsize_nid_postfix(const PthreadAttr* attr, std::size_t* size);
-int APS5_VABI pthread_attr_setguardsize_nid_postfix(PthreadAttr* attr, std::size_t size);
-int APS5_VABI pthread_attr_getstacksize_nid_postfix(const PthreadAttr* attr, std::size_t* size);
-int APS5_VABI pthread_attr_setstacksize_nid_postfix(PthreadAttr* attr, std::size_t size);
-int APS5_VABI pthread_attr_getschedparam_nid_postfix(const PthreadAttr* attr, KernelSchedParam* param);
-int APS5_VABI pthread_attr_setschedparam_nid_postfix(PthreadAttr* attr, const KernelSchedParam* param);
-int APS5_VABI pthread_equal_nid_postfix(Pthread first, Pthread second);
-Pthread APS5_VABI pthread_self_nid_postfix(void);
-int APS5_VABI sched_yield_nid_postfix(void);
-void APS5_VABI pthread_yield_nid_postfix(void);
-int APS5_VABI pthread_setcancelstate_nid_postfix(int state, int* oldState);
-int APS5_VABI pthread_create_name_np_nid_postfix(Pthread* thread, const PthreadAttr* attr, PthreadEntry entry, void* arg, const char* name);
-int APS5_VABI pthread_join_nid_postfix(Pthread thread, void** value);
-}
 
 static constexpr int GuestEinval = 22;
 static constexpr int CancelEnable = 0;
