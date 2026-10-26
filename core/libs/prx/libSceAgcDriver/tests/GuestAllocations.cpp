@@ -170,6 +170,13 @@ void RunGuestAllocationTests() {
     Require(static_cast<unsigned char*>(pointer)[31] == 0x66, "aligned guest realloc lost data");
     GuestHeap::GuestHeapFree_nid_postfix(pointer);
     Require(GuestAllocations::GuestAllocationsAcquire_nid_postfix().empty(), "freed guest allocations remain registered");
+    pointer = GuestHeap::GuestHeapAllocate_nid_postfix(32);
+    const auto savedBlockBytes = reinterpret_cast<std::size_t*>(pointer)[-1];
+    reinterpret_cast<std::size_t*>(pointer)[-1] = 0;
+    reject([&] { GuestHeap::GuestHeapFree_nid_postfix(pointer); });
+    reinterpret_cast<std::size_t*>(pointer)[-1] = savedBlockBytes;
+    GuestHeap::GuestHeapFree_nid_postfix(pointer);
+    Require(GuestAllocations::GuestAllocationsAcquire_nid_postfix().empty(), "freed guest allocations remain registered");
     std::array<std::byte, 128> mapping{};
     {
         GuestAllocations::Mutation mutation;

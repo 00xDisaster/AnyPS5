@@ -286,11 +286,20 @@ void* emptyInPlace(GuestAllocations::Mutation& mutation, void* pointer, bool gpu
     return pointer;
 }
 
-void free(GuestAllocations::Mutation& mutation, void* pointer) {
-    mutation.Remove(pointer);
+void free(GuestAllocations::Mutation& mutation, void* pointer, std::size_t bytes) {
+    const auto raw = reinterpret_cast<void**>(pointer)[-2];
     const auto blockBytes = reinterpret_cast<std::size_t*>(pointer)[-1];
+    const auto rawAddress = reinterpret_cast<std::uintptr_t>(raw);
+    const auto pointerAddress = reinterpret_cast<std::uintptr_t>(pointer);
+    if (rawAddress > pointerAddress || pointerAddress - rawAddress < HeaderBytes)
+        throw std::runtime_error("guest heap block header does not precede its allocation");
+    if (rawAddress > std::numeric_limits<std::uintptr_t>::max() - blockBytes || pointerAddress > rawAddress + blockBytes || bytes > rawAddress + blockBytes - pointerAddress)
+        throw std::runtime_error("guest heap block header does not cover its allocation");
+    if (GuestArena::GuestArenaAvailable_nid_postfix() && !GuestArena::GuestArenaContains_nid_postfix(raw, blockBytes))
+        throw std::runtime_error("guest heap block lies outside the guest arena");
+    mutation.Remove(pointer);
     shrink(usage().inUse, blockBytes);
-    rawFree(reinterpret_cast<void**>(pointer)[-2], blockBytes);
+    rawFree(raw, blockBytes);
 }
 
 }
@@ -305,7 +314,7 @@ void GuestHeapFree_nid_postfix(void* pointer) {
     GuestAllocations::Mutation mutation;
     const auto range = mutation.Find(pointer);
     mutation.RequireUnpinned(pointer, range.bytes);
-    free(mutation, pointer);
+    free(mutation, pointer, range.bytes);
 }
 
 void* GuestHeapReallocate_nid_postfix(void* pointer, std::size_t bytes) {
@@ -316,7 +325,7 @@ void* GuestHeapReallocate_nid_postfix(void* pointer, std::size_t bytes) {
     if (bytes == 0) return emptyInPlace(mutation, pointer, range.gpu);
     void* result = allocate(mutation, MinimumAlignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
-    free(mutation, pointer);
+    free(mutation, pointer, range.bytes);
     return result;
 }
 
@@ -333,7 +342,7 @@ void* GuestHeapRealign_nid_postfix(void* pointer, std::size_t bytes, std::size_t
     }
     void* result = allocate(mutation, alignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
-    free(mutation, pointer);
+    free(mutation, pointer, range.bytes);
     return result;
 }
 
