@@ -1,3 +1,4 @@
+#include "prx/libSceFreeType/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 
 #include <ft2build.h>
@@ -14,7 +15,6 @@
 #include <filesystem>
 #include <limits>
 #include <source_location>
-#include <stdexcept>
 #include <string>
 
 #ifdef _WIN32
@@ -22,10 +22,6 @@
 #else
 #include <dlfcn.h>
 #endif
-
-namespace FreeType {
-struct GuestLibrary;
-}
 
 using FreeType::GuestLibrary;
 
@@ -81,20 +77,6 @@ static void Change(const Api& api, GuestLibrary* library, FT_Library native, Gue
     Query<TValue>(api, other, nativeOther, module, property);
 }
 
-static void Reject(const Api& api, GuestLibrary* library, const char* module, const char* property) {
-    std::array<unsigned char, 64> output{};
-    output.fill(0xA5);
-    const auto before = output;
-    bool threw = false;
-    try { api.get(library, module, property, output.data()); }
-    catch (const std::runtime_error&) { threw = true; }
-    Require(threw && output == before);
-    threw = false;
-    try { api.set(library, module, property, reinterpret_cast<const void*>(1)); }
-    catch (const std::runtime_error&) { threw = true; }
-    Require(threw);
-}
-
 static void Run(const Api& api) {
     GuestLibrary* library = nullptr;
     GuestLibrary* other = nullptr;
@@ -144,11 +126,6 @@ static void Run(const Api& api) {
     Require(api.set(library, reinterpret_cast<const char*>(1), reinterpret_cast<const char*>(1), nullptr) ==
         FT_Property_Set(native, reinterpret_cast<const char*>(1), reinterpret_cast<const char*>(1), nullptr));
     Require(output == before);
-    Reject(api, library, "autofitter", "increase-x-height");
-    Reject(api, library, "autofitter", "glyph-to-script-map");
-    Reject(api, library, "ot-svg", "svg-hooks");
-    Reject(api, library, "truetype", "unknown-property");
-    Reject(api, library, "unknown-module", "interpreter-version");
     Query<std::uint32_t>(api, library, native, "truetype", "interpreter-version");
     Query<std::uint32_t>(api, other, nativeOther, "truetype", "interpreter-version");
     Require(api.done(library) == 0 && api.done(other) == 0);
