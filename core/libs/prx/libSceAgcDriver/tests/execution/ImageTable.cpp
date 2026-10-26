@@ -1621,11 +1621,14 @@ void RunGraphicsTests(AgcDriver::VulkanDevice& device) {
     for (std::uint32_t vertex = 0; vertex < 3u; ++vertex) Require(VertexResults[vertex * 4u] == static_cast<std::uint32_t>(SintTexels[0]), "image table graphics: the vertex stage read the wrong entry after the keys changed");
     Require(PixelResults[0] == std::bit_cast<std::uint32_t>(FloatTexels[0]), "image table graphics: the pixel stage read the wrong entry after the keys changed");
     Require(first == second, "image table graphics: other table keys built another pipeline");
+    for (const auto* mode : {"uint", "sint", "point"}) {
+        for (const bool draw : {false, true}) RunSharedSamplerTests(device, mode, draw);
+    }
 }
 
 }
 
-int main(int argc, char** argv) {
+int main() {
     try {
 #ifdef _WIN32
         _putenv_s("APS5_SRGB_SHADER_DECODE", "1");
@@ -1634,12 +1637,6 @@ int main(int argc, char** argv) {
 #endif
         const auto device = OpenVulkanTestDevice();
         if (!device) return VulkanTestSkipped;
-        if (argc == 4 && std::string(argv[1]) == "--shared-sampler") {
-            Require(std::string(argv[3]) == "draw" || std::string(argv[3]) == "dispatch", "unknown shared sampler stage");
-            RunSharedSamplerTests(*device, argv[2], std::string(argv[3]) == "draw");
-            return 0;
-        }
-        Require(argc == 1, "unknown image table test arguments");
         RunTests(*device);
         RunBorderSwizzleTests(*device);
         RunAnisoOverrideTests(*device);
