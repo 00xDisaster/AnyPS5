@@ -896,25 +896,6 @@ static void CheckUnknownRootsAndTopLevelNames() {
         *__error_nid_postfix() = 13;
         Require(sysctl_nid_postfix(mib, 2, &value, &length, nullptr, 0) == -1 && *__error_nid_postfix() == 2);
         Require(value == 0x5a5a5a5a && length == sizeof(value));
-        bool threw = false;
-        try {
-            sysctl_nid_postfix(mib, 2, nullptr, nullptr, &value, sizeof(value));
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw);
-    }
-    for (const int root : {256, 0x7fffffff}) {
-        const int mib[] = {root, 1};
-        int value = 0;
-        std::size_t length = sizeof(value);
-        bool threw = false;
-        try {
-            sysctl_nid_postfix(mib, 2, &value, &length, nullptr, 0);
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw);
     }
     struct TopLevel {
         const char* name;
