@@ -219,6 +219,19 @@ foreach(agcFirstSampleClass IN ITEMS Float Uint Sint)
     )
     list(APPEND agcPresentationShaderHeaders ${agcFirstSampleShaderHeader})
 endforeach()
+set(agcPackedFloatResolveShaderSource ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/shaders/PackedFloatResolve.frag)
+set(agcPackedFloatResolveShaderSpv ${agcTextureDetileGeneratedDir}/PackedFloatResolve.spv)
+set(agcPackedFloatResolveShaderHeader ${agcTextureDetileGeneratedDir}/PackedFloatResolve_spv.h)
+add_custom_command(
+        OUTPUT "${agcPackedFloatResolveShaderHeader}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTextureDetileGeneratedDir}"
+        COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcPackedFloatResolveShaderSpv}" "${agcPackedFloatResolveShaderSource}"
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${agcPackedFloatResolveShaderSpv} -DOUTPUT=${agcPackedFloatResolveShaderHeader}
+        -DSYMBOL=PACKED_FLOAT_RESOLVE_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
+        DEPENDS "${agcPackedFloatResolveShaderSource}" glslang-standalone
+        VERBATIM
+)
+list(APPEND agcPresentationShaderHeaders ${agcPackedFloatResolveShaderHeader})
 foreach(agcOverlayStage IN ITEMS Vert Frag)
     string(TOLOWER "${agcOverlayStage}" agcOverlayExtension)
     string(TOUPPER "${agcOverlayStage}" agcOverlaySymbol)
@@ -320,6 +333,7 @@ set(agcDriverSources
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/DepthSurface.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/MultisampleTarget.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/FirstSampleCopy.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/PackedFloatResolve.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/ColorTargetLayout.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/ColorTargetTransfer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/Pipeline.cpp
