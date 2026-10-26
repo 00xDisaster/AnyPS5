@@ -1456,7 +1456,7 @@ int APS5_VABI sceNetSetsockopt(int s, int level, int optname, const void* optval
     }
     if (level == NET_IPPROTO_IPV6) {
         if (!optval) return fail(NET_EINVAL);
-        const int error = GuestSockets::SetIpv6LevelOption(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, optval, optlen);
+        const int error = GuestSocketSetIpv6LevelOption_nid_no_patch(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, optval, optlen);
         return error == 0 ? 0 : fail(error);
     }
     if (level == NET_IPPROTO_TCP && socket.type != NET_SOCK_STREAM) return fail(NET_EINVAL);
@@ -1540,7 +1540,7 @@ int APS5_VABI sceNetGetsockopt(int s, int level, int optname, void* optval, uint
     if (level == NET_IPPROTO_IPV6) {
         int value = 0;
         std::uint32_t length = *optlen;
-        const int error = GuestSockets::GetIpv6LevelOption(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, &value, &length);
+        const int error = GuestSocketGetIpv6LevelOption_nid_no_patch(static_cast<std::uintptr_t>(socket.native->value), socket.family == NET_AF_INET6, optname, &value, &length);
         if (error != 0) return fail(error);
         const GuestArena::HostWrite destination(length == 0 ? nullptr : optval, length);
         if (!destination.Open()) return fail(NET_EFAULT);

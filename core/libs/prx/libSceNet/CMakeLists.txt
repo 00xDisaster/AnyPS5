@@ -4,6 +4,18 @@ target_link_libraries(libSceNet PRIVATE libSceNetCtl)
 configure_windows_unwind(libSceNet)
 
 if(BUILD_TESTING)
+    add_test_executable(net_ipv6only_patched_tests tests/Ipv6OnlyPatched.cpp
+        ${LIBS_INCLUDE_DIR}/nid/src/NidCompute.cpp
+        ${LIBS_INCLUDE_DIR}/nid/src/Sha1.cpp)
+    target_include_directories(net_ipv6only_patched_tests PRIVATE ${LIBS_INCLUDE_DIR} ${LIBS_INCLUDE_DIR}/nid/include)
+    target_link_libraries(net_ipv6only_patched_tests PRIVATE ${CMAKE_DL_LIBS})
+    add_dependencies(net_ipv6only_patched_tests libs)
+    if(MINGW)
+        target_compile_options(net_ipv6only_patched_tests PRIVATE -fasynchronous-unwind-tables)
+        target_link_options(net_ipv6only_patched_tests PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net_ipv6only_patched COMMAND net_ipv6only_patched_tests ${PATCHED_DIR})
+    set_tests_properties(net_ipv6only_patched PROPERTIES TIMEOUT 20 SKIP_RETURN_CODE 77)
     add_test_executable(net_ipv6only_tests tests/Ipv6Only.cpp)
     target_include_directories(net_ipv6only_tests PRIVATE ${LIBS_INCLUDE_DIR})
     target_link_libraries(net_ipv6only_tests PRIVATE libSceNet libkernel libc)

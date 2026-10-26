@@ -524,3 +524,11 @@ int GetIpv6LevelOption(std::uintptr_t native, bool ipv6, int option, void* value
 }
 
 }
+
+extern "C" int GuestSocketSetIpv6LevelOption_nid_no_patch(std::uintptr_t native, bool ipv6, int option, const void* value, std::uint32_t length) {
+    return GuestSockets::SetIpv6LevelOption(native, ipv6, option, value, length);
+}
+
+extern "C" int GuestSocketGetIpv6LevelOption_nid_no_patch(std::uintptr_t native, bool ipv6, int option, void* value, std::uint32_t* length) {
+    return GuestSockets::GetIpv6LevelOption(native, ipv6, option, value, length);
+}
