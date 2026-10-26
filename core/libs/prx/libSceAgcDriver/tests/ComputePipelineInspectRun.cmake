@@ -4,6 +4,18 @@ endif()
 string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef runId)
 set(runDirectory "${OUTPUT_ROOT}/compute-inspect-${runId}")
 file(MAKE_DIRECTORY "${runDirectory}")
+if(NOT DEFINED ENV{ANYPS5_REQUIRE_VULKAN} AND DEFINED VULKAN_PROBE)
+    execute_process(
+            COMMAND "${CMAKE_COMMAND}" -E env "APS5_PIPELINE_STATS=0" "${VULKAN_PROBE}"
+            WORKING_DIRECTORY "${runDirectory}"
+            RESULT_VARIABLE probeResult OUTPUT_VARIABLE probeOutput ERROR_VARIABLE probeError TIMEOUT 20
+    )
+    file(WRITE "${runDirectory}/vulkan-probe.log" "${probeOutput}\n${probeError}")
+    if(probeResult STREQUAL "77")
+        message(STATUS "compute pipeline inspection: skipped, no usable Vulkan device")
+        return()
+    endif()
+endif()
 set(report "${runDirectory}/inspection.json")
 execute_process(
         COMMAND "${CMAKE_COMMAND}" -E env "APS5_PIPELINE_STATS=1" "${REPLAY}" --fixture --inspect --output "${report}"
