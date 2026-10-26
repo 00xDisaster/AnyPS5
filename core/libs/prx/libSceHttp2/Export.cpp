@@ -383,7 +383,10 @@ int APS5_VABI sceHttp2SetRequestNoContentLength(int id) {
 }
 
 int APS5_VABI sceHttp2SetResolveRetry(int id, int32_t retry) {
-    return Update(id, __func__, [&](auto&) { if (retry != 0) NotImplemented_nid_no_patch("sceHttp2SetResolveRetry"); });
+    return Update(id, __func__, [&](auto& settings) {
+        if (retry < 0) NotImplemented_nid_no_patch("sceHttp2SetResolveRetry");
+        settings.resolveRetry = retry;
+    });
 }
 
 int APS5_VABI sceHttp2WebSocketCreateRequest(std::int32_t templateId, const char* url, Http2WebSocketTextCallback textCallback, Http2WebSocketDataCallback dataCallback, Http2WebSocketCloseCallback closeCallback, Http2WebSocketErrorCallback errorCallback, void* receiveBuffer, std::size_t receiveBufferSize, void* userData, const void* option) {

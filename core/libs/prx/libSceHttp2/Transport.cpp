@@ -323,16 +323,18 @@ struct Request::State {
         Require(startup >= 0, "sceHttp2: network initialization failed; console error mapping is unknown");
         Require(sceNetSocketClose(startup) == 0, "sceHttp2: network initialization socket close failed");
 #endif
-        const auto deadline = Deadline(settings.resolveTimeout);
-        const auto job = Dns().Submit(url);
-        {
+        std::shared_ptr<Lookup> job;
+        for (std::int32_t attempt = 0;; ++attempt) {
+            const auto deadline = Deadline(settings.resolveTimeout);
+            job = Dns().Submit(url);
             std::unique_lock lock(job->mutex);
             while (!job->complete) {
                 Check(deadline);
                 job->changed.wait_for(lock, std::chrono::milliseconds(5));
             }
             Check(deadline);
-            if (job->failure) std::rethrow_exception(job->failure);
+            if (!job->failure) break;
+            if (attempt >= settings.resolveRetry) std::rethrow_exception(job->failure);
         }
         const auto connectDeadline = Deadline(settings.connectTimeout);
         int result = 0;
