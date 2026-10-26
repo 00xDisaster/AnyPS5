@@ -196,9 +196,11 @@ struct CertificateChain {
 Pool systemRootPool{std::numeric_limits<std::size_t>::max() / 2};
 
 std::string ReadSystemCaList() {
-    const std::string path = std::string("/") + sceKernelGetFsSandboxRandomWord() + "/common/cert/CA_LIST.cer";
+    const char* const word = sceKernelGetFsSandboxRandomWord();
+    if (word == nullptr) throw std::runtime_error("SSL: the sandbox word for the system CA list is not available");
+    const std::string path = std::string("/") + word + "/common/cert/CA_LIST.cer";
     const int descriptor = sceKernelOpen(path.c_str(), 0, 0);
-    if (descriptor < 0) return {};
+    if (descriptor < 0) throw std::runtime_error("SSL: cannot open the system CA list " + path);
     std::string text;
     std::array<char, 16384> buffer{};
     for (;;) {
