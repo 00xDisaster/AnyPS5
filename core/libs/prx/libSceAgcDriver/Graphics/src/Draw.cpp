@@ -1393,6 +1393,7 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
             return inputs;
         }
         const std::uint32_t corners = state.quadList ? 6u : 3u;
+        Require(primitives <= std::numeric_limits<std::uint32_t>::max() / corners, "expanded index count overflow");
         const std::uint32_t outputIndexCount = primitives * corners;
         const std::size_t expandedIndexBytes = static_cast<std::size_t>(outputIndexCount) * sizeof(std::uint32_t);
         auto indexCopy = std::make_shared<Buffer>(context, expandedIndexBytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
