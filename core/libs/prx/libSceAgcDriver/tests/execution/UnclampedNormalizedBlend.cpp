@@ -382,7 +382,7 @@ int Difference(std::uint8_t left, std::uint8_t right, bool snorm) {
     return snorm ? std::abs(static_cast<int>(static_cast<std::int8_t>(left)) - static_cast<int>(static_cast<std::int8_t>(right))) : std::abs(static_cast<int>(left) - static_cast<int>(right));
 }
 
-Outcome Expect(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint8_t>& before, bool snorm, const std::string& what, const std::function<std::array<std::uint8_t, 4>(const std::array<std::uint8_t, 4>&)>& expected, const std::function<std::array<std::uint8_t, 4>(const std::array<std::uint8_t, 4>&)>& clamped) {
+Outcome Expect(AgcDriver::VulkanDevice& device, const Block& block, const ColorTargetLayout& layout, const std::vector<std::uint8_t>& before, bool snorm, std::uint32_t writeMask, const std::string& what, const std::function<std::array<std::uint8_t, 4>(const std::array<std::uint8_t, 4>&)>& expected, const std::function<std::array<std::uint8_t, 4>(const std::array<std::uint8_t, 4>&)>& clamped) {
     const auto stored = ReadBack(device, block);
     Outcome outcome;
     for (std::uint32_t y = 0; y < Height; ++y) {
@@ -393,7 +393,8 @@ Outcome Expect(AgcDriver::VulkanDevice& device, const Block& block, const ColorT
             const auto got = Texel(stored, layout, x, y);
             if (inside && clamped(was) != want) outcome.distinguished = true;
             for (std::uint32_t channel = 0; channel < 4u; ++channel) {
-                if (Difference(got[channel], want[channel], snorm) <= (inside ? Tolerance : 0)) continue;
+                const bool written = inside && (writeMask & (1u << channel)) != 0u;
+                if (Difference(got[channel], want[channel], snorm) <= (written ? Tolerance : 0)) continue;
                 char detail[256];
                 std::snprintf(detail, sizeof(detail), ": pixel (%u, %u) %s the scissor holds (%u, %u, %u, %u), expected (%u, %u, %u, %u) from (%u, %u, %u, %u)", x, y, inside ? "inside" : "outside", got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3], was[0], was[1], was[2], was[3]);
                 throw std::runtime_error(what + detail);
@@ -406,7 +407,7 @@ Outcome Expect(AgcDriver::VulkanDevice& device, const Block& block, const ColorT
 void RunCase(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLayout& layout, const AgcDriver::Graphics::ColorTarget& color, const Case& testCase, std::uint32_t seed) {
     const auto before = Fill(block, seed);
     Draw(device, color, testCase.blend, Float32Export, Float32Program(testCase.rgba));
-    const auto outcome = Expect(device, block, layout, before, testCase.blend.snorm, std::string("unclamped blend ") + testCase.name,
+    const auto outcome = Expect(device, block, layout, before, testCase.blend.snorm, testCase.blend.writeMask, std::string("unclamped blend ") + testCase.name,
         [&](const std::array<std::uint8_t, 4>& was) { return Blended(testCase.blend, testCase.rgba, was, false); },
         [&](const std::array<std::uint8_t, 4>& was) { return Blended(testCase.blend, testCase.rgba, was, true); });
     Require(outcome.distinguished == testCase.distinguishesClamping, std::string("unclamped blend ") + testCase.name + (testCase.distinguishesClamping ? " does not differ from Vulkan's clamped blend, so it cannot catch a clamping approximation" : " differs from Vulkan's clamped blend, which the case declares equal"));
@@ -426,7 +427,7 @@ void Overdraw(AgcDriver::VulkanDevice& device, Block& block, const ColorTargetLa
     BlendCase blend{VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, 0xf, {}, false};
     const auto before = Fill(block, seed);
     Draw(device, color, blend, Float32Export, DepthAsXProgram({0.0f, 0.4f, 0.6f, 0.5f}), {DepthInput, 0u, vertices});
-    Expect(device, block, layout, before, false, "one draw of 16 full-screen triangles alternating z " + std::to_string(first) + " and " + std::to_string(last) + " blended into a UNORM target",
+    Expect(device, block, layout, before, false, blend.writeMask, "one draw of 16 full-screen triangles alternating z " + std::to_string(first) + " and " + std::to_string(last) + " blended into a UNORM target",
         [&](const std::array<std::uint8_t, 4>& was) {
             auto state = was;
             for (const auto z : depths) state = Blended(blend, {z, 0.4f, 0.6f, 0.5f}, state, false);
