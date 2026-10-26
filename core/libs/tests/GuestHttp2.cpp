@@ -21,6 +21,10 @@ int main() {
     const int box = sceHttp2CreateCookieBox(0x10000);
     const int context = sceHttp2Init(1, 1, 0x10000, 4);
     const int tmpl = sceHttp2CreateTemplate(context, "agent", 3, 0);
+    const int proxyTemplate = sceHttp2CreateTemplate(context, "agent", 3, 1);
+    Require(proxyTemplate > 0 && sceHttp2DeleteTemplate(proxyTemplate) == 0);
+    Require(Throws([&] { sceHttp2CreateTemplate(context, "agent", 3, 2); }));
+    Require(Throws([&] { sceHttp2CreateTemplate(context, "agent", 3, -1); }));
     const int request = sceHttp2CreateRequestWithURL(tmpl, "GET", "https://localhost/", 0);
     Require(box > 0 && context > 0 && tmpl > 0 && request > 0);
     Require(sceHttp2SetCookieBox(tmpl, 0) == 0);

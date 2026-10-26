@@ -112,7 +112,7 @@ int APS5_VABI sceHttp2CreateTemplate(int lib_http2_ctx_id, const char* user_agen
     const auto* parent = FindHandle(lib_http2_ctx_id, Http2Kind::Context);
     if (!parent) return ERROR_INVALID_ID;
     if (!user_agent) NotImplemented_nid_no_patch(__func__);
-    if (is_auto_proxy_conf || http_ver < 1 || http_ver > 3) NotImplemented_nid_no_patch(__func__);
+    if ((is_auto_proxy_conf != 0 && is_auto_proxy_conf != 1) || http_ver < 1 || http_ver > 3) NotImplemented_nid_no_patch(__func__);
     Http2Handle handle{Http2Kind::Template, lib_http2_ctx_id, 0};
     handle.sslContext = parent->sslContext;
     handle.capacity = parent->capacity;

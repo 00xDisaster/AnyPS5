@@ -8,6 +8,8 @@
 #endif
 
 #include "Transport.hpp"
+#include "prx/libSceNet/include/Net.hpp"
+#include "prx/libSceSsl/include/Ssl.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libkernel/Socket/include/SocketPoll.hpp"
 #include <nghttp2/nghttp2.h>
@@ -24,23 +26,7 @@
 #include <string_view>
 #include <thread>
 
-extern "C" {
-int APS5_VABI sceNetSocket(const char*, int, int, int);
-int APS5_VABI sceNetSocketClose(int);
-int APS5_VABI sceNetSetsockopt(int, int, int, const void*, std::uint32_t);
-int APS5_VABI sceNetGetsockopt(int, int, int, void*, std::uint32_t*);
-int APS5_VABI sceNetConnect(int, const void*, std::uint32_t);
-int* APS5_VABI sceNetErrnoLoc();
-int APS5_VABI sceSslCreateConnection(int, int, const char*);
-int APS5_VABI sceSslDeleteConnection(int);
-int APS5_VABI sceSslConnect(int);
-int SslRead_nid_no_patch(int, void*, std::size_t, int);
-int APS5_VABI sceSslWrite(int, void*, std::size_t, int);
-int APS5_VABI sceSslSetAlpn(int, const char*);
-const char* APS5_VABI sceSslGetAlpnSelected(int);
-int APS5_VABI sceSslDisableVerifyOption(int, std::uint32_t);
-int APS5_VABI sceSslEnableVerifyOption(int, std::uint32_t);
-}
+extern "C" int SslRead_nid_no_patch(int, void*, std::size_t, int);
 
 namespace Http2 {
 namespace {
@@ -322,6 +308,11 @@ struct Request::State {
     }
 
     int Connect() {
+#ifdef _WIN32
+        const int startup = sceNetSocket("http2-resolver", 2, 1, 0);
+        Require(startup >= 0, "sceHttp2: network initialization failed; console error mapping is unknown");
+        Require(sceNetSocketClose(startup) == 0, "sceHttp2: network initialization socket close failed");
+#endif
         const auto deadline = Deadline(settings.resolveTimeout);
         const auto job = Dns().Submit(url);
         {
@@ -424,6 +415,11 @@ struct Request::State {
                 Require(!state.settings.auth || (state.status != 401 && state.status != 407), "sceHttp2: authentication is not implemented");
                 state.ready = true;
             }
+            if ((frame->hd.type == NGHTTP2_HEADERS || frame->hd.type == NGHTTP2_DATA) &&
+                (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)) {
+                Require(state.ready, "sceHttp2: response ended without final headers");
+                state.ended = true;
+            }
         });
     }
 
@@ -440,7 +436,7 @@ struct Request::State {
         auto& state = *static_cast<State*>(data);
         return Callback(state, [&] {
             if (streamId != state.stream) return;
-            Require(error == NGHTTP2_NO_ERROR && state.ready, "sceHttp2: stream failed or response is incomplete");
+            Require(error == NGHTTP2_NO_ERROR && state.ended, "sceHttp2: stream failed or response is incomplete");
             state.ended = true;
         });
     }
@@ -448,6 +444,7 @@ struct Request::State {
     static nghttp2_ssize Upload(nghttp2_session*, std::int32_t, std::uint8_t* buffer, std::size_t size,
         std::uint32_t* flags, nghttp2_data_source*, void* data) {
         auto& state = *static_cast<State*>(data);
+        if (state.ready) return NGHTTP2_ERR_DEFERRED;
         const auto count = std::min(size, state.uploadSize - state.uploadOffset);
         if (count) std::memcpy(buffer, state.upload + state.uploadOffset, count);
         state.uploadOffset += count;
@@ -567,9 +564,9 @@ int Request::Send(const void* data, std::size_t size) {
                 uploaded = true;
                 receiveDeadline = state->Deadline(state->settings.recvTimeout);
             }
-            if (state->ready && uploaded) break;
-            Require(!state->ended, "sceHttp2: response ended before upload completed");
+            if (state->ready) break;
             state->Receive(uploaded ? receiveDeadline : sendDeadline);
+            if (state->ready) break;
         }
         state->upload = nullptr;
         if (state->ended && state->body.empty()) state->Close();

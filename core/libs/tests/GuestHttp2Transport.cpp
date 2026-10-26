@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -7,6 +8,9 @@
 #endif
 
 #include "SceTypes.hpp"
+#include "prx/libSceHttp2/include/Http2.hpp"
+#include "prx/libSceNet/include/Net.hpp"
+#include "prx/libSceSsl/include/Ssl.hpp"
 #include "prx/libSceSsl/SslTypes.hpp"
 #include "SslCertificateFixture.hpp"
 #include <mbedtls/ctr_drbg.h>
@@ -28,38 +32,9 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
-
-extern "C" {
-int APS5_VABI sceNetInit_nid_postfix();
-int APS5_VABI sceSslInit_nid_postfix(std::uint64_t);
-int APS5_VABI sceSslTerm_nid_postfix(int);
-int APS5_VABI sceSslLoadCert(int, int, SceSsl::Data**, SceSsl::Data*, SceSsl::Data*);
-int APS5_VABI sceSslGetMemoryPoolStats(int, SceSsl::MemoryPoolStats*);
-int APS5_VABI sceHttp2Init(int, int, std::size_t, int);
-int APS5_VABI sceHttp2Term(int);
-int APS5_VABI sceHttp2CreateTemplate(int, const char*, int, int);
-int APS5_VABI sceHttp2DeleteTemplate(int);
-int APS5_VABI sceHttp2CreateRequestWithURL(int, const char*, const char*, std::uint64_t);
-int APS5_VABI sceHttp2DeleteRequest(int);
-int APS5_VABI sceHttp2AbortRequest(int);
-int APS5_VABI sceHttp2SendRequest(int, const void*, std::size_t);
-int APS5_VABI sceHttp2ReadData(int, void*, std::size_t);
-int APS5_VABI sceHttp2GetStatusCode(int, int*);
-int APS5_VABI sceHttp2GetResponseContentLength(int, int*, std::uint64_t*);
-int APS5_VABI sceHttp2GetAllResponseHeaders(int, char**, std::size_t*);
-int APS5_VABI sceHttp2AddRequestHeader(int, const char*, const char*, std::uint32_t);
-int APS5_VABI sceHttp2SetRecvTimeOut(int, std::uint32_t);
-int APS5_VABI sceHttp2SetSendTimeOut(int, std::uint32_t);
-int APS5_VABI sceHttp2SetConnectTimeOut(int, std::uint32_t);
-int APS5_VABI sceHttp2SetTimeOut(int, std::uint32_t);
-int APS5_VABI sceHttp2SetAutoRedirect(int, int);
-int APS5_VABI sceHttp2SetAuthEnabled(int, int);
-int APS5_VABI sceHttp2SetRequestNoContentLength(int);
-int APS5_VABI sceHttp2SslDisableOption(int, std::uint32_t);
-int APS5_VABI sceHttp2SslEnableOption(int, std::uint32_t);
-}
 
 namespace {
 
@@ -73,7 +48,7 @@ bool Throws(TCall call) {
     return false;
 }
 
-enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload };
+enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload, EarlyFinal, EarlyReset, EarlyEmpty, EarlyLarge, EarlyResetIncomplete };
 const char* Protocols[] = {"h2", nullptr};
 
 class Server {
@@ -136,6 +111,7 @@ public:
     const std::multimap<std::string, std::string>& Headers() const { return headers; }
     const std::string& Upload() const { return upload; }
     bool Negotiated() const { return negotiated; }
+    bool IsEarly() const { return mode >= Mode::EarlyFinal; }
 private:
     const Mode mode;
     mbedtls_net_context listener;
@@ -179,6 +155,10 @@ private:
     }
     static int Frame(nghttp2_session* session, const nghttp2_frame* frame, void* data) {
         auto& server = *static_cast<Server*>(data);
+        if (server.IsEarly() && frame->hd.type == NGHTTP2_HEADERS && frame->hd.stream_id > 0) {
+            server.Respond(session, frame->hd.stream_id);
+            return 0;
+        }
         if (server.mode == Mode::StallUpload && frame->hd.type == NGHTTP2_HEADERS) { server.Stage(2); server.Stall(); }
         if (frame->hd.stream_id > 0 && (frame->hd.type == NGHTTP2_HEADERS || frame->hd.type == NGHTTP2_DATA) &&
             (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)) server.Respond(session, frame->hd.stream_id);
@@ -191,7 +171,7 @@ private:
     static nghttp2_ssize Body(nghttp2_session*, std::int32_t, std::uint8_t* bytes, std::size_t size,
         std::uint32_t* flags, nghttp2_data_source*, void* data) {
         auto& server = *static_cast<Server*>(data);
-        if (server.mode == Mode::StallBody) return NGHTTP2_ERR_DEFERRED;
+        if (server.mode == Mode::StallBody || server.mode == Mode::EarlyResetIncomplete) return NGHTTP2_ERR_DEFERRED;
         size = std::min(size, server.body.size() - server.offset);
         if (size) std::memcpy(bytes, server.body.data() + server.offset, size);
         server.offset += size;
@@ -204,8 +184,9 @@ private:
         responded = true;
         if (mode == Mode::StallHeaders) { Stage(2); Stall(); return; }
         if (mode == Mode::Reset) { Require(nghttp2_submit_rst_stream(session, 0, stream, NGHTTP2_REFUSED_STREAM) == 0, "server reset"); return; }
-        body = mode == Mode::Large ? std::string(200000, 'x') : "response body";
-        std::string status = mode == Mode::NotFound ? "404" : mode == Mode::Redirect ? "302" : mode == Mode::Auth ? "401" : "200";
+        body = (mode == Mode::Large || mode == Mode::EarlyLarge) ? std::string(200000, 'x') : "response body";
+        std::string status = IsEarly() ? "413" : mode == Mode::NotFound ? "404" : mode == Mode::Redirect ? "302" : mode == Mode::Auth ? "401" : "200";
+        if (mode == Mode::EarlyEmpty) body.clear();
         auto length = std::to_string(body.size());
         if (mode == Mode::Head) body.clear();
         if (mode == Mode::Truncate) body = "short";
@@ -252,9 +233,14 @@ private:
         nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, Data);
         nghttp2_session_callbacks_set_on_stream_close_callback(callbacks, End);
         nghttp2_session* session = nullptr;
-        Require(nghttp2_session_server_new(&session, callbacks, this) == 0, "server session");
+        nghttp2_option* options = nullptr;
+        Require(nghttp2_option_new(&options) == 0, "server options");
+        if (IsEarly()) nghttp2_option_set_no_auto_window_update(options, 1);
+        Require(nghttp2_session_server_new2(&session, callbacks, this, options) == 0, "server session");
+        nghttp2_option_del(options);
         nghttp2_session_callbacks_del(callbacks);
         Require(nghttp2_submit_settings(session, 0, nullptr, 0) == 0, "server settings");
+        bool resetSent = false;
         for (;;) {
             const std::uint8_t* output = nullptr;
             nghttp2_ssize size = 0;
@@ -268,6 +254,15 @@ private:
                     position += static_cast<std::size_t>(count);
                 }
                 if (!sent) break;
+            }
+            if (IsEarly() && responded && sent) {
+                Stage(2);
+                if (!resetSent && (mode == Mode::EarlyReset || mode == Mode::EarlyResetIncomplete)) {
+                    Require(nghttp2_submit_rst_stream(session, 0, 1, NGHTTP2_NO_ERROR) == 0, "early response reset");
+                    resetSent = true;
+                    continue;
+                }
+                if (mode != Mode::EarlyLarge) { Stall(); break; }
             }
             if (mode == Mode::StallBody && responded) { Stage(2); Stall(); break; }
             if (ended && sent) {
@@ -290,9 +285,9 @@ private:
 
 struct Client {
     int context, tmpl, request = 0;
-    explicit Client(int ssl, int maximum = 4) {
+    explicit Client(int ssl, int maximum = 4, int autoProxy = 0) {
         context = sceHttp2Init(1, ssl, 1024 * 1024, maximum);
-        tmpl = sceHttp2CreateTemplate(context, "loopback-agent", 3, 0);
+        tmpl = sceHttp2CreateTemplate(context, "loopback-agent", 3, autoProxy);
         Require(context > 0 && tmpl > 0, "client handles");
         Require(sceHttp2SslDisableOption(tmpl, 0x4) == 0, "numeric loopback name policy");
     }
@@ -408,6 +403,60 @@ void Cancellation(int ssl, Mode mode, int teardown) {
     if (teardown) Require(sceHttp2DeleteRequest(client.request) == static_cast<int>(0x817b1100), "deleted request stays invalid");
 }
 
+void EarlyResponse(int ssl, Mode mode) {
+    std::fprintf(stderr, "HTTP2 early response scenario %d\n", static_cast<int>(mode));
+    Server server(mode);
+    Client client(ssl, 1, 1);
+    const std::string upload(150000, 'u');
+    client.Create(server.Url(), "POST", upload.size());
+    auto pending = std::async(std::launch::async, [&] {
+        Require(sceHttp2SendRequest(client.request, upload.data(), upload.size()) == 0, "early final send succeeds");
+        int status = -1;
+        Require(sceHttp2GetStatusCode(client.request, &status) == 0 && status == 413, "early final status");
+        int kind = -1;
+        std::uint64_t length = 999;
+        const std::string expected = mode == Mode::EarlyEmpty ? "" : mode == Mode::EarlyLarge ? std::string(200000, 'x') : "response body";
+        Require(sceHttp2GetResponseContentLength(client.request, &kind, &length) == 0 && kind == 0 && length == expected.size(), "early final length");
+        std::string body;
+        std::array<char, 317> buffer;
+        for (;;) {
+            const int count = sceHttp2ReadData(client.request, buffer.data(), buffer.size());
+            Require(count >= 0 && count <= static_cast<int>(buffer.size()), "early final read count");
+            if (!count) break;
+            body.append(buffer.data(), static_cast<std::size_t>(count));
+        }
+        Require(body == expected, "early final body");
+        Require(sceHttp2ReadData(client.request, buffer.data(), buffer.size()) == 0, "early final repeat EOF");
+    });
+    server.WaitStage(2);
+    Require(pending.wait_for(std::chrono::seconds(1)) == std::future_status::ready, "early response completes before upload release");
+    pending.get();
+    server.Join();
+    Require(server.Upload().size() <= 65535 && server.Upload().size() < upload.size(), "early final stops upload within initial window");
+    Require(server.Negotiated(), "early final h2 ALPN");
+}
+
+#ifdef _WIN32
+void FirstNetworkRequest(int ssl) {
+    WSADATA data{};
+    Require(WSAStartup(MAKEWORD(2, 2), &data) == 0, "reserve refused endpoint startup");
+    const SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    Require(listener != INVALID_SOCKET, "reserve refused endpoint socket");
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    Require(bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0, "reserve refused endpoint bind");
+    int size = sizeof(address);
+    Require(getsockname(listener, reinterpret_cast<sockaddr*>(&address), &size) == 0, "reserve refused endpoint port");
+    Require(closesocket(listener) == 0 && WSACleanup() == 0, "return to uninitialized Winsock");
+    addrinfo* addresses = nullptr;
+    Require(getaddrinfo("localhost", nullptr, nullptr, &addresses) == WSANOTINITIALISED && !addresses, "DNS starts without Winsock");
+    Client client(ssl, 1, 1);
+    client.Create("https://localhost:" + std::to_string(ntohs(address.sin_port)) + "/");
+    Require(sceHttp2SendRequest(client.request, nullptr, 0) == static_cast<int>(0x8041013d), "first network request resolves and reaches refused endpoint");
+}
+#endif
+
 void Refused(int ssl) {
     mbedtls_net_context listener;
     mbedtls_net_init(&listener);
@@ -467,7 +516,7 @@ void Deadline(int ssl, Mode mode, bool overall) {
 
 }
 
-int main() {
+int main(int argc, char** argv) {
 #ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
 #endif
@@ -477,21 +526,31 @@ int main() {
     SceSsl::Data root{reinterpret_cast<std::uint8_t*>(const_cast<char*>(RootPem)), sizeof(RootPem)};
     SceSsl::Data* authorities[] = {&root};
     Require(sceSslLoadCert(ssl, 1, authorities, nullptr, nullptr) == 0, "trust loopback CA");
-    for (const auto mode : {Mode::Normal, Mode::Large, Mode::NoLength, Mode::Head, Mode::NotFound, Mode::Redirect, Mode::Auth, Mode::Informational}) Success(ssl, mode);
-    for (const auto mode : {Mode::NoAlpn, Mode::Reset, Mode::Truncate, Mode::Redirect, Mode::Auth}) Failure(ssl, mode);
-    Failure(ssl, Mode::Normal, true);
-    for (const auto mode : {Mode::StallHandshake, Mode::StallHeaders, Mode::StallBody, Mode::StallUpload}) {
-        Deadline(ssl, mode, false);
-        Deadline(ssl, mode, true);
-        for (int teardown = 0; teardown < 4; ++teardown) Cancellation(ssl, mode, teardown);
+    if (argc == 2 && std::string_view(argv[1]) == "--early") {
+        for (const auto mode : {Mode::EarlyFinal, Mode::EarlyReset, Mode::EarlyEmpty, Mode::EarlyLarge}) EarlyResponse(ssl, mode);
+        Failure(ssl, Mode::EarlyResetIncomplete);
+#ifdef _WIN32
+    } else if (argc == 2 && std::string_view(argv[1]) == "--dns-first") {
+        FirstNetworkRequest(ssl);
+#endif
+    } else {
+        Require(argc == 1, "test arguments");
+        for (const auto mode : {Mode::Normal, Mode::Large, Mode::NoLength, Mode::Head, Mode::NotFound, Mode::Redirect, Mode::Auth, Mode::Informational}) Success(ssl, mode);
+        for (const auto mode : {Mode::NoAlpn, Mode::Reset, Mode::Truncate, Mode::Redirect, Mode::Auth}) Failure(ssl, mode);
+        Failure(ssl, Mode::Normal, true);
+        for (const auto mode : {Mode::StallHandshake, Mode::StallHeaders, Mode::StallBody, Mode::StallUpload}) {
+            Deadline(ssl, mode, false);
+            Deadline(ssl, mode, true);
+            for (int teardown = 0; teardown < 4; ++teardown) Cancellation(ssl, mode, teardown);
+        }
+        Refused(ssl);
+        Capacity(ssl);
+        const int untrusted = sceSslInit_nid_postfix(8 * 1024 * 1024);
+        Require(untrusted > 0, "untrusted SSL context");
+        Failure(untrusted, Mode::Normal);
+        Success(untrusted, Mode::Normal, true);
+        Require(sceSslTerm_nid_postfix(untrusted) == 0, "untrusted SSL term");
     }
-    Refused(ssl);
-    Capacity(ssl);
-    const int untrusted = sceSslInit_nid_postfix(8 * 1024 * 1024);
-    Require(untrusted > 0, "untrusted SSL context");
-    Failure(untrusted, Mode::Normal);
-    Success(untrusted, Mode::Normal, true);
-    Require(sceSslTerm_nid_postfix(untrusted) == 0, "untrusted SSL term");
     Require(sceSslTerm_nid_postfix(ssl) == 0, "SSL term");
     std::puts("HTTP2 loopback transport passed");
 }
