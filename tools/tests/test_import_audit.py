@@ -277,17 +277,19 @@ class ImportAuditTests(unittest.TestCase):
         work = self.work
         (work.libs / "LibSceA.prx").write_bytes(build_pe(["AAAAAAAAAAA"]))
         registry, result = work.root / "game.registry.json", work.root / "audit.json"
-        for suffix in (".sprx", ".SPRX", ".suprx", ".SUPRX", ".debug_prx", ".DEBUG_PRX", ".prx", ".PRX"):
+        for suffix, expected_missing in (
+                (".sprx", False), (".SPRX", True), (".suprx", False), (".SUPRX", True),
+                (".debug_prx", False), (".DEBUG_PRX", True), (".prx", False), (".PRX", False)):
             with self.subTest(suffix=suffix):
                 name = "libscea" + suffix
                 (work.modules / "guest.so").write_bytes(build_elf([], [name]))
                 write_registry(registry, [("AAAAAAAAAAA", name)])
                 registry.with_name("game.needed.json").write_text(json.dumps([name]))
                 code, _, err = work.run(registry, "--strict-providers", "--json", str(result))
-                self.assertEqual((code, err), (0, ""))
+                self.assertEqual((code, err), (1 if expected_missing else 0, ""))
                 data = json.loads(result.read_text())
-                self.assertEqual(data["missing_libraries"], {})
-                self.assertEqual(data["library_mismatch"], 0)
+                self.assertEqual(data["missing_libraries"], {name: 2} if expected_missing else {})
+                self.assertEqual(data["library_mismatch"], int(expected_missing))
                 self.assertEqual(data["imports"][0]["providers"], ["LibSceA.prx"])
 
     def test_elf_guest_dependencies_keep_literal_host_names(self):

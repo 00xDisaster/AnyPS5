@@ -722,15 +722,21 @@ def audit(imports, exports, stubs, libraries, modules, module_imports=None, modu
 
     def system_library(name):
         if name:
-            folded = name.casefold()
-            for suffix in (".sprx", ".suprx", ".debug_prx", ".prx"):
-                if folded.endswith(suffix):
+            for suffix in (".sprx", ".suprx", ".debug_prx"):
+                if name.endswith(suffix):
                     normalized = name[:-len(suffix)] + ".prx"
                     candidates = windows_names.get(normalized.casefold(), ())
                     if normalized in candidates:
                         return normalized
                     if len(candidates) == 1:
                         return next(iter(candidates))
+            if name.casefold().endswith(".prx"):
+                normalized = name[:-4] + ".prx"
+                candidates = windows_names.get(normalized.casefold(), ())
+                if normalized in candidates:
+                    return normalized
+                if len(candidates) == 1:
+                    return next(iter(candidates))
         return name
 
     def available(name):
