@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <exception>
 #ifdef __APPLE__
-#include <cstddef>
 #include <cstring>
 #endif
 
