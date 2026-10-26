@@ -4,9 +4,6 @@
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 
-struct DiscId;
-struct DiscId2;
-
 extern "C" {
 
 int APS5_VABI sceDiscIdGet(DiscId* discId) {

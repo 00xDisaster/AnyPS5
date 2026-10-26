@@ -1,16 +1,8 @@
-#include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceDiscId/include/Api.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
-
-struct DiscId;
-struct DiscId2;
-
-extern "C" {
-int APS5_VABI sceDiscIdGet(DiscId* discId);
-int APS5_VABI sceDiscIdGet2(DiscId2* discId, std::uint32_t flags);
-}
 
 namespace {
 
