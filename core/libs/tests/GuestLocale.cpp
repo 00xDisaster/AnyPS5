@@ -8,6 +8,7 @@
 #include <cwchar>
 #include <climits>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -74,12 +75,22 @@ static void CheckCodecvtWideVtableObject() {
 }
 
 static void CheckCollateVtableObject() {
-    for (std::uintptr_t& slot : _ZTVSt7collateIcE_nid_postfix) {
-        Require(slot == 0);
-        slot = 0x1111;
-        Require(slot == 0x1111);
-        slot = 0;
-    }
+    Require(_ZTVSt7collateIcE_nid_postfix[0] == 0 && _ZTVSt7collateIcE_nid_postfix[1] == 0);
+    for (std::size_t index = 2; index < std::size(_ZTVSt7collateIcE_nid_postfix); ++index) Require(_ZTVSt7collateIcE_nid_postfix[index] != 0);
+    const auto* vtable = reinterpret_cast<const GuestLocale::CollateVtable*>(&_ZTVSt7collateIcE_nid_postfix[2]);
+    GuestLocale::CollateFacet facet{};
+    facet.base.references = 0;
+    vtable->facet.destroy(&facet.base);
+    vtable->facet.retain(&facet.base);
+    Require(facet.base.references == 1);
+    Require(vtable->facet.release(&facet.base) == &facet.base && facet.base.references == 0);
+    Require(vtable->compare(&facet, "abc", "abc" + 3, "abd", "abd" + 3) < 0);
+    Require(vtable->compare(&facet, "abc", "abc" + 3, "abc", "abc" + 3) == 0);
+    Require(vtable->compare(&facet, "abd", "abd" + 3, "abc", "abc" + 3) > 0);
+    GuestLocale::String result{};
+    Require(vtable->transform(&result, &facet, "abc", "abc" + 3) == &result);
+    Require(result.size == 3 && result.capacity == 15 && std::memcmp(result.buffer, "abc", 3) == 0);
+    Require(vtable->hash(&facet, "abc", "abc" + 3) == -1792535898324117685LL);
 }
 
 static void CheckGuestCalls() {
