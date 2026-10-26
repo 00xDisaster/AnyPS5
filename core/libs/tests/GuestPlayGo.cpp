@@ -301,6 +301,13 @@ int main(int argc, char** argv) {
     Require(scePlayGoGetInstallSpeed(0x506C476F, &speed) == badHandleError && speed == -1);
     Require(scePlayGoGetInstallSpeed(validHandle, nullptr) == badPointerError);
     Require(scePlayGoGetInstallSpeed(validHandle, &speed) == 0 && speed == 2);
+    Require(scePlayGoSetInstallSpeed(-1, 0) == badHandleError);
+    Require(scePlayGoSetInstallSpeed(0x506C476F, 0) == badHandleError);
+    Require(scePlayGoGetInstallSpeed(validHandle, &speed) == 0 && speed == 2);
+    Require(scePlayGoSetInstallSpeed(validHandle, 0) == 0);
+    Require(scePlayGoGetInstallSpeed(validHandle, &speed) == 0 && speed == 0);
+    Require(scePlayGoSetInstallSpeed(validHandle, 2) == 0);
+    Require(scePlayGoGetInstallSpeed(validHandle, &speed) == 0 && speed == 2);
     Require(scePlayGoPrefetch(-1, nullptr, 0, 0) == badHandleError);
     Require(scePlayGoClose(validHandle) == 0);
     RunLayout(argv[0], "--scenario-only", {{"playgo-scenario.json", "{}"}});
