@@ -8,7 +8,6 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
-#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -35,17 +34,6 @@ void RequireThrows(TCall call, const char* message) {
         Require(false, message);
     }
     Require(false, message);
-}
-
-template<typename TCall>
-void RequireNotImplemented(TCall call, const std::string& name) {
-    try {
-        call();
-    } catch (const std::runtime_error& error) {
-        Require(error.what() == name + " not implemented", name.c_str());
-        return;
-    }
-    Require(false, name.c_str());
 }
 
 void* Resolve(const char* name) {
@@ -238,7 +226,6 @@ int main() {
     Require(sceAudioPropagationSourceCalculateAudioPaths(source, rays, 0, 1, rays, 6) == AudioPropagation::ErrorInvalidArgument, "path calculation empty rays");
     Require(sceAudioPropagationSourceCalculateAudioPaths(source, rays, 6, 0, rays, 6) == AudioPropagation::ErrorInvalidArgument, "path calculation zero reflection order");
     Require(sceAudioPropagationSourceCalculateAudioPaths(source, rays, 6, 1, rays, 0) == AudioPropagation::ErrorInvalidArgument, "path calculation zero output capacity");
-    RequireNotImplemented([&] { sceAudioPropagationSourceCalculateAudioPaths(source, rays, 6, 1, rays, 6); }, "sceAudioPropagationSourceCalculateAudioPaths");
     Require(sceAudioPropagationSourceSetAudioPaths(source, nullptr, 0) == 0, "empty audio paths failed");
     RequireThrows<std::runtime_error>([&] { sceAudioPropagationSourceSetAudioPaths(source, rays, 1); }, "set audio paths");
 

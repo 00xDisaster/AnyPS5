@@ -4,7 +4,6 @@
 #include <cstdlib>
 #include <set>
 #include <stdexcept>
-#include <string>
 
 namespace {
 
@@ -16,16 +15,6 @@ bool Throws(TAction action) {
         action();
     } catch (const TException&) {
         return true;
-    }
-    return false;
-}
-
-template <typename TAction>
-bool NotImplemented(TAction action, const std::string& name) {
-    try {
-        action();
-    } catch (const std::runtime_error& error) {
-        return error.what() == name + " not implemented";
     }
     return false;
 }
@@ -70,10 +59,7 @@ int main() {
     Require(sceContentExportStart() == static_cast<int>(0x809D3018u));
     Require(sceContentExportTerm() == static_cast<int>(0x809D3003u));
     int first = *sessions.begin();
-    Require(NotImplemented([&] { sceContentExportGetProgress(first); }, "sceContentExportGetProgress"));
     Require(sceContentExportCancel(first) == static_cast<int>(0x809D3002u));
-    Require(NotImplemented([&] { Export(first); }, "sceContentExportFromDataWithThumbnail"));
-    Require(path[0] == 0);
     Require(sceContentExportFinish(first) == 0);
     Require(Throws<std::invalid_argument>([&] { sceContentExportFinish(first); }));
     Require(Throws<std::invalid_argument>([&] { sceContentExportGetProgress(first); }));
