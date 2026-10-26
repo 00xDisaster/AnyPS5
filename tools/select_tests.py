@@ -155,9 +155,10 @@ def paths(arguments):
 
 
 def changed_paths(path):
-    text = Path(path).read_bytes().decode("utf-8-sig")
-    if "\0" in text:
-        return [name for name in text.split("\0") if name]
+    data = Path(path).read_bytes()
+    if b"\0" in data:
+        return [name for name in data.decode("utf-8").split("\0") if name]
+    text = data.decode("utf-8-sig")
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 

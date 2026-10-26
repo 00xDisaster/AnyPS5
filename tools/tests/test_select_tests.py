@@ -434,6 +434,20 @@ class BuildErrorTests(unittest.TestCase):
 
 class GitChangedPathTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_git_nul_preserves_a_leading_bom_in_the_first_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+            name = "\ufeffleading.h"
+            source = root / name
+            source.write_text("before\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+            source.write_text("after\n", encoding="utf-8")
+            changed = root / "changed"
+            changed.write_bytes(subprocess.check_output(["git", "diff", "--name-only", "-z", "--"], cwd=root))
+            self.assertEqual(select_tests.changed_paths(changed), [name])
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
     def test_git_nul_paths_select_the_changed_headers(self):
         names = ["größe.h", " leading.h", "with space.h"]
         if os.name != "nt":
