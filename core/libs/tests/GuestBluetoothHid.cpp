@@ -109,13 +109,7 @@ int main() {
     Require(bytes[12] == 0xa5 && bytes[13] == 0xa5 && bytes[14] == 0xa5 && bytes[15] == 0xa5, "bytes 12 to 15 of the parameter block changed");
     std::memset(&filled, 0x5a, sizeof(filled));
     Require(sceBluetoothHidParamInitialize(&filled, nullptr) == 0 && filled.threadParam == nullptr && filled.reserved == 0 && filled.padding == 0x5a5a5a5au, "a null thread parameter was not stored as given");
-    threw = false;
-    try {
-        sceBluetoothHidParamInitialize(nullptr, &thread);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    Require(threw, "a null parameter block did not throw");
+    Require(sceBluetoothHidParamInitialize(nullptr, &thread) == invalidArgument, "a null parameter block was not refused");
     std::puts("BluetoothHid tests passed");
     return 0;
 }

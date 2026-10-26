@@ -119,7 +119,7 @@ int APS5_VABI sceBluetoothHidInterruptOutput(std::uint64_t deviceHandle, std::ui
 }
 
 int APS5_VABI sceBluetoothHidParamInitialize(BluetoothHidParam* param, const BluetoothHidThreadParam* threadParam) {
-    if (param == nullptr) throw std::invalid_argument("sceBluetoothHidParamInitialize: no source gives the answer for a null parameter block");
+    if (param == nullptr) return InvalidArgument;
     param->threadParam = threadParam;
     param->reserved = 0;
     return 0;
