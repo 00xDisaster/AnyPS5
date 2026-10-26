@@ -804,11 +804,6 @@ int APS5_VABI sceKernelGetCpuUsageThread(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelGetCpumodeGame(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelGetCurrentFanDuty(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -1695,11 +1690,6 @@ int APS5_VABI sceKernelSetCompressionAttribute(void) {
 }
 
 int APS5_VABI sceKernelSetCoredumpAppInfo(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelSetCpumodeGame(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
