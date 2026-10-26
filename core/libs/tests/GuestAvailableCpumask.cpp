@@ -280,15 +280,17 @@ int main() {
 
     Require(ReadCpuset(pthread_self_nid_postfix()) == available);
     std::uint8_t rawSet[GUEST_CPUSET_BYTES]{};
-    for (const std::size_t size : {std::size_t{0}, std::size_t{4}, std::size_t{32}, std::size_t{33}, std::size_t{64}})
+    for (const std::size_t size : {std::size_t{32}, std::size_t{33}, std::size_t{64}})
         Require(pthread_getaffinity_np_nid_postfix(pthread_self_nid_postfix(), size, rawSet) == GUEST_ERANGE);
-    bool unmeasuredSizeThrew = false;
-    try {
-        pthread_getaffinity_np_nid_postfix(pthread_self_nid_postfix(), 24, rawSet);
-    } catch (const std::exception&) {
-        unmeasuredSizeThrew = true;
+    for (const std::size_t size : {std::size_t{0}, std::size_t{4}, std::size_t{12}, std::size_t{24}}) {
+        bool unmeasuredSizeThrew = false;
+        try {
+            pthread_getaffinity_np_nid_postfix(pthread_self_nid_postfix(), size, rawSet);
+        } catch (const std::exception&) {
+            unmeasuredSizeThrew = true;
+        }
+        Require(unmeasuredSizeThrew);
     }
-    Require(unmeasuredSizeThrew);
     Require(pthread_getaffinity_np_nid_postfix(nullptr, GUEST_CPUSET_BYTES, rawSet) == GUEST_EINVAL);
     Require(pthread_getaffinity_np_nid_postfix(nullptr, 0, rawSet) == GUEST_EINVAL);
     Require(pthread_getaffinity_np_nid_postfix(pthread_self_nid_postfix(), 16, nullptr) == GUEST_EFAULT);
