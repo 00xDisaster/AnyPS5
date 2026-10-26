@@ -64,7 +64,9 @@ void APS5_VABI FT_Outline_Translate_nid_postfix(const FreeType::GuestOutline* ou
 void APS5_VABI FT_Outline_Reverse_nid_postfix(FreeType::GuestOutline* outline);
 int APS5_VABI FT_Request_Size_nid_postfix(FreeType::GuestFaceRec* face, const FreeType::GuestSizeRequestRec* request);
 int APS5_VABI FT_Property_Get_nid_postfix(FreeType::GuestLibrary* library, const char* moduleName, const char* propertyName, void* value);
+int APS5_VABI sceFreeTypeOtPropertyGet_nid_no_patch();
 int APS5_VABI FT_Property_Set_nid_postfix(FreeType::GuestLibrary* library, const char* moduleName, const char* propertyName, const void* value);
+int APS5_VABI sceFreeTypeOtPropertySet_nid_no_patch();
 
 void APS5_VABI FT_Bitmap_New_nid_postfix(FreeType::GuestBitmap* bitmap);
 int APS5_VABI FT_Bitmap_Copy_nid_postfix(FreeType::GuestLibrary* library, const FreeType::GuestBitmap* source, FreeType::GuestBitmap* target);
