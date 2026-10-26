@@ -13,7 +13,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `ANYPS5_POSIX_SPAWN_ROLE` | string | `core/libs/tests/GuestPosixSpawn.cpp` |  | role of the test's own copy spawned as a `posix_spawn` child, which exits or sleeps on it and otherwise fails |
 | `ANYPS5_TEST_QUOTED_ARGV0` | presence | `core/libs/tests/GuestLoadExecHost.cpp` |  | makes the load-exec test's first argument one with quotes, a backslash and non-ASCII text |
 | `APS5_EBOOT` | string | `core/libs/tests/GuestSystemExit.cpp` |  | host path of the executable launched for /app0/eboot.bin, defaulting to the running executable |
-| `APS5_SKIP_TIMING_TESTS` | presence | `core/libs/tests/PreciseWait.cpp` |  | treats the timing tests' runner as preempted, so they skip without probing the clock |
+| `APS5_SKIP_TIMING_TESTS` | presence | `core/libs/tests/PreciseWait.cpp` |  | treats the timing tests' runner as preempted, so they skip without probing the clock; an empty value or one starting with 0 leaves the probe on |
 | `APS5_USBD_DEVICE` | string | `core/libs/tests/GuestUsbd.cpp` |  | selects the USB device a test drives, as vendor:product in hex |
 
 ### core/relinker
