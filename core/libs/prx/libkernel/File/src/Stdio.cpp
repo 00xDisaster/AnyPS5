@@ -1556,8 +1556,6 @@ int APS5_VABI sceKernelRename(const char* from, const char* to) {
     if (!from) return SceErrorFromErrno(GUEST_EFAULT);
     const int result = RenameGuestPath_nid_no_patch(from, to);
     return result == 0 ? 0 : SceKernelError(errno);
-    if (const int dot = RenameDotError_nid_no_patch(from)) return SceKernelError(dot);
-    if (const int dot = RenameDotError_nid_no_patch(to)) return SceKernelError(dot);
 }
 
 int APS5_VABI sceKernelRmdir(const char* path) {

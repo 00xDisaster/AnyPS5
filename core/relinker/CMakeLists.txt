@@ -574,6 +574,8 @@ if(BUILD_TESTING)
         set_tests_properties(macos_tls_alu PROPERTIES TIMEOUT 60)
         add_test(NAME linux_load_alignment COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_load_alignment.py $<TARGET_FILE:relinker>)
+        add_test(NAME linux_load_bounds COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_load_bounds.py $<TARGET_FILE:relinker>)
         add_test(NAME linux_eh_frame_header COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_linux_eh_frame_header.py $<TARGET_FILE:relinker>)
         add_test(NAME linux_dynamic_strings COMMAND ${Python3_EXECUTABLE}
@@ -637,6 +639,8 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_module_dir.py $<TARGET_FILE:relinker>)
         add_test(NAME guest_module_directories COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_module_directories.py $<TARGET_FILE:relinker>)
+        add_test(NAME guest_trailing_note COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_trailing_note.py $<TARGET_FILE:relinker>)
         add_test(NAME relinker_executables COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_executables.py $<TARGET_FILE:relinker>)
         add_test(NAME game_patches COMMAND ${Python3_EXECUTABLE}
