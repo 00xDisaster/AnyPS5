@@ -192,6 +192,36 @@ static void CheckLongDoubleExpOverflowRounding() {
     Require(std::fesetround(saved) == 0);
 }
 
+static void CheckLongDoubleExpCompensatingRange() {
+    struct Case {
+        long double x;
+        long double multiplier;
+        short scale;
+        long double expected;
+    };
+    const Case cases[] = {
+        {30000.0L, 1.0L, -32768, 0xe.6ea97839ad67302p+10509L},
+        {-30000.0L, 1.0L, 32767, 0x8.de778b1319b01b4p-10517L},
+        {1.0L, std::numeric_limits<long double>::max(), -2, 0xa.df85458a2bb4a9ap+16380L},
+        {30000.0L, -1.0L, -32768, -0xe.6ea97839ad67302p+10509L},
+        {-30000.0L, -1.0L, 32767, -0x8.de778b1319b01b4p-10517L},
+        {1.0L, -std::numeric_limits<long double>::max(), -2, -0xa.df85458a2bb4a9ap+16380L},
+    };
+    for (const auto& test : cases) {
+        errno = 0;
+        std::feclearexcept(FE_ALL_EXCEPT);
+        long double result = test.x;
+        const short kind = _LExp_nid_postfix(&result, test.multiplier, test.scale);
+        Require(kind == -1);
+        Require(SameBits(result, test.expected));
+        Require(__fpclassifyl_nid_postfix(result) == -1);
+        Require(errno == 0);
+        const int raised = std::fetestexcept(FE_ALL_EXCEPT);
+        Require((raised & (FE_OVERFLOW | FE_UNDERFLOW | FE_INVALID | FE_DIVBYZERO)) == 0);
+        Require((raised & FE_INEXACT) != 0);
+    }
+}
+
 static void CheckLongDoubleExpTinyRounding() {
     struct Case {
         int mode;
@@ -328,6 +358,7 @@ int main() {
     CheckConsoleQuirks();
     CheckRoundingModes();
     CheckLongDoubleExpOverflowRounding();
+    CheckLongDoubleExpCompensatingRange();
     CheckLongDoubleExpTinyRounding();
     CheckClassification();
     CheckLongDoubleExp();

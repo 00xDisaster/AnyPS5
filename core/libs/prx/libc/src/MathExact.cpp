@@ -137,6 +137,11 @@ short FinishExpScale(long double& value, long long exponent) {
     return result;
 }
 
+short UnderflowScaled(long double& value, long double multiplier) {
+    value = std::copysign(1.0L, multiplier);
+    return FinishExpScale(value, -1000000);
+}
+
 short ExpScaled(long double& x, long long scale, long double multiplier) {
     constexpr long double inverseLn2 = 0xb.8aa3b295c17f0bcp-3L;
     constexpr long double ln2Low = -0xe.8e7bcd5e4f1d9ccp-35L;
@@ -147,17 +152,26 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
     constexpr long double p2 = 0xe.8b94728735d9363p-7L;
     constexpr long double q0 = 0x8.45a5963c196b530p-17L;
     constexpr long double q1 = 0xf.83a71f722cba3c4p-10L;
-    if (x < -29490.0L) {
-        x = std::copysign(0.0L, multiplier);
-        RaiseLibcError(FE_UNDERFLOW);
-        return Zero;
-    }
-    if (x > 29490.0L) {
+    if (std::isinf(x)) {
+        if (x < 0.0L) {
+            x = std::copysign(0.0L, multiplier);
+            RaiseLibcError(FE_UNDERFLOW);
+            return Zero;
+        }
         return OverflowScaled(x, multiplier);
     }
-    if (scale == 0 && x == 1.0L) {
-        x = 0xa.df85458a2bb4a9bp-2L * multiplier;
-        return FinishExpScale(x, 0);
+    constexpr long double inputLimit = 50000.0L;
+    if (x > inputLimit) return OverflowScaled(x, multiplier);
+    if (x < -inputLimit) return UnderflowScaled(x, multiplier);
+    if (std::isinf(multiplier)) {
+        x = multiplier;
+        return Infinite;
+    }
+    if (x == 1.0L) {
+        int multiplierExponent = 0;
+        const long double multiplierMantissa = std::frexpl(multiplier, &multiplierExponent);
+        x = 0xa.df85458a2bb4a9bp-2L * multiplierMantissa;
+        return FinishExpScale(x, scale + multiplierExponent);
     }
     const long double g = x * inverseLn2;
     if (std::isnan(g)) {
@@ -176,8 +190,10 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
         const long double odd = x * ((q0 * w + q1) * w + 0.5L);
         x = ((even + odd) + 1.0L) / ((even - odd) + 1.0L);
     }
-    x *= multiplier;
-    return FinishExpScale(x, n + scale);
+    int multiplierExponent = 0;
+    const long double multiplierMantissa = std::frexpl(multiplier, &multiplierExponent);
+    x *= multiplierMantissa;
+    return FinishExpScale(x, n + scale + multiplierExponent);
 }
 
 template<typename TFloat>
@@ -392,18 +408,6 @@ short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale
     if (y == 0.0L) {
         *value = 0.0L;
         return Zero;
-    }
-    if (x < -29490.0L) {
-        *value = std::copysign(0.0L, y);
-        RaiseLibcError(FE_UNDERFLOW);
-        return Zero;
-    }
-    if (x > 29490.0L) {
-        return OverflowScaled(*value, y);
-    }
-    if (std::isinf(y)) {
-        *value = y;
-        return Infinite;
     }
     long double result = x;
     const short resultKind = ExpScaled(result, scale, y);
