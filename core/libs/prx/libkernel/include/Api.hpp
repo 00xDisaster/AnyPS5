@@ -218,6 +218,7 @@ int APS5_VABI sceKernelMapFlexibleMemory(void** addrInOut, size_t len, int prot,
 int APS5_VABI sceKernelMapNamedDirectMemory(void** addr, size_t len, int prot, int flags, int64_t directMemoryStart, size_t alignment, const char* name);
 int32_t APS5_VABI sceKernelMapNamedFlexibleMemory(void** addrInOut, size_t len, int prot, int flags, const char* name);
 int32_t APS5_VABI sceKernelMapNamedFlexibleMemoryInternal(void** addrInOut, size_t len, int prot, int flags, const char* name);
+int32_t APS5_VABI sceKernelMapNamedSystemFlexibleMemory(void** addrInOut, size_t len, int prot, int flags, const char* name);
 int APS5_VABI sceKernelMprotect(const void* addr, size_t len, int prot);
 int APS5_VABI sceKernelMunmap(uint64_t vaddr, size_t len);
 int APS5_VABI sceKernelMmap(void* addr, size_t len, int prot, int flags, int fd, int64_t offset, void** res);

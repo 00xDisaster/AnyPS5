@@ -391,7 +391,6 @@ int APS5_VABI sceKernelLwfsLseek(void);
 int APS5_VABI sceKernelLwfsSetAttribute(void);
 int APS5_VABI sceKernelLwfsTrimBlock(void);
 int APS5_VABI sceKernelLwfsWrite(void);
-int APS5_VABI sceKernelMapNamedSystemFlexibleMemory(void);
 int APS5_VABI sceKernelMapSanitizerShadowMemory(void);
 int APS5_VABI sceKernelMapToolMemory(void);
 int APS5_VABI sceKernelMapTraceMemory(void);
