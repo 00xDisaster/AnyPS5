@@ -3,7 +3,9 @@ import io
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import env_reference
@@ -167,6 +169,19 @@ class EnvReferenceTests(unittest.TestCase):
         self.assertTrue([name for name in found if name.startswith("APS5_")])
         self.assertTrue([name for name in found if name.startswith("ANYPS5_")])
 
+    def test_reads_fails_on_a_source_file_it_cannot_decode(self):
+        root = self.fixture()
+        (root / "core" / "Latin.cpp").write_bytes(b'static const char* s = "caf\xe9";\n')
+        with self.assertRaises(ValueError) as raised:
+            env_reference.reads([root / "core"], BOTH)
+        self.assertIn("Latin.cpp", str(raised.exception))
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = env_reference.main(["--check", "--doc", str(root / "missing.md"), "--root", str(root / "core")])
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read", stderr.getvalue())
+        self.assertIn("Latin.cpp", stderr.getvalue())
+
     def test_check_passes_when_every_read_name_has_a_row(self):
         root = self.fixture()
         found = env_reference.reads([root / "core"])
@@ -213,6 +228,64 @@ class EnvReferenceTests(unittest.TestCase):
         (core / "3rdparty" / "Ignored.cpp").write_text('static bool b = IsEnvironmentSet("APS5_IGNORED");\n', encoding="utf-8")
         self.assertEqual(set(env_reference.reads([core], BOTH)), {"APS5_TRACE_GPU"})
 
+    def test_main_reconfigures_streams_for_unicode_report_paths(self):
+        class Stream:
+            def __init__(self):
+                self.encoding = "ascii"
+                self.errors = "strict"
+                self.text = ""
+
+            def reconfigure(self, encoding=None, errors=None):
+                self.encoding = encoding
+                self.errors = errors
+
+            def write(self, text):
+                text.encode(self.encoding, self.errors)
+                self.text += text
+                return len(text)
+
+            def flush(self):
+                pass
+
+        root = self.fixture() / "source-Ж"
+        root.mkdir()
+        core = root / "core"
+        core.mkdir()
+        (core / "Sample.cpp").write_text('static bool a = std::getenv("APS5_TRACE_GPU") != nullptr;\n', encoding="utf-8")
+        out, err = Stream(), Stream()
+        with mock.patch.object(env_reference.sys, "stdout", out), mock.patch.object(env_reference.sys, "stderr", err):
+            self.assertEqual(env_reference.main(["--root", str(core)]), 0)
+        self.assertEqual((out.encoding, out.errors), ("utf-8", "backslashreplace"))
+        self.assertEqual((err.encoding, err.errors), ("utf-8", "backslashreplace"))
+        self.assertIn((core / "Sample.cpp").as_posix(), out.text)
+
+    def test_main_reports_unicode_scan_root_with_non_utf8_stderr(self):
+        class Stream:
+            def __init__(self):
+                self.encoding = "ascii"
+                self.errors = "strict"
+                self.text = ""
+
+            def reconfigure(self, encoding=None, errors=None):
+                self.encoding = encoding
+                self.errors = errors
+
+            def write(self, text):
+                text.encode(self.encoding, self.errors)
+                self.text += text
+                return len(text)
+
+            def flush(self):
+                pass
+
+        root = Path(tempfile.gettempdir()) / "missing-source-Ж"
+        out, err = Stream(), Stream()
+        with mock.patch.object(env_reference.sys, "stdout", out), mock.patch.object(env_reference.sys, "stderr", err):
+            self.assertEqual(env_reference.main(["--root", str(root)]), 1)
+        self.assertEqual((out.encoding, out.errors), ("utf-8", "backslashreplace"))
+        self.assertEqual((err.encoding, err.errors), ("utf-8", "backslashreplace"))
+        self.assertIn(str(root), err.text)
+
     def test_main_rejects_a_scan_root_that_is_not_a_directory(self):
         root = self.fixture()
         for name in ("missing", "core/Sample.cpp"):
@@ -223,6 +296,34 @@ class EnvReferenceTests(unittest.TestCase):
                 self.assertEqual(code, 1, (name, flags))
                 self.assertIn("is not a directory", err.getvalue())
                 self.assertNotIn("no longer reads", out.getvalue())
+
+
+    def test_main_reconfigures_streams(self):
+        class Stream:
+            def __init__(self):
+                self.encoding = None
+                self.errors = None
+
+            def reconfigure(self, encoding=None, errors=None):
+                self.encoding = encoding
+                self.errors = errors
+
+            def write(self, text):
+                pass
+
+            def flush(self):
+                pass
+
+        out, err = Stream(), Stream()
+        with patch.object(env_reference.sys, "stdout", out), patch.object(env_reference.sys, "stderr", err):
+            try:
+                env_reference.main(["--root", "nonexistent"])
+            except SystemExit:
+                pass
+        self.assertEqual(out.encoding, "utf-8")
+        self.assertEqual(out.errors, "backslashreplace")
+        self.assertEqual(err.encoding, "utf-8")
+        self.assertEqual(err.errors, "backslashreplace")
 
 
 if __name__ == "__main__":
