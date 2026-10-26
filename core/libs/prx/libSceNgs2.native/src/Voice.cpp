@@ -90,6 +90,7 @@ void Ngs2Voice::ResetSetup() {
     callbackData = 0;
     callbackFlags = 0;
     peakMeterHistory.clear();
+    peakMeterMode = 0;
     peakMeterCount = 0;
     peakMeterCursor = 0;
     peakHeight = 0.0f;

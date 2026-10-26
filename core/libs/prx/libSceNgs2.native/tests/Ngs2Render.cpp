@@ -732,6 +732,13 @@ static void TestPeakMeterHistory() {
         Patch(sampler, master);
         Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
         RenderI16(system);
+        Require(height() == 0.0f);
+        Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP, Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 1, 48000, 0, 0, 0}});
+        Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS, Ngs2SamplerVoiceWaveformBlocksParam{{}, half.data(), 0, 1, &block});
+        Patch(sampler, master);
+        Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
+        Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_PEAK_METER, Ngs2VoicePeakMeterParam{{}, 2, 0});
+        RenderI16(system);
         Require(Near(height(), std::sqrt(0.125f)));
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     }
