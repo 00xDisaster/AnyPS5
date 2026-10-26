@@ -35,8 +35,10 @@ std::uintptr_t CurrentWaker();
 void Wake(std::uintptr_t waker);
 bool WaitAny(const std::vector<Interest>& interests, std::uint64_t deadlineNanos);
 bool PipeReadState(int descriptor, std::int64_t* data, bool* eof);
+bool PipeWriteState(int descriptor, std::int64_t* data, bool* eof, bool* writable);
 std::int64_t Readv(int descriptor, const Iovec* iov, int iovcnt);
 std::int64_t Writev(int descriptor, const Iovec* iov, int iovcnt);
 }
 
 extern "C" bool GuestSocketIsOpen_nid_no_patch(int descriptor);
+extern "C" bool GuestSocketReadGuest_nid_no_patch(void* destination, const void* source, std::size_t bytes);
