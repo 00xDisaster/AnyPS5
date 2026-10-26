@@ -731,6 +731,10 @@ int APS5_VABI chmod_nid_postfix(const char* path, int mode) {
     return 0;
 }
 
+int ChmodNative_nid_no_patch(const std::filesystem::path& native, int mode) {
+    return NativeChmod(native, mode);
+}
+
 int APS5_VABI chflags_nid_postfix(const char* path, std::uint64_t flags) {
     std::string copy;
     if (const int error = PathError(path, copy)) return PosixFailure(error);
@@ -1734,7 +1738,7 @@ int APS5_VABI lutimes_nid_postfix(const char* path, const KernelTimeval* times) 
     path = copy.c_str();
     std::filesystem::path native;
     if (const int error = ResolvePathError_nid_no_patch(path, native)) return PosixFailure(error);
-    if (NativeUtimes(native, times, false) != 0) return PosixResult(SceErrorFromErrno(errno));
+    if (NativeUtimes(native, times, false) != 0) return PosixResult(SceErrorFromErrno(errno == ENOENT ? NotFoundError_nid_no_patch(native) : errno));
     return 0;
 }
 
