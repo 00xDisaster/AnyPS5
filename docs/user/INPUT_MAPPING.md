@@ -45,7 +45,7 @@ Without an `anyps5-input.ini`, or for actions the file does not mention, these b
 | `TogglePerformanceOverlay` | F10 |
 | `Screenshot` | F12 |
 
-For example, this changes Cross to F or Space, moves the left stick to IJKL, uses the mouse buttons for Square and R2, and keeps all other built-in bindings:
+For example, this changes Cross to F or Space, moves the left stick to IJKL, uses the mouse buttons for Square and R2, makes the middle mouse button the only `ToggleMouse` input (the line replaces F7), and keeps all other built-in bindings:
 
 ```ini
 Cross = KEY:F
