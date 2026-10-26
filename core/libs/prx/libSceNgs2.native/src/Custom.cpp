@@ -213,7 +213,7 @@ void Ngs2ResetUserFx2(Ngs2Voice& voice) {
 static void SetupCustomSubmixer(Ngs2Voice& voice, const Ngs2CustomSubmixerVoiceSetupParam& setup) {
     if (setup.flags != 0) throw std::runtime_error("NGS2: custom submixer setup flags are not implemented");
     if (setup.num_input_channels != setup.num_output_channels) throw std::runtime_error("NGS2: custom submixer channel conversion is not implemented");
-    if (setup.num_input_channels == 0 || setup.num_input_channels > voice.rack->maxChannels) APS5_INVALID_ARG_EX;
+    if (setup.num_input_channels == 0 || setup.num_input_channels > voice.rack->maxChannels || setup.num_input_channels > NGS2_MAX_CHANNELS) APS5_INVALID_ARG_EX;
     if (Ngs2HasPitchShift(voice)) voice.ResetSetup();
     else Ngs2ResetUserFx2(voice);
     for (auto& gain : voice.customGain) if (gain.configured) gain.lifecycleUnknown = true;
