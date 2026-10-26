@@ -33,7 +33,6 @@ void Ngs2RestartSampler(Ngs2Voice& voice) {
     voice.samplerStarved = false;
     voice.samplerEnded = false;
     voice.pcmRemaining = 0;
-    voice.pcmSkipRemaining = 0;
 }
 
 void Ngs2SaveSamplerBlock(Ngs2Voice& voice, Ngs2Block& block) {

@@ -368,7 +368,7 @@ static void TestPitchAndRepeat() {
     const auto system = CreateSystem();
     const auto master = Mastering(system, 1);
     const std::vector<std::int16_t> pcm{0, 1000, 2000, 3000};
-    const auto sampler = Sampler(system, pcm, 1);
+    const auto sampler = Sampler(system, pcm, 2);
     Patch(sampler, master);
     Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_PITCH, Ngs2SamplerVoicePitchParam{{}, 0.5f});
     Control(sampler, SCE_NGS2_VOICE_PARAM_CALLBACK,
@@ -444,7 +444,7 @@ static void TestPcmCallbackReset() {
     for (const auto flag : {SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT}) {
         const auto system = CreateSystem();
         const std::vector<std::int16_t> pcm{16384};
-        const auto sampler = Sampler(system, pcm, flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT ? 1 : 0);
+        const auto sampler = Sampler(system, pcm, flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT ? 2 : 0);
         Patch(sampler, Mastering(system, 1));
         Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_PITCH, Ngs2SamplerVoicePitchParam{{}, 2.0f});
         PcmResetCallback callback{{}, flag};
@@ -534,7 +534,7 @@ static void TestPcmCallbackSetup() {
         for (const auto flag : {SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT}) {
             const auto system = CreateSystem();
             const std::vector<std::int16_t> pcm{16384};
-            const auto sampler = Sampler(system, pcm, flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT ? 1 : 0);
+            const auto sampler = Sampler(system, pcm, flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_REPEAT ? 2 : 0);
             PcmSetupCallback callback{Mastering(system, channels), channels, flag, {}};
             for (std::uint32_t frame = 0; frame < Grain * 2; ++frame) {
                 for (std::uint32_t channel = 0; channel < channels; ++channel) callback.pcm.push_back(static_cast<std::int16_t>(1000 + frame * 25 + channel * 100));
@@ -911,7 +911,7 @@ static void TestSampleRate() {
 
     const auto master = Mastering(system, 1);
     const std::vector<std::int16_t> pcm{0, 1000, 2000, 3000};
-    const auto sampler = Sampler(system, pcm, 1);
+    const auto sampler = Sampler(system, pcm, 2);
     Patch(sampler, master);
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
     const std::int16_t expected[Grain] = {0, 0, 0, 0, 0, -30, 0, 470};
@@ -943,7 +943,7 @@ static void TestSystemOptionFlags() {
     Require(sceNgs2SystemSetGrainSamples(system, Grain) == SCE_NGS2_OK);
     const auto master = Mastering(system, 1);
     const std::vector<std::int16_t> pcm{1000, 2000, 3000, 4000};
-    const auto sampler = Sampler(system, pcm, 1);
+    const auto sampler = Sampler(system, pcm, 2);
     Patch(sampler, master);
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
     const auto out = RenderI16(system);

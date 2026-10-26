@@ -27,8 +27,7 @@ void Ngs2BindSamplerBlock(Ngs2Voice& voice, bool restartDecoder) {
         voice.atrac9.skipSamples = block.info.num_skip_samples;
         if (restartDecoder) voice.atrac9.restartOnDrain = true;
     } else {
-        voice.pcmRemaining = block.info.num_samples;
-        voice.pcmSkipRemaining = block.info.num_skip_samples;
+        voice.pcmRemaining = block.info.num_samples + block.info.num_skip_samples;
     }
     block.started = true;
 }
@@ -38,7 +37,7 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
     if (block.data != nullptr) {
         voice.decodedBytes += block.info.data_size > block.dataCursor ? block.info.data_size - block.dataCursor : 0;
     }
-    const bool repeat = block.info.num_repeats != 0;
+    const bool repeat = block.info.num_repeats > 1;
     if (repeat) {
         if (block.info.num_repeats != UINT32_MAX) block.info.num_repeats--;
         block.numRepeated++;
@@ -56,7 +55,7 @@ bool Ngs2FinishBlock(Ngs2Voice& voice) {
         block.info.user_data,
         block.data,
         static_cast<std::uint32_t>(block.info.data_size),
-        block.numRepeated,
+        0,
         0,
         0,
     };
@@ -88,14 +87,6 @@ std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t st
             continue;
         }
         if (block.data != nullptr && block.info.data_size - block.dataCursor < frameBytes) throw std::runtime_error("NGS2: a partial PCM frame is not implemented");
-        if (voice.pcmSkipRemaining != 0) {
-            const auto available = block.data == nullptr ? voice.pcmSkipRemaining : (block.info.data_size - block.dataCursor) / frameBytes;
-            const auto skipped = std::min<std::uint64_t>(voice.pcmSkipRemaining, available);
-            block.dataCursor += skipped * frameBytes;
-            voice.decodedBytes += skipped * frameBytes;
-            voice.pcmSkipRemaining -= static_cast<std::uint32_t>(skipped);
-            continue;
-        }
         float frame[NGS2_MAX_CHANNELS];
         ReadPcm(voice, block.data == nullptr ? nullptr : block.data + block.dataCursor, frame);
         for (std::uint32_t channel = 0; channel < voice.channels; ++channel) dest[static_cast<std::size_t>(channel) * stride + written] = frame[channel];

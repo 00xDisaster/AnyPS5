@@ -105,7 +105,7 @@ static void TestSkipAndBlockEnd(const std::vector<float>& reference) {
 
 static void TestRepeatAndState(const std::vector<float>& reference) {
     const auto system = CreateSystem();
-    const auto sampler = Sampler(system, 0, 300, 1);
+    const auto sampler = Sampler(system, 0, 300, 2);
     Patch(sampler, Mastering(system, 1));
     callbackFlags.clear();
     auto rendered = Render(system, 304);

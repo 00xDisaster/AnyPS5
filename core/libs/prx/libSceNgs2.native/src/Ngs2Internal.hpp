@@ -153,7 +153,6 @@ struct Ngs2Voice {
     bool samplerStarved = false;
     bool samplerEnded = false;
     std::uint32_t pcmRemaining = 0;
-    std::uint32_t pcmSkipRemaining = 0;
     std::vector<Ngs2QueuedCallback> pendingBlockCallbacks;
     std::vector<Ngs2QueuedCallback> dispatchBlockCallbacks;
     std::vector<float> samplerScratch;
