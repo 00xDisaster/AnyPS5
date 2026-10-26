@@ -190,13 +190,19 @@ void DecodeRdnaProgram(std::span<const std::uint32_t> code, RdnaProgram& program
     for (std::uint32_t wordIndex = 0; wordIndex < code.size();) {
         const std::uint32_t programCounter = wordIndex * static_cast<std::uint32_t>(sizeof(std::uint32_t));
         RdnaInstruction decoded;
+        std::exception_ptr error;
         try {
             decoded = DecodeRdnaInstruction(programCounter, code, wordIndex);
-        } catch (const std::exception&) {
+        } catch (const std::runtime_error&) {
+            error = std::current_exception();
+        } catch (const std::logic_error&) {
+            error = std::current_exception();
+        }
+        if (error) {
             if (fallthroughReachable) {
-                throw;
+                std::rethrow_exception(error);
             }
-            skippedWords.push_back({programCounter, std::current_exception()});
+            skippedWords.push_back({programCounter, error});
             ++wordIndex;
             continue;
         }
@@ -220,6 +226,7 @@ void DecodeRdnaProgram(std::span<const std::uint32_t> code, RdnaProgram& program
         }
     }
 
+    rejectTargetedSkippedWords(program, skippedWords);
     throw std::out_of_range("RDNA program decode reached the code boundary before s_endpgm");
 }
 

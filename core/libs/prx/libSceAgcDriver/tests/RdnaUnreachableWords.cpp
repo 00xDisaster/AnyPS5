@@ -136,6 +136,9 @@ int main() {
     const std::array<std::uint32_t, 4> branchTarget{SCbranchScc1SkipOne, SEndpgm, UnsupportedSop2, SEndpgm};
     ExpectError<UnsupportedInstructionError>("branch to an unsupported word", branchTarget, "unsupported SOP2 opcode 12");
 
+    const std::array<std::uint32_t, 3> branchTargetAtSpanEnd{SCbranchScc1SkipOne, SEndpgm, UnsupportedSop2};
+    ExpectError<UnsupportedInstructionError>("branch to an unsupported word at the end of the span", branchTargetAtSpanEnd, "unsupported SOP2 opcode 12");
+
     const std::array<std::uint32_t, 2> unknownFirst{UnknownFamily, SEndpgm};
     ExpectError<std::invalid_argument>("unknown first word", unknownFirst,
         "unknown RDNA instruction family at program counter 0x00000000 raw word 0xffffffff");
