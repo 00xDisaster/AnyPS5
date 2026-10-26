@@ -545,6 +545,36 @@ void CheckStubBeforeUndecodableData() {
     Require(tables[0].End <= TextAddress + 0x13, "Mask covered the syscall stub before undecodable data");
 }
 
+void CheckTableWithPaddingAndReturnBytes() {
+    constexpr std::size_t gap = 0x800;
+    Bytes text(0x10 + gap, 0x90);
+    text[0] = 0x48;
+    text[1] = 0x8d;
+    text[2] = 0x05;
+    SetDisplacement(text, 3, 7, TextAddress + 0x10);
+    text[7] = 0xc3;
+    for (std::size_t i = 8; i < 0x10; ++i) text[i] = 0xcc;
+    static constexpr std::uint8_t row[]{
+        0x18, 0x18, 0x60, 0x18, 0xc0, 0x78, 0x30, 0xd8,
+        0x18, 0x18, 0x60, 0x18, 0xc0, 0x78, 0x30, 0xd8,
+        0x0f, 0x78, 0x33, 0x1e
+    };
+    for (std::size_t at = 0x10; at + sizeof(row) <= text.size(); at += sizeof(row))
+        std::memcpy(text.data() + at, row, sizeof(row));
+    static constexpr std::uint8_t paddedChain[]{0x00, 0xcc, 0x90, 0x48, 0x89, 0xc0, 0xc3};
+    static constexpr std::uint8_t alignedChain[]{0x00, 0xcc, 0x90, 0x00, 0x48, 0x89, 0xc0, 0xc3};
+    std::memcpy(text.data() + 0x10 + 0x3b8, paddedChain, sizeof(paddedChain));
+    std::memcpy(text.data() + 0x10 + 0x4ac, alignedChain, sizeof(alignedChain));
+    const std::vector<std::pair<VirtualAddress, VirtualAddress>> functions{
+        {TextAddress, TextAddress + 8},
+        {TextAddress + text.size(), TextAddress + text.size() + 8}
+    };
+    const auto tables = Relinker::FindRelativeJumpTables(text, TextAddress, functions);
+    Require(tables.size() == 1, "Expected a table with padding and return bytes to be recognized");
+    Require(tables[0].Begin == TextAddress + 0x10, "Table with padding and return bytes started at the wrong address");
+    Require(tables[0].End == TextAddress + text.size(), "Mask stopped inside a table with padding and return bytes");
+}
+
 void CheckLargeZeroGaps() {
     constexpr std::size_t stride = 0x10000;
     constexpr std::size_t count = 32;
@@ -607,6 +637,7 @@ int main() {
         CheckEmbeddedDataTables();
         CheckDecodedPaddingSuffix();
         CheckStubBeforeUndecodableData();
+        CheckTableWithPaddingAndReturnBytes();
         CheckLargeZeroGaps();
         std::cout << "Control-flow graph tests passed\n";
         return 0;

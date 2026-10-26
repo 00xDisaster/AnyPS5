@@ -156,7 +156,7 @@ public:
             const bool isSyscall = IsForbiddenSyscallInstruction(code, pos, info);
             syscalls[pos] = isSyscall || syscalls[next];
             if (EndsControlFlow(info, isSyscall)) {
-                trailing[pos] = Trailing::Terminator;
+                trailing[pos] = isSyscall || trailing[next] == Trailing::Padding ? Trailing::Terminator : Trailing::NonTerminator;
                 continue;
             }
             if (trailing[next] != Trailing::Padding) {
