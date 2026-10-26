@@ -299,6 +299,11 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+if(BUILD_TESTING AND Python3_Interpreter_FOUND)
+    add_test(NAME mingw_host_only_test_targets COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_mingw_host_only_test_targets.py)
+endif()
+
 if(ANYPS5_RELINKER_ONLY)
     add_subdirectory(core/relinker)
     return()
