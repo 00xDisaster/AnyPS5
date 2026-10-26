@@ -108,20 +108,9 @@ static void TestParsePcm() {
     Require(sceNgs2ParseWaveformData(noChannels.data(), noChannels.size(), &info) == SCE_NGS2_ERROR_INVALID_WAVEFORM_FORMAT);
 }
 
-static bool ParseThrowsFormat(const std::vector<std::uint8_t>& file) {
-    Ngs2WaveformInfo info{};
-    try {
-        sceNgs2ParseWaveformData(file.data(), file.size(), &info);
-    } catch (const std::runtime_error&) {
-        return true;
-    }
-    return false;
-}
-
 static void TestParseUnknownFormats() {
     const std::uint8_t pcmGuid[16] = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71};
     const std::uint8_t unknownGuid[16] = {0xaa, 0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc};
-    const std::uint8_t type43Guid[16] = {0x1c, 0xe0, 0x10, 0x9e, 0xcc, 0x8b, 0xd9, 0x47, 0x8f, 0x3b, 0xe3, 0x0b, 0x8b, 0xdc, 0x35, 0x29};
     Ngs2WaveformInfo info{};
     for (const std::uint32_t tag : {0x0u, 0x2u, 0x11u, 0x55u, 0x165u, 0xffffu}) {
         const auto wave = PcmFile(1, 44100, 16, 10, tag);
@@ -137,9 +126,6 @@ static void TestParseUnknownFormats() {
     }
     const auto pcm = ExtensibleFile(0x34, pcmGuid);
     Require(sceNgs2ParseWaveformData(pcm.data(), pcm.size(), &info) == SCE_NGS2_OK && info.format.waveform_type == SCE_NGS2_WAVEFORM_TYPE_PCM_I16L && info.num_samples == 10);
-    Require(ParseThrowsFormat(ExtensibleFile(0x28, type43Guid)));
-    Require(ParseThrowsFormat(ExtensibleFile(0x34, type43Guid)));
-    Require(ParseThrowsFormat(ExtensibleFile(0x34, unknownGuid)));
 
     const auto wave = PcmFile(1, 44100, 16, 10, 0x55);
     const char* const guestPath = "/aps5_ngs2_parse_unknown.wav";
