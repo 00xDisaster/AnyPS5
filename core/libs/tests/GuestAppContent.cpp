@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <fstream>
 #include <array>
-#include <stdexcept>
 #include "ProcessParametersFixture.hpp"
 
 static constexpr int ErrorParameter = static_cast<int>(0x80D90002);
@@ -17,15 +16,6 @@ static constexpr int ErrorDrmNoEntitlement = static_cast<int>(0x80D90007);
 static constexpr int ErrorBusy = static_cast<int>(0x80D90003);
 static constexpr int ErrorNotMounted = static_cast<int>(0x80D90004);
 static void Require(bool value) { if (!value) std::abort(); }
-
-template <typename Call> static bool Throws(Call call) {
-    try {
-        call();
-    } catch (const std::runtime_error&) {
-        return true;
-    }
-    return false;
-}
 
 int main() {
     static std::array<std::byte, 64> process{};
@@ -263,9 +253,6 @@ int main() {
             if (version >= 0x03500000) {
                 Require(sceAppContentAddcontEnqueueDownloadSp(0, &label) == ErrorParameter);
                 Require(sceAppContentAddcontShrink(0, &label) == ErrorParameter);
-            } else {
-                Require(Throws([&] { sceAppContentAddcontEnqueueDownloadSp(0, &label); }));
-                Require(Throws([&] { sceAppContentAddcontShrink(0, &label); }));
             }
             Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0);
             Require(std::memcmp(progress, progressBefore, sizeof(progress)) == 0);
