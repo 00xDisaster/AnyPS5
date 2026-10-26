@@ -2,6 +2,7 @@
 #include "SceTypes.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libc/include/GuestTime.hpp"
+#include <cmath>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -137,6 +138,12 @@ static void CheckCount() {
     Require(Format(buffer, 16, u"a%n", nullCount) < 0, "vswprintf null %n argument");
 }
 
+static void CheckUnsignedSignFlags() {
+    char16_t buffer[32];
+    Require(swprintf_nid_postfix(buffer, 32, u"[% u|%+u|% lu|% 5u|%+x|% #o]", 7u, 7u, 7ul, 7u, 7u, 7u) == 18 &&
+        buffer == std::u16string(u"[7|7|7|    7|7|07]"), "unsigned conversions ignore the space and plus flags");
+}
+
 static void CheckGroupingFlag() {
     char16_t buffer[48];
     Require(swprintf_nid_postfix(buffer, 48, u"%'d|%'-6u|%'.2f|%'+05d|%'g", 1234567, 42u, 1234.5, 12, 1e6) == 34 &&
@@ -186,6 +193,8 @@ static void CheckFloat() {
     Require(swprintf_nid_postfix(buffer, 64, u"[%a|%.3a]", 0x1p-1074, 0x0.fffffffffffffp-1022) == 25 &&
         buffer == std::u16string(u"[0x1p-1074|0x2.000p-1023]"), "swprintf normalises subnormal hexadecimal floats");
     Require(swprintf_nid_postfix(buffer, 64, u"[%.2Lf]", 0.125L) == 6 && buffer == std::u16string(u"[0.13]"), "swprintf long double rounding");
+    Require(swprintf_nid_postfix(buffer, 64, u"[%La|%.0La]", 0.1L, 1.5L) == 32 && buffer == std::u16string(u"[0x1.999999999999999ap-4|0x2p+0]"),
+        "swprintf long double hexadecimal");
 }
 
 static void CheckSwprintf() {
@@ -306,9 +315,18 @@ static void CheckAlternateOctalZero() {
     Require(snwprintf_s_nid_postfix(buffer, 1, u"%#.0o", 0u) == 1 && buffer[0] == 0 && buffer[1] == u'y', "octal zero bounded output");
 }
 
+static void CheckNanSign() {
+    char16_t buffer[64];
+    Require(swprintf_nid_postfix(buffer, 64, u"[%f][%+f][% F][%5.1e]", -NAN, -NAN, NAN, -NAN) == 25, "NaN sign length");
+    Require(buffer == std::u16string(u"[-nan][-nan][ NAN][ -nan]"), "NaN sign");
+    Require(swprintf_nid_postfix(buffer, 64, u"[%-6g][%06a][%LG][%+f][%+G]", NAN, -NAN, -static_cast<long double>(NAN), -INFINITY, NAN) == 34, "NaN flags length");
+    Require(buffer == std::u16string(u"[nan   ][  -nan][-NAN][-inf][+NAN]"), "NaN flags");
+}
+
 int main() {
     CheckAlternateOctalZero();
     CheckBounded();
+    CheckNanSign();
     CheckPositional();
     CheckPointer();
     CheckCount();
@@ -328,4 +346,5 @@ int main() {
     Check(u"%.1s", "\xf0\x9f\x98\x80x", u"");
     Check(u"%.3s", "\xf0\x9f\x98\x80x", u"\U0001f600x");
     CheckGroupingFlag();
+    CheckUnsignedSignFlags();
 }
