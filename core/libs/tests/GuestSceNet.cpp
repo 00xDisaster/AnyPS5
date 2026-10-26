@@ -777,6 +777,33 @@ static void CheckMessages(int receiver, int sender, const std::array<std::uint8_
     Require(threw);
 }
 
+static void CheckOverlappingReceiveVectors(int receiver, int sender, const std::array<std::uint8_t, 16>& address) {
+    constexpr std::size_t page = 0x4000;
+    std::int64_t physical = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page, 0, 0, &physical) == 0);
+    void* blocked = nullptr;
+    Require(sceKernelMapDirectMemory(&blocked, page, 3, 0, physical, 0) == 0);
+    Require(sceKernelMprotect(blocked, page, 0) == 0);
+    char tail[4]{};
+    NetIovec vectors[2]{};
+    vectors[1] = {tail, sizeof(tail)};
+    vectors[0] = {&vectors[1], sizeof(NetIovec)};
+    const NetIovec redirect{blocked, sizeof(tail)};
+    char payload[sizeof(NetIovec) + sizeof(tail)];
+    std::memcpy(payload, &redirect, sizeof(redirect));
+    std::memcpy(payload + sizeof(redirect), "tail", sizeof(tail));
+    std::array<std::uint8_t, 16> destination = address;
+    Require(sceNetSendto(sender, payload, sizeof(payload), 0, destination.data(), destination.size()) == sizeof(payload));
+    std::array<std::uint8_t, 16> source{};
+    NetMsghdr message{source.data(), static_cast<std::uint32_t>(source.size()), vectors, 2, nullptr, 0, -1};
+    Require(sceNetRecvmsg(receiver, &message, 0) == sizeof(payload));
+    Require(std::memcmp(tail, "tail", sizeof(tail)) == 0);
+    Require(std::memcmp(&vectors[1], &redirect, sizeof(redirect)) == 0);
+    Require(message.iov == vectors && message.iov_length == 2 && message.flags == 0 && message.name_length == 16);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(blocked), page) == 0);
+    Require(sceKernelReleaseDirectMemory(physical, page) == 0);
+}
+
 static void CheckEpollWritable() {
     std::array<std::uint8_t, 16> address{16, 2, 0, 0, 127, 0, 0, 1};
     const int receiver = sceNetSocket("epoll-receiver", 2, 2, 17);
@@ -2282,6 +2309,7 @@ int main() {
     CheckStreamReceiveTimeout();
     CheckMicrosecondTimeouts(udp_receiver);
     CheckMessages(udp_receiver, udp_sender, address);
+    CheckOverlappingReceiveVectors(udp_receiver, udp_sender, address);
     Require(sceNetSocketClose(udp_sender) == 0);
     Require(sceNetSocketClose(udp_receiver) == 0);
 
