@@ -111,10 +111,17 @@ public:
                 Check(enumerateExtensions(context.physical, nullptr, &count, extensions.data()), "vkEnumerateDeviceExtensionProperties");
             }
             const auto supported = [&](const char* name) { return std::any_of(extensions.begin(), extensions.end(), [&](const auto& item) { return std::strcmp(item.extensionName, name) == 0; }); };
-            const bool externalHost = supported(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) && supported(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            const bool externalHostExtensions = supported(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) && supported(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
             const std::array<const char*, 2> externalHostNames{VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
             VkPhysicalDeviceBufferDeviceAddressFeatures address{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES};
-            address.bufferDeviceAddress = VK_TRUE;
+            if (externalHostExtensions) {
+                VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &address};
+                function<PFN_vkGetPhysicalDeviceFeatures2>("vkGetPhysicalDeviceFeatures2")(context.physical, &features);
+            }
+            const bool externalHost = externalHostExtensions && address.bufferDeviceAddress == VK_TRUE;
+            address.pNext = nullptr;
+            address.bufferDeviceAddressCaptureReplay = VK_FALSE;
+            address.bufferDeviceAddressMultiDevice = VK_FALSE;
             VkDeviceCreateInfo device{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, externalHost ? &address : nullptr};
             device.queueCreateInfoCount = 1u;
             device.pQueueCreateInfos = &queue;
@@ -1159,7 +1166,7 @@ void CheckBufferWrite(Context context, VkFormat format, std::uint32_t fragments,
 
 void CheckBufferWrites(Context context, VkFormat format, std::uint32_t fragments) {
     if (context.hostImportAlignment == 0u) {
-        std::printf("skipped native depth buffer writes: the device does not import host memory\n");
+        std::printf("skipped native depth buffer writes: the device lacks VK_EXT_external_memory_host, VK_KHR_buffer_device_address or the bufferDeviceAddress feature\n");
         return;
     }
     for (const auto write : {BufferWrite::DepthPlane, BufferWrite::Htile, BufferWrite::Written}) CheckBufferWrite(context, format, fragments, write);
