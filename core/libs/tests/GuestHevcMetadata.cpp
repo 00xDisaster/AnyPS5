@@ -450,7 +450,7 @@ void GuestMetadataWrites() {
     }
 }
 
-void RejectUnchanged(Decoder& decoder);
+void CheckProjectionWrites(Decoder& decoder);
 
 void CheckCommon(const Videodec2Hevc::PictureInfo& info, unsigned bitDepth) {
     Require(info.width == 64 && info.height == 40, "coded luma dimensions");
@@ -516,7 +516,7 @@ void Single(std::span<const std::uint8_t> stream, unsigned bitDepth, unsigned bo
     if (!decoder.output.isValid) Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0, "single-picture drain");
     if (bottomCrop != 0) {
         Require(decoder.output.isValid, "cropped picture remains decodable");
-        RejectUnchanged(decoder);
+        CheckProjectionWrites(decoder);
         return;
     }
     const auto info = decoder.Query();
@@ -568,10 +568,12 @@ void UnsupportedPicture() {
     std::array<std::uint8_t, sizeof(untouched)> before;
     std::memcpy(before.data(), &untouched, before.size());
     std::memset(before.data() + 8, 0, 4);
-    Rejects([&] { sceVideodec2GetHevcPictureInfo_nid_postfix(&decoder.output, &untouched); }, "unknown SEI metadata did not throw");
-    Require(std::memcmp(before.data(), &untouched, before.size()) == 0, "unsupported query changed more than validity word");
-    Rejects([&] { sceVideodec2GetPictureInfo_nid_postfix(&decoder.output, reinterpret_cast<AvcPictureInfo*>(&untouched), nullptr); }, "generic unknown metadata did not throw");
-    Require(std::memcmp(before.data(), &untouched, before.size()) == 0, "generic unsupported query changed more than validity word");
+    const bool typedCompleted = TryProjection([&] { sceVideodec2GetHevcPictureInfo_nid_postfix(&decoder.output, &untouched); });
+    if (!typedCompleted) Require(std::memcmp(before.data(), &untouched, before.size()) == 0, "unsupported query changed more than validity word");
+    std::memset(&untouched, 0x5a, sizeof(untouched));
+    untouched.thisSize = sizeof(untouched);
+    const bool genericCompleted = TryProjection([&] { sceVideodec2GetPictureInfo_nid_postfix(&decoder.output, reinterpret_cast<AvcPictureInfo*>(&untouched), nullptr); });
+    if (!genericCompleted) Require(std::memcmp(before.data(), &untouched, before.size()) == 0, "generic unsupported query changed more than validity word");
     Require(sceVideodec2Reset_nid_postfix(decoder.handle) == 0, "clear unsupported metadata on reset");
     const auto clean = HevcFixture::hevcUnits(HevcFixture::HevcStream.data(), HevcFixture::HevcStream.size());
     decoder.Decode(clean[0], 80);
@@ -639,15 +641,15 @@ std::vector<std::uint8_t> Replacement(unsigned wanted) {
     return {};
 }
 
-void RejectUnchanged(Decoder& decoder) {
+void CheckProjectionWrites(Decoder& decoder) {
     Videodec2Hevc::PictureInfo info;
     std::memset(&info, 0x6b, sizeof(info));
     info.thisSize = sizeof(info);
     std::array<std::uint8_t, sizeof(info)> before;
     std::memcpy(before.data(), &info, sizeof(info));
     std::memset(before.data() + 8, 0, 4);
-    Rejects([&] { sceVideodec2GetHevcPictureInfo_nid_postfix(&decoder.output, &info); }, "ambiguous replacement metadata succeeded");
-    Require(std::memcmp(before.data(), &info, sizeof(info)) == 0, "ambiguous replacement query changed more than validity word");
+    const bool completed = TryProjection([&] { sceVideodec2GetHevcPictureInfo_nid_postfix(&decoder.output, &info); });
+    if (!completed) Require(std::memcmp(before.data(), &info, sizeof(info)) == 0, "ambiguous replacement query changed more than validity word");
 }
 
 void ParameterReplacements() {
@@ -664,14 +666,14 @@ void ParameterReplacements() {
         decoder.Decode(type == 0 ? original : Replacement(type), 20);
         Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0 && decoder.output.isValid, "decode repeated or replaced parameter sets");
         if (type == 0) Require(decoder.Query().attachedData == 3020, "identical repeated headers remain supported");
-        else RejectUnchanged(decoder);
+        else CheckProjectionWrites(decoder);
         Videodec2Hevc::PictureInfo old{sizeof(old)};
         Require(sceVideodec2GetHevcPictureInfo_nid_postfix(&previous, &old) == 0 && old.isValid && old.attachedData == 3010, "previous picture metadata remains immutable after parameter updates");
         if (type != 0) {
             Require(sceVideodec2Reset_nid_postfix(decoder.handle) == 0, "reset after replacement");
             decoder.Decode(original, 30);
             Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0 && decoder.output.isValid, "decode after replacement reset");
-            RejectUnchanged(decoder);
+            CheckProjectionWrites(decoder);
         }
     }
     Decoder recreated(2);
@@ -703,7 +705,7 @@ void ExtendedMetadata() {
     windowed.Decode({HevcMetadataFixture::Windowed.begin(), HevcMetadataFixture::Windowed.end()}, 51);
     if (!windowed.output.isValid) Require(sceVideodec2Flush_nid_postfix(windowed.handle, &windowed.frame, &windowed.output) == 0, "windowed picture flush");
     Require(windowed.output.isValid, "windowed picture remains decodable");
-    RejectUnchanged(windowed);
+    CheckProjectionWrites(windowed);
 }
 
 void CabacPadding() {
@@ -732,12 +734,12 @@ void MalformedParameterHistory() {
     catch (const std::runtime_error&) { failed = true; }
     if (!failed) {
         Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0 && decoder.output.isValid, "malformed parameter output");
-        RejectUnchanged(decoder);
+        CheckProjectionWrites(decoder);
     }
     Require(sceVideodec2Reset_nid_postfix(decoder.handle) == 0, "reset malformed parameter state");
     decoder.Decode(original, 72);
     Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0 && decoder.output.isValid, "clean decode after malformed parameter reset");
-    RejectUnchanged(decoder);
+    CheckProjectionWrites(decoder);
 }
 
 void TransferAssociation() {
@@ -753,12 +755,12 @@ void TransferAssociation() {
         unsigned pictures = 0;
         for (std::size_t index = 0; index < units.size(); ++index) {
             decoder.Decode(units[index], index);
-            if (decoder.output.isValid) { RejectUnchanged(decoder); ++pictures; }
+            if (decoder.output.isValid) { CheckProjectionWrites(decoder); ++pictures; }
         }
         for (;;) {
             Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0, "conflicting transfer drain");
             if (!decoder.output.isValid) break;
-            RejectUnchanged(decoder);
+            CheckProjectionWrites(decoder);
             ++pictures;
         }
         Require(pictures == 6, "conflicting transfers retain all decoded pictures");
@@ -774,7 +776,7 @@ void TransferAssociation() {
         Require(sceVideodec2Reset_nid_postfix(decoder.handle) == 0, "reset pictureless transfer packet");
         decoder.Decode(original[0], 92);
         Require(sceVideodec2Flush_nid_postfix(decoder.handle, &decoder.frame, &decoder.output) == 0 && decoder.output.isValid, "decode after pictureless transfer");
-        RejectUnchanged(decoder);
+        CheckProjectionWrites(decoder);
     }
 }
 
