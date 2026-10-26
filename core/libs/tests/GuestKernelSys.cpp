@@ -33,6 +33,7 @@
 #ifndef _WIN32
 #include <cerrno>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -66,6 +67,14 @@ bool ThrowsNaming(Call call, const char* text) {
     }
     return false;
 }
+
+#ifndef _WIN32
+nlink_t LinkCount(const std::string& path) {
+    struct stat status {};
+    Require(::lstat(path.c_str(), &status) == 0);
+    return status.st_nlink;
+}
+#endif
 
 void OwnershipAndLinkTests(const std::filesystem::path& root) {
     constexpr std::uint32_t Unchanged = 0xFFFFFFFFu;
@@ -137,7 +146,31 @@ void OwnershipAndLinkTests(const std::filesystem::path& root) {
         Require(lchown_nid_postfix(dangling.c_str(), 0, 0) == 0);
         Require(fchownat_nid_postfix(-100, dangling.c_str(), 0, 0, 0) == -1 && Error() == 2);
         Require(fchownat_nid_postfix(-100, dangling.c_str(), 0, 0, 0x200) == 0);
+#ifdef _WIN32
         Require(ThrowsNaming([&] { linkat_nid_postfix(-100, symbolic.c_str(), -100, other.c_str(), 0); }, "symbolic link itself"));
+#else
+        const auto symbolicCopy = (root / "copy.link").string();
+        const auto danglingCopy = (root / "dangling.copy").string();
+        Require(linkat_nid_postfix(-100, symbolic.c_str(), -100, symbolicCopy.c_str(), 0) == 0);
+        Require(std::filesystem::read_symlink(symbolicCopy) == "owned.txt" && LinkCount(symbolic) == 2);
+        Require(std::filesystem::hard_link_count(file) == 2);
+        Require(linkat_nid_postfix(directory, "dangling.link", directory, "dangling.copy", 0) == 0);
+        Require(std::filesystem::read_symlink(danglingCopy) == "missing.txt" && LinkCount(dangling) == 2);
+        Require(linkat_nid_postfix(-100, dangling.c_str(), -100, other.c_str(), 0x400) == -1 && Error() == 2);
+        Require(linkat_nid_postfix(-100, symbolic.c_str(), -100, linked.c_str(), 0) == -1 && Error() == 17);
+        Require(linkat_nid_postfix(-100, symbolic.c_str(), -100, (missing + "/inner").c_str(), 0) == -1 && Error() == 2);
+        Require(linkat_nid_postfix(-100, symbolic.c_str(), -100, (throughFile + "/inner").c_str(), 0) == -1 && Error() == 20);
+        Require(LinkCount(symbolic) == 2 && !std::filesystem::exists(std::filesystem::symlink_status(other)));
+        const auto folder = root / "folder";
+        const auto folderLink = (root / "folder.link").string();
+        const auto folderCopy = (root / "folder.copy").string();
+        Require(std::filesystem::create_directory(folder) && symlink_nid_postfix("folder", folderLink.c_str()) == 0);
+        Require(linkat_nid_postfix(-100, folderLink.c_str(), -100, other.c_str(), 0x400) == -1 && Error() == 1);
+        Require(linkat_nid_postfix(-100, folderLink.c_str(), -100, folderCopy.c_str(), 0) == 0);
+        Require(std::filesystem::read_symlink(folderCopy) == "folder" && LinkCount(folderLink) == 2);
+        Require(std::filesystem::remove(symbolicCopy) && std::filesystem::remove(danglingCopy) && std::filesystem::remove(folderCopy));
+        Require(std::filesystem::remove(folderLink) && std::filesystem::remove(folder));
+#endif
         Require(linkat_nid_postfix(-100, symbolic.c_str(), -100, other.c_str(), 0x400) == 0);
 #ifdef _WIN32
         Require((GetFileAttributesW(std::filesystem::path(other).c_str()) & FILE_ATTRIBUTE_REPARSE_POINT) == 0);
