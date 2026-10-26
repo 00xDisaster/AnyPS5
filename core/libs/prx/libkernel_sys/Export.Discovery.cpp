@@ -1488,10 +1488,6 @@ int APS5_VABI sceKernelKernelHeapUsage(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelLoadStartModuleForSysmodule(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 
 int APS5_VABI sceKernelLoadStartModuleInternalForMono(void) {
     NotImplemented_nid_no_patch(__func__);
