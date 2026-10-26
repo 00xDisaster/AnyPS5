@@ -789,12 +789,15 @@ int APS5_VABI scePthreadCondattrGetpshared(const PthreadCondattr* attr, int* psh
 int APS5_VABI pthread_mutexattr_setkind_np_nid_postfix(PthreadMutexattr* attr, int kind);
 int APS5_VABI pthread_mutexattr_getkind_np_nid_postfix(PthreadMutexattr attr);
 int APS5_VABI scePthreadMutexattrGettype(const PthreadMutexattr* attr, int* type);
+int APS5_VABI scePthreadMutexattrSetkind(PthreadMutexattr* attr, int kind);
+int APS5_VABI scePthreadMutexattrGetkind(PthreadMutexattr attr);
 int APS5_VABI scePthreadMutexattrGetprotocol(const PthreadMutexattr* attr, int* protocol);
 int APS5_VABI scePthreadMutexattrSetprioceiling(PthreadMutexattr* attr, int prioceiling);
 int APS5_VABI scePthreadMutexattrGetprioceiling(const PthreadMutexattr* attr, int* prioceiling);
 int APS5_VABI scePthreadMutexattrSetpshared(PthreadMutexattr* attr, int pshared);
 int APS5_VABI scePthreadMutexattrGetpshared(const PthreadMutexattr* attr, int* pshared);
 int APS5_VABI pthread_rwlockattr_gettype_np_nid_postfix(const PthreadRwlockattr* attr, int* type);
+int APS5_VABI pthread_rwlockattr_settype_np_nid_postfix(PthreadRwlockattr* attr, int type);
 int APS5_VABI scePthreadRwlockattrGettype(const PthreadRwlockattr* attr, int* type);
 int APS5_VABI scePthreadRwlockattrSetpshared(PthreadRwlockattr* attr, int pshared);
 int APS5_VABI scePthreadRwlockattrGetpshared(const PthreadRwlockattr* attr, int* pshared);
