@@ -722,9 +722,10 @@ def audit(imports, exports, stubs, libraries, modules, module_imports=None, modu
 
     def system_library(name):
         if name:
-            for suffix in (".sprx", ".suprx", ".debug_prx"):
-                if name.endswith(suffix):
-                    normalized = name.removesuffix(suffix) + ".prx"
+            folded = name.casefold()
+            for suffix in (".sprx", ".suprx", ".debug_prx", ".prx"):
+                if folded.endswith(suffix):
+                    normalized = name[:-len(suffix)] + ".prx"
                     candidates = windows_names.get(normalized.casefold(), ())
                     if normalized in candidates:
                         return normalized
