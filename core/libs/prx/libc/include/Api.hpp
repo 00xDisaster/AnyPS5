@@ -163,6 +163,15 @@ int APS5_VABI _Atomic_compare_exchange_strong_8_nid_postfix(volatile std::uint64
 int APS5_VABI _Atomic_compare_exchange_weak_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t* expected, std::uint8_t desired, int, int);
 int APS5_VABI _Atomic_compare_exchange_weak_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t* expected, std::uint16_t desired, int, int);
 int APS5_VABI _Atomic_compare_exchange_weak_8_nid_postfix(volatile std::uint64_t* target, std::uint64_t* expected, std::uint64_t desired, int, int);
+std::uint8_t APS5_VABI _Fetch_and_seq_cst_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t value);
+std::uint16_t APS5_VABI _Fetch_and_seq_cst_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t value);
+std::uint32_t APS5_VABI _Fetch_and_seq_cst_4_nid_postfix(volatile std::uint32_t* target, std::uint32_t value);
+std::uint8_t APS5_VABI _Fetch_or_seq_cst_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t value);
+std::uint16_t APS5_VABI _Fetch_or_seq_cst_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t value);
+std::uint32_t APS5_VABI _Fetch_or_seq_cst_4_nid_postfix(volatile std::uint32_t* target, std::uint32_t value);
+std::uint8_t APS5_VABI _Fetch_xor_seq_cst_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t value);
+std::uint16_t APS5_VABI _Fetch_xor_seq_cst_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t value);
+std::uint32_t APS5_VABI _Fetch_xor_seq_cst_4_nid_postfix(volatile std::uint32_t* target, std::uint32_t value);
 std::uint8_t APS5_VABI _Atomic_fetch_add_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t value, int);
 std::uint16_t APS5_VABI _Atomic_fetch_add_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t value, int);
 std::uint64_t APS5_VABI _Atomic_fetch_add_8_nid_postfix(volatile std::uint64_t* target, std::uint64_t value, int order);
