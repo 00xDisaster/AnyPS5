@@ -235,6 +235,7 @@ int APS5_VABI fclose_nid_postfix(FileStream* stream);
 FileStream* APS5_VABI _ZSt7_FiopenPKcNSt5_IosbIiE9_OpenmodeEi_nid_postfix(const char* filename, int mode, int protection);
 size_t APS5_VABI fread_nid_postfix(void* buffer, size_t size, size_t count, FileStream* stream);
 size_t APS5_VABI fwrite_nid_postfix(const void* buffer, size_t size, size_t count, FileStream* stream);
+int APS5_VABI fpurge_nid_postfix(FileStream*);
 int APS5_VABI fseeko_nid_postfix(FileStream* stream, std::int64_t offset, int origin);
 std::int64_t APS5_VABI ftello_nid_postfix(FileStream* stream);
 int APS5_VABI fseek_nid_postfix(FileStream* stream, std::int64_t offset, int origin);

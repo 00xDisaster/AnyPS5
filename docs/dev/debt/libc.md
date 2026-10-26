@@ -71,6 +71,8 @@
 
 - [snprintf and vsnprintf](../../../core/libs/prx/libc/src/Formatting.cpp) (libc) accept any size up to `SIZE_MAX`, as a payload process on a PS5 (firmware 13.60) does. A null buffer with a nonzero size throws here, where the console writes through it, and a result longer than `INT_MAX` throws, which was not measured
 
+- [fpurge](../../../core/libs/prx/libc/src/StreamPurge.cpp) follows FreeBSD 11.4 [fpurge.c](https://github.com/freebsd/freebsd-src/blob/releng/11.4/lib/libc/stdio/fpurge.c): discard buffered input, pushback and output without writing or seeking, preserving EOF and error status, and report `EBADF` for a closed stream. Console behavior is unverified. The Windows path resets the existing host UCRT buffer representation; Linux and macOS use their native purge operations. Null streams throw as existing stream wrappers do.
+
 ### Functional
 
 - [_Cosh](../../../core/libs/prx/libc/src/Math.cpp) (libc) follows the two-argument Dinkumware CRT helper used by `std::complex`, including a scaled large-finite-input path; the signature, exact result and floating-point exception behavior are not verified against the console.
