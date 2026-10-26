@@ -438,7 +438,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_TRACE_QUERY` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/GuestMemory.cpp` |  | prints every 16th page query with its cost |
 | `APS5_TRACE_RESOURCE_KEY_MISSES` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/ShaderResources.cpp` |  | reports shader-resource cache key misses |
 | `APS5_TRACE_SECONDS` | string | `core/libs/prx/libSceAgcDriver/Execution/include/PerformanceTrace.hpp` |  | records from the first present `<start>` seconds after the first present for `<length>` seconds (whole numbers, `start:length`) |
-| `APS5_TRACE_SHADER_CORRELATION` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Draw/Draw.cpp` |  | traces shader selection and preparation failure tokens through draw batches |
+| `APS5_TRACE_SHADER_CORRELATION` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Draw/Draw.cpp` |  | traces shader selection and preparation failure tokens through draw batches (requires `APS5_CAPTURE_TRACE`) |
 | `APS5_TRACE_SHADER_REGS` | string | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Shaders/ShaderRegistry.cpp` |  | prints a shader's registers for one hex program address, or `all` |
 | `APS5_TRACE_SHADOW` | integer | `core/libs/prx/libSceAgcDriver/Graphics/src/UnitShadow.cpp` |  | prints the first n shadow publishes, the first 64 seeds, every evict and retire |
 | `APS5_TRACE_SKIPS` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Shaders/ShaderDiagnostics.cpp` |  | reports each distinct shader skip once |
