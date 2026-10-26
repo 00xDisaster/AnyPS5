@@ -16,6 +16,11 @@ struct KernelIovec {
     std::size_t length;
 };
 
+struct KernelTlsIndex {
+    std::uint64_t module;
+    std::uint64_t offset;
+};
+
 using GuestHandler = void (APS5_VABI *)(int);
 
 struct GuestItimerspec {
@@ -143,7 +148,7 @@ int APS5_VABI sceKernelCancelEventFlag(KernelEventFlag ef, std::uint64_t setPatt
 
 extern "C" {
 
-int APS5_VABI __tls_get_addr_nid_postfix(void);
+void* APS5_VABI __tls_get_addr_nid_postfix(const KernelTlsIndex* index);
 int APS5_VABI physhm_open_nid_postfix(void);
 int APS5_VABI physhm_unlink_nid_postfix(void);
 int APS5_VABI sceKernelUnknown03(void);
@@ -641,6 +646,7 @@ int APS5_VABI sceKernelRaiseException(Pthread thread, int signum);
 void APS5_VABI sceKernelDebugRaiseException(int c1, int c2);
 void APS5_VABI sceKernelDebugRaiseExceptionOnReleaseMode(int c1, int c2);
 int APS5_VABI getlogin_r_nid_postfix(char* output, int size);
+char* APS5_VABI getlogin_nid_postfix(void);
 int APS5_VABI sceKernelDebugOutText(int channel, const char* text);
 int APS5_VABI sceKernelSendNotificationRequest(int device, const void* request, std::size_t size, int flags);
 int APS5_VABI getargc_nid_postfix(void);
@@ -723,6 +729,7 @@ int APS5_VABI killpg_nid_postfix(int pgrp, int guest);
 int APS5_VABI pthread_kill_nid_postfix(Pthread thread, int guest);
 int APS5_VABI sigaltstack_nid_postfix(const GuestStack* stack, GuestStack* previous);
 int APS5_VABI _sigprocmask_nid_postfix(int how, const GuestSignalSet* set, GuestSignalSet* previousSet);
+int APS5_VABI SetSignalMaskCatching_nid_no_patch(const GuestSignalSet* set, GuestSignalSet* previousSet);
 int APS5_VABI sigprocmask_nid_postfix(int how, const void* set, void* previousSet);
 int APS5_VABI pthread_sigmask_nid_postfix(int how, const GuestSignalSet* set, GuestSignalSet* previousSet);
 int APS5_VABI sigtimedwait_nid_postfix(const GuestSignalSet* set, void* info, const KernelTimespec* timeout);
@@ -770,6 +777,7 @@ unsigned int APS5_VABI sceKernelSleep(unsigned int seconds);
 [[noreturn]] void APS5_VABI _exit_nid_postfix(int status);
 
 [[gnu::returns_twice]] int APS5_VABI getcontext_nid_postfix(UserUcontext* context);
+[[gnu::returns_twice]] int APS5_VABI swapcontext_nid_postfix(UserUcontext* oucp, const UserUcontext* ucp);
 
 [[gnu::returns_twice]] int APS5_VABI sigsetjmp_nid_postfix(std::uint64_t* buffer, int saveMask);
 [[noreturn]] void APS5_VABI siglongjmp_nid_postfix(std::uint64_t* buffer, int value);
