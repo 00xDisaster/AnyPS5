@@ -130,7 +130,7 @@ MouseCurve = 1.3
 
 Earlier versions sampled the mouse every 33 ms and tilted the stick at least halfway for any movement. `MouseDeadzoneOffset = 0.5`, `MouseSmoothingMs = 0` and `MouseDecayMs = 33` come close to that behavior.
 
-An invalid line reports the file and line number and stops input initialization. If the configured file does not exist or cannot be read, AnyPS5 reports an error. With no `anyps5-input.ini` and no `ANYPS5_INPUT_CONFIG`, the built-in mapping is used.
+An invalid line stops the game when video output starts, with an error that names the file and line number. If the file named by `ANYPS5_INPUT_CONFIG` does not exist, or the configuration file cannot be read, the game stops with an error. With no `anyps5-input.ini` and no `ANYPS5_INPUT_CONFIG`, the built-in mapping is used.
 
 ## Web configurator
 
