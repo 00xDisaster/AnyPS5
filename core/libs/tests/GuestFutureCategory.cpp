@@ -9,10 +9,25 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <new>
 #include <stdexcept>
 
 using Message = GuestLocale::String* (APS5_VABI *)(GuestLocale::String*, const LibcException::CategoryObject*, int);
 using Name = const char* (APS5_VABI *)(const LibcException::CategoryObject*);
+using Raise = void (APS5_VABI *)(const LibcException::FutureErrorObject*);
+
+bool failAllocation = false;
+
+void* APS5_VABI TestAllocate(std::size_t size) { return failAllocation ? nullptr : std::malloc(size); }
+void APS5_VABI TestFree(void* pointer) { std::free(pointer); }
+void* APS5_VABI TestCalloc(std::size_t count, std::size_t size) { return std::calloc(count, size); }
+void* APS5_VABI TestReallocate(void* pointer, std::size_t size) { return std::realloc(pointer, size); }
+void* APS5_VABI TestAlign(std::size_t, std::size_t size) { return std::malloc(size); }
+void* APS5_VABI TestRealign(void* pointer, std::size_t size, std::size_t) { return std::realloc(pointer, size); }
+int APS5_VABI TestPosixAlign(void** pointer, std::size_t, std::size_t size) {
+    *pointer = std::malloc(size);
+    return *pointer ? 0 : 12;
+}
 
 struct TypeRecord { const void* vtable; const char* name; const TypeRecord* base; };
 struct ClassTypeRecord { const void* vtable; const char* name; };
@@ -139,6 +154,22 @@ static void CheckFutureError() {
     }
     REQUIRE(caught);
 
+    const auto raise = std::bit_cast<Raise>(_ZTVSt12future_error_nid_postfix[5]);
+    LibcException::FutureErrorObject source {};
+    source.message.capacity = 24;
+    source.message.size = 24;
+    source.message.pointer = static_cast<char*>(_Znwm_nid_postfix(25));
+    std::memcpy(source.message.pointer, "future already retrieved", 25);
+    source.code = {0x12345678, 2, future};
+    failAllocation = true;
+    bool allocationFailure = false;
+    try { raise(&source); }
+    catch (const std::bad_alloc&) { allocationFailure = true; }
+    failAllocation = false;
+    REQUIRE(allocationFailure);
+    REQUIRE(std::strcmp(source.message.pointer, "future already retrieved") == 0);
+    _ZdlPv_nid_postfix(source.message.pointer);
+
     LibcException::FutureErrorObject object {};
     object.message.capacity = 15;
     _ZNSt12future_errorD1Ev_nid_postfix(&object);
@@ -147,7 +178,11 @@ static void CheckFutureError() {
 }
 
 int main() {
-    const std::array<void*, 10> api {};
+    const std::array<void*, 10> api {
+        reinterpret_cast<void*>(&TestAllocate), reinterpret_cast<void*>(&TestFree),
+        reinterpret_cast<void*>(&TestCalloc), reinterpret_cast<void*>(&TestReallocate),
+        reinterpret_cast<void*>(&TestAlign), reinterpret_cast<void*>(&TestRealign),
+        reinterpret_cast<void*>(&TestPosixAlign), nullptr, nullptr, nullptr};
     ApplicationHeapRegister_nid_no_patch(api.data());
     CheckBaseCategory();
     CheckFutureCategory();
