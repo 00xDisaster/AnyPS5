@@ -2393,6 +2393,28 @@ foreach(agcReadbackTestKind IN ITEMS Vertex Uint Depth)
 endforeach()
 target_include_directories(agc_driver_multisample_readback_tests PRIVATE ${agcTestShaderGeneratedRoot})
 
+foreach(agcPackedResolveTestStage IN ITEMS Vertex Fill)
+    if(agcPackedResolveTestStage STREQUAL "Vertex")
+        set(agcPackedResolveTestSource ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/MultisampleReadback.vert)
+    else()
+        set(agcPackedResolveTestSource ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/PackedFloatResolveFill.frag)
+    endif()
+    string(TOUPPER "${agcPackedResolveTestStage}" agcPackedResolveTestSymbol)
+    set(agcPackedResolveTestSpv ${agcTestShaderGeneratedRoot}/PackedFloatResolveTest${agcPackedResolveTestStage}.spv)
+    set(agcPackedResolveTestHeader ${agcTestShaderGeneratedRoot}/PackedFloatResolveTest${agcPackedResolveTestStage}_spv.h)
+    add_custom_command(
+        OUTPUT "${agcPackedResolveTestHeader}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${agcTestShaderGeneratedRoot}"
+        COMMAND "$<TARGET_FILE:glslang-standalone>" -V --target-env vulkan1.1 -o "${agcPackedResolveTestSpv}" "${agcPackedResolveTestSource}"
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${agcPackedResolveTestSpv} -DOUTPUT=${agcPackedResolveTestHeader}
+        -DSYMBOL=PACKED_FLOAT_RESOLVE_TEST_${agcPackedResolveTestSymbol}_SPV -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
+        DEPENDS "${agcPackedResolveTestSource}" glslang-standalone
+        VERBATIM
+    )
+    target_sources(agc_driver_packed_float_resolve_tests PRIVATE ${agcPackedResolveTestHeader})
+endforeach()
+target_include_directories(agc_driver_packed_float_resolve_tests PRIVATE ${agcTestShaderGeneratedRoot})
+
 target_include_directories(agc_driver_dual_source_blend_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
 
 target_include_directories(agc_driver_reversed_order_blend_tests PRIVATE $<TARGET_PROPERTY:shader_recompiler_agc_driver,INTERFACE_INCLUDE_DIRECTORIES>)
