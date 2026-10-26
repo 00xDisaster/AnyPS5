@@ -13,6 +13,7 @@
 #include FT_FREETYPE_H
 
 #include "prx/libSceFont/include/FontInternal.hpp"
+#include "prx/libc/include/General.hpp"
 
 namespace {
 
@@ -129,8 +130,8 @@ int RenderGlyph(FontGlyph glyph, const FontStyleFrame* styleFrame, FontRenderer 
     auto* generated = TryGetGeneratedGlyph(glyph);
     if (!generated) return fail(SCE_FONT_ERROR_INVALID_GLYPH);
     if (!renderer || static_cast<const RendererNative*>(renderer)->magic != RENDERER_MAGIC) return fail(SCE_FONT_ERROR_INVALID_RENDERER);
-    if (styleFrame && !ValidStyleFrame(styleFrame)) return fail(SCE_FONT_ERROR_INVALID_PARAMETER);
     if (!surface || !metrics || !result) return fail(SCE_FONT_ERROR_INVALID_PARAMETER);
+    if (direction == 2) NotImplemented_nid_no_patch("sceFontGlyphRenderImageVertical");
     const FontHandle owner = generated->owner;
     auto* font = TryGetState(owner) ? GetNativeFont(owner) : nullptr;
     std::uint32_t fontLock = 0;
@@ -139,25 +140,22 @@ int RenderGlyph(FontGlyph glyph, const FontStyleFrame* styleFrame, FontRenderer 
     glyphStyle.scale_w = generated->glyph.scale_x;
     glyphStyle.scale_h = generated->glyph.base_scale;
     StyleStateBlock framed{};
-    const StyleStateBlock* style = ApplyStyleFrame(&glyphStyle, styleFrame ? styleFrame : SurfaceStyleFrame(surface), framed);
-    float xUsed = x;
+    const FontStyleFrame* surfaceFrame = SurfaceStyleFrame(surface);
+    const StyleStateBlock* style = ApplyStyleFrame(&glyphStyle, surfaceFrame ? surfaceFrame : styleFrame, framed);
     float yUsed = y;
     int rc = SCE_FONT_OK;
     if (direction == 0) {
-        const bool horizontal = static_cast<std::int16_t>(font->flags) >= 0;
-        if (horizontal) {
-            std::uint8_t layout[HORIZONTAL_LAYOUT_SIZE] = {};
-            rc = ComputeHorizontalLayout(owner, style, layout);
-            yUsed = y + LoadFloat(layout, HORIZONTAL_BASELINE);
-        } else {
-            std::uint8_t layout[VERTICAL_LAYOUT_SIZE] = {};
-            rc = ComputeVerticalLayout(owner, style, layout);
-            xUsed = x + LoadFloat(layout, VERTICAL_BASELINE_OFFSET_X);
+        if (static_cast<std::int16_t>(font->flags) < 0) {
+            ReleaseFontLock(font, fontLock);
+            NotImplemented_nid_no_patch("sceFontGlyphRenderImage: a vertical font");
         }
-        direction = horizontal ? 1 : 2;
+        std::uint8_t layout[HORIZONTAL_LAYOUT_SIZE] = {};
+        rc = ComputeHorizontalLayout(owner, style, layout);
+        yUsed = y + LoadFloat(layout, HORIZONTAL_BASELINE);
+        direction = 1;
     }
     CachedStyleSetDirectionWord(font->cached_style, direction);
-    if (rc == SCE_FONT_OK) rc = RenderCodeWithStyle(owner, generated->codepoint, style, surface, xUsed, yUsed, metrics, result);
+    if (rc == SCE_FONT_OK) rc = RenderCodeWithStyle(owner, generated->codepoint, style, surface, x, yUsed, metrics, result);
     ReleaseFontLock(font, fontLock);
     if (rc != SCE_FONT_OK) ClearRenderOutputs(metrics, result);
     return rc;
