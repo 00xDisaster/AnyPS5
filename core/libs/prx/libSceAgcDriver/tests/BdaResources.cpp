@@ -3639,6 +3639,8 @@ void RunAddressCopyCapTests(const Context& context, const BdaTestAccess& access,
         SetAddressCopyLimit(0);
         unrelated(true);
     }
+    NoteHostImportFrame();
+    NoteHostImportFrame();
     for (int use = 0; use < 300; ++use) Require(HostImportFor(importing, busy, 64) != nullptr, "the busy range lost its import");
     if (!remembered) unwatch();
     const auto refused = builds();
