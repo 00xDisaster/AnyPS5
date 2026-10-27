@@ -249,12 +249,6 @@ enum class FpuSource { Context, Current, Initial };
     Aps5ContextRestore_nid_no_patch(&frame);
 }
 
-int APS5_VABI Aps5SwapcontextFinish_nid_no_patch(UserUcontext* saved, const UserUcontext* next, const RegisterFrame* frame) {
-    if (saved == nullptr || next == nullptr) return Fail(GuestEinval);
-    Aps5GetcontextFinish_nid_no_patch(saved, frame);
-    return setcontext_nid_postfix(next);
-}
-
 }
 
 extern "C" {
@@ -278,6 +272,12 @@ int SigreturnContext_nid_no_patch(const UserUcontext* context) {
     if (machine.ownedfp == FpOwnedNone) RestoreContext(context, FpuSource::Initial);
     if (machine.ownedfp != FpOwnedFpu && machine.ownedfp != FpOwnedPcb) return Fail(GuestEinval);
     RestoreContext(context, FpuSource::Context);
+}
+
+int APS5_VABI Aps5SwapcontextFinish_nid_no_patch(UserUcontext* saved, const UserUcontext* next, const RegisterFrame* frame) {
+    if (saved == nullptr || next == nullptr) return Fail(GuestEinval);
+    Aps5GetcontextFinish_nid_no_patch(saved, frame);
+    return setcontext_nid_postfix(next);
 }
 
 }
