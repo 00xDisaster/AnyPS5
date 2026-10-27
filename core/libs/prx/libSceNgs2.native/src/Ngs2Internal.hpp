@@ -93,6 +93,7 @@ struct Ngs2Port {
     float volume = 1.0f;
     std::int32_t matrix = -1;
     std::vector<float> rampFrom;
+    std::uint32_t destInput = 0;
 };
 
 struct Ngs2UserFx2 {
@@ -115,6 +116,8 @@ struct Ngs2VoiceCustomUserFx {
 struct Ngs2VoiceCustomGain {
     std::array<float, SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS> current{};
     std::array<float, SCE_NGS2_CUSTOM_SUBMIXER_MAX_CHANNELS> target{};
+    bool configured = false;
+    bool lifecycleUnknown = false;
 };
 
 struct Ngs2QueuedCallback {
@@ -187,6 +190,7 @@ struct Ngs2Voice {
     std::array<std::uintptr_t, 3> userFxData{};
     std::uint32_t userFxFlags = 0;
     std::vector<float> samples;
+    std::vector<std::vector<float>> customBuffers;
     bool rendering = false;
     bool rendered = false;
     bool hasSamples = false;
@@ -202,6 +206,8 @@ struct Ngs2Voice {
     std::uint32_t UserFxFlags(std::uint32_t flags) const;
     const std::uint8_t* WaveformData() const;
     std::uint32_t InputChannels() const { return inputChannels != 0 ? inputChannels : channels; }
+    std::vector<float>& Samples(std::uint32_t buffer) { return buffer == 0 ? samples : customBuffers.at(buffer - 1); }
+    const std::vector<float>& Samples(std::uint32_t buffer) const { return buffer == 0 ? samples : customBuffers.at(buffer - 1); }
 };
 
 struct Ngs2Rack {
@@ -231,6 +237,7 @@ struct Ngs2Rack {
     std::vector<std::vector<std::uint8_t>> userFxParam;
     std::vector<std::uint32_t> customModuleIds;
     std::vector<Ngs2CustomModuleInfo> customModules;
+    std::vector<std::uint32_t> customPortBuffers;
     std::thread::id lockOwner{};
     std::uint32_t lockDepth = 0;
     std::uint32_t voiceAccesses = 0;
@@ -324,6 +331,7 @@ void Ngs2ConsumeSampler(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sam
 std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);
 std::uint32_t Ngs2ReadSamplerAtrac9(Ngs2Voice& voice, float* dest, std::uint32_t stride, std::uint32_t count);
 void Ngs2CleanupUserFx(Ngs2Rack& rack);
+int Ngs2ApplyCustomGainParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param);
 void Ngs2ApplyCustomParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param);
 void Ngs2ProcessUserFx(Ngs2Voice& voice, std::uint32_t grain, std::uint32_t sampleRate);
 void Ngs2SetReverbParams(Ngs2Voice& voice, const Ngs2ReverbI3DL2Param& params);

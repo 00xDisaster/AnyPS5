@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "Ngs2JobTest.hpp"
 
 #include <array>

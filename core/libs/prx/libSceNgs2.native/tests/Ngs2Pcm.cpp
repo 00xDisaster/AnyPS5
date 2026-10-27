@@ -216,6 +216,24 @@ static void TestRepeatAndTransition(const PcmFixture& fixture) {
     Require(callbacks[0].block_data == fixture.data.data() && callbacks[2].block_data == fixture.data.data() + fixture.bytes * 4);
 }
 
+static void TestSkipWindowContract() {
+    Playback playback(SCE_NGS2_WAVEFORM_TYPE_PCM_I16L);
+    std::vector<std::int16_t> pcm(256, 8192);
+    pcm[0] = -32768; pcm[1] = -16384; pcm[2] = -8192; pcm[3] = 0; pcm[4] = 16384;
+    callbacks.clear();
+    Control(playback.voice, SCE_NGS2_VOICE_PARAM_CALLBACK,
+            Ngs2VoiceCallbackParam{{}, OnBlock, 7, SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END, 0});
+    const Ngs2WaveformBlock blocks[] = {{0, 10, 0, 2, 3, 0, 101}, {10, 502, 0, 0, 251, 0, 202}};
+    playback.Add(pcm.data(), blocks, 2);
+    const auto output = playback.Render();
+    const std::array<float, 8> prefix{0, 0, 0, -1, -0.5f, -0.25f, 0, 0.5f};
+    Require(std::equal(prefix.begin(), prefix.end(), output.begin()));
+    for (std::size_t i = prefix.size(); i < output.size(); ++i) Require(output[i] == 0.25f);
+    const auto state = playback.State();
+    Require(state.num_decoded_samples == 62 && state.decoded_data_size == 128);
+    Require(callbacks.size() == 1 && callbacks.front().flag == SCE_NGS2_VOICE_CALLBACK_FLAG_BLOCK_END && callbacks.front().user_data == 101);
+}
+
 static void TestResampling(const PcmFixture& fixture) {
     const auto canonical = Canonical(fixture);
     Playback playback(fixture.type, 1, 24000), reference(canonical.type, 1, 24000);
@@ -273,6 +291,7 @@ static void TestNumericEdges() {
 }
 
 int main() {
+    TestSkipWindowContract();
     for (const auto& fixture : Fixtures) {
         TestConstantConversions(fixture);
         for (const auto channels : {1u, 2u, 6u, 8u}) TestFramesAndPositions(fixture, channels);

@@ -1,4 +1,5 @@
 #include "Ngs2Test.hpp"
+#include "prx/libSceNgs2.native/include/Api.hpp"
 
 #include <cstdint>
 #include <array>
@@ -12,6 +13,11 @@
 
 static void Status(int actual, int expected, const char* message) {
     if (actual != expected) throw std::runtime_error(message);
+}
+
+static void CheckExportLinked() {
+    auto* volatile linked = &sceNgs2RackQueryInfo;
+    Require(linked != nullptr);
 }
 
 static void CheckResetOption() {
@@ -435,6 +441,7 @@ int main() {
         CheckResetScheduler();
         CheckSetGrainSamples();
         CheckSetSampleRate();
+        CheckExportLinked();
         std::cout << "NGS2 PS5 handle errors and validation precedence checked\n";
         return 0;
     } catch (const std::exception& error) {

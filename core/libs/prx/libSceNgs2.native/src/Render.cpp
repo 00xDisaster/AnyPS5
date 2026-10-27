@@ -91,8 +91,9 @@ std::uint32_t Ngs2ReadSamplerPcm(Ngs2Voice& voice, float* dest, std::uint32_t st
         ReadPcm(voice, block.data == nullptr ? nullptr : block.data + block.dataCursor, frame);
         for (std::uint32_t channel = 0; channel < voice.channels; ++channel) dest[static_cast<std::size_t>(channel) * stride + written] = frame[channel];
         ++written;
+        const auto consumed = block.info.num_skip_samples + block.info.num_samples - voice.pcmRemaining;
         --voice.pcmRemaining;
-        ++voice.decodedSamples;
+        if (consumed >= block.info.num_skip_samples) ++voice.decodedSamples;
         voice.decodedBytes += frameBytes;
         block.dataCursor += frameBytes;
         if (voice.pcmRemaining != 0 && (written == count || block.dataCursor == block.info.data_size)) {
@@ -221,7 +222,13 @@ void Ngs2PrepareControlMix(Ngs2Voice& voice) {
     }
 }
 
-static void MixPort(Ngs2Voice& voice, const Ngs2Voice& source, const Ngs2Port& port, std::uint32_t grain) {
+static void MixPort(Ngs2Voice& voice, const Ngs2Voice& source, const Ngs2Port& port, std::uint32_t sourceBuffer, std::uint32_t grain) {
+    const auto& sourceSamples = source.Samples(sourceBuffer);
+    auto& destSamples = voice.Samples(port.destInput);
+    if (sourceSamples.size() != static_cast<std::size_t>(grain) * source.channels ||
+        destSamples.size() != static_cast<std::size_t>(grain) * voice.InputChannels()) {
+        throw std::runtime_error("NGS2: channel layout changes during input rendering are not implemented");
+    }
     const auto* matrix = port.matrix < 0 || source.matrices[port.matrix].empty() ? nullptr : &source.matrices[port.matrix];
     const auto channels = voice.InputChannels();
     const std::size_t outputs = port.rampFrom.empty() ? (matrix == nullptr ? channels : std::min<std::size_t>(channels, matrix->size() / source.channels)) : channels;
@@ -232,10 +239,10 @@ static void MixPort(Ngs2Voice& voice, const Ngs2Voice& source, const Ngs2Port& p
             const float from = port.rampFrom.empty() ? level : port.rampFrom[index];
             if (level == 0.0f && from == 0.0f) continue;
             if (from == level) {
-                for (std::uint32_t i = 0; i < grain; i++) voice.samples[dst * grain + i] += source.samples[src * grain + i] * level;
+                for (std::uint32_t i = 0; i < grain; i++) destSamples[dst * grain + i] += sourceSamples[src * grain + i] * level;
             } else {
                 const float step = (level - from) / static_cast<float>(grain);
-                for (std::uint32_t i = 0; i < grain; i++) voice.samples[dst * grain + i] += source.samples[src * grain + i] * (from + step * static_cast<float>(i));
+                for (std::uint32_t i = 0; i < grain; i++) destSamples[dst * grain + i] += sourceSamples[src * grain + i] * (from + step * static_cast<float>(i));
             }
         }
     }
@@ -243,11 +250,17 @@ static void MixPort(Ngs2Voice& voice, const Ngs2Voice& source, const Ngs2Port& p
 
 static void MixInputs(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices, std::uint32_t grain, std::uint32_t systemRate) {
     for (auto* source : voices) {
-        for (const auto& port : source->ports) {
+        for (std::size_t p = 0; p < source->ports.size(); p++) {
+            const auto& port = source->ports[p];
             if (port.dest != &voice || (port.volume == 0.0f && port.rampFrom.empty())) continue;
+            const auto destInput = port.destInput;
             RenderVoice(*source, voices, grain, systemRate);
+            if (port.dest != &voice || port.destInput != destInput) {
+                throw std::runtime_error("NGS2: patch changes during source rendering are not implemented");
+            }
             if (!source->hasSamples || source->KilledForRender()) continue;
-            MixPort(voice, *source, port, grain);
+            const auto sourceBuffer = source->rack->customPortBuffers.empty() ? 0u : source->rack->customPortBuffers[p];
+            MixPort(voice, *source, port, sourceBuffer, grain);
             voice.hasSamples = true;
         }
     }
@@ -262,6 +275,7 @@ static void RenderVoice(Ngs2Voice& voice, const std::vector<Ngs2Voice*>& voices,
         ~RenderingScope() { active = false; }
     } renderingScope{voice.rendering};
     voice.samples.assign(static_cast<std::size_t>(grain) * voice.InputChannels(), 0.0f);
+    for (auto& buffer : voice.customBuffers) buffer.assign(static_cast<std::size_t>(grain) * voice.InputChannels(), 0.0f);
     voice.hasSamples = false;
     const bool pitchShiftActive = (Ngs2HasPitchShift(voice) || voice.IsSampler() || voice.IsMixer()) &&
         (voice.state == Ngs2PlayState::Paused || voice.outputTransition == Ngs2VoiceTransition::Stop || voice.outputTransition == Ngs2VoiceTransition::Kill);
@@ -421,6 +435,7 @@ static void WriteOutput(const Ngs2RenderBufferInfo& output, const std::vector<fl
     }
     auto* pcm = static_cast<std::int16_t*>(output.buffer);
     for (std::size_t i = 0; i < mix.size(); i++) {
+        if (!std::isfinite(mix[i])) throw std::runtime_error("NGS2: integer rendering of nonfinite samples is not implemented");
         pcm[i] = static_cast<std::int16_t>(std::min(std::lrint(std::clamp(mix[i], -1.0f, 1.0f) * 32768.0f), 32767L));
     }
 }

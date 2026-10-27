@@ -68,4 +68,3 @@ static std::uintptr_t Sampler(std::uintptr_t system, bool custom) {
     Require(TestRackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &common, &buffer, &handle) == SCE_NGS2_OK);
     return Voice(handle);
 }
-

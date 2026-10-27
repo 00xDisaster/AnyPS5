@@ -219,6 +219,7 @@ void Ngs2RestartPitchShift(Ngs2Voice& voice) {
 }
 
 void Ngs2ProcessPitchShift(Ngs2Voice& voice, std::size_t module, std::uint32_t grain) {
+    if (voice.channels >= 32) throw std::runtime_error("NGS2: PitchShift channel masks for 32 or more channels are not implemented");
     auto& state = voice.customPitchShift[module];
     const auto active = ((1u << voice.channels) - 1) & ~state.bypassMask;
     if (active == 0) return;
