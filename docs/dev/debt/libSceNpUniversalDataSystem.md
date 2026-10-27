@@ -2,7 +2,8 @@
 
 ### Silent stubs
 
-- [sceNpUniversalDataSystemRegisterContext, sceNpUniversalDataSystemDestroyHandle and sceNpUniversalDataSystemAbortHandle](../../../core/libs/prx/libSceNpUniversalDataSystem/src/Context.cpp) (libSceNpUniversalDataSystem) - return `SCE_NP_UNIVERSAL_DATA_SYSTEM_OK` without checking the context or handle and without recording anything. `sceNpUniversalDataSystemPostEvent` uses only its context and ignores the handle, so nothing depends on the registration. All ten titles in my set call the first two; Metal Gear Solid 4 (PPSA18194) also calls `sceNpUniversalDataSystemAbortHandle`.
+- [sceNpUniversalDataSystemRegisterContext](../../../core/libs/prx/libSceNpUniversalDataSystem/src/Context.cpp) (libSceNpUniversalDataSystem) - returns `SCE_NP_UNIVERSAL_DATA_SYSTEM_OK` without checking the context or handle and without recording anything. `sceNpUniversalDataSystemPostEvent` uses only its context and ignores the handle, so nothing depends on the registration. All ten titles in my set call it.
+- [sceNpUniversalDataSystemDestroyHandle and sceNpUniversalDataSystemAbortHandle](../../../core/libs/prx/libSceNpUniversalDataSystem/src/Handle.cpp) (libSceNpUniversalDataSystem) - return `SCE_NP_UNIVERSAL_DATA_SYSTEM_OK` without checking the handle. `sceNpUniversalDataSystemCreateHandle` always hands out the same handle and keeps no state, so there is nothing to tear down. All ten titles in my set call `sceNpUniversalDataSystemDestroyHandle`; Metal Gear Solid 4 (PPSA18194) also calls `sceNpUniversalDataSystemAbortHandle`.
 
 ### Unknown function info
 
