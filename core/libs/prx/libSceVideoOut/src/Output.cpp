@@ -17,6 +17,7 @@
 
 static constexpr std::uint32_t VIDEO_OUT_OUTPUT_OPTIONS_FIRST_WORD = 0x00FF0000;
 static constexpr std::size_t VIDEO_OUT_OUTPUT_OPTIONS_FREE_WORD = 3;
+static constexpr int VIDEO_OUT_ERROR_0x8029001C = -2144796644;
 
 static VideoOutOutputStatus outputStatus(const auto& cfg) {
     VideoOutOutputStatus status{};
@@ -232,6 +233,24 @@ int APS5_VABI sceVideoOutIsFlipPending(int handle) try {
     std::unique_lock lock(cfg->mutex);
     cfg->Check();
     return cfg->flipStatus.flipPendingNum;
+} catch (const ProcessShutdown&) {
+    LibcAwaitExit_nid_postfix();
+}
+
+static bool isOpenHandle(int handle) {
+    return VideoOutDriver::Get().HasConfig(handle) && VideoOutDriver::Get().IsOpen(handle);
+}
+
+int APS5_VABI sceVideoOutSetFlipMaster(std::int32_t handle, std::int32_t masterHandle) try {
+    if (!isOpenHandle(handle) || masterHandle == 0 || masterHandle == 1) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    NotImplemented_nid_no_patch(__func__);
+} catch (const ProcessShutdown&) {
+    LibcAwaitExit_nid_postfix();
+}
+
+int APS5_VABI sceVideoOutClearFlipMaster(std::int32_t handle) try {
+    if (!isOpenHandle(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    return VIDEO_OUT_ERROR_0x8029001C;
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
 }

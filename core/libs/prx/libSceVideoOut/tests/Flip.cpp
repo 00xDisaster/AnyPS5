@@ -1068,6 +1068,9 @@ void testFreshHandleCalls() {
     check(sceVideoOutCursorSetPosition(handle, 0, 100, 100) == 0, "the cursor position was refused");
     check(sceVideoOutCursorSetImageAddress(handle, 0, nullptr) == VIDEO_OUT_ERROR_INVALID_ADDRESS, "a null cursor image address was accepted");
     check(sceVideoOutCursorDisable(handle, 0) == 0, "the cursor was not disabled");
+    check(sceVideoOutSetFlipMaster(handle, 0) == VIDEO_OUT_ERROR_INVALID_HANDLE, "a fresh handle was made flip master of handle 0");
+    check(sceVideoOutSetFlipMaster(handle, 1) == VIDEO_OUT_ERROR_INVALID_HANDLE, "a fresh handle was made flip master of handle 1");
+    check(sceVideoOutClearFlipMaster(handle) == static_cast<int>(0x8029001Cu), "a fresh handle's flip master was cleared");
 
     std::array<std::byte, 128> untouched;
     untouched.fill(std::byte{0xaa});
@@ -1079,6 +1082,8 @@ void testFreshHandleCalls() {
     check(sceVideoOutCursorSetPosition(-1, 0, 100, 100) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's cursor was positioned");
     check(sceVideoOutCursorSetImageAddress(-1, 0, nullptr) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's cursor image was set");
     check(sceVideoOutCursorDisable(-1, 0) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's cursor was disabled");
+    check(sceVideoOutSetFlipMaster(-1, 0) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle was made flip master");
+    check(sceVideoOutClearFlipMaster(-1) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's flip master was cleared");
     check(sceVideoOutClose(handle) == 0, "the fresh handle was not closed");
     LibcRunShutdown_nid_postfix();
 }
