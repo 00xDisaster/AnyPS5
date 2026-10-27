@@ -1,4 +1,4 @@
-add_library(libSceLibcInternal SHARED EXCLUDE_FROM_ALL Export.cpp FileTime.cpp Getopt.cpp SignalList.cpp Spawn.cpp InventoryExports6.cpp UserContext.cpp
+add_library(libSceLibcInternal SHARED EXCLUDE_FROM_ALL Export.cpp FileTime.cpp Getopt.cpp SignalList.cpp Spawn.cpp UserContext.cpp)
 target_include_directories(libSceLibcInternal PRIVATE ${LIBS_INCLUDE_DIR})
 set_source_files_properties(UserContext.cpp PROPERTIES COMPILE_OPTIONS -fno-omit-frame-pointer)
 target_link_libraries(libSceLibcInternal PRIVATE ${CMAKE_DL_LIBS})
@@ -20,6 +20,7 @@ target_sources(libSceLibcInternal PRIVATE Err.cpp)
 configure_windows_unwind(libSceLibcInternal)
 target_sources(libSceLibcInternal PRIVATE FilesystemStatistics.cpp PathStatistics.cpp)
 target_sources(libSceLibcInternal PRIVATE Inet.cpp)
+target_sources(libSceLibcInternal PRIVATE InventoryExports6.cpp)
 target_sources(libSceLibcInternal PRIVATE Filesystem.cpp)
 
 if(BUILD_TESTING)
