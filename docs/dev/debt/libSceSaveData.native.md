@@ -1,5 +1,9 @@
 # libSceSaveData.native technical debt
 
+### Silent stubs
+
+- [sceSaveDataPrepare](../../../core/libs/prx/libSceSaveData.native/Export.cpp) (libSceSaveData.native) returns success without looking at its mount point or its 40-byte parameter; what it prepares on a console is unknown. Six titles call it, at eleven call sites. PPSA01494, PPSA30839 and PPSA31162 ignore the result at every site. PPSA03984 takes an error path when it is negative, PPSA34502 checks it at one of its two sites and PPSA36591 at two of its four. A failure code would change the save flow of those three titles, while the stub keeps them on the success path.
+
 ### Unknown function info
 
 - [sceSaveDataCreateTransactionResource, sceSaveDataDeleteTransactionResource](../../../core/libs/prx/libSceSaveData.native/Export.cpp) (libSceSaveData.native) - transaction resources return synthetic positive identifiers and validate initialization state; resource parameter validation and transactional rollback semantics on host filesystem storage are unknown
