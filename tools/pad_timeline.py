@@ -86,6 +86,10 @@ def main():
     try:
         if args.timeline.resolve() == args.path.resolve() or (args.path.exists() and os.path.samefile(args.timeline, args.path)):
             raise ValueError("the command file must be separate from the timeline JSON")
+        if args.path.is_dir():
+            raise ValueError(f"{args.path} is a directory")
+        if not args.path.parent.is_dir():
+            raise ValueError(f"directory does not exist: {args.path.parent}")
         document = json.loads(args.timeline.read_text(encoding="utf-8"))
         text = compile_timeline(document, next_sequence(args.path), args.repeat, args.gap_ms)
         queue_timeline(args.path, text)

@@ -155,6 +155,21 @@ class TimelineTests(unittest.TestCase):
             self.assertEqual(self.run_cli(timeline, linked).returncode, 2)
             self.assertEqual(timeline.read_text(encoding="utf-8"), original)
 
+    def test_output_directory_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            timeline = root / "sequence.json"
+            timeline.write_text(json.dumps(self.document), encoding="utf-8")
+            target_dir = root / "output_dir"
+            target_dir.mkdir()
+            result = self.run_cli(timeline, target_dir)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(f"{target_dir} is a directory", result.stderr)
+            nonexistent_parent = root / "missing" / "command"
+            result = self.run_cli(timeline, nonexistent_parent)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(f"directory does not exist: {nonexistent_parent.parent}", result.stderr)
+
     def test_sequence_advances_past_existing_command_after_clock_reset(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
