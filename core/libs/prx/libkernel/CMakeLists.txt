@@ -33,6 +33,7 @@ add_library(libkernel SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/Attr.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/Thread.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/Tsd.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/GuestTlsMacOs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/Rwlock.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/Sem.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Pthread/src/MainThreadMacOs.cpp
@@ -120,6 +121,7 @@ if(BUILD_TESTING)
     if(WIN32)
         list(APPEND aprReadCases fault stack)
     endif()
+    list(APPEND aprReadCases queries)
     foreach(aprReadCase IN LISTS aprReadCases)
         set(aprReadRun ${CMAKE_CURRENT_BINARY_DIR}/apr_read_${aprReadCase})
         file(MAKE_DIRECTORY ${aprReadRun})
