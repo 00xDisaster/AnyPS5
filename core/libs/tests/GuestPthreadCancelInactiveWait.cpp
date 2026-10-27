@@ -19,10 +19,10 @@ static void Require(bool value, std::source_location location = std::source_loca
 }
 
 template <class TPredicate>
-static void Await(TPredicate predicate) {
+static void Await(TPredicate predicate, std::source_location location = std::source_location::current()) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (!predicate() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
-    Require(predicate());
+    Require(predicate(), location);
 }
 
 struct Gate {
@@ -71,6 +71,7 @@ struct Context {
     PthreadKey key = 0;
     bool timed = false;
     bool destructorWait = false;
+    bool naturalReturn = false;
     bool ready = false;
     std::atomic<bool> waitReturned{false};
     std::atomic<bool> returned{false};
@@ -91,7 +92,7 @@ static void Wait(Context& context) {
 static void APS5_VABI DestroySpecific(void* argument) {
     auto& context = *static_cast<Context*>(argument);
     if (context.destructorWait) Wait(context);
-    Require(context.waitReturned && context.cleanup == 1);
+    Require(context.waitReturned && context.cleanup == (context.naturalReturn ? 0 : 1));
     ++context.destructors;
 }
 
@@ -104,6 +105,10 @@ static void APS5_VABI Cleanup(void* argument) {
 static void* APS5_VABI Worker(void* argument) {
     auto& context = *static_cast<Context*>(argument);
     Require(scePthreadSetspecific(context.key, &context) == 0);
+    if (context.naturalReturn) {
+        context.returned = true;
+        return &context;
+    }
     CleanupHandler cleanup{};
     __pthread_cleanup_push_imp_nid_postfix(Cleanup, &context, &cleanup);
     scePthreadExit(&context);
@@ -111,10 +116,12 @@ static void* APS5_VABI Worker(void* argument) {
     return nullptr;
 }
 
-static void Check(bool timed, bool destructorWait, bool posix) {
+static void Check(bool timed, bool destructorWait, bool naturalReturn, bool posix) {
     Context context;
     context.timed = timed;
     context.destructorWait = destructorWait;
+    context.naturalReturn = naturalReturn;
+    const int cleanupCount = naturalReturn ? 0 : 1;
     Require(scePthreadKeyCreate(&context.key, reinterpret_cast<pthread_key_destructor_func_t>(DestroySpecific)) == 0);
     Pthread thread = nullptr;
     Require(scePthreadCreate(&thread, nullptr, Worker, &context, nullptr) == 0);
@@ -126,8 +133,8 @@ static void Check(bool timed, bool destructorWait, bool posix) {
         cancelReturned = true;
     });
     Await([&] { return cancelReturned.load(); });
-    Require(!context.waitReturned && !context.returned && context.destructors == 0);
-    Require(context.cleanup == 1);
+    Require(!context.waitReturned && context.returned == naturalReturn && context.destructors == 0);
+    Require(context.cleanup == cleanupCount);
     Require(thread->cancelPending.load());
     cancel.join();
     context.lock.gate.Release();
@@ -139,15 +146,15 @@ static void Check(bool timed, bool destructorWait, bool posix) {
     void* result = nullptr;
     Require(scePthreadJoin(thread, &result) == 0);
     Require(result == &context);
-    Require(context.waitReturned && !context.returned && context.cleanup == 1 && context.destructors == 1);
+    Require(context.waitReturned && context.returned == naturalReturn && context.cleanup == cleanupCount && context.destructors == 1);
     Require(scePthreadKeyDelete(context.key) == 0);
 }
 
 int main(int count, char** arguments) {
     Require(count == 4);
     const std::string_view state(arguments[1]), mode(arguments[2]), api(arguments[3]);
-    Require(state == "cleanup" || state == "destructor");
+    Require(state == "cleanup" || state == "destructor" || state == "return");
     Require(mode == "untimed" || mode == "timed");
     Require(api == "sce" || api == "posix");
-    Check(mode == "timed", state == "destructor", api == "posix");
+    Check(mode == "timed", state != "cleanup", state == "return", api == "posix");
 }
