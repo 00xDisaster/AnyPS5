@@ -15,7 +15,6 @@
 #include <nghttp2/nghttp2.h>
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
@@ -118,11 +117,6 @@ struct Lookup {
     std::vector<Address> addresses;
     std::exception_ptr failure;
 };
-
-std::atomic<LookupHook>& LookupHookSlot() {
-    static std::atomic<LookupHook> hook{nullptr};
-    return hook;
-}
 
 class Resolver {
 public:
@@ -643,10 +637,6 @@ void Request::Stop() {
 
 std::shared_ptr<Capacity> CreateCapacity_nid_no_patch(int maximum) {
     return std::make_shared<Capacity>(maximum);
-}
-
-void SetLookupHook(LookupHook hook) {
-    LookupHookSlot().store(hook, std::memory_order_release);
 }
 
 std::shared_ptr<Request> CreateRequest_nid_no_patch(int sslContext, std::shared_ptr<Capacity> capacity, Settings settings, std::string method, std::string url) {

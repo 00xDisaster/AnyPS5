@@ -383,7 +383,7 @@ int APS5_VABI sceHttp2SetRequestNoContentLength(int id) {
 }
 
 extern "C" void Http2SetLookupHook_nid_no_patch(Http2::LookupHook hook) {
-    Http2::SetLookupHook(hook);
+    Http2::LookupHookSlot().store(hook, std::memory_order_release);
 }
 
 int APS5_VABI sceHttp2SetResolveRetry(int id, int32_t retry) {

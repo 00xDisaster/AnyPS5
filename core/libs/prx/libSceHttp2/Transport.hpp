@@ -10,6 +10,13 @@
 
 namespace Http2 {
 
+using LookupHook = int (*)(const char* host);
+
+inline std::atomic<LookupHook>& LookupHookSlot() {
+    static std::atomic<LookupHook> hook{nullptr};
+    return hook;
+}
+
 struct Settings {
     std::string userAgent;
     std::vector<std::pair<std::string, std::string>> headers;
@@ -55,8 +62,6 @@ private:
 
 int AddHeader(Settings& settings, const char* name, const char* value, std::uint32_t mode);
 std::shared_ptr<Capacity> CreateCapacity_nid_no_patch(int maximum);
-using LookupHook = int (*)(const char* host);
-void SetLookupHook(LookupHook hook);
 std::shared_ptr<Request> CreateRequest_nid_no_patch(int sslContext, std::shared_ptr<Capacity> capacity, Settings settings, std::string method, std::string url);
 
 }
