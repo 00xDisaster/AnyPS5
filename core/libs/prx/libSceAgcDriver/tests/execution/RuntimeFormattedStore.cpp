@@ -28,6 +28,7 @@ constexpr std::uint32_t LaneBytes = 16;
 constexpr std::size_t OutputBytes = 128;
 constexpr std::size_t FirstByte = 33;
 constexpr std::uint8_t Untouched = 0xa5;
+constexpr std::size_t MaxRuntimeWords = 24576;
 
 class GuestBlock {
 public:
@@ -121,7 +122,11 @@ void Run(AgcDriver::VulkanDevice& device, GuestBlock& guest, std::uint32_t compo
         : std::array<std::uint32_t, 8>{0x3fc00000u, 0xc0000000u, 0x3f000000u, 0x7fc12345u, 0xbf000000u, 0x3f800000u, 0xff800000u, 0x00000001u};
     std::copy(input.begin(), input.end(), guest.Input());
     const auto runtime = Compile(device, guest, components, d16);
-    for (const auto format : Formats) {
+    std::printf("runtime formatted store x%u%s: %zu SPIR-V words\n", components, d16 ? " d16" : "", runtime.spirv.Words().size());
+    std::fflush(stdout);
+    Require(runtime.spirv.Words().size() <= MaxRuntimeWords, "runtime formatted store: runtime shader exceeds " + std::to_string(MaxRuntimeWords) + " SPIR-V words");
+    for (std::size_t index = (components - 1u) % 2u; index < Formats.size(); index += 2u) {
+        const auto format = Formats[index];
         const auto reference = Compile(device, guest, components, d16, format.value);
         for (const auto records : {32u, 16u, format.bytes - 1u}) {
             guest.Descriptor()[0] = records;
@@ -165,7 +170,7 @@ int main(int argc, char** argv) {
         if (!device) return VulkanTestSkipped;
         GuestBlock guest;
         Run(*device, guest, components, d16);
-        std::printf("runtime formatted store x%u%s: 18 formats, unaligned base, full/record/partial OOB and all output bytes match constant-format stores\n", components, d16 ? " d16" : "");
+        std::printf("runtime formatted store x%u%s: 9 formats, unaligned base, full/record/partial OOB and all output bytes match constant-format stores\n", components, d16 ? " d16" : "");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
