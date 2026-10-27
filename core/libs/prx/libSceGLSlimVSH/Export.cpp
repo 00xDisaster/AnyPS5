@@ -946,12 +946,6 @@ int APS5_VABI sceGLSlimVSHUnknown_AcruVcmKz78_nid_no_patch() {
 }
 APS5_EXPORT("AcruVcmKz78", sceGLSlimVSHUnknown_AcruVcmKz78_nid_no_patch);
 
-int APS5_VABI sceGLSlimVSHUnknown_M9RtXpjSYtE_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-APS5_EXPORT("M9RtXpjSYtE", sceGLSlimVSHUnknown_M9RtXpjSYtE_nid_no_patch);
-
 int APS5_VABI sceGLSlimVSHUnknown_QvXbiLqpn6c_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
