@@ -65,6 +65,7 @@ if(BUILD_TESTING)
     add_test(NAME guest_http2_teardown COMMAND guest_http2_teardown_tests)
     set_tests_properties(guest_http2_teardown PROPERTIES TIMEOUT 30)
     if(WIN32)
+        target_link_libraries(guest_http2_teardown_tests PRIVATE ws2_32)
         set_tests_properties(guest_http2_teardown PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
