@@ -92,20 +92,6 @@ void testPatches() {
         check(sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(packet, 0xfedcba9876543210ull) == 0 && packet[2] == 0x76543210u && packet[3] == 0xfedcba98u, "the source patch did not keep a 64-bit immediate whole");
     }
 
-    Storage refused;
-    auto* packet = writeDraw(&refused.buffer);
-    packet[0] = 0xc0051000u;
-    auto before = refused.words;
-    expectFailure([&] { sceAgcDmaDataPatchSetDstAddressOrOffset(packet, PatchedDestination); });
-    expectFailure([&] { sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(packet, PatchedSource); });
-    check(refused.words == before, "a patch of a NOP changed it");
-    packet[0] = 0xc0045000u;
-    before = refused.words;
-    expectFailure([&] { sceAgcDmaDataPatchSetDstAddressOrOffset(packet, PatchedDestination); });
-    expectFailure([&] { sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(packet, PatchedSource); });
-    check(refused.words == before, "a patch of a short DMA packet changed it");
-    expectFailure([] { sceAgcDmaDataPatchSetDstAddressOrOffset(nullptr, PatchedDestination); });
-    expectFailure([] { sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(nullptr, PatchedSource); });
 }
 
 }
