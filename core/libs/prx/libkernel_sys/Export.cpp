@@ -326,6 +326,16 @@ int APS5_VABI setsid_nid_postfix(void) {
     return static_cast<int>(Fail(GuestEperm));
 }
 
+int APS5_VABI profil_nid_postfix(void* samples, std::size_t size, std::size_t offset, unsigned int scale) {
+    (void)samples;
+    (void)size;
+    (void)offset;
+    constexpr unsigned int MaxScale = 1u << 16;
+    if (scale > MaxScale) return static_cast<int>(Fail(GuestEinval));
+    if (scale != 0) NotImplemented_nid_no_patch("profil: the profiling clock");
+    return 0;
+}
+
 std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
     return File::ExchangeCreationMask_nid_no_patch(mask);
 }
@@ -564,6 +574,27 @@ int APS5_VABI chroot_nid_postfix(const char* path) {
     if (error) return static_cast<int>(Fail(GuestError(error)));
     if (root) return 0;
     throw std::runtime_error(std::string("chroot: changing the root directory to ") + path + " is not supported, the guest path resolver keeps a fixed root");
+}
+
+int APS5_VABI kldfind_nid_postfix(const char* file) {
+    std::string copy;
+    if (const int error = CopyPath(file, copy)) return static_cast<int>(Fail(error));
+    return static_cast<int>(Fail(GuestEnoent));
+}
+
+int APS5_VABI kldfirstmod_nid_postfix(int fileid) {
+    return static_cast<int>(Fail(GuestEnoent));
+}
+
+int APS5_VABI kldnext_nid_postfix(int fileid) {
+    if (fileid < 0) return static_cast<int>(Fail(GuestEnoent));
+    if (fileid == 0) return 0;
+    return static_cast<int>(Fail(GuestEnoent));
+}
+
+int APS5_VABI kldunload_nid_postfix(int fileid) {
+    (void)fileid;
+    return static_cast<int>(Fail(GuestEperm));
 }
 
 int APS5_VABI symlink_nid_postfix(const char* target, const char* created) {

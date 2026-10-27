@@ -484,6 +484,8 @@ int main() {
             for (int whence = 0; whence < 3; ++whence) {
                 Require(lseek_nid_postfix(end, 0, whence) == -1 && *__error_nid_postfix() == 29);
                 Require(sceKernelLseek(end, 1, whence) == static_cast<int>(0x8002001du));
+                Require(lseek_nid_postfix(end, -1, whence) == -1 && *__error_nid_postfix() == 29);
+                Require(sceKernelLseek(end, -100, whence) == static_cast<int>(0x8002001du));
             }
         }
         char piped[8]{};
@@ -576,6 +578,15 @@ int main() {
     {
         const auto listed = root / "listed.txt";
         std::ofstream(listed, std::ios::binary) << "listed";
+        Require(fopen_nid_postfix(listed.string().c_str(), "wx") == nullptr && *__error_nid_postfix() == 17);
+        for (const char* invalidMode : {"z", "", "q"}) {
+            *__error_nid_postfix() = 0;
+            Require(fopen_nid_postfix(listed.string().c_str(), invalidMode) == nullptr && *__error_nid_postfix() == 22);
+        }
+        auto* readWrite = fopen_nid_postfix(listed.string().c_str(), "rw");
+        char word[8] = {};
+        Require(readWrite != nullptr && fread_nid_postfix(word, 1, 6, readWrite) == 6 && std::string(word) == "listed");
+        Require(fclose_nid_postfix(readWrite) == 0);
         for (const char* openMode : {"r", "rb", "re"}) {
             auto* directoryStream = fopen_nid_postfix(root.string().c_str(), openMode);
             Require(directoryStream != nullptr);
