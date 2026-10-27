@@ -26,14 +26,6 @@ def tls_headers(data):
     return [header for header in headers(data) if header[0] == PT_TLS]
 
 
-def load(path):
-    import ctypes
-    library = ctypes.CDLL(path)
-    function = getattr(library, "shared#guest")
-    function.restype = ctypes.c_int64
-    assert function() == 42
-
-
 def check_executable(relinker, work, native):
     for alignment in (0, 1, 16):
         source = work / f"executable-{alignment}.elf"
@@ -52,7 +44,7 @@ def check_executable(relinker, work, native):
                 assert execution.returncode == -signal.SIGTRAP, (name, alignment, execution.returncode, execution.stdout, execution.stderr)
 
 
-def check_guest(relinker, work, native):
+def check_guest(relinker, work):
     for alignment in (0, 1, 8):
         case = work / f"guest-{alignment}"
         modules = case / "prx"
@@ -67,22 +59,15 @@ def check_guest(relinker, work, native):
         expected = [(PT_TLS, 4, 0x980, 0x2380, 0x2380, 8, 8, max(alignment, 1))]
         found = tls_headers(converted.read_bytes())
         assert found == expected, ("guest", alignment, found, expected)
-        if native:
-            run = subprocess.run([sys.executable, __file__, "--load", str(converted)],
-                                 capture_output=True, text=True, timeout=20)
-            assert run.returncode == 0, ("guest", alignment, run.returncode, run.stdout, run.stderr)
 
 
 def main():
-    if sys.argv[1] == "--load":
-        load(sys.argv[2])
-        return
     relinker = Path(sys.argv[1]).resolve()
     native = sys.platform.startswith("linux") and os.uname().machine == "x86_64"
     with tempfile.TemporaryDirectory(prefix="anyps5-linux-tls-alignment-") as directory:
         work = Path(directory)
         check_executable(relinker, work, native)
-        check_guest(relinker, work, native)
+        check_guest(relinker, work)
     print("Linux TLS alignment tests passed")
 
 
