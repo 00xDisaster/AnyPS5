@@ -488,3 +488,21 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 endif()
+
+add_test_executable(agc_create_shader_tests EXCLUDE_FROM_ALL
+        tests/CreateShader.cpp
+        Shader/src/CreateShader.cpp
+        Shader/src/ShaderUtils.cpp
+)
+target_include_directories(agc_create_shader_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_create_shader_tests PRIVATE libc libSceAgcDriver)
+configure_windows_unwind(agc_create_shader_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_create_shader_tests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    add_test(NAME agc_create_shader COMMAND agc_create_shader_tests)
+    set_tests_properties(agc_create_shader PROPERTIES TIMEOUT 30)
+    if(WIN32)
+        set_tests_properties(agc_create_shader PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+endif()
