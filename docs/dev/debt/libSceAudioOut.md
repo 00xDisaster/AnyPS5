@@ -5,6 +5,7 @@
 - [sceAudioOut2LoTerminate](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Low.cpp) (libSceAudioOut) - returns 0, as the PS5 13.60 module (0x248d0) does whether or not the low-latency service runs. The module disconnects from the audio server and clears the service tables; here `sceAudioOut2LoInit` starts no service and open contexts and ports are left as they are
 - [sceAudioOutMasteringTerm](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Mastering.cpp) (libSceAudioOut) - returns 0 without doing anything: there is no mastering stage to tear down, and `sceAudioOutMasteringInit` keeps no state. Whether the console fails a Term without a matching Init is unknown
 - [sceAudioOutSetMainOutput](../../../core/libs/prx/libSceAudioOut/src/AudioOut.cpp) (libSceAudioOut) - returns 0 and does nothing, as the console function does on firmware 12.70: [PS5-Audio-Passthrough-Research](https://github.com/sainsaji/PS5-Audio-Passthrough-Research/blob/cf3c921d79bf00db4847f31b68a7bd95a8037cd7/docs/FINDINGS.md#L25) reads that export as `xor eax,eax; ret`. The export reads no argument, so its parameters stay unknown; other firmware versions are unverified
+- [sceAudioOut2ContextSetAttributes](../../../core/libs/prx/libSceAudioOut/src/AudioOut2Context.cpp) (libSceAudioOut) - returns 0 and ignores every attribute; what a context attribute changes on a console is unknown. PPSA25286 01.000.568 sets attribute 2 to a 4-byte 1 at start-up, and PPSA02225 passes two attributes from an object at its single call.
 
 ### Unknown function info
 
