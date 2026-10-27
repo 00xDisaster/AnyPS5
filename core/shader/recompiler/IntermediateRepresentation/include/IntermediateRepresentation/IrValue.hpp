@@ -34,6 +34,8 @@ public:
     }
 
     IrOperands& operator=(std::vector<IrValue*>&& values) {
+        if (allocated > InlineCapacity) delete[] heap;
+        allocated = InlineCapacity;
         count = 0;
         reserve(values.size());
         for (IrValue* value : values) data()[count++] = value;
