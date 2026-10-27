@@ -39,8 +39,8 @@ def skips(path, require_tests=False):
     found = False
     for case in root.iter("testcase"):
         found = True
-        if case.get("status") == "disabled":
-            raise ValueError(f"{path}: testcase {case.get('name')!r} is disabled and was not run")
+        if case.get("status") in ("disabled", "notrun"):
+            raise ValueError(f"{path}: testcase {case.get('name')!r} is {case.get('status')} and was not run")
         skipped = case.find("skipped")
         if skipped is None:
             continue
