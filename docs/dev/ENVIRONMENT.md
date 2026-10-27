@@ -192,7 +192,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_LABEL_RUNS_INLINE` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | records store runs at once and closes each run at the next command |
 | `APS5_LABEL_STORE_ALWAYS` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | writes back every label store even when a later store already covered its bytes |
 | `APS5_LABEL_SUBMIT_NOW` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | submits every label immediately instead of waiting for the flush deadline |
-| `APS5_LABEL_TRUST_LATE` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | trusts cache entries with a stamp at or below the wait's stamp under the late rule (off unless set to a non-zero value) |
+| `APS5_LABEL_TRUST_LATE` | string | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | trusts cache entries with a stamp at or below the wait's stamp under the late rule (off unless set to a non-zero value) |
 | `APS5_LABEL_TRY_EACH_PACKET` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/DeferredLabels.cpp` |  | attempts to record deferred labels at every self-locking packet instead of deferring to its lock |
 | `APS5_LAND_WAITS_ALL_QUEUES` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Synchronization/WaitMemory.cpp` |  | notes pending waits on queue 0 as well |
 | `APS5_LAZY_SHADER_PREPARE` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Shaders/ShaderRegistry.cpp` |  | prepares a registered shader on its first use instead of while registering it |
