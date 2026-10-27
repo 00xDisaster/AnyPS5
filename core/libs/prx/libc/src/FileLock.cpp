@@ -3,10 +3,14 @@
 #ifdef _WIN32
 
 #include <cerrno>
+#include <condition_variable>
+#include <cstdint>
 #include <io.h>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <utility>
 #include <windows.h>
 
 #include "prx/libc/include/WindowsDescriptor.hpp"
@@ -20,15 +24,66 @@ constexpr int LockUnlock = 8;
 constexpr DWORD LockByteLow = 0xFFFFFFFE;
 constexpr DWORD LockByteHigh = 0x7FFFFFFF;
 
+using DirectoryKey = std::pair<DWORD, std::uint64_t>;
+
+struct DirectoryHolders {
+    int shared = 0;
+    bool exclusive = false;
+};
+
+std::mutex g_directoryMutex;
+std::condition_variable g_directoryChanged;
+std::map<DirectoryKey, DirectoryHolders> g_directoryLocks;
+
+bool LockDirectory(const DirectoryKey& key, int mode, bool nonblocking) {
+    std::unique_lock lock(g_directoryMutex);
+    const auto busy = [&] {
+        const auto found = g_directoryLocks.find(key);
+        return found != g_directoryLocks.end() && (found->second.exclusive || (mode == LockExclusive && found->second.shared != 0));
+    };
+    if (busy()) {
+        if (nonblocking) {
+            ::SetLastError(ERROR_LOCK_VIOLATION);
+            return false;
+        }
+        g_directoryChanged.wait(lock, [&] { return !busy(); });
+    }
+    auto& holders = g_directoryLocks[key];
+    if (mode == LockExclusive) holders.exclusive = true;
+    else ++holders.shared;
+    return true;
+}
+
+void UnlockDirectory(const DirectoryKey& key, int mode) {
+    {
+        std::lock_guard lock(g_directoryMutex);
+        const auto found = g_directoryLocks.find(key);
+        if (found == g_directoryLocks.end()) return;
+        if (mode == LockExclusive) found->second.exclusive = false;
+        else --found->second.shared;
+        if (!found->second.exclusive && found->second.shared == 0) g_directoryLocks.erase(found);
+    }
+    g_directoryChanged.notify_all();
+}
+
+std::optional<DirectoryKey> DirectoryOf(HANDLE handle) {
+    BY_HANDLE_FILE_INFORMATION information{};
+    if (!::GetFileInformationByHandle(handle, &information) || (information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) return std::nullopt;
+    return DirectoryKey{information.dwVolumeSerialNumber, (static_cast<std::uint64_t>(information.nFileIndexHigh) << 32) | information.nFileIndexLow};
+}
+
 struct LockState {
     std::mutex mutex;
     int mode = 0;
     HANDLE locker = nullptr;
+    bool classified = false;
+    std::optional<DirectoryKey> directory;
 
     LockState() = default;
     LockState(const LockState&) = delete;
     LockState& operator=(const LockState&) = delete;
     ~LockState() {
+        if (directory && mode != 0) UnlockDirectory(*directory, mode);
         if (locker != nullptr) ::CloseHandle(locker);
     }
 };
@@ -65,6 +120,20 @@ int GuestFileLock_nid_no_patch(int fd, int operation) {
     }();
     std::lock_guard lock(state->mutex);
     if (state->mode == mode) return 0;
+    if (!state->classified) {
+        state->directory = DirectoryOf(handle);
+        state->classified = true;
+    }
+    if (state->directory) {
+        if (state->mode != 0) {
+            UnlockDirectory(*state->directory, state->mode);
+            state->mode = 0;
+        }
+        if (mode == LockUnlock) return 0;
+        if (!LockDirectory(*state->directory, mode, (operation & LockNonblocking) != 0)) return -1;
+        state->mode = mode;
+        return 0;
+    }
     if (state->mode != 0) {
         OVERLAPPED overlapped{};
         overlapped.Offset = LockByteLow;
