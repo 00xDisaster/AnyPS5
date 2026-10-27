@@ -78,14 +78,14 @@ static int APS5_VABI PrintList(const char* format, ...) {
 
 static void CheckIgnoredLengths() {
     char output[96];
-    Require(snprintf_nid_postfix(output, sizeof(output), "%Ld|%Lx|%Lu|%Lo", 0x89abcdefu, 0x89abcdefu, 0x89abcdefu, 0x89abcdefu) == 43 &&
+    Require(snprintf_nid_postfix(output, sizeof(output), "%Ld|%Lx|%Lu|%Lo", -1985229329, 0x89abcdefu, 0x89abcdefu, 0x89abcdefu) == 43 &&
         std::strcmp(output, "-1985229329|89abcdef|2309737967|21152746757") == 0);
     Require(snprintf_nid_postfix(output, sizeof(output), "[%5Ld][%-8.3Lx]", 0x41424344, 0x41424344) == 22 && std::strcmp(output, "[1094861636][41424344]") == 0);
     Require(snprintf_nid_postfix(output, sizeof(output), "%hhc%Lc%zc|%hhs|%Ls|%zs", 0x44, 0x45, 0x46, "ab", "ab", "ab") == 12 && std::strcmp(output, "DEF|ab|ab|ab") == 0);
     Require(snprintf_nid_postfix(output, sizeof(output), "%hf|%llf|%ze|%ja", 1.5, 1.5, 1.5, 1.5) == 39 && std::strcmp(output, "1.500000|1.500000|1.500000e+00|0x1.8p+0") == 0);
     Require(snprintf_nid_postfix(output, sizeof(output), "%hp|%Lp", reinterpret_cast<void*>(0x1234), reinterpret_cast<void*>(0x1234)) == 9 && std::strcmp(output, "1234|1234") == 0);
-    long long count = -1;
-    Require(snprintf_nid_postfix(output, sizeof(output), "a%Ln", &count) == 1 && static_cast<std::uint32_t>(count) == 1 && static_cast<std::uint64_t>(count) >> 32 == 0xffffffffu);
+    struct { int count; int guard; } written = {-1, -1};
+    Require(snprintf_nid_postfix(output, sizeof(output), "a%Ln", &written.count) == 1 && written.count == 1 && written.guard == -1);
 }
 
 static void CheckSizeLimits() {
