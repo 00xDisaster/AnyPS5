@@ -57,6 +57,15 @@ class CheckCompileModeTests(unittest.TestCase):
             self.skipTest("needs Clang")
         self.check_modes((("-print-ivar-layout",),), compiler_names=("clang",))
 
+    def test_clang_supported_cpu_queries_cannot_report_success(self):
+        self.check_driver_queries((("--print-supported-cpus",), ("-print-supported-cpus",)), compiler_names=("clang",))
+
+    def test_clang_cpu_help_queries_cannot_report_success(self):
+        self.check_driver_queries((("-mcpu=help",), ("-mtune=help",)), compiler_names=("clang",))
+
+    def test_clang_target_cpu_options_still_check_syntax(self):
+        self.check_modes((("--target=aarch64", "-mcpu=generic", "-mtune=generic"),), compiler_names=("clang",))
+
     def test_gcc_driver_queries_cannot_report_success(self):
         self.check_driver_queries((("-dumpversion",), ("-dumpfullversion",), ("-dumpmachine",)), compiler_names=("gcc",))
 
@@ -69,11 +78,21 @@ class CheckCompileModeTests(unittest.TestCase):
     def test_gcc_program_and_category_help_cannot_report_success(self):
         self.check_driver_queries((("-print-prog-name=cc1",), ("--help=common",)), compiler_names=("gcc",))
 
-    def test_query_named_include_operand_still_compiles(self):
+    def check_query_named_include_operands(self, names):
         def configure(root, build, source):
-            (build / "--version").write_text("#define HEADER_PRESENT 1\n", encoding="utf-8")
+            for name in names:
+                (build / name).write_text("#define HEADER_PRESENT 1\n", encoding="utf-8")
             return [], "#ifndef HEADER_PRESENT\n#error include operand was lost\n#endif\n", ""
-        self.check_modes((("-include", "--version"),), configure=configure)
+        self.check_modes(tuple(("-include", name) for name in names), configure=configure)
+
+    def test_query_named_include_operand_still_compiles(self):
+        self.check_query_named_include_operands(("--version",))
+
+    def test_supported_cpu_query_named_include_operands_still_compile(self):
+        self.check_query_named_include_operands(("--print-supported-cpus", "-print-supported-cpus"))
+
+    def test_cpu_help_query_named_include_operands_still_compile(self):
+        self.check_query_named_include_operands(("-mcpu=help", "-mtune=help"))
 
     def compilers(self, names=("gcc", "clang")):
         values = list(dict.fromkeys(value for value in map(shutil.which, names) if value))
