@@ -1,6 +1,5 @@
 import argparse
 import hashlib
-import itertools
 import json
 import os
 import re
@@ -536,22 +535,35 @@ def branch_variants(body):
         raise AuditError("#if without a matching #endif")
     root.append(body[position:])
 
+    def choices(item):
+        if isinstance(item, str):
+            return iter((item,))
+        return (choice for alternative in item["alternatives"] for choice in expand(alternative))
+
     def expand(items):
-        parts = []
-        for item in items:
-            if isinstance(item, str):
-                parts.append((item,))
-                continue
-            choices = [choice for alternative in item["alternatives"] for choice in expand(alternative)]
-            if len(choices) > BRANCH_VARIANT_LIMIT:
-                raise AuditError(f"more than {BRANCH_VARIANT_LIMIT} preprocessor branch combinations in one function")
-            parts.append(choices)
-        for count, variant in enumerate(itertools.product(*parts), 1):
+        iterators = [choices(item) for item in items]
+        values = [next(iterator) for iterator in iterators]
+        while True:
+            yield "".join(values)
+            index = len(items) - 1
+            while index >= 0:
+                try:
+                    values[index] = next(iterators[index])
+                    break
+                except StopIteration:
+                    iterators[index] = choices(items[index])
+                    values[index] = next(iterators[index])
+                    index -= 1
+            if index < 0:
+                return
+
+    def limited(variants):
+        for count, variant in enumerate(variants, 1):
             if count > BRANCH_VARIANT_LIMIT:
                 raise AuditError(f"more than {BRANCH_VARIANT_LIMIT} preprocessor branch combinations in one function")
-            yield "".join(variant)
+            yield variant
 
-    return expand(root)
+    return limited(expand(root))
 
 
 def variant_calls(body):
