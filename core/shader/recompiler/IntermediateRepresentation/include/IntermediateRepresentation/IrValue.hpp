@@ -30,7 +30,7 @@ public:
     IrOperands(const IrOperands&) = delete;
     IrOperands& operator=(const IrOperands&) = delete;
     ~IrOperands() {
-        if (capacity > Inline) delete[] heap;
+        if (allocated > InlineCapacity) delete[] heap;
     }
 
     IrOperands& operator=(std::vector<IrValue*>&& values) {
@@ -42,17 +42,20 @@ public:
     }
 
     void reserve(std::size_t size) {
-        if (size > capacity) grow(size);
+        if (size > allocated) grow(size);
     }
     void push_back(IrValue* value) {
-        if (count == capacity) grow(static_cast<std::size_t>(capacity) * 2u);
+        if (count == allocated) grow(static_cast<std::size_t>(allocated) * 2u);
         data()[count++] = value;
     }
     void clear() {
         count = 0;
     }
 
+    static constexpr std::size_t InlineCapacity = 3;
+
     [[nodiscard]] std::size_t size() const { return count; }
+    [[nodiscard]] std::size_t capacity() const { return allocated; }
     [[nodiscard]] bool empty() const { return count == 0; }
     [[nodiscard]] IrValue* const* begin() const { return data(); }
     [[nodiscard]] IrValue* const* end() const { return data() + count; }
@@ -66,22 +69,20 @@ public:
     [[nodiscard]] IrValue* back() const { return data()[count - 1]; }
 
 private:
-    static constexpr std::uint32_t Inline = 3;
-
-    [[nodiscard]] IrValue* const* data() const { return capacity > Inline ? heap : local; }
-    [[nodiscard]] IrValue** data() { return capacity > Inline ? heap : local; }
+    [[nodiscard]] IrValue* const* data() const { return allocated > InlineCapacity ? heap : local; }
+    [[nodiscard]] IrValue** data() { return allocated > InlineCapacity ? heap : local; }
     void grow(std::size_t size) {
         auto* grown = new IrValue*[size];
         for (std::uint32_t index = 0; index < count; ++index) grown[index] = data()[index];
-        if (capacity > Inline) delete[] heap;
+        if (allocated > InlineCapacity) delete[] heap;
         heap = grown;
-        capacity = static_cast<std::uint32_t>(size);
+        allocated = static_cast<std::uint32_t>(size);
     }
 
     std::uint32_t count = 0;
-    std::uint32_t capacity = Inline;
+    std::uint32_t allocated = InlineCapacity;
     union {
-        IrValue* local[Inline];
+        IrValue* local[InlineCapacity];
         IrValue** heap;
     };
 };
