@@ -455,6 +455,38 @@ void testContextState() {
     check(invalid.buffer.cursor_up == growth.destination.words.data(), "failed reservation advanced cursor");
 }
 
+void testFlowPackets() {
+    const auto* target = reinterpret_cast<const std::uint32_t*>(0x123456789ab0ull);
+    Storage chained;
+    const auto* jump = sceAgcDcbJump(&chained.buffer, 1, 2, target, 0x40);
+    const std::array<std::uint32_t, 4> chainedExpected{0xc0023f00u, 0x56789ab0u, 0x1234u, 0x2f300040u};
+    check(jump == chained.words.data() && std::equal(chainedExpected.begin(), chainedExpected.end(), chained.words.begin()), "chained INDIRECT_BUFFER packet mismatch");
+    Storage called;
+    sceAgcDcbJump(&called.buffer, 0, 0, target, 0xfffffu);
+    check(called.words[3] == 0x0f2fffffu, "unchained INDIRECT_BUFFER control word mismatch");
+    Storage compute;
+    sceAgcAcbJump(&compute.buffer, 1, target, 0x10);
+    check(compute.words[0] == 0xc0023f00u && compute.words[3] == 0x1f300010u, "compute jumps did not chain");
+    Storage rejected;
+    expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 2, 0, target, 1); });
+    expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 0, 4, target, 1); });
+    expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 0, 0, target, 0x100000u); });
+    expectFailure([&] { sceAgcAcbJump(&rejected.buffer, 0, reinterpret_cast<const std::uint32_t*>(0x1002ull), 1); });
+    check(rejected.words[0] == 0, "a rejected jump wrote a packet");
+    check(sceAgcDcbJumpGetSize() == 16 && sceAgcAcbJumpGetSize() == 16, "jump packet sizes");
+    Storage stall;
+    sceAgcDcbStallCommandBufferParser(&stall.buffer);
+    check(stall.words[0] == 0xc0004200u && stall.words[1] == 0 && sceAgcDcbStallCommandBufferParserGetSize() == 8, "PFP_SYNC_ME packet mismatch");
+    Storage rendering;
+    sceAgcDcbWaitUntilSafeForRendering(&rendering.buffer, 7, 2);
+    const std::array<std::uint32_t, 4> renderingExpected{0xc0021018u, 7, 2, 0};
+    check(std::equal(renderingExpected.begin(), renderingExpected.end(), rendering.words.begin()), "rendering wait packet mismatch");
+    Storage reset;
+    sceAgcAcbResetQueue(&reset.buffer, 5, 9);
+    check(reset.words[0] == 0xc0001024u && reset.words[1] == 5 && reset.words[2] == 0, "compute queue reset packet mismatch");
+    expectFailure([&] { sceAgcAcbResetQueue(nullptr, 5, 9); });
+}
+
 void testFlip() {
     Storage storage;
     storage.words.fill(0xdeadbeefu);
@@ -864,6 +896,7 @@ int main(int argc, char** argv) {
         testIndexIndirectArgs();
         testIndirectBase();
         testContextState();
+        testFlowPackets();
         testFlip();
         testRegisters();
         testRegisterRange();
