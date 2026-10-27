@@ -37,8 +37,10 @@ int main() {
     std::memset(result, 0x5a, sizeof(result));
 
     Require(sceNetCtlApDialogTerminate() == kErrNotInitialized);
+    Require(sceNetCtlApDialogOpen(nullptr) == kErrArgNull);
     Require(sceNetCtlApDialogOpen(&param) == kErrNotInitialized);
     Require(sceNetCtlApDialogClose() == kErrNotInitialized);
+    Require(sceNetCtlApDialogGetResult(nullptr) == kErrArgNull);
     Require(sceNetCtlApDialogGetResult(reinterpret_cast<NetCtlApDialogResult*>(result)) == kErrNotInitialized);
     Require(sceNetCtlApDialogGetStatus() == kStatusNone);
     Require(sceNetCtlApDialogUpdateStatus() == kStatusNone);
