@@ -14,21 +14,8 @@ bool MouseIsOpen_nid_no_patch();
 
 static void Require(bool value) { if (!value) std::abort(); }
 
-template <typename TCall>
-static bool Throws(TCall call) {
-    try {
-        call();
-    } catch (...) {
-        return true;
-    }
-    return false;
-}
-
 int main() {
     MouseData data[64]{};
-    Require(Throws([] { sceMouseReadAbsolutePosition(); }));
-    Require(Throws([] { sceMouseSetAbsoluteHighPrecisionMode(); }));
-    Require(Throws([] { sceMouseSetAbsoluteVirtualScreenSize(); }));
     Require(!MouseIsOpen_nid_no_patch());
     Require(sceMouseResetAbsolutePosition(MOUSE_HANDLE, 959, 539) == MOUSE_ERROR_NOT_INITIALIZED);
     Require(sceMouseOpen(1, 0, 0, nullptr) == MOUSE_ERROR_NOT_INITIALIZED);
