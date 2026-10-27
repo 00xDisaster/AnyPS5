@@ -29,7 +29,7 @@ int main() {
     Require(box > 0 && context > 0 && tmpl > 0 && request > 0);
     Require(sceHttp2SetCookieBox(tmpl, 0) == 0);
     Require(Throws([&] { sceHttp2SetCookieBox(tmpl, box); }));
-    Require(Throws([&] { sceHttp2CookieFlush(box); }));
+    Require(sceHttp2CookieFlush(box) == 0);
     Require(sceHttp2SetResolveRetry(tmpl, 0) == 0);
     Require(Throws([&] { sceHttp2SetResolveRetry(tmpl, 3); }));
     Require(sceHttp2SetRequestNoContentLength(request) == 0);

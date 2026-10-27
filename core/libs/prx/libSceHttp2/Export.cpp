@@ -4,6 +4,8 @@
 #include <cstring>
 #include "SceTypes.hpp"
 #include "Transport.hpp"
+#include "Cookies.hpp"
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 #include <atomic>
 #include <mutex>
@@ -21,7 +23,7 @@ struct Http2Handle {
     Http2Kind kind;
     int owner;
     std::size_t poolSize;
-    std::shared_ptr<std::byte[]> cookieMemory;
+    std::shared_ptr<void> cookieMemory;
     int sslContext = 0;
     int version = 0;
     Http2::Settings settings;
@@ -57,6 +59,11 @@ static void ReleaseOwnedHandles(int owner) {
         if (handle.transport) handle.transport->Stop();
         g_handles.erase(id);
     }
+}
+
+bool Http2CookieBoxExists(int cookieBoxId) {
+    std::lock_guard lock(g_handlesMutex);
+    return FindHandle(cookieBoxId, Http2Kind::CookieBox) != nullptr;
 }
 
 template<class TUpdate>
@@ -310,15 +317,16 @@ int APS5_VABI sceHttp2GetMemoryPoolStats(int lib_http2_ctx_id, Http2MemoryPoolSt
 }
 
 int APS5_VABI sceHttp2CookieFlush(int id) {
-    NotImplemented_nid_no_patch(__func__);
+    Http2FlushCookies(id);
     return 0;
 }
 
 int APS5_VABI sceHttp2CreateCookieBox(std::size_t poolSize) {
     if (poolSize < 0x10000) return static_cast<int>(0x817b121du);
-    if (poolSize > std::numeric_limits<std::size_t>::max() - 0x3fff) throw std::overflow_error("sceHttp2CreateCookieBox: pool size overflow");
-    const auto allocationSize = (poolSize + 0x3fff) & ~std::size_t{0x3fff};
-    auto memory = std::make_shared<std::byte[]>(allocationSize);
+    const auto mappedSize = (poolSize + 0x3fff) & ~std::size_t{0x3fff};
+    void* address = nullptr;
+    if (const int result = sceKernelMapNamedFlexibleMemory(&address, mappedSize, 3, 0, "SceHttp2CookieBox"); result != 0) return result;
+    std::shared_ptr<void> memory(address, [mappedSize](void* mapped) { sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapped), mappedSize); });
     std::lock_guard lock(g_handlesMutex);
     const int id = g_nextHandle.fetch_add(1, std::memory_order_relaxed);
     g_handles.emplace(id, Http2Handle{Http2Kind::CookieBox, 0, poolSize, std::move(memory)});
@@ -326,9 +334,12 @@ int APS5_VABI sceHttp2CreateCookieBox(std::size_t poolSize) {
 }
 
 int APS5_VABI sceHttp2DeleteCookieBox(int cookie_box_id) {
-    std::lock_guard lock(g_handlesMutex);
-    if (!FindHandle(cookie_box_id, Http2Kind::CookieBox)) return ERROR_INVALID_ID;
-    g_handles.erase(cookie_box_id);
+    {
+        std::lock_guard lock(g_handlesMutex);
+        if (!FindHandle(cookie_box_id, Http2Kind::CookieBox)) return ERROR_INVALID_ID;
+        g_handles.erase(cookie_box_id);
+    }
+    Http2ForgetCookies(cookie_box_id);
     return 0;
 }
 
@@ -373,11 +384,6 @@ int APS5_VABI sceHttp2WebSocketSetPingTimeout(std::int32_t requestId, std::uint3
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
-int APS5_VABI sceHttp2AddCookie(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceHttp2AuthCacheFlush(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
@@ -403,17 +409,7 @@ int APS5_VABI sceHttp2GetAutoRedirect(void) {
     return 0;
 }
 
-int APS5_VABI sceHttp2GetCookie(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceHttp2GetCookieBox(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttp2GetCookieStats(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -429,21 +425,6 @@ int APS5_VABI sceHttp2RemoveRequestHeader(void) {
 }
 
 int APS5_VABI sceHttp2SetAuthInfoCallback(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttp2SetCookieMaxNum(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttp2SetCookieMaxNumPerDomain(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceHttp2SetCookieMaxSize(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }

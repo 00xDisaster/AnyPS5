@@ -81,6 +81,39 @@ struct LibreSslUiMethod {
     UiPromptFunction constructPrompt;
 };
 
+struct LibreSslRsaMethod {
+    const char* name;
+    void* operations[8];
+    int flags;
+    char* appData;
+    void* sign;
+    void* verify;
+    void* keygen;
+};
+
+struct LibreSslRsa {
+    int pad;
+    std::int64_t version;
+    const LibreSslRsaMethod* meth;
+    void* engine;
+    void* n;
+    void* e;
+    void* d;
+    void* p;
+    void* q;
+    void* dmp1;
+    void* dmq1;
+    void* iqmp;
+    void* exData;
+    int references;
+    int flags;
+    void* methodModN;
+    void* methodModP;
+    void* methodModQ;
+    void* blinding;
+    void* mtBlinding;
+};
+
 extern "C" {
 
 std::int64_t APS5_VABI ASN1_INTEGER_get_nid_postfix(const Asn1String* value);
@@ -270,7 +303,7 @@ int APS5_VABI PEM_write_bio_X509_nid_postfix(void);
 int APS5_VABI PKCS12_PBE_add_nid_postfix(void);
 int APS5_VABI PKCS12_free_nid_postfix(void);
 int APS5_VABI PKCS12_parse_nid_postfix(void);
-int APS5_VABI RSA_flags_nid_postfix(void);
+int APS5_VABI RSA_flags_nid_postfix(const LibreSslRsa* rsa);
 int APS5_VABI RSA_free_nid_postfix(void);
 int APS5_VABI RSA_generate_key_ex_nid_postfix(void);
 int APS5_VABI RSA_new_nid_postfix(void);
@@ -280,7 +313,7 @@ int APS5_VABI RSA_private_encrypt_nid_postfix(void);
 int APS5_VABI RSA_public_decrypt_nid_postfix(void);
 int APS5_VABI RSA_public_encrypt_nid_postfix(void);
 int APS5_VABI RSA_sign_nid_postfix(void);
-int APS5_VABI RSA_size_nid_postfix(void);
+int APS5_VABI RSA_size_nid_postfix(const LibreSslRsa* rsa);
 int APS5_VABI RSA_verify_nid_postfix(void);
 int APS5_VABI RSA_verify_PKCS1_PSS_nid_postfix(void);
 int APS5_VABI SSL_CIPHER_get_bits_nid_postfix(const void* cipher, std::int32_t* algorithmBits);
