@@ -1,3 +1,5 @@
+#include "prx/libkernel/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -32,8 +34,6 @@
 #include <mutex>
 
 extern "C" std::uint64_t GuestImageSegmentBytes_nid_no_patch();
-extern "C" void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protection, int flags, int descriptor, std::int64_t offset) noexcept;
-extern "C" int* APS5_VABI __error_nid_postfix();
 
 namespace {
 
@@ -275,8 +275,6 @@ int APS5_VABI sceKernelMapFlexibleMemory(void** addr_in_out, size_t len, int pro
  constexpr int IgnoredHeapFlag = 0x8000;
  return _mapFlexible(addr_in_out, len, prot, flags & ~IgnoredHeapFlag);
 }
-
-int APS5_VABI sceKernelSetVirtualRangeName(const void* addr, uint64_t len, const char* name);
 
 int APS5_VABI sceKernelMapNamedDirectMemory(void** addr, size_t len, int prot, int flags, int64_t direct_memory_start, size_t alignment, const char* name) {
  const int result = DoMapDirect(addr, len, prot, flags, direct_memory_start, alignment);
@@ -525,8 +523,6 @@ int APS5_VABI sceKernelSetPrtAperture(int index, void* addr, size_t len) {
  return 0;
 }
 
-int APS5_VABI sceKernelBatchMap2(KernelBatchMapEntry* entries, int num_entries, int* num_entries_out, int flags);
-
 int APS5_VABI sceKernelBatchMap(KernelBatchMapEntry* entries, int num_entries, int* num_entries_out) {
  constexpr int MapFixed = 0x10;
  return sceKernelBatchMap2(entries, num_entries, num_entries_out, MapFixed);
@@ -569,6 +565,18 @@ int APS5_VABI sceKernelBatchMap2(KernelBatchMapEntry* entries, int num_entries, 
  }
  if (num_entries_out) *num_entries_out = processed;
  return result;
+}
+
+int32_t APS5_VABI sceKernelMapNamedSystemFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags, const char* name) {
+    constexpr size_t MaximumNameLength = 32;
+    if (len == 0 || (len & (PS5_PAGE_SIZE - 1)) != 0) return SCE_KERNEL_ERROR_EINVAL;
+    if (name == nullptr) throw std::runtime_error("sceKernelMapNamedSystemFlexibleMemory: null name");
+    if (strnlen(name, MaximumNameLength) >= MaximumNameLength) throw std::runtime_error("sceKernelMapNamedSystemFlexibleMemory: name of 32 bytes or more");
+    const int result = DoMapAnon(addr_in_out, len, prot, flags);
+    if (result != 0) return result;
+    _releaseFlexible(reinterpret_cast<uintptr_t>(*addr_in_out), len);
+    sceKernelSetVirtualRangeName(*addr_in_out, len, name);
+    return 0;
 }
 
 }
