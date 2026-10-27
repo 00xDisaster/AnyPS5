@@ -237,20 +237,25 @@ int APS5_VABI sceVideoOutIsFlipPending(int handle) try {
     LibcAwaitExit_nid_postfix();
 }
 
-static bool isOpenHandle(int handle) {
-    return VideoOutDriver::Get().HasConfig(handle) && VideoOutDriver::Get().IsOpen(handle);
+static bool isFreshHandle(int handle) {
+    auto cfg = VideoOutDriver::Get().GetConfig(handle);
+    std::unique_lock lock(cfg->mutex);
+    cfg->Check();
+    return !cfg->buffersEverRegistered;
 }
 
 int APS5_VABI sceVideoOutSetFlipMaster(std::int32_t handle, std::int32_t masterHandle) try {
-    if (!isOpenHandle(handle) || masterHandle == 0 || masterHandle == 1) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    if (!VideoOutDriver::Get().HasConfig(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    if ((masterHandle == 0 || masterHandle == 1) && isFreshHandle(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
     NotImplemented_nid_no_patch(__func__);
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
 }
 
 int APS5_VABI sceVideoOutClearFlipMaster(std::int32_t handle) try {
-    if (!isOpenHandle(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
-    return VIDEO_OUT_ERROR_0x8029001C;
+    if (!VideoOutDriver::Get().HasConfig(handle)) return VIDEO_OUT_ERROR_INVALID_HANDLE;
+    if (isFreshHandle(handle)) return VIDEO_OUT_ERROR_0x8029001C;
+    NotImplemented_nid_no_patch(__func__);
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
 }

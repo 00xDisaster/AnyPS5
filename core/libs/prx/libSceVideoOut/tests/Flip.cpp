@@ -1072,6 +1072,18 @@ void testFreshHandleCalls() {
     check(sceVideoOutSetFlipMaster(handle, 1) == VIDEO_OUT_ERROR_INVALID_HANDLE, "a fresh handle was made flip master of handle 1");
     check(sceVideoOutClearFlipMaster(handle) == static_cast<int>(0x8029001Cu), "a fresh handle's flip master was cleared");
 
+    std::vector<std::byte> allocation(65536 + 65535);
+    const auto storage = alignedBuffer(allocation);
+    VideoOutBuffers buffer{storage.data(), nullptr, {nullptr, nullptr}};
+    VideoOutBufferAttribute2 attribute{};
+    sceVideoOutSetBufferAttribute2(&attribute, 0x8000000000000000ull, 0, 64, 64, 0, 0, 0);
+    check(sceVideoOutRegisterBuffers2(handle, 0, 0, &buffer, 1, &attribute, 0, nullptr) == 0, "buffer registration failed");
+    check(expectFailure([&] { sceVideoOutSetFlipMaster(handle, 0); }).find("not implemented") != std::string::npos, "a handle with registered buffers was answered as a fresh one by SetFlipMaster");
+    check(expectFailure([&] { sceVideoOutClearFlipMaster(handle); }).find("not implemented") != std::string::npos, "a handle with registered buffers was answered as a fresh one by ClearFlipMaster");
+    check(sceVideoOutUnregisterBuffers(handle, 0) == 0, "buffer unregistration failed");
+    check(expectFailure([&] { sceVideoOutSetFlipMaster(handle, 0); }).find("not implemented") != std::string::npos, "a handle whose buffers were unregistered was answered as a fresh one by SetFlipMaster");
+    check(expectFailure([&] { sceVideoOutClearFlipMaster(handle); }).find("not implemented") != std::string::npos, "a handle whose buffers were unregistered was answered as a fresh one by ClearFlipMaster");
+
     std::array<std::byte, 128> untouched;
     untouched.fill(std::byte{0xaa});
     check(sceVideoOutGetFlipStatus(-1, reinterpret_cast<VideoOutFlipStatus*>(untouched.data())) == VIDEO_OUT_ERROR_INVALID_HANDLE, "an invalid handle's flip status was returned");
