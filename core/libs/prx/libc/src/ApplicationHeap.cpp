@@ -165,7 +165,7 @@ bool ApplicationHeapDefault_nid_no_patch() {
 void ApplicationHeapInitialize_nid_no_patch(const void* processParameters) {
     std::call_once(heapInitialization, [processParameters] {
         try {
-            if (processParameters == nullptr) {
+            if (processParameters == ApplicationEmptyProcessParameters_nid_no_patch()) {
                 const std::array<void*, 10> none{};
                 ApplicationHeapRegister_nid_no_patch(none.data());
                 return;

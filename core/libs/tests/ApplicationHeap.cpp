@@ -289,6 +289,9 @@ int main(int argc, char** argv) {
         installProcessParameters(false);
         auto* pointer = static_cast<unsigned char*>(_Znwm_nid_postfix(40));
         require(pointer != nullptr && pointer != reinterpret_cast<unsigned char*>(storage.data()) && lastSize == 0 && initializes == 0);
+        const auto* parameters = static_cast<const unsigned char*>(ApplicationProcessParameters_nid_no_patch());
+        require(parameters != nullptr);
+        for (std::size_t offset = 0; offset < 0x40; ++offset) require(parameters[offset] == 0);
         std::memset(pointer, 0x6b, 40);
         _ZdlPv_nid_postfix(pointer);
         void* aligned = nullptr;

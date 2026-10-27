@@ -52,6 +52,11 @@ bool ApplicationGuestHeapApi_nid_no_patch(void** api) {
 #endif
 }
 
+const void* ApplicationEmptyProcessParameters_nid_no_patch() {
+    alignas(16) static const std::byte empty[0x40] = {};
+    return empty;
+}
+
 const void* ApplicationProcessParameters_nid_no_patch() {
 #ifdef _WIN32
     const auto* image = reinterpret_cast<const std::byte*>(GetModuleHandleW(nullptr));
@@ -74,7 +79,10 @@ const void* ApplicationProcessParameters_nid_no_patch() {
         std::uint32_t size;
         std::memcpy(&address, image + section.VirtualAddress, sizeof(address));
         std::memcpy(&size, image + section.VirtualAddress + 4, sizeof(size));
-        if (address == 0 && size == 0) continue;
+        if (address == 0 && size == 0) {
+            result = ApplicationEmptyProcessParameters_nid_no_patch();
+            continue;
+        }
         if (size < 0x40 || address > imageSize || size > imageSize - address) throw std::runtime_error("application heap: process parameters exceed the image");
         result = image + address;
     }
