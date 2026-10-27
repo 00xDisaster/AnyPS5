@@ -537,6 +537,24 @@ static void CheckDirectMemoryFollowsPhysicalPages() {
     Require(sceKernelReleaseDirectMemory(again, page * 2) == 0);
 }
 
+static void CheckAllocateMainDirectMemory() {
+    constexpr std::size_t page = 0x4000;
+    std::int64_t physical = -1;
+    Require(sceKernelAllocateMainDirectMemory(page * 2, page * 2, 3, &physical) == 0);
+    Require(physical >= 0 && physical % static_cast<std::int64_t>(page * 2) == 0 && static_cast<std::size_t>(physical) + page * 2 <= sceKernelGetDirectMemorySize());
+    int type = -1;
+    std::int64_t start = -1;
+    std::int64_t end = -1;
+    Require(sceKernelGetDirectMemoryType(physical, &type, &start, &end) == 0 && type == 3 && start == physical && end == physical + static_cast<std::int64_t>(page * 2));
+    Require(sceKernelReleaseDirectMemory(physical, page * 2) == 0);
+    std::int64_t untouched = -1;
+    Require(sceKernelAllocateMainDirectMemory(0, 0, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelAllocateMainDirectMemory(0x1000, 0, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelAllocateMainDirectMemory(page, 0x1000, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelAllocateMainDirectMemory(page, 0, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(untouched == -1);
+}
+
 static void CheckSparseDirectMemoryBacking() {
     constexpr std::size_t page = 0x4000;
     constexpr std::size_t size = 256u * 1024u * 1024u;
@@ -3341,6 +3359,7 @@ int main(int argc, char** argv) {
     CheckPosixMprotectIgnoresUndefinedBits();
     CheckDirectMemoryFollowsPhysicalPages();
     CheckSparseDirectMemoryBacking();
+    CheckAllocateMainDirectMemory();
     CheckSavedDirectMemorySurvivesCachePressure();
     CheckReusedDirectMemorySections();
     CheckReleaseDirectMemoryClearsMappings();
