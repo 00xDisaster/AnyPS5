@@ -468,7 +468,7 @@ void _ammAllocatePrt(const Apr::AmmProtectCommand& command) {
             try {
                 AmmPool::MapScattered(state, address, bytes, command.type, command.protection, [&](std::uint64_t at, std::uint64_t physical, std::uint64_t size) { _mapRun(at, physical, size, command.protection); });
             } catch (...) {
-                _reserve(address, bytes);
+                _zeroPrt(address, bytes);
                 throw;
             }
         }
