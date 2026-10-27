@@ -193,6 +193,10 @@ static void CheckIntegerScanWidths() {
     int leading = 0;
     Require(sscanf_nid_postfix("7 5", "%d %qd", &leading, &quad) == 1 && leading == 7 && quad == 0x5555555555555555ll);
     leading = 0;
+    Require(ScanList("7 5", "%d %qd", &leading, &quad) == 1 && leading == 7 && quad == 0x5555555555555555ll);
+    char16_t quadWide[4] = {u'!', u'!', u'!', u'!'};
+    Require(sscanf_nid_postfix("ab cd", "%qS", quadWide) == 0 && quadWide[0] == u'!');
+    leading = 0;
     Require(sscanf_nid_postfix("%qd 9", "%%qd %d", &leading) == 1 && leading == 9);
     const char* const quadFormat = "%*3d %%q %[^q]%qd";
     Require(LibcDetail::FindQuadScanDirective(quadFormat) == quadFormat + 14);
