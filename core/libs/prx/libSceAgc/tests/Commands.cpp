@@ -815,11 +815,15 @@ void testDispatchPackets() {
     const std::array<std::uint32_t, 5> directExpected{0xc0031500u, 7, 3, 1, 0x8041u};
     check(std::equal(directExpected.begin(), directExpected.end(), direct.words.begin()), "DISPATCH_DIRECT packet mismatch");
     Storage rejected;
-    expectFailure([&] { sceAgcDcbDispatchIndirect(&rejected.buffer, 0, 0x2u); });
+    rejected.words.fill(0xa5a5a5a5u);
+    const auto rejectedWords = rejected.words;
+    const auto* rejectedCursor = rejected.buffer.cursor_up;
     expectFailure([&] { sceAgcCbDispatch(&rejected.buffer, 1, 1, 1, 0x100u); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcAcbDispatchIndirect(&rejected.buffer, reinterpret_cast<const volatile void*>(0x1002ull), 0); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcAcbDispatchIndirect(&rejected.buffer, nullptr, 0); });
-    check(rejected.words[0] == 0, "a rejected dispatch wrote a packet");
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     check(sceAgcDcbDispatchIndirectGetSize() == 12 && sceAgcAcbDispatchIndirectGetSize() == 16 && sceAgcCbDispatchGetSize() == 20, "dispatch packet sizes");
 }
 
