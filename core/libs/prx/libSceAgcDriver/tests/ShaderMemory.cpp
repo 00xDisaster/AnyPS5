@@ -5992,7 +5992,8 @@ void verifyDepthExportClamp() {
             require(legacy.request.context.pixel->depthExportEnable && legacy.request.context.pixel->depthExportMin == 0.0f &&
                         legacy.request.context.pixel->depthExportMax == 1.0f && legacy.request.target.largePixelFunctionLdsBuffer &&
                         legacy.request.target.pixelFunctionStorageDwords == 2048u,
-                "depth export: a version " + std::to_string(legacyVersion) + " depth exporting request did not read with default bounds and its target tail");
+                legacyVersion == 46u ? "depth export: a version 46 depth exporting request did not read with default bounds and its target tail"
+                                     : "depth export: a version 47 depth exporting request did not read with default bounds and its target tail");
         }
         for (const bool depthExport : {false, true}) {
             auto dithered = request;
