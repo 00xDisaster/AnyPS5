@@ -2,6 +2,7 @@
 #include <cstdint>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libSceGLSlimVSH/include/Api.hpp"
 #include <SDL_egl.h>
 #include <SDL_opengles2_khrplatform.h>
 #include <SDL_opengles2_gl2platform.h>
