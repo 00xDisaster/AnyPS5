@@ -1,3 +1,4 @@
+#include "prx/libSceFreeType/include/Api.hpp"
 #include "prx/libSceFreeType/include/GuestObjects.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 
@@ -8,20 +9,6 @@
 #include <cstdlib>
 
 using namespace FreeType;
-
-extern "C" {
-int APS5_VABI FT_Stroker_New_nid_postfix(GuestLibrary*, void**);
-void APS5_VABI FT_Stroker_Done_nid_postfix(void*);
-int APS5_VABI FT_Stroker_GetCounts_nid_postfix(void*, std::uint32_t*, std::uint32_t*);
-int APS5_VABI FT_Stroker_BeginSubPath_nid_postfix(void*, const GuestVector*, std::uint8_t);
-int APS5_VABI FT_Stroker_LineTo_nid_postfix(void*, const GuestVector*);
-int APS5_VABI FT_Stroker_EndSubPath_nid_postfix(void*);
-void APS5_VABI FT_Stroker_Set_nid_postfix(void*, std::int64_t, std::int32_t, std::int32_t, std::int64_t);
-void APS5_VABI FT_Stroker_Rewind_nid_postfix(void*);
-int APS5_VABI FT_Stroker_GetBorderCounts_nid_postfix(void*, std::int32_t, std::uint32_t*, std::uint32_t*);
-int APS5_VABI FT_Stroker_ConicTo_nid_postfix(void*, const GuestVector*, const GuestVector*);
-int APS5_VABI FT_Stroker_CubicTo_nid_postfix(void*, const GuestVector*, const GuestVector*, const GuestVector*);
-}
 
 static void Check(bool value, int line) {
     if (!value) {
