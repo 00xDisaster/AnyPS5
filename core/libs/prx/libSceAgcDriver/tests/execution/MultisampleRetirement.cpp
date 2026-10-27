@@ -534,6 +534,7 @@ public:
         const auto target = Target(block);
         auto twin = target;
         twin.format = VK_FORMAT_R8G8B8A8_SRGB;
+        const bool bornStorable = MayReorderSamples(context, target.samples) && SampleOrderStorageFormat(context, target.format, target.elementBytes, target.samples) != VK_FORMAT_UNDEFINED;
         const auto resource = Resource(block);
         VkImage renderedImage = VK_NULL_HANDLE, twinImage = VK_NULL_HANDLE, promotedImage = VK_NULL_HANDLE, promotedTwinImage = VK_NULL_HANDLE;
         Image rendered{}, promoted{};
@@ -549,7 +550,7 @@ public:
         {
             std::lock_guard lock(AgcDriver::GuestMemory::GpuMutex());
             promoted = ImageFor(MultisampleTargetStorageView(context, resource), &promotedImage);
-            Require(promoted.generation != rendered.generation, "MSAA storage promotion kept the rendered image");
+            Require(bornStorable == (promoted.generation == rendered.generation), bornStorable ? "a born-storable MSAA target was promoted to a new image" : "MSAA storage promotion kept the rendered image");
             const auto promotedTwin = MultisampleTargetView(context, twin);
             ImageFor(promotedTwin, &promotedTwinImage);
             Require(promotedTwinImage == promotedImage, "after storage promotion an sRGB use of the MSAA surface still views the retired image");
