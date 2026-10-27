@@ -1172,6 +1172,54 @@ void TestAmmMapsScatteredPoolPages() {
     Require(exhausts(empty));
 }
 
+void TestAmmPrtAllocationFailureKeepsZeros() {
+    std::uint64_t start = 0;
+    std::uint64_t end = 0;
+    std::uint64_t multimapStart = 0;
+    std::uint64_t multimapEnd = 0;
+    Require(sceAmprAmmGetVirtualAddressRanges(&start, &end, &multimapStart, &multimapEnd) == 0);
+    const auto exhausts = [](Recorder& recorder) {
+        try {
+            SubmitAmm(recorder);
+        } catch (const std::runtime_error& error) {
+            return std::string(error.what()).starts_with("AMM: no free run of ");
+        }
+        return false;
+    };
+    const auto drained = start + 24576 * page;
+    for (std::uint64_t index = 0;; ++index) {
+        Require(index < 4096);
+        Recorder drain;
+        Require(sceAmprAmmCommandBufferMap(&drain.buffer, drained + index * page, page, 0, cpuReadWrite) == 0);
+        if (exhausts(drain)) break;
+    }
+    std::int64_t pool = -1;
+    Require(sceAmprAmmGiveDirectMemory(0, static_cast<std::int64_t>(sceKernelGetDirectMemorySize()), page, page, 1, &pool) == 0);
+
+    const std::uint64_t prt = start + 28672 * page;
+    Recorder reserve;
+    Require(sceAmprAmmCommandBufferMapAsPrt(&reserve.buffer, prt, 4 * page) == 0);
+    SubmitAmm(reserve);
+    Require(At(prt) == 0 && At(prt + 3 * page) == 0);
+
+    Recorder tooMany;
+    Require(sceAmprAmmCommandBufferAllocatePaForPrt(&tooMany.buffer, prt + page, 2 * page, 0, cpuReadWrite) == 0);
+    Require(exhausts(tooMany));
+    Require(Protection(prt + page) == 0x10 && At(prt) == 0 && At(prt + page) == 0 && At(prt + 2 * page) == 0 && At(prt + 3 * page) == 0);
+
+    Recorder one;
+    Require(sceAmprAmmCommandBufferAllocatePaForPrt(&one.buffer, prt + page, page, 0, cpuReadWrite) == 0);
+    SubmitAmm(one);
+    Require(Protection(prt + page) == 0x03);
+    At(prt + page) = 0x61;
+    Require(At(prt + page) == 0x61 && At(prt) == 0 && At(prt + 2 * page) == 0);
+
+    Recorder none;
+    Require(sceAmprAmmCommandBufferAllocatePaForPrt(&none.buffer, prt + 2 * page, page, 0, cpuReadWrite) == 0);
+    Require(exhausts(none));
+    Require(At(prt + 2 * page) == 0 && At(prt + page) == 0x61);
+}
+
 void TestAmmMapFailureKeepsPoolOwnership() {
     std::uint64_t start = 0;
     std::uint64_t end = 0;
@@ -1518,6 +1566,7 @@ int main() {
     TestAmm();
     TestAmmRemapAndProtect();
     TestAmmPrt();
+    TestAmmPrtAllocationFailureKeepsZeros();
     TestKernelWriteCommands();
     return 0;
 }
