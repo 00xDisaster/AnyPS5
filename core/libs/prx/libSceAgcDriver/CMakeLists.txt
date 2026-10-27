@@ -3541,7 +3541,7 @@ if(BUILD_TESTING)
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 
-    if(WIN32)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test_executable(agc_driver_frame_capture_eop_tests tests/FrameCaptureEop.cpp Execution/src/FrameCapture.cpp)
         target_include_directories(agc_driver_frame_capture_eop_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/core/shader/recompiler ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR} ${ANYPS5_SPIRV_HEADERS_INCLUDE_DIR})
         target_link_libraries(agc_driver_frame_capture_eop_tests PRIVATE libSceAgcDriver libkernel libc libzstd_static)
@@ -3551,8 +3551,10 @@ if(BUILD_TESTING)
         set_tests_properties(agc_driver_frame_capture_eop PROPERTIES
                 ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1;APS5_FRAME_CAPTURE=${CMAKE_CURRENT_BINARY_DIR}/frame-capture-eop;APS5_FRAME_CAPTURE_AT_FLIP=1;APS5_FRAME_CAPTURE_FRAMES=3"
                 TIMEOUT 120)
-        set_tests_properties(agc_driver_frame_capture_eop PROPERTIES ENVIRONMENT_MODIFICATION
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        if(WIN32)
+            set_tests_properties(agc_driver_frame_capture_eop PROPERTIES ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        endif()
     endif()
 
     add_test_executable(agc_driver_frame_replay_state_tests tests/FrameReplayState.cpp Execution/src/FrameCapture.cpp)
@@ -3561,8 +3563,14 @@ if(BUILD_TESTING)
     set_target_properties(agc_driver_frame_replay_state_tests PROPERTIES CXX_EXTENSIONS OFF)
     configure_windows_unwind(agc_driver_frame_replay_state_tests)
     set(agcFrameReplayModes order tokens blocking)
-    if(WIN32)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         list(APPEND agcFrameReplayModes zero shader shader_host)
+    endif()
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        list(APPEND agcFrameReplayModes unwatched)
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        list(APPEND agcFrameReplayModes shared_page host_neighbors)
     endif()
     foreach(mode IN LISTS agcFrameReplayModes)
         set(capture "${CMAKE_CURRENT_BINARY_DIR}/frame-replay-${mode}")
@@ -3572,13 +3580,17 @@ if(BUILD_TESTING)
             set_tests_properties(agc_driver_frame_replay_${mode} PROPERTIES ENVIRONMENT
                     "APS5_FRAME_CAPTURE=${capture};APS5_FRAME_CAPTURE_AT_FLIP=1;APS5_FRAME_CAPTURE_FRAMES=1")
         endif()
+        if(mode STREQUAL "unwatched")
+            set_tests_properties(agc_driver_frame_replay_${mode} PROPERTIES ENVIRONMENT
+                    "APS5_NO_WRITE_WATCH=1;APS5_FRAME_CAPTURE=${capture};APS5_FRAME_CAPTURE_AT_FLIP=1;APS5_FRAME_CAPTURE_FRAMES=1")
+        endif()
         if(WIN32)
             set_tests_properties(agc_driver_frame_replay_${mode} PROPERTIES ENVIRONMENT_MODIFICATION
                     "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
         endif()
     endforeach()
 
-    if(WIN32)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test_executable(agc_driver_frame_replay_tests tests/FrameReplay.cpp Execution/src/FrameCapture.cpp)
         target_include_directories(agc_driver_frame_replay_tests PRIVATE ${LIBS_INCLUDE_DIR})
         target_link_libraries(agc_driver_frame_replay_tests PRIVATE libSceAgc libSceAgcDriver libkernel libc libzstd_static)
@@ -3589,14 +3601,18 @@ if(BUILD_TESTING)
         set_tests_properties(agc_driver_frame_replay PROPERTIES
                 ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1;APS5_FRAME_CAPTURE=${CMAKE_CURRENT_BINARY_DIR}/frame-replay-capture;APS5_FRAME_CAPTURE_AT_FLIP=1;APS5_FRAME_CAPTURE_FRAMES=2"
                 TIMEOUT 120)
-        set_tests_properties(agc_driver_frame_replay PROPERTIES ENVIRONMENT_MODIFICATION
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        if(WIN32)
+            set_tests_properties(agc_driver_frame_replay PROPERTIES ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        endif()
         add_test(NAME agc_driver_frame_replay_concurrent COMMAND agc_driver_frame_replay_tests $<TARGET_FILE:agc_frame_replay> concurrent)
         set_tests_properties(agc_driver_frame_replay_concurrent PROPERTIES
                 ENVIRONMENT "ANYPS5_NO_SHADER_CACHE=1;APS5_FRAME_CAPTURE=${CMAKE_CURRENT_BINARY_DIR}/frame-replay-concurrent-capture;APS5_FRAME_CAPTURE_AT_FLIP=1;APS5_FRAME_CAPTURE_FRAMES=8"
                 TIMEOUT 120)
-        set_tests_properties(agc_driver_frame_replay_concurrent PROPERTIES ENVIRONMENT_MODIFICATION
-                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        if(WIN32)
+            set_tests_properties(agc_driver_frame_replay_concurrent PROPERTIES ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+        endif()
     endif()
 endif()
 
