@@ -858,10 +858,15 @@ void testAcquireMem() {
     const std::array<std::uint32_t, 8> compute{0xc0065800u, 0x80000000u, 2, 0, 0x12345678u, 0, 2, 0x55u};
     check(std::equal(compute.begin(), compute.end(), asynchronous.words.begin()), "the asynchronous compute acquire did not select engine 1 with no CB/DB operation");
     Storage rejected;
+    rejected.words.fill(0xa5a5a5a5u);
+    const auto rejectedWords = rejected.words;
+    const auto* rejectedCursor = rejected.buffer.cursor_up;
     expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 2, 0, 0, base, 0x100, 0); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 0, 0, 0x80000u, base, 0x100, 0); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 0, 0, 0, base, 0x100, 40u * 0x10000u); });
-    check(rejected.words[0] == 0, "a rejected acquire wrote a packet");
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     check(sceAgcDcbAcquireMemGetSize() == 32 && sceAgcAcbAcquireMemGetSize() == 32, "acquire packet size");
 }
 
