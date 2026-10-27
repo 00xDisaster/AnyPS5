@@ -1,6 +1,7 @@
 #include "prx/libSceAgc/include/Agc.hpp"
 #include "prx/libSceAgcDriver/Resource/include/Registration.hpp"
 #include "prx/libSceAgc/Patch/include/WaitRegMem.hpp"
+#include "prx/libSceAgc/Patch/include/IndirectRegisters.hpp"
 #include "prx/libSceAgc/Patch/include/Nop.hpp"
 #include "prx/libSceAgc/Misc/include/Suspend.hpp"
 #include "prx/libSceAgc/Misc/include/RegisterDefaults.hpp"
@@ -507,6 +508,23 @@ void testRegisters() {
     check(storage.words == before, "invalid indirect patch modified memory");
 }
 
+void testIndirectRegisterPatches() {
+    using AddRegisters = int (APS5_VABI *)(std::uint32_t*, std::uint32_t);
+    const std::array<ShaderRegister, 2> registers{{{0x10, 7}, {0x11, 8}}};
+    const std::array<std::pair<std::uint32_t, AddRegisters>, 3> kinds{{{0x9fu, sceAgcSetCxRegIndirectPatchAddRegisters}, {0x63u, sceAgcSetShRegIndirectPatchAddRegisters}, {0x64u, sceAgcSetUcRegIndirectPatchAddRegisters}}};
+    for (std::size_t i = 0; i < kinds.size(); ++i) {
+        Storage storage;
+        auto* packet = Agc::Command::WriteIndirectRegisters(&storage.buffer, kinds[i].first, registers.data(), 2, __func__);
+        check(kinds[i].second(packet, 3) == 0 && packet[4] == 5, "indirect register patch did not add to the count");
+        check(kinds[i].second(packet, 0x3fffu - 5u) == 0 && packet[4] == 0x3fffu, "indirect register patch did not reach the largest count");
+        const auto before = storage.words;
+        expectFailure([&] { kinds[i].second(packet, 1); });
+        check(storage.words == before, "an overflowing indirect register patch modified the packet");
+        expectFailure([&] { kinds[(i + 1) % kinds.size()].second(packet, 1); });
+        check(storage.words == before, "an indirect register patch of another packet kind modified the packet");
+    }
+}
+
 void testRegisterRange() {
     Storage storage;
     storage.words.fill(0xdeadbeefu);
@@ -866,6 +884,7 @@ int main(int argc, char** argv) {
         testContextState();
         testFlip();
         testRegisters();
+        testIndirectRegisterPatches();
         testRegisterRange();
         testPacketPayloadAddress();
         testMemory();
