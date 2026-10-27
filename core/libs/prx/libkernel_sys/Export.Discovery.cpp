@@ -1361,16 +1361,6 @@ int APS5_VABI sceKernelIsExperimentalBeta(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelIsGenuineCEX(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelIsGenuineDevKit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelIsGenuineKratosCex(void) {
     return 0;
 }
@@ -1379,17 +1369,7 @@ int APS5_VABI sceKernelIsGenuineN(void) {
     return 1;
 }
 
-int APS5_VABI sceKernelIsGenuineTestKit(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelIsInSandbox(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelIsKratos(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
@@ -1419,17 +1399,7 @@ int APS5_VABI sceKernelIsNeoMode(void) {
     return 0;
 }
 
-int APS5_VABI sceKernelIsProspero(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI sceKernelIsPs4Process(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI sceKernelIsTestKit(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
