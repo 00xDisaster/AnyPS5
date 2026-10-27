@@ -2213,6 +2213,10 @@ set(ANYPS5_AGC_EXECUTION_TESTS "" CACHE STRING "tests/execution sources to build
 add_executable(agc_driver_registration_prepare_budget_tests tests/RegistrationPrepareBudget.cpp)
 target_include_directories(agc_driver_registration_prepare_budget_tests PRIVATE ${LIBS_INCLUDE_DIR})
 set_target_properties(agc_driver_registration_prepare_budget_tests PROPERTIES CXX_EXTENSIONS OFF)
+if(MINGW)
+    target_compile_options(agc_driver_registration_prepare_budget_tests PRIVATE -fasynchronous-unwind-tables)
+    target_link_options(agc_driver_registration_prepare_budget_tests PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
 
 file(GLOB agcExecutionTestSources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/execution/*.cpp)
 set(agcExecutionTests)
