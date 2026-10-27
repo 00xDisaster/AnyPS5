@@ -944,6 +944,8 @@ int main(int argc, char** argv) {
     RtcDateTime sentinel{0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaaaaaau};
     RtcDateTime ranged = sentinel;
     Require(sceRtcSetTime_t(&ranged, -1) == invalidValue && Equal(ranged, sentinel));
+    Require(sceRtcSetTime_t(nullptr, -1) == invalidValue && sceRtcSetTime_t(nullptr, std::numeric_limits<std::int64_t>::min()) == invalidValue);
+    Require(sceRtcSetTime_t(nullptr, 0) == static_cast<int>(0x80B50002) && sceRtcSetTime_t(nullptr, 1) == static_cast<int>(0x80B50002));
     Require(sceRtcSetTime_t(&ranged, std::numeric_limits<std::int64_t>::min()) == invalidValue && Equal(ranged, sentinel));
     Require(sceRtcSetTime_t(&ranged, 4294967296ll) == 0 && Equal(ranged, RtcDateTime{2106, 2, 7, 6, 28, 16, 0}));
     Require(sceRtcSetTime_t(&ranged, 253402300800ll) == 0 && Equal(ranged, RtcDateTime{10000, 1, 1, 0, 0, 0, 0}));
