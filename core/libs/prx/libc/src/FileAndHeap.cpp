@@ -536,6 +536,7 @@ size_t APS5_VABI fwrite_nid_postfix(const void* buffer, size_t size, size_t coun
     if (count > std::numeric_limits<std::size_t>::max() / size) throw std::overflow_error("fwrite: buffer size overflow");
     const auto bytes = size * count;
     if (bytes > std::numeric_limits<std::uintptr_t>::max() - reinterpret_cast<std::uintptr_t>(buffer)) throw std::overflow_error("fwrite: buffer address overflow");
+    if (!stream->SwitchToWriting()) return 0;
     GuestArena::GuestArenaPrepareHostRead_nid_no_patch(buffer, bytes);
     const auto result = std::fwrite(buffer, size, count, handle);
     stream->SyncStatus();
@@ -601,7 +602,9 @@ void APS5_VABI rewind_nid_postfix(FileStream* stream) {
 int APS5_VABI fputs_nid_postfix(const char* str, FileStream* stream) {
     if (!str) throw std::runtime_error("fputs: null string");
     if (stream && !stream->IsOpen()) { errno = 9; return -1; }
-    const int result = std::fputs(str, GetNativeStream(stream));
+    auto* native = GetNativeStream(stream);
+    if (*str != '\0' && !stream->SwitchToWriting()) return -1;
+    const int result = std::fputs(str, native);
     stream->SyncStatus();
     return result;
 }
