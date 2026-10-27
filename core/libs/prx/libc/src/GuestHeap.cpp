@@ -265,8 +265,8 @@ struct Block {
 };
 
 std::unordered_map<const void*, Block>& blocks() {
-    static std::unordered_map<const void*, Block> value;
-    return value;
+    static auto* value = new std::unordered_map<const void*, Block>;
+    return *value;
 }
 
 Block validatedBlock(const void* pointer, std::size_t bytes) {
