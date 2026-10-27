@@ -566,6 +566,11 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_optional_plt.py $<TARGET_FILE:relinker>)
         add_test(NAME optional_rela COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_optional_rela.py $<TARGET_FILE:relinker>)
+        add_test(NAME relr_conversion COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_relr_relocations.py $<TARGET_FILE:relinker>)
+        add_test(NAME guest_relr_conversion COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_relr_relocations.py $<TARGET_FILE:relinker> guest)
+        set_tests_properties(relr_conversion guest_relr_conversion PROPERTIES TIMEOUT 20)
         add_test(NAME empty_tls COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_empty_tls.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_tls_zero_fill COMMAND ${Python3_EXECUTABLE}
@@ -812,11 +817,6 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME elf_header COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_elf_header.py $<TARGET_FILE:relinker>)
-        add_test(NAME relr_conversion COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_relr_relocations.py $<TARGET_FILE:relinker>)
-        add_test(NAME guest_relr_conversion COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_relr_relocations.py $<TARGET_FILE:relinker> guest)
-        set_tests_properties(relr_conversion guest_relr_conversion PROPERTIES TIMEOUT 20)
         add_test(NAME weak_imports COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_weak_imports.py $<TARGET_FILE:relinker>)
         add_test(NAME windows_guest_weak_imports COMMAND ${Python3_EXECUTABLE}
