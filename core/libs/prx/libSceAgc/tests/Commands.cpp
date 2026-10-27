@@ -12,6 +12,8 @@
 #include "prx/libSceAgc/DcbState/include/Display.hpp"
 #include "prx/libSceAgc/DcbState/include/ContextState.hpp"
 #include "prx/libSceAgc/DcbFlow/include/Sync.hpp"
+#include "prx/libSceAgc/DcbFlow/include/Memory.hpp"
+#include "prx/libSceAgc/Acb/include/Memory.hpp"
 #include "prx/libSceAgc/DcbFlow/include/Control.hpp"
 #include "prx/libSceAgc/DcbDraw/include/Instancing.hpp"
 #include "prx/libSceAgc/DcbDraw/include/IndexBuffer.hpp"
@@ -839,6 +841,30 @@ void testEventWrite() {
     check(cacheFlushWithAddress.words[0] == 0xc0004600u && cacheFlushWithAddress.words[1] == 0x16u, "incorrect event 0x16 with address packet");
 }
 
+void testAcquireMem() {
+    Storage storage;
+    const auto* base = reinterpret_cast<const volatile void*>(0x1234567890ull);
+    const auto* packet = sceAgcDcbAcquireMem(&storage.buffer, 0, 3, 0x1234u, base, 0x1000, 400);
+    const std::array<std::uint32_t, 8> expected{0xc0065800u, 3, 0x11, 0, 0x12345678u, 0, 10, 0x1234u};
+    check(packet == storage.words.data() && std::equal(expected.begin(), expected.end(), storage.words.begin()), "acquire packet does not round its range outward to 256 bytes");
+    Storage whole;
+    sceAgcDcbAcquireMem(&whole.buffer, 0, 0, 0, base, 0xffffffffffffffffull, 0);
+    check(whole.words[0] == 0xc0065800u && whole.words[2] == 0 && whole.words[4] == 0 && whole.words[6] == 0, "an unbounded acquire did not cover the whole address space");
+    Storage large;
+    sceAgcDcbAcquireMem(&large.buffer, 0, 0, 0, base, (1ull << 40u) + 1u, 0);
+    check(large.words[2] == 0 && large.words[4] == 0, "an acquire over 1 TiB did not cover the whole address space");
+    Storage asynchronous;
+    sceAgcAcbAcquireMem(&asynchronous.buffer, 0x55u, base, 0x100, 80);
+    const std::array<std::uint32_t, 8> compute{0xc0065800u, 0x80000000u, 2, 0, 0x12345678u, 0, 2, 0x55u};
+    check(std::equal(compute.begin(), compute.end(), asynchronous.words.begin()), "the asynchronous compute acquire did not select engine 1 with no CB/DB operation");
+    Storage rejected;
+    expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 2, 0, 0, base, 0x100, 0); });
+    expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 0, 0, 0x80000u, base, 0x100, 0); });
+    expectFailure([&] { sceAgcDcbAcquireMem(&rejected.buffer, 0, 0, 0, base, 0x100, 40u * 0x10000u); });
+    check(rejected.words[0] == 0, "a rejected acquire wrote a packet");
+    check(sceAgcDcbAcquireMemGetSize() == 32 && sceAgcAcbAcquireMemGetSize() == 32, "acquire packet size");
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -852,6 +878,7 @@ int main(int argc, char** argv) {
         }
         testPackets();
         testEventWrite();
+        testAcquireMem();
         testNop();
         testClearState();
         testIndexedIndirectDraws();
