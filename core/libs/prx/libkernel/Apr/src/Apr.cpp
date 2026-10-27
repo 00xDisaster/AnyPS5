@@ -12,6 +12,7 @@
 #include "prx/libc/include/PreciseWait.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libkernel/Apr/include/AprCommandBuffer.hpp"
+#include "prx/libkernel/Apr/include/AmmPool.hpp"
 #include "prx/libkernel/DirectMemory/DirectMemory.hpp"
 #include "prx/libkernel/File/include/NativeStat.hpp"
 #include "prx/libkernel/Equeue/Equeue.hpp"
@@ -281,19 +282,13 @@ constexpr std::uint64_t AmmRangeAlignment = 64ull << 30;
 constexpr int GuestMapFixed = 0x10;
 constexpr int GuestMapNoOverwrite = 0x80;
 
-struct AmmPage {
-    std::uint64_t physical;
-    std::int32_t type;
-    std::int32_t protection;
-    bool pooled;
-};
+static_assert(AmmPool::PageBytes == PS5_PAGE_SIZE);
 
-struct AmmState {
+using AmmPage = AmmPool::Page;
+
+struct AmmState : AmmPool::Records {
     std::mutex lock;
     std::uintptr_t base = 0;
-    std::map<std::uint64_t, std::uint64_t> pool;
-    std::map<std::uintptr_t, AmmPage> pages;
-    std::map<std::uint64_t, std::uint32_t> pooledUses;
     std::set<std::uintptr_t> prt;
 };
 
@@ -331,31 +326,11 @@ int _ammHostProtection(std::int32_t protection) {
 }
 
 void _returnPoolPages(AmmState& state, std::uint64_t offset, std::uint64_t bytes) {
-    auto next = state.pool.lower_bound(offset);
-    if (next != state.pool.end() && next->first == offset + bytes) {
-        bytes += next->second;
-        next = state.pool.erase(next);
-    }
-    if (next != state.pool.begin()) {
-        const auto previous = std::prev(next);
-        if (previous->first + previous->second == offset) {
-            previous->second += bytes;
-            return;
-        }
-    }
-    state.pool.emplace(offset, bytes);
+    AmmPool::ReturnPages(state, offset, bytes);
 }
 
 bool _tryTakePoolPages(AmmState& state, std::uint64_t bytes, std::uint64_t& offset) {
-    for (auto it = state.pool.begin(); it != state.pool.end(); ++it) {
-        if (it->second < bytes) continue;
-        offset = it->first;
-        const auto remaining = it->second - bytes;
-        state.pool.erase(it);
-        if (remaining != 0) state.pool.emplace(offset + bytes, remaining);
-        return true;
-    }
-    return false;
+    return AmmPool::TryTakeRun(state, bytes, offset);
 }
 
 std::uint64_t _takePoolPages(AmmState& state, std::uint64_t bytes) {
@@ -364,27 +339,8 @@ std::uint64_t _takePoolPages(AmmState& state, std::uint64_t bytes) {
     return offset;
 }
 
-std::vector<AmmPage> _takeScatteredPages(AmmState& state, std::uint64_t bytes, std::int32_t type, std::int32_t protection) {
-    std::uint64_t free = 0;
-    for (const auto& [offset, size] : state.pool) free += size;
-    if (free < bytes) throw std::runtime_error("AMM: no free run of " + std::to_string(bytes) + " bytes in the direct memory given to the mapper");
-    std::vector<AmmPage> pages;
-    pages.reserve(bytes / PS5_PAGE_SIZE);
-    while (pages.size() * PS5_PAGE_SIZE < bytes) {
-        auto it = state.pool.begin();
-        const auto take = std::min(it->second, bytes - pages.size() * PS5_PAGE_SIZE);
-        const auto offset = it->first;
-        const auto remaining = it->second - take;
-        state.pool.erase(it);
-        if (remaining != 0) state.pool.emplace(offset + take, remaining);
-        for (std::uint64_t page = 0; page < take; page += PS5_PAGE_SIZE) pages.push_back({offset + page, type, protection, true});
-    }
-    return pages;
-}
-
 void _addPage(AmmState& state, std::uint64_t address, const AmmPage& page) {
-    state.pages[address] = page;
-    if (page.pooled) ++state.pooledUses[page.physical];
+    AmmPool::AddPage(state, address, page);
 }
 
 void _releasePage(AmmState& state, const AmmPage& page) {
@@ -537,20 +493,9 @@ void _ammMap(const Apr::AmmMapCommand& command, bool direct) {
     _clearPrt(state, command.address, command.size);
     std::uint64_t physical = direct ? command.directOffset : 0;
     if (!direct && !_tryTakePoolPages(state, command.size, physical)) {
-        const auto pages = _takeScatteredPages(state, command.size, command.type, command.protection);
-        std::size_t mapped = 0;
         try {
-            for (std::size_t first = 0; first < pages.size();) {
-                std::size_t last = first + 1;
-                while (last < pages.size() && pages[last].physical == pages[last - 1].physical + PS5_PAGE_SIZE) ++last;
-                _mapRun(command.address + first * PS5_PAGE_SIZE, pages[first].physical, (last - first) * PS5_PAGE_SIZE, command.protection);
-                for (std::size_t index = first; index < last; ++index) _addPage(state, command.address + index * PS5_PAGE_SIZE, pages[index]);
-                mapped = last;
-                first = last;
-            }
+            AmmPool::MapScattered(state, command.address, command.size, command.type, command.protection, [&](std::uint64_t address, std::uint64_t physicalRun, std::uint64_t size) { _mapRun(address, physicalRun, size, command.protection); });
         } catch (...) {
-            _forgetPages(state, command.address, command.size);
-            for (std::size_t index = mapped; index < pages.size(); ++index) _returnPoolPages(state, pages[index].physical, PS5_PAGE_SIZE);
             _reserve(command.address, command.size);
             throw;
         }
