@@ -136,13 +136,14 @@ PFN_vkGetDeviceProcAddr TrySetUp(VkDevice device, PFN_vkGetDeviceProcAddr resolv
 void ALaterDeviceUsesItsOwnResolver() {
     events.clear();
     const auto first = Handle<VkDevice>(0x103);
-    DeferDestructionToIdle(first, mockProc);
+    const auto firstProc = DeferDestructionToIdle(first, mockProc);
     DestroyDeferredObjects(first);
     const auto second = Handle<VkDevice>(0x104);
     const auto proc = TrySetUp(second, reloadedProc);
     Expect(proc != nullptr, "a device set up after the last one went could not use a resolver from a reloaded Vulkan loader");
     if (proc == nullptr) return;
     Expect(ContextFor(second, proc).Function<PFN_vkQueueWaitIdle>("vkQueueWaitIdle") == &reloadedQueueWaitIdle, "a later device did not pass through to its own resolver");
+    Expect(reinterpret_cast<PFN_vkQueueWaitIdle>(firstProc(first, "vkQueueWaitIdle")) == &mockQueueWaitIdle, "an earlier device's wrapper passed through to a later device's resolver");
     Expect(TrySetUp(Handle<VkDevice>(0x105), mockProc) == nullptr, "two live devices with different resolvers were accepted");
     DestroyDeferredObjects(second);
 }
