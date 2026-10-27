@@ -733,6 +733,28 @@ static void CheckSinhLargeArguments() {
     }
 }
 
+static void CheckSinhOverflowErrno() {
+    constexpr int sentinel = 1234;
+    for (const std::uint64_t sign : {std::uint64_t{0}, std::uint64_t{1} << 63}) {
+        for (const std::uint64_t input : {0x408633cf00000000ull, 0x7fefffffffffffffull}) {
+            errno = sentinel;
+            const std::uint64_t result = std::bit_cast<std::uint64_t>(sinh_nid_postfix(std::bit_cast<double>(input | sign)));
+            if (result != (0x7ff0000000000000ull | sign) || errno != ERANGE) {
+                std::fprintf(stderr, "Guest sinh overflow failed for %016llx: got %016llx, errno %d\n", static_cast<unsigned long long>(input | sign), static_cast<unsigned long long>(result), errno);
+                std::abort();
+            }
+        }
+        for (const std::uint64_t input : {0x408633ce8fb9e87dull, 0x7ff0000000000000ull, 0x3ff0000000000000ull, 0ull}) {
+            errno = sentinel;
+            sinh_nid_postfix(std::bit_cast<double>(input | sign));
+            if (errno != sentinel) {
+                std::fprintf(stderr, "Guest sinh changed errno for %016llx: errno %d\n", static_cast<unsigned long long>(input | sign), errno);
+                std::abort();
+            }
+        }
+    }
+}
+
 static void CheckRoundingNaNConsoleBits() {
     constexpr std::uint64_t cases[][2] = {
         {0x7ff0000000000001ull, 0x7ff8000000000001ull}, {0xfff4000000000123ull, 0xfffc000000000123ull}, {0x7ff8000000000456ull, 0x7ff8000000000456ull},
@@ -2000,6 +2022,7 @@ int main() {
     CheckTanhConsoleBits();
     CheckSinhMsunBits();
     CheckSinhLargeArguments();
+    CheckSinhOverflowErrno();
     CheckRoundingNaNConsoleBits();
     CheckNextafterEnvironment(nextafterf_nid_postfix, 0x80000000u, 0x3f800000u, 0x00800000u, 0x7f7fffffu, 0x7f800000u);
     CheckNextafterEnvironment(nextafter_nid_postfix, std::uint64_t{0x8000000000000000ull}, std::uint64_t{0x3ff0000000000000ull}, std::uint64_t{0x0010000000000000ull}, std::uint64_t{0x7fefffffffffffffull}, std::uint64_t{0x7ff0000000000000ull});
