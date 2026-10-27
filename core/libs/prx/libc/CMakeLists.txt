@@ -126,6 +126,17 @@ target_include_directories(libc PRIVATE
 
 target_link_libraries(libc PRIVATE zarchive)
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(libc PRIVATE -ffp-contract=off)
+    if(BUILD_TESTING AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND NOT MSVC)
+        add_test(NAME libc_floating_point_contraction
+                COMMAND ${CMAKE_COMMAND} -DCOMPILER=${CMAKE_CXX_COMPILER}
+                    "-DOPTIONS=$<JOIN:$<TARGET_PROPERTY:libc,COMPILE_OPTIONS>, >"
+                    -DWORK=${CMAKE_CURRENT_BINARY_DIR}/libc_floating_point_contraction
+                    -P ${LIBS_INCLUDE_DIR}/tests/LibcFloatingPointContraction.cmake)
+    endif()
+endif()
+
 if(BUILD_TESTING)
     add_test_executable(guest_update_env_tests ${LIBS_INCLUDE_DIR}/tests/GuestUpdateEnv.cpp)
     target_include_directories(guest_update_env_tests PRIVATE ${LIBS_INCLUDE_DIR})
