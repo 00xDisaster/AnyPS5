@@ -142,13 +142,15 @@ int main(int argc, char** argv) {
         const auto draw = [&](const Surface& surface, const DrawOptions& options) { return Draw(*device, shaders, surface, options, PlaneExtent, Colors); };
         const DrawOptions writeHalf{.depthWrite = true, .depthCompare = VK_COMPARE_OP_ALWAYS};
 
-        const bool partialWatch = argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-partial-unwatch";
+        const bool pageWatch = argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-page-unwatch";
+        const bool partialWatch = pageWatch || (argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-partial-unwatch");
         if (partialWatch || (argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-memo")) {
             if (!AgcDriver::GuestMemory::WriteWatched() || !AgcDriver::GuestMemory::Watched(base, PlaneBytes)) return VulkanTestSkipped;
             if (partialWatch) {
-                AgcDriver::GuestMemory::Unwatch(base + 5u * Block, Block);
+                AgcDriver::GuestMemory::Unwatch(pageWatch ? base + 4u * Block + 8192u : base + 5u * Block, pageWatch ? 4096u : Block);
                 Require(!AgcDriver::GuestMemory::Watched(base, PlaneBytes), "the regression plane remains fully watched");
-                Require(AgcDriver::GuestMemory::Watched(base + 4u * Block, Block), "the descriptor unit lost write watching");
+                Require(AgcDriver::GuestMemory::Watched(base + 4u * Block + 4096u, pageWatch ? 4096u : Block - 4096u), "the descriptor page lost write watching");
+                Require(!pageWatch || !AgcDriver::GuestMemory::Watched(base + 4u * Block, Block), "the descriptor unit remains fully watched");
             }
             Fill(plane, 1.0f);
             Require(draw(depth, writeHalf) == PlaneTexels, "the memo regression depth draw did not cover the plane");
