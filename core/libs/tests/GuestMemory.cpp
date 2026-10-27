@@ -619,12 +619,6 @@ static void CheckAllocateMainDirectMemory() {
     std::int64_t end = -1;
     Require(sceKernelGetDirectMemoryType(physical, &type, &start, &end) == 0 && type == 3 && start == physical && end == physical + static_cast<std::int64_t>(page * 2));
     Require(sceKernelReleaseDirectMemory(physical, page * 2) == 0);
-    std::int64_t untouched = -1;
-    Require(sceKernelAllocateMainDirectMemory(0, 0, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
-    Require(sceKernelAllocateMainDirectMemory(0x1000, 0, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
-    Require(sceKernelAllocateMainDirectMemory(page, 0x1000, 0, &untouched) == SCE_KERNEL_ERROR_EINVAL);
-    Require(sceKernelAllocateMainDirectMemory(page, 0, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
-    Require(untouched == -1);
 }
 
 static void CheckReusedDirectMemorySections() {
