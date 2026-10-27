@@ -20,6 +20,7 @@
 
 #include "prx/libc/include/WindowsFormatting.hpp"
 #include "prx/libc/include/ScanWideField.hpp"
+#include "prx/libc/include/ScanQuadLength.hpp"
 
 #ifdef _WIN32
 #include "prx/libc/include/WindowsScanning.hpp"
@@ -100,6 +101,12 @@ std::string HostLength(const std::string& length, char conversion) {
 }
 
 int HostVsscanf(const char* input, const char* format, std::va_list args) {
+#ifndef _WIN32
+    if (const char* quad = LibcDetail::FindQuadScanDirective(format)) {
+        const std::string head(format, quad);
+        return HostVsscanf(input, head.c_str(), args);
+    }
+#endif
 #if defined(__GLIBC__)
     return __isoc99_vsscanf(input, format, args);
 #else
@@ -117,6 +124,10 @@ int HostSscanf(const char* input, const char* format, ...) {
 
 #ifndef _WIN32
 int HostVfscanf(std::FILE* stream, const char* format, std::va_list args) {
+    if (const char* quad = LibcDetail::FindQuadScanDirective(format)) {
+        const std::string head(format, quad);
+        return HostVfscanf(stream, head.c_str(), args);
+    }
 #if defined(__GLIBC__)
     return __isoc99_vfscanf(stream, format, args);
 #else
