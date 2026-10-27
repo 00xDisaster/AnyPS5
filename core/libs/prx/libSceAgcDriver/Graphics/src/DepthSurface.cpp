@@ -897,11 +897,22 @@ public:
     std::vector<bool> WrittenUnits(const GuestTextureResource& resource, std::uint64_t& generation) {
         const auto bytes = static_cast<std::size_t>(DescribeSurface(resource).guestBytes);
         SizeUnits(bytes);
-        GuestMemory::CollectWrites(resource.baseAddress, bytes);
+        const auto collected = GuestMemory::CollectWrites(resource.baseAddress, bytes);
         generation = GuestMemory::TrackerGeneration();
         std::vector<bool> changed(unitGeneration.size(), false);
         if (unitGeneration.size() == 1u) {
             changed[0] = GuestMemory::WrittenSince(resource.baseAddress, bytes, unitGeneration[0]);
+            return changed;
+        }
+        if (collected == 0u) {
+            for (std::size_t unit = 0; unit < unitGeneration.size(); ++unit) {
+                if (unitGeneration[unit] == 0u) continue;
+                const auto offset = unit * unitBytes;
+                const auto address = resource.baseAddress + offset;
+                const auto length = static_cast<std::size_t>(std::min<std::uint64_t>(unitBytes, bytes - offset));
+                if (GuestMemory::CollectWritesUncached(address, length) != 0u) changed[unit] = GuestMemory::WrittenSince(address, length, unitGeneration[unit]);
+            }
+            generation = GuestMemory::TrackerGeneration();
             return changed;
         }
         const auto oldest = *std::min_element(unitGeneration.begin(), unitGeneration.end());
