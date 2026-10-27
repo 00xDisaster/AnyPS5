@@ -28,7 +28,7 @@ constexpr std::uint32_t LaneBytes = 16;
 constexpr std::size_t OutputBytes = 128;
 constexpr std::size_t FirstByte = 33;
 constexpr std::uint8_t Untouched = 0xa5;
-constexpr std::size_t MaxRuntimeWords = 24576;
+constexpr std::size_t MaxRuntimeWriteCalls = 3;
 
 class GuestBlock {
 public:
@@ -76,16 +76,36 @@ std::array<std::uint32_t, 4> Descriptor(const void* pointer, std::uint32_t bytes
     return {static_cast<std::uint32_t>(address), static_cast<std::uint32_t>((address >> 32u) & 0xffffu), bytes, 0x31016facu};
 }
 
-bool HasRuntimeStore(const ShaderRecompiler::RecompileResult& shader, std::uint32_t components) {
-    const auto expected = "store_formatted_gpu_buffer_x" + std::to_string(components);
+std::uint32_t FindFunction(const ShaderRecompiler::RecompileResult& shader, std::string_view expected) {
     const auto words = shader.spirv.Words();
     for (std::size_t offset = 5; offset < words.size();) {
         const auto count = words[offset] >> spv::WordCountShift;
         Require(count != 0u && count <= words.size() - offset, "runtime formatted store: malformed SPIR-V");
-        if ((words[offset] & spv::OpCodeMask) == spv::OpName && count >= 3u && std::string_view(reinterpret_cast<const char*>(&words[offset + 2u])) == expected) return true;
+        if ((words[offset] & spv::OpCodeMask) == spv::OpName && count >= 3u && std::string_view(reinterpret_cast<const char*>(&words[offset + 2u])) == expected) return words[offset + 1u];
         offset += count;
     }
-    return false;
+    return 0u;
+}
+
+std::size_t RuntimeWriteCalls(const ShaderRecompiler::RecompileResult& shader, std::uint32_t components) {
+    const auto runtime = FindFunction(shader, "store_formatted_gpu_buffer_x" + std::to_string(components));
+    const auto bytes = FindFunction(shader, "write_bda_bytes");
+    const auto coherentBytes = FindFunction(shader, "write_bda_bytes_coherent");
+    Require(runtime != 0u && (bytes != 0u || coherentBytes != 0u), "runtime formatted store: missing store or byte-write helper");
+    const auto words = shader.spirv.Words();
+    bool inside = false;
+    std::size_t calls = 0;
+    for (std::size_t offset = 5; offset < words.size();) {
+        const auto count = words[offset] >> spv::WordCountShift;
+        Require(count != 0u && count <= words.size() - offset, "runtime formatted store: malformed SPIR-V");
+        const auto opcode = words[offset] & spv::OpCodeMask;
+        if (opcode == spv::OpFunction && count >= 3u) inside = words[offset + 2u] == runtime;
+        if (inside && opcode == spv::OpFunctionCall && count >= 4u &&
+            ((bytes != 0u && words[offset + 3u] == bytes) || (coherentBytes != 0u && words[offset + 3u] == coherentBytes))) ++calls;
+        if (opcode == spv::OpFunctionEnd) inside = false;
+        offset += count;
+    }
+    return calls;
 }
 
 ShaderRecompiler::RecompileResult Compile(AgcDriver::VulkanDevice& device, GuestBlock& guest, std::uint32_t components, bool d16, std::uint32_t format = 0u) {
@@ -112,7 +132,7 @@ ShaderRecompiler::RecompileResult Compile(AgcDriver::VulkanDevice& device, Guest
     };
     request.useCache = false;
     auto result = ShaderRecompiler::Recompile(request);
-    Require(HasRuntimeStore(result, components) == (format == 0u), "runtime formatted store: the runtime and constant-format shaders did not take distinct store paths");
+    Require((FindFunction(result, "store_formatted_gpu_buffer_x" + std::to_string(components)) != 0u) == (format == 0u), "runtime formatted store: the runtime and constant-format shaders did not take distinct store paths");
     return result;
 }
 
@@ -122,9 +142,10 @@ void Run(AgcDriver::VulkanDevice& device, GuestBlock& guest, std::uint32_t compo
         : std::array<std::uint32_t, 8>{0x3fc00000u, 0xc0000000u, 0x3f000000u, 0x7fc12345u, 0xbf000000u, 0x3f800000u, 0xff800000u, 0x00000001u};
     std::copy(input.begin(), input.end(), guest.Input());
     const auto runtime = Compile(device, guest, components, d16);
-    std::printf("runtime formatted store x%u%s: %zu SPIR-V words\n", components, d16 ? " d16" : "", runtime.spirv.Words().size());
+    const auto writeCalls = RuntimeWriteCalls(runtime, components);
+    std::printf("runtime formatted store x%u%s: %zu SPIR-V words, %zu byte-write call sites\n", components, d16 ? " d16" : "", runtime.spirv.Words().size(), writeCalls);
     std::fflush(stdout);
-    Require(runtime.spirv.Words().size() <= MaxRuntimeWords, "runtime formatted store: runtime shader exceeds " + std::to_string(MaxRuntimeWords) + " SPIR-V words");
+    Require(writeCalls != 0u && writeCalls <= MaxRuntimeWriteCalls, "runtime formatted store: expected one shared byte-write call site per 8/16/32-bit width");
     for (std::size_t index = (components - 1u) % 2u; index < Formats.size(); index += 2u) {
         const auto format = Formats[index];
         const auto reference = Compile(device, guest, components, d16, format.value);
