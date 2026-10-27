@@ -189,8 +189,6 @@ int APS5_VABI sceKernelAioPollRequest(int32_t id, int32_t* state);
 int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state, uint32_t mode, uint32_t* usec);
 int APS5_VABI sceKernelAioWaitRequest(int32_t id, int32_t* state, uint32_t* usec);
 int APS5_VABI sceKernelAioPollRequests(int32_t* id, int32_t num, int32_t* state);
-void AioAdvanceIdentityForTest_nid_no_patch(std::int64_t next);
-std::int32_t AioProcessingWaitersForTest_nid_no_patch();
 int APS5_VABI sceKernelAprResolveFilepathsToIds(const char** paths, uint32_t count, uint32_t* ids, uint32_t* errorIndex);
 int APS5_VABI sceKernelAprResolveFilepathsToIdsAndFileSizes(const char** paths, uint32_t count, uint32_t* ids, uint64_t* sizes, uint32_t* errorIndex);
 int APS5_VABI sceKernelAprResolveFilepathsWithPrefixToIdsAndFileSizes(const char* prefix, const char** paths, uint32_t count, uint32_t* ids, uint64_t* sizes, uint32_t* errorIndex);

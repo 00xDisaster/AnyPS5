@@ -1,6 +1,5 @@
 #include "prx/libkernel/include/Api.hpp"
 #include <array>
-#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cstddef>
@@ -17,6 +16,11 @@
 #include "prx/libkernel/File/include/File.hpp"
 #include "prx/libkernel/File/include/SharedMemory.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
+
+#ifdef ANYPS5_AIO_TESTING
+#include <atomic>
+#include "tests/AioTest.hpp"
+#endif
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -50,6 +54,8 @@ struct RequestState {
 };
 std::array<RequestState, AioMaxQueues - 1> g_requests{};
 std::int64_t g_nextId = 1;
+
+#ifdef ANYPS5_AIO_TESTING
 std::atomic<std::int32_t> g_processingWaiters{0};
 
 class ProcessingWaiter {
@@ -67,6 +73,7 @@ public:
 private:
     bool observed = false;
 };
+#endif
 
 RequestState* FindLocked(std::int32_t id) {
     if (id <= 0) return nullptr;
@@ -249,6 +256,7 @@ int ValidateIds(const std::int32_t* id, std::int32_t num, const void* out) {
 
 extern "C" {
 
+#ifdef ANYPS5_AIO_TESTING
 std::int32_t AioProcessingWaitersForTest_nid_no_patch() {
     return g_processingWaiters.load();
 }
@@ -259,6 +267,7 @@ void AioAdvanceIdentityForTest_nid_no_patch(std::int64_t next) {
         throw std::invalid_argument("AIO: invalid test identity advance");
     g_nextId = next;
 }
+#endif
 
 int APS5_VABI sceKernelAioDeleteRequest(int32_t id, int32_t* ret) {
     if (ret == nullptr) return SCE_KERNEL_ERROR_EFAULT;
@@ -350,7 +359,9 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
     if (error != 0) return error;
     if (mode != AioWaitAnd && mode != AioWaitOr) return SCE_KERNEL_ERROR_EINVAL;
     const auto start = std::chrono::steady_clock::now();
+#ifdef ANYPS5_AIO_TESTING
     ProcessingWaiter waiter;
+#endif
     for (;;) {
         bool allDone = true;
         bool anyCompleted = false;
@@ -366,7 +377,9 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
                 return 0;
             }
         }
+#ifdef ANYPS5_AIO_TESTING
         waiter.Observe();
+#endif
         if (usec != nullptr && *usec != 0) {
             const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
             if (elapsed > static_cast<std::int64_t>(*usec)) {
@@ -382,7 +395,9 @@ int APS5_VABI sceKernelAioWaitRequests(int32_t* id, int32_t num, int32_t* state,
 int APS5_VABI sceKernelAioWaitRequest(int32_t id, int32_t* state, uint32_t* usec) {
     if (state == nullptr) return SCE_KERNEL_ERROR_EFAULT;
     const auto start = std::chrono::steady_clock::now();
+#ifdef ANYPS5_AIO_TESTING
     ProcessingWaiter waiter;
+#endif
     for (;;) {
         std::int32_t current;
         {
@@ -393,7 +408,9 @@ int APS5_VABI sceKernelAioWaitRequest(int32_t id, int32_t* state, uint32_t* usec
             *state = current;
             return 0;
         }
+#ifdef ANYPS5_AIO_TESTING
         waiter.Observe();
+#endif
         if (usec != nullptr && *usec != 0) {
             const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
             if (elapsed > static_cast<std::int64_t>(*usec)) {
