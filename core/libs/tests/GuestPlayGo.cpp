@@ -150,8 +150,19 @@ static int CheckNoPlayGoFile(const char* root) {
     Require(scePlayGoGetLocus(handle, onlyDeclared, 2, loci) == 0 && loci[0] == 3 && loci[1] == 3);
     std::uint32_t chunkCount = 0;
     Require(scePlayGoGetChunkId(handle, nullptr, 0, &chunkCount) == 0 && chunkCount == 1);
+    PlayGoProgress progress{};
+    Require(scePlayGoGetProgress(handle + 1, &chunk, 1, &progress) == badHandle);
+    Require(scePlayGoGetProgress(handle, &chunk, 1, nullptr) == badPointer);
+    Require(scePlayGoGetProgress(handle, nullptr, 1, &progress) == badPointer);
+    Require(scePlayGoGetProgress(handle, &chunk, 0, &progress) == badSize);
+    Require(scePlayGoGetProgress(handle, &chunk, 1, &progress) == 0 && progress.progress_size == 1 && progress.total_size == 1);
+    Require(scePlayGoSetInstallSpeed(handle + 1, 2) == badHandle);
+    Require(scePlayGoSetInstallSpeed(handle, 2) == 0);
+    Require(scePlayGoPrefetchOptionalChunk(handle + 1, 0, nullptr) == badHandle);
+    Require(scePlayGoPrefetchOptionalChunk(handle, 0, nullptr) == 0);
     Require(scePlayGoClose(handle + 1) == badHandle);
     Require(scePlayGoClose(handle) == 0);
+    Require(scePlayGoTerminate() == 0);
     return 0;
 }
 
