@@ -468,11 +468,17 @@ void testFlowPackets() {
     sceAgcAcbJump(&compute.buffer, 1, target, 0x10);
     check(compute.words[0] == 0xc0023f00u && compute.words[3] == 0x1f300010u, "compute jumps did not chain");
     Storage rejected;
+    rejected.words.fill(0xa5a5a5a5u);
+    const auto rejectedWords = rejected.words;
+    const auto* rejectedCursor = rejected.buffer.cursor_up;
     expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 2, 0, target, 1); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 0, 4, target, 1); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcDcbJump(&rejected.buffer, 0, 0, target, 0x100000u); });
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     expectFailure([&] { sceAgcAcbJump(&rejected.buffer, 0, reinterpret_cast<const std::uint32_t*>(0x1002ull), 1); });
-    check(rejected.words[0] == 0, "a rejected jump wrote a packet");
+    check(rejected.words == rejectedWords && rejected.buffer.cursor_up == rejectedCursor, "a refused packet changed the command buffer");
     check(sceAgcDcbJumpGetSize() == 16 && sceAgcAcbJumpGetSize() == 16, "jump packet sizes");
     Storage stall;
     sceAgcDcbStallCommandBufferParser(&stall.buffer);
