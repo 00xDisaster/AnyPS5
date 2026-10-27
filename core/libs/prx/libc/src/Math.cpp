@@ -1057,6 +1057,7 @@ double APS5_VABI sinh_nid_postfix(double x) {
     }
     if (ix < 0x40862e42) return h * exp_nid_postfix(std::fabs(x));
     if (ix <= 0x408633ce) return h * 2.0 * SinhLdexpExpHalf(std::fabs(x));
+    errno = ERANGE;
     return x * shuge;
 }
 double APS5_VABI cosh_nid_postfix(double x) { return std::cosh(x); }
