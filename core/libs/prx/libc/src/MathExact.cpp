@@ -174,7 +174,7 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
     }
     if (x == 1.0L) {
         int multiplierExponent = 0;
-        const long double multiplierMantissa = std::frexpl(multiplier, &multiplierExponent);
+        const long double multiplierMantissa = std::frexp(multiplier, &multiplierExponent);
         x = 0xa.df85458a2bb4a9bp-2L * multiplierMantissa;
         return FinishExpScale(x, scale + multiplierExponent);
     }
@@ -196,7 +196,7 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
         x = ((even + odd) + 1.0L) / ((even - odd) + 1.0L);
     }
     int multiplierExponent = 0;
-    const long double multiplierMantissa = std::frexpl(multiplier, &multiplierExponent);
+    const long double multiplierMantissa = std::frexp(multiplier, &multiplierExponent);
     x *= multiplierMantissa;
     return FinishExpScale(x, n + scale + multiplierExponent);
 }
