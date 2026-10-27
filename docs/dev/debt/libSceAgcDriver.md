@@ -2,6 +2,7 @@
 
 ### Silent stubs
 
+- [sceAgcDriverInitResourceRegistration, sceAgcDriverQueryResourceRegistrationUserMemoryRequirements](../../../core/libs/prx/libSceAgcDriver/Resource/src/Lifecycle.cpp) (libSceAgcDriver) - the init call returns 0 without setting anything up. The query writes 16 KiB (0x4000) as the user memory registration needs and returns 0; I found no source for that size. Registration stays unavailable (see Resource registration), so the size is never used. Crimson Desert (PPSA25286), Call of Duty: Black Ops II (PPSA34502), Steins;Gate Re:Boot (PPSA36591) and Metal Gear Solid 4 (PPSA18194) reach both through one-instruction wrappers.
 - [sceAgcDriverRegisterDefaultOwner](../../../core/libs/prx/libSceAgcDriver/Unimplemented.cpp) (libSceAgcDriver) - takes one uint32 owner by value (OpenAGC `include/agcdriver.h`, SharpEmu `AgcExports.DriverResources.cs`) and returns 0 without recording it. PPSA21480 treats the code 0x8A6C9018 it returned before as fatal. Console behaviour is unverified: OpenAGC describes the function as a firmware 5.50 stub that returns 0x8A6C9018, SharpEmu returns 0. The one call in PPSA21480 (0x7f41f) is followed by a test of the sign of the result only; a negative result ends in a coredump user string write and `abort()` (0x131d0-0x13214).
 - [sceAgcDriverSetResourceRegistrationInfo](../../../core/libs/prx/libSceAgcDriver/Resource/src/Registration.cpp) (libSceAgcDriver) - returns 0 without storing the info, as the retail `libSceAgcDriver.sprx` body does; registration is unavailable, so nothing reads it back.
 
