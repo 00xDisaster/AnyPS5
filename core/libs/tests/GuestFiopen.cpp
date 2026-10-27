@@ -1,3 +1,4 @@
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
@@ -6,13 +7,6 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
-
-extern "C" {
-FileStream* APS5_VABI _ZSt7_FiopenPKcNSt5_IosbIiE9_OpenmodeEi_nid_postfix(const char*, int, int);
-FileStream* APS5_VABI fopen_nid_postfix(const char*, const char*);
-int APS5_VABI fclose_nid_postfix(FileStream*);
-std::int64_t APS5_VABI ftello_nid_postfix(FileStream*);
-}
 
 static void Check(bool value, int line) {
     if (!value) {
@@ -24,6 +18,8 @@ static void Check(bool value, int line) {
 
 constexpr int In = 0x01, Out = 0x02, Ate = 0x04, App = 0x08, Trunc = 0x10, Nocreate = 0x20, Noreplace = 0x40,
     Binary = 0x80;
+constexpr int GuestEinval = 22;
+constexpr int GuestEnoent = 2;
 
 static FileStream* Open(const char* name, int mode) {
     return _ZSt7_FiopenPKcNSt5_IosbIiE9_OpenmodeEi_nid_postfix(name, mode, 0x1b6);
@@ -35,6 +31,7 @@ static std::string Contents(const char* name) {
     std::string text;
     for (int c; (c = std::fgetc(stream->GetHandle())) != EOF;) text += static_cast<char>(c);
     fclose_nid_postfix(stream);
+
     return text;
 }
 
@@ -42,6 +39,7 @@ static void Write(FileStream* stream, const char* text) {
     Require(stream != nullptr);
     Require(std::fputs(text, stream->GetHandle()) >= 0);
     fclose_nid_postfix(stream);
+
 }
 
 static bool Exists(const char* name) {
@@ -66,13 +64,30 @@ int main() {
     Write(Open(file, Out), "abc");
     Require(Contents(file) == "abc");
 
+    FileStream* checkedStream = &_Stdout_nid_postfix;
+    Require(fopen_s_nid_postfix(&checkedStream, nullptr, "rb") == GuestEinval);
+    Require(checkedStream == nullptr);
+    checkedStream = &_Stderr_nid_postfix;
+    Require(fopen_s_nid_postfix(&checkedStream, file, nullptr) == GuestEinval);
+    Require(checkedStream == nullptr);
+    Require(fopen_s_nid_postfix(nullptr, file, "rb") == GuestEinval);
+    checkedStream = &_Stdout_nid_postfix;
+    Require(fopen_s_nid_postfix(&checkedStream, file, "rb") == 0);
+    Require(checkedStream != nullptr);
+    Require(fclose_nid_postfix(checkedStream) == 0);
+    checkedStream = &_Stdout_nid_postfix;
+    Require(fopen_s_nid_postfix(&checkedStream, missing, "rb") == GuestEnoent);
+    Require(checkedStream == nullptr);
+
     auto* stream = Open(file, In);
     Require(stream != nullptr && std::fgetc(stream->GetHandle()) == 'a');
     fclose_nid_postfix(stream);
+
     stream = Open(file, In);
     Require(stream != nullptr);
     std::fputc('x', stream->GetHandle());
     fclose_nid_postfix(stream);
+
     Require(Contents(file) == "abc");
 
     Write(Open(file, App), "d");
@@ -83,6 +98,7 @@ int main() {
     stream = Open(file, In | Ate);
     Require(stream != nullptr && ftello_nid_postfix(stream) == 5);
     fclose_nid_postfix(stream);
+
     stream = Open(file, In | Binary);
     Require(stream != nullptr && ftello_nid_postfix(stream) == 0);
     fclose_nid_postfix(stream);
@@ -92,6 +108,10 @@ int main() {
     Require(Open(file, App | Noreplace) == nullptr);
     Require(Contents(file) == "abcde");
     stream = Open(file, In | Noreplace);
+    Require(stream != nullptr);
+    fclose_nid_postfix(stream);
+
+    stream = Open(file, In | Binary | Noreplace);
     Require(stream != nullptr);
     fclose_nid_postfix(stream);
 
@@ -107,6 +127,7 @@ int main() {
     stream = Open(file, In | Out);
     Require(stream != nullptr && std::fgetc(stream->GetHandle()) == 'X');
     fclose_nid_postfix(stream);
+
     Require(Contents(file) == "Xbcdef");
 
     Write(Open(file, In | Out | App), "g");
@@ -130,6 +151,14 @@ int main() {
     stream = Open(file, In | 0x100 | 0x8000);
     Require(stream != nullptr && std::fgetc(stream->GetHandle()) == 'k');
     fclose_nid_postfix(stream);
+
+#ifdef __linux__
+    auto* full = std::fopen("/dev/full", "wb");
+    Require(full != nullptr);
+    auto* fullStream = new FileStream(full, true);
+    Require(std::fwrite("buffered", 1, 8, full) == 8);
+    Require(fclose_nid_postfix(fullStream) == EOF);
+#endif
 
     std::filesystem::remove_all(dir);
     return 0;

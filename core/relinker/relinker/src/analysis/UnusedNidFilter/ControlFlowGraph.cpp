@@ -1,9 +1,11 @@
 #include <relinker/analysis/UnusedNidFilter/IControlFlowGraph.hpp>
 #include <codegen/x86/X64InstructionDecoder.hpp>
 #include <codegen/CodegenException.hpp>
+#include <algorithm>
 #include <unordered_map>
 #include <queue>
 #include <cstring>
+#include <limits>
 
 namespace Relinker::UnusedNidFilter {
 
@@ -29,16 +31,11 @@ private:
 
 namespace {
 
-void buildGraph(
-    std::span<const std::uint8_t> text,
-    VirtualAddress textVaddr,
-    VirtualAddress entryVaddr,
-    const std::vector<VirtualAddress>& extraEntries,
-    const IRelativeRelocationIndex& relativeRelocations,
-    const std::vector<StrictDataRegion>* data,
-    bool followCodeAddresses,
-    std::unordered_set<VirtualAddress>& reachable
-) {
+void buildGraph(std::span<const std::uint8_t> text, VirtualAddress textVaddr, VirtualAddress entryVaddr, const std::vector<VirtualAddress>& extraEntries, const IRelativeRelocationIndex& relativeRelocations, const std::vector<StrictDataRegion>* data, bool followCodeAddresses, std::unordered_set<VirtualAddress>& reachable, const std::function<void(std::uint64_t)>& progress, const std::function<bool(VirtualAddress)>& isData) {
+    if (text.size() > std::numeric_limits<VirtualAddress>::max() - textVaddr)
+        throw RelinkerException("Text section range exceeds the address space");
+    std::size_t codeSize = text.size();
+    while (codeSize > 0 && text[codeSize - 1] == 0) --codeSize;
     const Codegen::X64InstructionDecoder decoder;
     std::unordered_set<VirtualAddress> visited;
     std::queue<VirtualAddress> worklist;
@@ -47,9 +44,16 @@ void buildGraph(
 
     auto enqueue = [&](VirtualAddress va) {
         if (reachable.count(va) > 0) return;
-        if (va < textVaddr || va >= textVaddr + static_cast<VirtualAddress>(text.size())) return;
+        if (isData && isData(va)) return;
+        if (va < textVaddr || va - textVaddr >= text.size()) return;
         if (!visited.insert(va).second) return;
         worklist.push(va);
+    };
+
+    auto zeroPaddingFollows = [&](VirtualAddress va) {
+        const auto offset = static_cast<std::size_t>(va - textVaddr);
+        const auto aligned = (offset + 15) & ~std::size_t{15};
+        return aligned != offset && aligned <= text.size() && std::all_of(text.begin() + offset, text.begin() + aligned, [](std::uint8_t value) { return value == 0; });
     };
 
     auto takeAddress = [&](VirtualAddress va) {
@@ -73,104 +77,102 @@ void buildGraph(
 
         VirtualAddress va = worklist.front();
         worklist.pop();
+        const VirtualAddress blockEntry = va;
 
-        if (va < textVaddr || va >= textVaddr + static_cast<VirtualAddress>(text.size()))
-            throw RelinkerException("CFG: jump target outside text segment", va);
+        while (va >= textVaddr && va - textVaddr < text.size() && (va == blockEntry || va - textVaddr < codeSize) && !reachable.contains(va) && !(isData && isData(va))) {
+            std::size_t bufOff = static_cast<std::size_t>(va - textVaddr);
+            std::size_t available = text.size() - bufOff;
+            if (available == 0) throw RelinkerException("CFG: zero available bytes at target", va);
 
-        std::size_t bufOff = static_cast<std::size_t>(va - textVaddr);
-        std::size_t available = text.size() - bufOff;
-        if (available == 0) throw RelinkerException("CFG: zero available bytes at target", va);
-
-        Codegen::DecodedInstructionInfo info;
-        if (speculative) {
-            try {
+            Codegen::DecodedInstructionInfo info;
+            if (speculative) {
+                try {
+                    info = decoder.DecodeInstruction(text.data() + bufOff, available);
+                } catch (const Codegen::CodegenException&) {
+                    break;
+                }
+            } else {
                 info = decoder.DecodeInstruction(text.data() + bufOff, available);
-            } catch (const Codegen::CodegenException&) {
-                continue;
             }
-        } else {
-            info = decoder.DecodeInstruction(text.data() + bufOff, available);
-        }
-        reachable.insert(va);
+            reachable.insert(va);
+            if (progress && reachable.size() % 4096 == 0) progress(reachable.size());
+            visited.erase(va);
 
-        VirtualAddress nextVaddr = va + static_cast<VirtualAddress>(info.Length);
+            VirtualAddress nextVaddr = va + static_cast<VirtualAddress>(info.Length);
 
-        if (followCodeAddresses && info.HasRipRelativeDisp && text[bufOff + info.OpcodeOffset] == 0x8d && (info.RexPrefix & 8)) {
-            std::int32_t displacement = 0;
-            std::memcpy(&displacement, text.data() + bufOff + info.RipRelativeDispOffset, 4);
-            enqueue(static_cast<VirtualAddress>(static_cast<std::int64_t>(nextVaddr) + displacement));
-        }
+            if (followCodeAddresses && info.HasRipRelativeDisp && text[bufOff + info.OpcodeOffset] == 0x8d && (info.RexPrefix & 8)) {
+                std::int32_t displacement = 0;
+                std::memcpy(&displacement, text.data() + bufOff + info.RipRelativeDispOffset, 4);
+                auto target = nextVaddr + static_cast<VirtualAddress>(static_cast<std::int64_t>(displacement));
+                if (info.AddressSize32) target = static_cast<std::uint32_t>(target);
+                enqueue(target);
+            }
 
-        if (data != nullptr && info.HasRipRelativeDisp && !info.IsTwoByteOpcode && info.Opcode == 0x8D) {
-            std::int32_t displacement = 0;
-            std::memcpy(&displacement, text.data() + bufOff + info.RipRelativeDispOffset, 4);
-            const auto base = static_cast<VirtualAddress>(static_cast<std::int64_t>(nextVaddr) + displacement);
-            takeAddress(base);
-            for (VirtualAddress target : ReadRelativeTableTargets(*data, base, textVaddr, text.size())) takeAddress(target);
-        }
+            if (data != nullptr && info.HasRipRelativeDisp && !info.IsTwoByteOpcode && info.Opcode == 0x8D) {
+                std::int32_t displacement = 0;
+                std::memcpy(&displacement, text.data() + bufOff + info.RipRelativeDispOffset, 4);
+                auto base = nextVaddr + static_cast<VirtualAddress>(static_cast<std::int64_t>(displacement));
+                if (info.AddressSize32) base = static_cast<std::uint32_t>(base);
+                takeAddress(base);
+                for (VirtualAddress target : ReadRelativeTableTargets(*data, base, textVaddr, text.size())) takeAddress(target);
+            }
 
-        switch (info.FlowKind) {
-            using enum Codegen::ControlFlowKind;
-            case Sequential:
-                enqueue(nextVaddr);
-                break;
-            case ConditionalBranch:
-                enqueue(nextVaddr);
-                if (info.HasBranchTarget)
-                    enqueue(static_cast<VirtualAddress>(static_cast<std::int64_t>(nextVaddr) + info.BranchDisp));
-                break;
-            case UnconditionalJump:
-                if (info.HasRipRelativeDisp) {
-                    std::int32_t disp = 0;
-                    std::memcpy(&disp, text.data() + bufOff + info.RipRelativeDispOffset, 4);
-                    VirtualAddress slotVaddr = static_cast<VirtualAddress>(
-                        static_cast<std::int64_t>(nextVaddr) + disp
-                    );
-                    auto resolved = relativeRelocations.TargetOfSlot(slotVaddr);
-                    if (resolved.has_value())
-                        enqueue(*resolved);
-                } else if (info.HasBranchTarget) {
-                    enqueue(static_cast<VirtualAddress>(static_cast<std::int64_t>(nextVaddr) + info.BranchDisp));
-                }
-                break;
-            case Call:
-                if (info.HasRipRelativeDisp) {
-                    std::int32_t disp = 0;
-                    std::memcpy(&disp, text.data() + bufOff + info.RipRelativeDispOffset, 4);
-                    VirtualAddress slotVaddr = static_cast<VirtualAddress>(
-                        static_cast<std::int64_t>(nextVaddr) + disp
-                    );
-                    auto resolved = relativeRelocations.TargetOfSlot(slotVaddr);
-                    if (resolved.has_value())
-                        enqueue(*resolved);
-                } else if (info.HasBranchTarget) {
-                    enqueue(static_cast<VirtualAddress>(static_cast<std::int64_t>(nextVaddr) + info.BranchDisp));
-                }
-                enqueue(nextVaddr);
-                break;
-            case IndirectCall:
-                enqueue(nextVaddr);
-                break;
-            case Return:
-            case IndirectJump:
-            case Trap:
-                break;
+            bool fallThrough = true;
+            switch (info.FlowKind) {
+                using enum Codegen::ControlFlowKind;
+                case Sequential:
+                    break;
+                case ConditionalBranch:
+                    if (info.HasBranchTarget)
+                        enqueue(nextVaddr + static_cast<VirtualAddress>(info.BranchDisp));
+                    break;
+                case UnconditionalJump:
+                    fallThrough = false;
+                    if (info.HasRipRelativeDisp) {
+                        std::int32_t disp = 0;
+                        std::memcpy(&disp, text.data() + bufOff + info.RipRelativeDispOffset, 4);
+                        VirtualAddress slotVaddr = nextVaddr + static_cast<VirtualAddress>(static_cast<std::int64_t>(disp));
+                        if (info.AddressSize32) slotVaddr = static_cast<std::uint32_t>(slotVaddr);
+                        auto resolved = relativeRelocations.TargetOfSlot(slotVaddr);
+                        if (resolved.has_value())
+                            enqueue(*resolved);
+                    } else if (info.HasBranchTarget) {
+                        enqueue(nextVaddr + static_cast<VirtualAddress>(info.BranchDisp));
+                    }
+                    break;
+                case Call:
+                    if (info.HasRipRelativeDisp) {
+                        std::int32_t disp = 0;
+                        std::memcpy(&disp, text.data() + bufOff + info.RipRelativeDispOffset, 4);
+                        VirtualAddress slotVaddr = nextVaddr + static_cast<VirtualAddress>(static_cast<std::int64_t>(disp));
+                        if (info.AddressSize32) slotVaddr = static_cast<std::uint32_t>(slotVaddr);
+                        auto resolved = relativeRelocations.TargetOfSlot(slotVaddr);
+                        if (resolved.has_value())
+                            enqueue(*resolved);
+                    } else if (info.HasBranchTarget) {
+                        enqueue(nextVaddr + static_cast<VirtualAddress>(info.BranchDisp));
+                    }
+                    fallThrough = !zeroPaddingFollows(nextVaddr);
+                    break;
+                case IndirectCall:
+                    fallThrough = !zeroPaddingFollows(nextVaddr);
+                    break;
+                case Return:
+                case IndirectJump:
+                case Trap:
+                    fallThrough = false;
+                    break;
+            }
+            if (!fallThrough) break;
+            va = nextVaddr;
         }
     }
 }
 
 }
 
-std::unique_ptr<IControlFlowGraph> BuildControlFlowGraph(
-    std::span<const std::uint8_t> text,
-    VirtualAddress textVaddr,
-    VirtualAddress entryVaddr,
-    const std::vector<VirtualAddress>& extraEntries,
-    const IRelativeRelocationIndex& relativeRelocations,
-    bool followCodeAddresses,
-    std::unordered_set<VirtualAddress>& reachable
-) {
-    buildGraph(text, textVaddr, entryVaddr, extraEntries, relativeRelocations, nullptr, followCodeAddresses, reachable);
+std::unique_ptr<IControlFlowGraph> BuildControlFlowGraph(std::span<const std::uint8_t> text, VirtualAddress textVaddr, VirtualAddress entryVaddr, const std::vector<VirtualAddress>& extraEntries, const IRelativeRelocationIndex& relativeRelocations, bool followCodeAddresses, std::unordered_set<VirtualAddress>& reachable, const std::function<void(std::uint64_t)>& progress, const std::function<bool(VirtualAddress)>& isData) {
+    buildGraph(text, textVaddr, entryVaddr, extraEntries, relativeRelocations, nullptr, followCodeAddresses, reachable, progress, isData);
     return std::make_unique<ControlFlowGraph>(&reachable);
 }
 
@@ -207,7 +209,7 @@ std::unique_ptr<IControlFlowGraph> BuildAddressTakenControlFlowGraph(
     const std::vector<StrictDataRegion>& data
 ) {
     std::unordered_set<VirtualAddress> reachable;
-    buildGraph(std::span<const std::uint8_t>(text.data(), text.size()), textVaddr, entryVaddr, extraEntries, relativeRelocations, &data, false, reachable);
+    buildGraph(std::span<const std::uint8_t>(text.data(), text.size()), textVaddr, entryVaddr, extraEntries, relativeRelocations, &data, false, reachable, {}, {});
     return std::make_unique<ControlFlowGraph>(std::move(reachable));
 }
 

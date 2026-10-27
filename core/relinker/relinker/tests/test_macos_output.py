@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "macos"))
 from import_fixture import fixture as import_fixture
 from nid import nid
 from tls_fixture import fixture as tls_fixture
+from test_guest_module_directories import module_with_symbol
 
 MH_MAGIC_64 = 0xFEEDFACF
 CPU_TYPE_X86_64 = 0x01000007
@@ -113,8 +114,26 @@ def check_structure(name, data):
     return macho
 
 
+def check_main_entry_mxcsr(macho, data):
+    stub = data[macho.entryoff:]
+    setup = bytes.fromhex("4883ec100fae1c24c7442404c09f00000fae542404")
+    call = stub.find(bytes.fromhex("ff15"))
+    check(call >= len(setup), "entry stub does not initialize guest MXCSR before its start call")
+    check(stub[call - len(setup):call] == setup, "entry stub does not save host MXCSR and load guest MXCSR 0x9fc0")
+    entry = stub.find(bytes.fromhex("488d3d"))
+    entry_target = IMAGE_BASE + macho.entryoff + entry + 7 + struct.unpack_from("<i", stub, entry + 3)[0]
+    check(any(segment["initprot"] & PROT_EXEC and segment["vmaddr"] <= entry_target < segment["vmaddr"] + segment["vmsize"] for segment in macho.segments),
+          "entry stub does not point at executable guest code")
+    start_target = IMAGE_BASE + macho.entryoff + call + 6 + struct.unpack_from("<i", stub, call + 2)[0]
+    meta_segment = macho.segment("__APS5DATA")
+    check(meta_segment["vmaddr"] <= start_target < meta_segment["vmaddr"] + meta_segment["vmsize"], "entry stub start call does not point at its bound start slot")
+    restore = bytes.fromhex("0fae14244883c4100f0b")
+    check(stub[call + 6:call + 6 + len(restore)] == restore, "entry stub does not restore host MXCSR after the guest start call")
+
+
 def check_imports(data):
     macho = check_structure("import", data)
+    check_main_entry_mxcsr(macho, data)
     check("@rpath/libc.prx" in macho.dylibs, f"import: libc.prx is not a dependency: {macho.dylibs}")
     linkedit = macho.segment("__LINKEDIT")
     binds = data[linkedit["fileoff"]:linkedit["fileoff"] + linkedit["filesize"]]
@@ -122,6 +141,17 @@ def check_imports(data):
         check(("_" + nid(symbol)).encode() in binds, f"import: {symbol} is not bound by its NID")
     code = b"".join(data[lo:hi] for lo, hi in macho.executable_ranges())
     check(bytes.fromhex("4883ec08") in code, "import: the guest code is missing from the image")
+
+
+def check_runtime_dependencies(relinker, directory):
+    for needed, expected in (
+            (b"libc.prx", ["@rpath/libc.prx", "@rpath/libkernel.prx"]),
+            (b"libkernel.prx", ["@rpath/libkernel.prx", "@rpath/libc.prx"]),
+            (b"libSceLibcInternal.prx", ["@rpath/libSceLibcInternal.prx", "@rpath/libkernel.prx", "@rpath/libc.prx"]),
+            (b"libSceVideoOut.prx", ["@rpath/libSceVideoOut.prx", "@rpath/libkernel.prx", "@rpath/libc.prx"])):
+        name = needed.decode().removesuffix(".prx")
+        dylibs = [dylib for dylib in check_structure(name, relink(relinker, directory, name, import_fixture(library=needed))).dylibs if dylib.startswith("@rpath/")]
+        check(dylibs == expected, f"{name}: dependencies {dylibs}, expected {expected}")
 
 
 def check_tls(data):
@@ -145,12 +175,44 @@ def check_options(relinker, directory):
     check(result.returncode != 0 and "--windows conflicts with --macos" in result.stdout + result.stderr, "--macos together with --windows was accepted")
 
 
+def check_runpath_lists(relinker, directory):
+    source = Path(directory) / "runpaths.elf"
+    source.write_bytes(bytes(import_fixture()))
+    modules = Path(directory) / "sce_module"
+    modules.mkdir()
+    (modules / "module.prx").write_bytes(module_with_symbol(True))
+    for index, (configured, expected) in enumerate((
+            ("$ORIGIN/first:$ORIGIN/second", ["@executable_path/first", "@executable_path/second"]),
+            ("$ORIGIN:$ORIGIN/libs:$ORIGIN", ["@executable_path", "@executable_path/libs", "@executable_path"]),
+            ("/first:/second", ["/first", "/second"]))):
+        output = Path(directory) / f"runpaths-{index}"
+        options = ["--skip-sce-module"] if configured.startswith("/") else []
+        result = subprocess.run([str(relinker), "--macos", *options, "--rpath", configured,
+                                 str(source), str(output)], capture_output=True, text=True, timeout=20)
+        check(result.returncode == 0, f"run paths: {result.stdout}{result.stderr}")
+        actual = MachO(output.read_bytes()).rpaths
+        check(actual == expected, f"run paths: {actual}")
+        if not options:
+            guest = MachO((Path(directory) / "app0/sce_module/module.prx.guest.prx").read_bytes()).rpaths
+            expected_guest = [path.replace("@executable_path", "@loader_path/../..") for path in expected]
+            check(guest == expected_guest, f"guest run paths: {guest}")
+    for configured in (":$ORIGIN/libs", "$ORIGIN/libs:", "$ORIGIN/first::$ORIGIN/second"):
+        output = Path(directory) / "empty-runpaths"
+        result = subprocess.run([str(relinker), "--macos", "--skip-sce-module", "--rpath", configured,
+                                 str(source), str(output)], capture_output=True, text=True, timeout=20)
+        check(result.returncode != 0 and "Empty macOS run path component" in result.stdout + result.stderr,
+              f"empty run path accepted: {configured}")
+        check(not output.exists(), "empty run path created an output")
+
+
 def main():
     relinker = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="anyps5-macos-output-") as directory:
         check_imports(relink(relinker, directory, "import", import_fixture()))
+        check_runtime_dependencies(relinker, directory)
         check_tls(relink(relinker, directory, "tls", tls_fixture()))
         check_options(relinker, directory)
+        check_runpath_lists(relinker, directory)
     print("macOS output checks passed")
 
 
