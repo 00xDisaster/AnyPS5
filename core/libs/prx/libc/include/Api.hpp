@@ -954,6 +954,7 @@ std::int64_t APS5_VABI strtol_nid_postfix(const char* str, char** endptr, int ba
 std::uint64_t APS5_VABI strtoul_nid_postfix(const char* str, char** endptr, int base);
 long long APS5_VABI strtoll_nid_postfix(const char* str, char** endptr, int base);
 unsigned long long APS5_VABI strtoull_nid_postfix(const char* str, char** endptr, int base);
+long long APS5_VABI strtoq_nid_postfix(const char* str, char** endptr, int base);
 unsigned long long APS5_VABI strtouq_nid_postfix(const char* str, char** endptr, int base);
 double APS5_VABI strtod_nid_postfix(const char* str, char** endptr);
 double APS5_VABI atof_nid_postfix(const char* str);

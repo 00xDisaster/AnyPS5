@@ -74,6 +74,8 @@
 
 - [fpurge](../../../core/libs/prx/libc/src/StreamPurge.cpp) follows FreeBSD 11.4 [fpurge.c](https://github.com/freebsd/freebsd-src/blob/releng/11.4/lib/libc/stdio/fpurge.c): discard buffered input, pushback and output without writing or seeking, preserving EOF and error status, and report `EBADF` for a closed stream. Console behavior is unverified. The Windows path resets the existing host UCRT buffer representation; Linux and macOS use their native purge operations. Null streams throw as existing stream wrappers do.
 
+- [strtoq](../../../core/libs/prx/libc/src/Strings.cpp) (libc, NID `yUUOxgk8Dmc`) is the BSD "quad" alias of `strtoll` and forwards to it, as FreeBSD 11.4 [strtoq.c](https://github.com/freebsd/freebsd-src/blob/8c639945a44588f6cfdddfb057bb5aad88735da0/lib/libc/stdlib/strtoq.c) does. The console export is not verified; the sibling `strtouq` is already here.
+
 ### Functional
 
 - [_Cosh](../../../core/libs/prx/libc/src/Math.cpp) (libc) follows the two-argument Dinkumware CRT helper used by `std::complex`, including a scaled large-finite-input path; the signature, exact result and floating-point exception behavior are not verified against the console.
