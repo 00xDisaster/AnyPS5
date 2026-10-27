@@ -169,9 +169,10 @@ void testIndexedIndirectDraws() {
     alignas(4) std::uint32_t count = 0;
     const auto* multi = sceAgcDcbDrawIndexIndirectMulti(&storage.buffer, 0x80, 1, 8, &count, 20, 0);
     const auto address = reinterpret_cast<std::uintptr_t>(&count);
-    const std::array<std::uint32_t, 10> expectedMulti{0xc0083800u, 0x80, 0x280, 0x280, 0x40000280u, 8, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u), 20, 0};
+    const std::array<std::uint32_t, 16> expectedMulti{0xc0017904u, 0x342, 0xc6000005u, 0xc0083800u, 0x80, 0x280, 0x280, 0x40000280u, 8, static_cast<std::uint32_t>(address), static_cast<std::uint32_t>(address >> 32u), 20, 0, 0xc0017904u, 0x342, 0xc6000000u};
     check(multi == storage.words.data() + expectedSingle.size() && std::equal(expectedMulti.begin(), expectedMulti.end(), multi), "indexed indirect multi draw packet mismatch");
     check(storage.buffer.cursor_up == storage.words.data() + expectedSingle.size() + expectedMulti.size(), "incorrect indexed indirect cursor advance");
+    check(sceAgcDcbDrawIndexIndirectMultiGetSize() == expectedMulti.size() * sizeof(std::uint32_t), "indexed indirect multi draw size differs from its packets");
     const auto before = storage.words;
     expectFailure([&] { sceAgcDcbDrawIndexIndirect(&storage.buffer, 2, 0); });
     expectFailure([&] { sceAgcDcbDrawIndexIndirectMulti(&storage.buffer, 0, 1, 8, &count, 16, 0); });
