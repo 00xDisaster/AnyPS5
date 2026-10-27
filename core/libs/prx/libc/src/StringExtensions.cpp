@@ -151,12 +151,12 @@ char* APS5_VABI stpcpy_nid_postfix(char* destination, const char* source) {
 }
 
 char* APS5_VABI strtok_r_nid_postfix(char* text, const char* delimiters, char** state) {
-    static char exhausted[] = "";
+    static const char exhausted[] = "";
     if (text == nullptr) text = *state;
     if (text == nullptr) return nullptr;
     text += std::strspn(text, delimiters);
     if (*text == '\0') {
-        *state = exhausted;
+        *state = const_cast<char*>(exhausted);
         return nullptr;
     }
     char* end = text + std::strcspn(text, delimiters);

@@ -738,12 +738,12 @@ size_t APS5_VABI wcscspn_nid_postfix(const char16_t* s, const char16_t* reject) 
 }
 
 char16_t* APS5_VABI wcstok_nid_postfix(char16_t* text, const char16_t* delimiters, char16_t** last) {
-    static char16_t exhausted[] = u"";
+    static const char16_t exhausted[] = u"";
     if (text == nullptr) text = *last;
     if (text == nullptr) return nullptr;
     while (*text != 0 && Contains(delimiters, *text)) ++text;
     if (*text == 0) {
-        *last = exhausted;
+        *last = const_cast<char16_t*>(exhausted);
         return nullptr;
     }
     char16_t* end = text;

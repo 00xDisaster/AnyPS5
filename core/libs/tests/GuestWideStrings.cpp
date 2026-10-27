@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <string>
 
 namespace {
@@ -245,13 +246,16 @@ int main() {
     require(token == tokens + 7 && same(token, u"two", 4) && last == tokens + 11);
     token = wcstok_nid_postfix(nullptr, u",", &last);
     require(token == tokens + 11 && same(token, u"three", 6) && last == tokens + 17);
-    require(wcstok_nid_postfix(nullptr, u",", &last) == nullptr && last != nullptr && *last == 0 && (last < tokens || last >= tokens + 18));
+    require(wcstok_nid_postfix(nullptr, u",", &last) == nullptr && last != nullptr && *last == 0 && (std::less<>()(last, tokens) || !std::less<>()(last, tokens + 18)));
     char16_t* const exhausted = last;
     require(wcstok_nid_postfix(nullptr, u",", &last) == nullptr && last == exhausted);
 
-    char16_t tail[] = u"a b";
+    char16_t tail[8] = u"a b";
     require(wcstok_nid_postfix(tail, u" ", &last) == tail && last == tail + 2);
     require(wcstok_nid_postfix(nullptr, u" ", &last) == tail + 2 && same(tail, u"a\0b", 4) && last == tail + 3);
+    tail[3] = u'x';
+    tail[4] = 0;
+    require(wcstok_nid_postfix(nullptr, u" ", &last) == tail + 3 && tail[3] == u'x' && last == tail + 4);
 
     char16_t onlyDelimiters[] = u";;";
     last = onlyDelimiters;

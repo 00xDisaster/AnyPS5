@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 
 static void Require(bool condition) {
@@ -481,7 +482,7 @@ int main() {
     Require(std::strcmp(strtok_r_nid_postfix(nullptr, ",", &firstState), "b") == 0);
     Require(firstState == first + 6);
     Require(strtok_r_nid_postfix(nullptr, ",", &firstState) == nullptr);
-    Require(firstState != nullptr && *firstState == '\0' && (firstState < first || firstState >= first + sizeof(first)));
+    Require(firstState != nullptr && *firstState == '\0' && (std::less<>()(firstState, first) || !std::less<>()(firstState, first + sizeof(first))));
     char* const exhausted = firstState;
     Require(strtok_r_nid_postfix(nullptr, ",", &firstState) == nullptr && firstState == exhausted);
     Require(std::strcmp(strtok_r_nid_postfix(nullptr, "", &secondState), "y") == 0);
