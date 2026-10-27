@@ -1,6 +1,6 @@
 #include <cstddef>
 #include <cstdint>
-#include "prx/libSceRnpsNKInjectedBundle/libSceRnpsNKInjectedBundle.hpp"
+#include "prx/libSceRnpsNKInjectedBundle/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 
 extern "C" {
