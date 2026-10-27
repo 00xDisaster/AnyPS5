@@ -1208,7 +1208,13 @@ int main(int argc, char** argv) {
         if (argc == 3 && std::string_view(argv[1]) == "--dcc-srgb-clear") {
             const auto samples = std::string_view(argv[2]) == "2" ? 2u : std::string_view(argv[2]) == "4" ? 4u : std::string_view(argv[2]) == "8" ? 8u : 0u;
             Require(samples != 0, "unknown sRGB DCC test sample count");
-            DccSrgbClearTests(*device, samples);
+            try {
+                DccSrgbClearTests(*device, samples);
+            } catch (const std::runtime_error& error) {
+                if (std::string_view(error.what()) != "AGC graphics: the device cannot render color with the target's sample count") throw;
+                std::printf("skipped, the device lacks the requested multisample color attachments: %s\n", error.what());
+                return VulkanTestSkipped;
+            }
             std::cout << "Multisampled sRGB DCC clear tests passed\n";
             return 0;
         }
