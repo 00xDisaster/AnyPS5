@@ -906,11 +906,10 @@ public:
         }
         if (collected == 0u) {
             for (std::size_t unit = 0; unit < unitGeneration.size(); ++unit) {
-                if (unitGeneration[unit] == 0u) continue;
                 const auto offset = unit * unitBytes;
                 const auto address = resource.baseAddress + offset;
                 const auto length = static_cast<std::size_t>(std::min<std::uint64_t>(unitBytes, bytes - offset));
-                if (GuestMemory::CollectWritesUncached(address, length) != 0u) changed[unit] = GuestMemory::WrittenSince(address, length, unitGeneration[unit]);
+                if (GuestMemory::CollectWritesUncached(address, length) != 0u) changed[unit] = unitGeneration[unit] != 0u && GuestMemory::WrittenSince(address, length, unitGeneration[unit]);
             }
             generation = GuestMemory::TrackerGeneration();
             return changed;
