@@ -81,7 +81,7 @@ PFN_vkGetDeviceProcAddr DeferDestructionToIdle(VkDevice device, PFN_vkGetDeviceP
     auto& state = registry();
     std::lock_guard lock(state.mutex);
     const auto current = state.resolver.load(std::memory_order_acquire);
-    if (current != nullptr && current != resolver) throw std::runtime_error("AGC graphics: deferred destruction found two different device resolvers");
+    if (current != nullptr && current != resolver && !state.devices.empty()) throw std::runtime_error("AGC graphics: deferred destruction found two different device resolvers");
     if (!state.devices.emplace(device, std::move(deferred)).second) throw std::runtime_error("AGC graphics: deferred destruction was set up twice for one device");
     state.resolver.store(resolver, std::memory_order_release);
     return &deferringDeviceProc;
