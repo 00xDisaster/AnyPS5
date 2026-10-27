@@ -388,7 +388,7 @@ int APS5_VABI SSL_new_nid_postfix(void);
 int APS5_VABI SSL_peek_nid_postfix(void);
 int APS5_VABI SSL_pending_nid_postfix(void);
 int APS5_VABI SSL_read_nid_postfix(void);
-int APS5_VABI SSL_select_next_proto_nid_postfix(void);
+int APS5_VABI SSL_select_next_proto_nid_postfix(unsigned char** output, unsigned char* outputLength, const unsigned char* peer, std::uint32_t peerLength, const unsigned char* supported, std::uint32_t supportedLength);
 int APS5_VABI SSL_set_SSL_CTX_nid_postfix(void);
 int APS5_VABI SSL_set_bio_nid_postfix(void);
 int APS5_VABI SSL_set_connect_state_nid_postfix(void);

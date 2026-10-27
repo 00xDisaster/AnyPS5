@@ -1,5 +1,9 @@
 # libSceLibreSsl technical debt
 
+### Functional
+
+- [SSL_select_next_proto](../../../core/libs/prx/libSceLibreSsl/src/ProtocolSelection.cpp) leaves empty lists, zero-length names and truncated encodings unsupported and throws instead of following the reported firmware behavior. Null outputs also throw; their firmware behavior is unmeasured. [Independent firmware 13.42 evidence](https://github.com/boykopovar/AnyPS5/pull/9785#issuecomment-6406712390) reports host-PC execution of `libSceLibreSsl.sprx` at `0xda6d0`, with matching six-argument valid-list selection, status, borrowed pointer and length. That report also observes negotiation of zero-length entries, unchecked fallback lengths and an empty-supported-list read; these paths remain unsupported here. Null outputs and console-hardware behavior remain unmeasured. The author-sourced signature and valid-list contract follow LibreSSL 3.4.1.
+
 ### Unknown function info
 
 - [libSceLibreSsl pending exports](../../../core/libs/prx/libSceLibreSsl/Export.cpp) - 318 named callable exports are listed in the [PS5 3.20 export table](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceLibreSsl.c) and were cross-checked against the same module in PS5 firmware 13.60. Their signatures and behaviour are unverified; the declarations use the no-parameter unknown-signature convention and throw through `NotImplemented_nid_no_patch`.
