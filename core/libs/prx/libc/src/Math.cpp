@@ -1077,6 +1077,17 @@ float APS5_VABI sinhf_nid_postfix(float x) {
     return x * 1.0e37f;
 }
 
+/*
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ */
+/* Adapted from FreeBSD release/11.4.0 lib/msun/src/s_asinh.c: https://github.com/freebsd/freebsd-src/blob/release/11.4.0/lib/msun/src/s_asinh.c */
 double APS5_VABI asinh_nid_postfix(double x) {
     const double one = 1.0;
     const double ln2 = 6.93147180559945286227e-01;
