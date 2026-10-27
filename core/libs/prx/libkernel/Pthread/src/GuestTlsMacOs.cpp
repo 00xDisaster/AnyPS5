@@ -40,7 +40,10 @@ void Release(void* threadPointer) {
 
 extern "C" {
 
-std::uint8_t Aps5GuestTlsAvx_nid_no_patch = __builtin_cpu_supports("avx") ? 1 : 0;
+std::uint8_t Aps5GuestTlsAvx_nid_no_patch = [] {
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx") ? 1 : 0;
+}();
 
 void Aps5GuestTlsRegister_nid_no_patch(GuestTlsDescriptor* descriptor) {
     if (descriptor == nullptr || descriptor->version != 1) Fail("unknown TLS descriptor");
