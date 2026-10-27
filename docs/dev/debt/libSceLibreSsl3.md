@@ -2,6 +2,21 @@
 
 ### Unknown function info
 
+- [libSceLibreSsl3 additional exports](../../../core/libs/prx/libSceLibreSsl3/AdditionalExports.cpp) - these name/NID pairs are present in the 13.60 export inventory. Parameter lists, return types and behavior are unverified. Parameterless `int` declarations are import-resolution placeholders, not verified ABI prototypes; every entry throws through `NotImplemented_nid_no_patch`. No runtime functionality is implemented.
+
+| Name | NID |
+| --- | --- |
+| `tls_client` | `GEK3LmjM9Q4` |
+| `tls_close` | `Fqc0-3YCXjo` |
+| `tls_config_free` | `LL8N+X6DA-4` |
+| `tls_config_new` | `BQNyLN2nA9w` |
+| `tls_configure` | `8pwP-7j5UZI` |
+| `tls_error` | `N+G3Gxequt0` |
+| `tls_free` | `uz3bWkbHZu4` |
+| `tls_read` | `7RvDjfy4gUA` |
+| `tls_server` | `nCOh70mg3K0` |
+| `tls_write` | `fZJr2OF+KGw` |
+
 - [libSceLibreSsl3 pending exports](../../../core/libs/prx/libSceLibreSsl3/Export.cpp) - 81 named callable exports, excluding `CRYPTO_memcmp`, `MD5`, `SHA1`, `d2i_ASN1_INTEGER`, `EVP_PKEY_up_ref` and `EC_KEY_up_ref`, remain unimplemented from the [PS5 3.20 export table](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceLibreSsl3.c), cross-checked against the same module in PS5 firmware 13.60. Their signatures and behaviour are unverified; the declarations use the no-parameter unknown-signature convention and throw through `NotImplemented_nid_no_patch`.
 
 ### Functional
