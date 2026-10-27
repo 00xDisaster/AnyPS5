@@ -195,10 +195,13 @@ struct CertificateChain {
 
 Pool systemRootPool{std::numeric_limits<std::size_t>::max() / 2};
 
-std::string ReadSystemCaList() {
+std::string SystemCaListPath() {
     const char* const word = sceKernelGetFsSandboxRandomWord();
     if (word == nullptr) throw std::runtime_error("SSL: the sandbox word for the system CA list is not available");
-    const std::string path = std::string("/") + word + "/common/cert/CA_LIST.cer";
+    return std::string("/") + word + "/common/cert/CA_LIST.cer";
+}
+
+std::string ReadSystemCaList(const std::string& path) {
     const int descriptor = sceKernelOpen(path.c_str(), 0, 0);
     if (descriptor < 0) throw std::runtime_error("SSL: cannot open the system CA list " + path);
     std::string text;
@@ -218,15 +221,17 @@ std::string ReadSystemCaList() {
 
 const mbedtls_x509_crt* SystemRoots() {
     static const std::unique_ptr<CertificateChain> roots = [] {
+        const auto path = SystemCaListPath();
+        const auto text = ReadSystemCaList(path);
+        if (text.empty()) throw std::runtime_error("SSL: the system CA list " + path + " is empty");
         auto chain = std::make_unique<CertificateChain>();
-        const auto text = ReadSystemCaList();
-        if (text.empty()) return chain;
         PoolScope scope(systemRootPool);
         const int result = mbedtls_x509_crt_parse(&chain->root, reinterpret_cast<const unsigned char*>(text.c_str()), text.size() + 1);
-        if (result < 0) CheckBackend(result, "SSL system CA list parse failed");
+        if (result < 0 && currentPoolExhausted) throw std::bad_alloc();
+        if (result < 0 || !chain->root.raw.p) throw std::runtime_error("SSL: the system CA list " + path + " has no certificate");
         return chain;
     }();
-    return roots->root.raw.p ? &roots->root : nullptr;
+    return &roots->root;
 }
 
 struct PrivateKey {
