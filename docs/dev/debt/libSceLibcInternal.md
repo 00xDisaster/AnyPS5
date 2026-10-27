@@ -24,7 +24,7 @@
 ### Additional PS5 3.20 imports (xdCloudy #9498)
 
 - [3.20 pending imports](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - The following PS5 3.20 inventory names are declared for import resolution only; their prototypes and behavior are unverified, and each call throws through `NotImplemented_nid_no_patch`. The source list is [PS5-3.20_Libs](https://github.com/DNNDHH/PS5-3.20_Libs).
-- [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Atan`, `_Atqexit`, `_Atthreadexit`, `_Btowc`, `_CStrftime`, `_CStrxfrm`, `_CWcsxfrm`, `_Call_onceEx`, `_Closreg`, `_Cnd_do_broadcast_at_thread_exit`
+- [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Atan`, `_Atqexit`, `_Atthreadexit`, `_CStrftime`, `_CStrxfrm`, `_CWcsxfrm`, `_Call_onceEx`, `_Closreg`, `_Cnd_do_broadcast_at_thread_exit`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Cnd_register_at_thread_exit`, `_Cnd_unregister_at_thread_exit`, `_Daysto`, `_Deletegloballocale`, `_Do_call`, `_Dtento`, `_Erfc`, `_FAtan`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_FDtento`, `_FErfc`, `_FHypot`, `_FLogpoly`, `_FPlsw`, `_FPmsw`, `_FPow`, `_FQuad`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_FQuadph`, `_FRint`, `_FSincos`, `_FTan`, `_FTgamma`, `_FXp_addh`, `_FXp_addx`, `_FXp_getw`, `_FXp_invx`
@@ -32,7 +32,7 @@
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Fetch_add_8`, `_Fetch_and_8`, `_Fetch_or_8`, `_Fetch_xor_8`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Fgpos`, `_Fofind`, `_Fofree`, `_Fopen`, `_Foprep`, `_Frprep`, `_Fspos`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Fwprep`, `_Genld`, `_Gentime`, `_Getcloc`, `_Getctyptab`, `_Getdst`, `_Geterrno`, `_Getfld`, `_Getfloat`, `_Getgloballocale`
-- [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Getint`, `_Getpcostate`, `_Getptimes`, `_Getpwcostate`, `_Getpwctrtab`, `_Getpwctytab`, `_Getstr`, `_Gettime`, `_Getzone`, `_Hypot`
+- [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Getint`, `_Getpcostate`, `_Getpwcostate`, `_Getpwctrtab`, `_Getpwctytab`, `_Getstr`, `_Gettime`, `_Getzone`, `_Hypot`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_Isdst`, `_LAtan`, `_LDtento`, `_LErfc`, `_LExp`, `_LHypot`, `_LLogpoly`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_LPlsw`, `_LPmsw`, `_LPow`, `_LQuad`, `_LQuadph`, `_LRint`, `_LSincos`, `_LTan`
 - [Additional imported names](../../../core/libs/prx/libSceLibcInternal/Export.cpp) (libSceLibcInternal) - `_LTgamma`, `_LXp_addh`, `_LXp_addx`, `_LXp_getw`, `_LXp_invx`, `_LXp_ldexpx`, `_LXp_movx`, `_LXp_mulh`, `_LXp_mulx`, `_LXp_setn`
