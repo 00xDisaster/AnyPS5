@@ -85,6 +85,8 @@ int main() {
     Require(sceNpProfileDialogGetResult(nullptr) == kErrNotInitialized);
     Require(sceNpProfileDialogGetStatus() == kStatusNone);
     Require(sceNpProfileDialogUpdateStatus() == kStatusNone);
+    RequireThrows([] { sceNpProfileDialogOpen(nullptr); });
+    RequireThrows([] { sceNpProfileDialogOpenA(nullptr); });
     RequireThrows([&] { sceNpProfileDialogOpen(reinterpret_cast<const SceNpProfileDialogParam*>(param)); });
     RequireThrows([&] { sceNpProfileDialogOpenA(reinterpret_cast<const SceNpProfileDialogParamA*>(paramA)); });
     Require(sceNpProfileDialogGetStatus() == kStatusNone);
