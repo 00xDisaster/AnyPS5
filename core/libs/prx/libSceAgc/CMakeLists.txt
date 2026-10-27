@@ -395,6 +395,7 @@ add_test_executable(agc_dma_data_tests EXCLUDE_FROM_ALL
         Command/src/Memory.cpp
         Acb/src/Memory.cpp
         DcbFlow/src/Memory.cpp
+        Patch/src/Dma.cpp
 )
 target_include_directories(agc_dma_data_tests PRIVATE ${LIBS_INCLUDE_DIR})
 target_link_libraries(agc_dma_data_tests PRIVATE libSceAgcDriver libc)
