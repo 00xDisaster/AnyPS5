@@ -1,5 +1,5 @@
 import { abortAndDiscardOutput, OutputDirectoryTransaction } from "./output-directory.mjs";
-import { batchMemoryEstimate } from "./batch.mjs";
+import { batchMemoryEstimate } from "./batch.mjs";
 import { failureReport } from "./failure-report.mjs";
 
 const $ = id => document.getElementById(id);
