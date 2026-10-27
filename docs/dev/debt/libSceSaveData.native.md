@@ -2,7 +2,7 @@
 
 ### Silent stubs
 
-- [sceSaveDataPrepare, sceSaveDataCommit](../../../core/libs/prx/libSceSaveData.native/Export.cpp) (libSceSaveData.native) return success without looking at their arguments; what preparing and committing a mounted save do on a console is unknown. The same six titles call both. `sceSaveDataPrepare` has 11 call sites: PPSA01494, PPSA30839 and PPSA31162 ignore its result, PPSA03984 takes an error path when it is negative, PPSA34502 checks it at one of two sites and PPSA36591 at two of four. `sceSaveDataCommit` has 14: PPSA01494 and PPSA30839 ignore its result, PPSA03984 and PPSA31162 check its sign, PPSA34502 checks it at all five sites and PPSA36591 at two of four. A failure code from either would change the save flow of the titles that check it, while the stubs keep all six on the success path.
+- [sceSaveDataPrepare, sceSaveDataCommit](../../../core/libs/prx/libSceSaveData.native/Export.cpp) (libSceSaveData.native) return success without looking at their arguments; what preparing and committing a mounted save do on a console is unknown. The same six titles call both; this counts tests of the result in the three instructions after each call. `sceSaveDataPrepare` has 11 call sites: PPSA01494, PPSA30839 and PPSA31162 test none of them there, PPSA03984 takes an error path when it is negative, PPSA34502 checks it at one of two sites and PPSA36591 at two of four. `sceSaveDataCommit` has 14: PPSA01494 and PPSA30839 test none, PPSA03984 and PPSA31162 check its sign, PPSA34502 checks it at all five sites and PPSA36591 at two of four. A failure code from either would change the save flow of the titles that check it, while the stubs keep all six on the success path.
 
 ### Unknown function info
 
