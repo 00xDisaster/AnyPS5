@@ -23,6 +23,7 @@ void RunSparseHeapMirrorBudgetTests(const AgcDriver::Graphics::Context& context,
 void RunHeapMirrorRunUnwatchTests(const AgcDriver::Graphics::Context& context, const BdaTestAccess& access);
 void RunAddressCopyCapTests(const AgcDriver::Graphics::Context& context, const BdaTestAccess& access, bool remembered, int frames);
 void RunAddressCopyCapMirrorTests(const AgcDriver::Graphics::Context& context, const BdaTestAccess& access, int frames);
+void RunUnwatchedMirrorImportTests(const AgcDriver::Graphics::Context& context, const BdaTestAccess& access, int frames);
 void RunGuestAllocationTests();
 void RunGuestLeaseWaitTests();
 void RunUnmappedGapTests();

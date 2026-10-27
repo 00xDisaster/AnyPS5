@@ -1633,6 +1633,21 @@ bool evictable(const HostImports& state, const HostImport& entry) {
     return effectiveUse(state, entry) < state.previousFrameFloor;
 }
 
+struct MirrorsYield {
+    HostImports& state;
+    std::uint64_t floor;
+    MirrorsYield(HostImports& state, std::uint64_t buildFloor) : state(state), floor(state.buildFloor) {
+        state.mirrorsYield = true;
+        state.buildFloor = buildFloor;
+    }
+    ~MirrorsYield() {
+        state.mirrorsYield = false;
+        state.buildFloor = floor;
+    }
+    MirrorsYield(const MirrorsYield&) = delete;
+    MirrorsYield& operator=(const MirrorsYield&) = delete;
+};
+
 bool evictingRefusalCurrent(const HostImports& state, const EvictingRefusal& refusal, std::uint64_t budget) {
     return refusal.epoch == state.epoch && refusal.frames == state.framesEnded && refusal.liveBytes == state.liveBytes && budget <= refusal.budget && refusal.window == importWindow.load(std::memory_order_relaxed) && state.useCounter < refusal.ready && (state.buildFloor <= refusal.floor || state.useCounter < refusal.readyHeld);
 }
@@ -3093,7 +3108,10 @@ bool heapMirrorWatched(ImageMirror& mirror) {
 }
 
 bool importsNow(const Context& context, HostImports& state, const GuestAllocations::Lease& lease, std::uint64_t address) {
-    return context.hostImportAlignment != 0 && (importsStale(context, state) || importAllocation(context, state, address, lease, ImportRequester::Build, 0, false) != nullptr);
+    if (context.hostImportAlignment == 0) return false;
+    if (importsStale(context, state)) return true;
+    const MirrorsYield yield(state, state.useCounter + 1);
+    return importAllocation(context, state, address, lease, ImportRequester::Build, 0, true) != nullptr;
 }
 
 const char* heapCopyReason(bool overBudget, bool watched) {
@@ -4544,13 +4562,8 @@ void GuestBufferMemory::AcquireRegistered() {
             if (overBudget && copiedBytes + committed > cap) {
                 auto& state = Imports();
                 std::lock_guard lock(state.mutex);
-                struct MirrorsYield {
-                    HostImports& state;
-                    explicit MirrorsYield(HostImports& state) : state(state) { state.mirrorsYield = true; }
-                    ~MirrorsYield() { state.mirrorsYield = false; }
-                };
                 {
-                    const MirrorsYield yield(state);
+                    const MirrorsYield yield(state, state.buildFloor);
                     entry = importAllocation(context, state, range->address, lease, ImportRequester::Build, 0, true);
                 }
                 if (entry != nullptr) {
