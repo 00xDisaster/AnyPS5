@@ -4,6 +4,7 @@
 #include "prx/libSceAgc/Patch/include/Nop.hpp"
 #include "prx/libSceAgc/Misc/include/Suspend.hpp"
 #include "prx/libSceAgc/Misc/include/RegisterDefaults.hpp"
+#include "prx/libSceAgc/Patch/include/Jump.hpp"
 #include "prx/libSceAgc/Misc/include/PacketInfo.hpp"
 #include "prx/libSceAgc/Misc/include/Debug.hpp"
 #include "prx/libSceAgc/DcbState/include/Workload.hpp"
@@ -213,6 +214,24 @@ void testTagHeaders() {
         expectFailure([&] { sceAgcWaitRegMemPatchReference(wait32, 5); });
         check(storage.words == before, "a wait whose end tag header differs from its wrapper was patched");
     }
+}
+
+void testJumpTargetPatch() {
+    const auto target = [](std::uintptr_t address) { return reinterpret_cast<const volatile std::uint32_t*>(address); };
+    Storage storage;
+    auto* packet = sceAgcDcbJump(&storage.buffer, 1, 2, reinterpret_cast<const std::uint32_t*>(0x1000ull), 0x40);
+    check(sceAgcJumpPatchSetTarget_0300(packet, 1, target(0x123456789ab0u), 0x80) == 0, "jump target patch with a cache policy failed");
+    check(packet[1] == 0x56789ab0u && packet[2] == 0x1234u && packet[3] == 0x1f300080u, "jump target patch did not replace the address, size and cache policy only");
+    check(sceAgcJumpPatchSetTarget(packet, target(0x2000u), 0x10) == 0, "jump target patch failed");
+    check(packet[1] == 0x2000u && packet[2] == 0 && packet[3] == 0x1f300010u, "jump target patch without a cache policy changed it");
+    const auto before = storage.words;
+    expectFailure([&] { sceAgcJumpPatchSetTarget_0300(packet, 4, target(0x3000u), 1); });
+    expectFailure([&] { sceAgcJumpPatchSetTarget_0300(packet, 0, target(0x3002u), 1); });
+    expectFailure([&] { sceAgcJumpPatchSetTarget(packet, target(0x3000u), 0x100000u); });
+    packet[0] = Agc::Command::Header(0x3fu, 5);
+    expectFailure([&] { sceAgcJumpPatchSetTarget(packet, target(0x3000u), 1); });
+    packet[0] = before[0];
+    check(storage.words == before, "a refused jump target patch modified the packet");
 }
 
 void testMarkers() {
@@ -857,6 +876,7 @@ int main(int argc, char** argv) {
         testIndexedIndirectDraws();
         testTagHeaders();
         testMarkers();
+        testJumpTargetPatch();
         testMarkerSpans();
         testWorkloads();
         testWorkloadStreams();
