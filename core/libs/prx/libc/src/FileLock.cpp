@@ -35,35 +35,43 @@ std::mutex g_directoryMutex;
 std::condition_variable g_directoryChanged;
 std::map<DirectoryKey, DirectoryHolders> g_directoryLocks;
 
-bool LockDirectory(const DirectoryKey& key, int mode, bool nonblocking) {
+bool SetDirectoryLock(const DirectoryKey& key, int& held, int mode, bool nonblocking) {
     std::unique_lock lock(g_directoryMutex);
+    const auto release = [&] {
+        const auto found = g_directoryLocks.find(key);
+        if (found != g_directoryLocks.end()) {
+            if (held == LockExclusive) found->second.exclusive = false;
+            else if (held == LockShared) --found->second.shared;
+            if (!found->second.exclusive && found->second.shared == 0) g_directoryLocks.erase(found);
+        }
+        held = 0;
+    };
     const auto busy = [&] {
         const auto found = g_directoryLocks.find(key);
-        return found != g_directoryLocks.end() && (found->second.exclusive || (mode == LockExclusive && found->second.shared != 0));
+        if (found == g_directoryLocks.end()) return false;
+        const int others = found->second.shared - (held == LockShared ? 1 : 0);
+        return (found->second.exclusive && held != LockExclusive) || (mode == LockExclusive && others != 0);
     };
-    if (busy()) {
+    if (mode != LockUnlock && busy()) {
         if (nonblocking) {
             ::SetLastError(ERROR_LOCK_VIOLATION);
             return false;
         }
+        if (held != 0) {
+            release();
+            g_directoryChanged.notify_all();
+        }
         g_directoryChanged.wait(lock, [&] { return !busy(); });
     }
-    auto& holders = g_directoryLocks[key];
-    if (mode == LockExclusive) holders.exclusive = true;
-    else ++holders.shared;
-    return true;
-}
-
-void UnlockDirectory(const DirectoryKey& key, int mode) {
-    {
-        std::lock_guard lock(g_directoryMutex);
-        const auto found = g_directoryLocks.find(key);
-        if (found == g_directoryLocks.end()) return;
-        if (mode == LockExclusive) found->second.exclusive = false;
-        else --found->second.shared;
-        if (!found->second.exclusive && found->second.shared == 0) g_directoryLocks.erase(found);
+    release();
+    if (mode != LockUnlock) {
+        auto& holders = g_directoryLocks[key];
+        if (mode == LockExclusive) holders.exclusive = true;
+        else ++holders.shared;
+        held = mode;
     }
     g_directoryChanged.notify_all();
+    return true;
 }
 
 std::optional<DirectoryKey> DirectoryOf(HANDLE handle) {
@@ -83,7 +91,7 @@ struct LockState {
     LockState(const LockState&) = delete;
     LockState& operator=(const LockState&) = delete;
     ~LockState() {
-        if (directory && mode != 0) UnlockDirectory(*directory, mode);
+        if (directory && mode != 0) SetDirectoryLock(*directory, mode, LockUnlock, true);
         if (locker != nullptr) ::CloseHandle(locker);
     }
 };
@@ -124,16 +132,7 @@ int GuestFileLock_nid_no_patch(int fd, int operation) {
         state->directory = DirectoryOf(handle);
         state->classified = true;
     }
-    if (state->directory) {
-        if (state->mode != 0) {
-            UnlockDirectory(*state->directory, state->mode);
-            state->mode = 0;
-        }
-        if (mode == LockUnlock) return 0;
-        if (!LockDirectory(*state->directory, mode, (operation & LockNonblocking) != 0)) return -1;
-        state->mode = mode;
-        return 0;
-    }
+    if (state->directory) return SetDirectoryLock(*state->directory, state->mode, mode, (operation & LockNonblocking) != 0) ? 0 : -1;
     if (state->mode != 0) {
         OVERLAPPED overlapped{};
         overlapped.Offset = LockByteLow;
