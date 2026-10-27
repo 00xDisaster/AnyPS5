@@ -116,6 +116,19 @@ int main() {
     Require(sceNpSessionSignalingGetConnectionFromNetAddress2(firstId, 1, 0x0100007fu, 3658, reinterpret_cast<std::uint32_t*>(&found)) == ContextNotFound, "connection from group net address stale context");
     Require(sceNpSessionSignalingGetConnectionFromPeerAddress(firstId, reinterpret_cast<const SessionSignalingPeerAddress*>(peer), reinterpret_cast<std::uint32_t*>(&found)) == ContextNotFound, "connection from peer address stale context");
     Require(found == 0x5a5a5a5a, "a failed lookup wrote an id");
+    const char* const activateSessionId = reinterpret_cast<const char*>(sessionId);
+    SessionSignalingSessionParam sessionParam{1, 0};
+    std::uint32_t activatedGroup = 0xa5a5a5a5u;
+    Require(sceNpSessionSignalingActivateSession(contextId, nullptr, 0, &sessionParam, &activatedGroup) == InvalidArgument, "activate with a null session id");
+    Require(sceNpSessionSignalingActivateSession(contextId, activateSessionId, 0, nullptr, &activatedGroup) == InvalidArgument, "activate with a null session param");
+    Require(sceNpSessionSignalingActivateSession(contextId, activateSessionId, 0, &sessionParam, nullptr) == InvalidArgument, "activate with a null group id");
+    Require(sceNpSessionSignalingActivateSession(firstId, activateSessionId, 0, &sessionParam, &activatedGroup) == ContextNotFound, "activate on a stale context");
+    const SessionSignalingSessionParam modeOneWithOption{1, 1};
+    Require(sceNpSessionSignalingActivateSession(contextId, activateSessionId, 0, &modeOneWithOption, &activatedGroup) == InvalidArgument, "mode 1 with an option");
+    const SessionSignalingSessionParam modeTwoWithoutOption{2, 0};
+    Require(sceNpSessionSignalingActivateSession(contextId, activateSessionId, 0, &modeTwoWithoutOption, &activatedGroup) == InvalidArgument, "mode 2 without an option");
+    Require(sceNpSessionSignalingActivateSession(contextId, activateSessionId, 0, &sessionParam, &activatedGroup) == Unavailable, "activate without network");
+    Require(activatedGroup == 0xa5a5a5a5u, "a failed activation wrote a group id");
 
     Require(sceNpSessionSignalingTerminate() == 0, "terminate failed");
     Require(sceNpSessionSignalingDestroyContext(contextId) == NotInitialized, "destroy after terminate");
@@ -124,6 +137,7 @@ int main() {
     Require(sceNpSessionSignalingGetConnectionFromNetAddress(netContextId, 0, 0, nullptr) == NotInitialized, "connection from net address after terminate");
     Require(sceNpSessionSignalingGetConnectionFromNetAddress2(netContextId, 1, 0, 0, nullptr) == NotInitialized, "connection from group net address after terminate");
     Require(sceNpSessionSignalingGetConnectionFromPeerAddress(netContextId, nullptr, nullptr) == NotInitialized, "connection from peer address after terminate");
+    Require(sceNpSessionSignalingActivateSession(contextId, nullptr, 0, nullptr, nullptr) == NotInitialized, "activate after terminate");
     Require(sceNpSessionSignalingTerminate() == NotInitialized, "repeated terminate");
     Require(sceNpSessionSignalingInitialize(reinterpret_cast<const SessionSignalingInitParam*>(initializeParam)) == 0, "reinitialize");
     Require(sceNpSessionSignalingRequestPrepare(contextId, &requestId) == ContextNotFound, "reinitialize retained a context");
