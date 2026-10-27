@@ -322,6 +322,25 @@ std::uint32_t EmittedEvaluationControlPoint(std::uint32_t address) {
     return EmittedControlPoint(IrShaderStage::TessellationEvaluation, TessellationAttribute::EvaluationInput, address);
 }
 
+enum class Conjunction { None, Before, After };
+
+bool LowersUnderComplementedBallot(Conjunction conjunction) {
+    Hull hull;
+    hull.program.SetWaveSize(32);
+    auto& first = hull.firstInvocation();
+    auto& notFirst = hull.builder.Emit(IrOpcode::LogicalNot, IrType::Bool, {&first});
+    auto& own = hull.complementedOwnLaneBit(notFirst);
+    auto& other = hull.builder.Emit(IrOpcode::ULessThan32, IrType::Bool, {&hull.invocation(), &hull.builder.Constant(2u)});
+    IrValue* predicate = &own;
+    if (conjunction == Conjunction::Before) predicate = &hull.builder.Emit(IrOpcode::LogicalAnd, IrType::Bool, {&own, &other});
+    if (conjunction == Conjunction::After) predicate = &hull.builder.Emit(IrOpcode::LogicalAnd, IrType::Bool, {&other, &own});
+    auto& square = hull.builder.IMul(hull.invocation(), hull.invocation());
+    auto& offset = hull.builder.Emit(IrOpcode::SelectU32, IrType::U32, {&notFirst, &square, &hull.computed(2u, LocalStride)});
+    auto& address = hull.inPatch(offset);
+    hull.read(address, *predicate);
+    return LoweredAt(hull.program, address);
+}
+
 bool run(const char* name, const std::function<bool()>& body) {
     bool passed = false;
     try {
