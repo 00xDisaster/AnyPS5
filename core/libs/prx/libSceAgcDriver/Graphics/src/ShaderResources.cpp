@@ -1550,9 +1550,10 @@ std::shared_ptr<StorageTexture> RepeatStorageSurface(const Context& context, con
     if (disabled || stored == nullptr) return nullptr;
     const auto viewed = ArrayLayerWindow(requested, context.limits.maxImageArrayLayers);
     Require(viewed.dimension != TextureDimension::k2DMsaa, "storage image access to a multisampled texture is not implemented");
-    RequireNoMultisampleTarget(viewed.baseAddress, 1u, "a storage image access");
+    const auto viewedBytes = DescribeSurface(viewed).guestBytes;
+    RequireNoMultisampleTarget(viewed.baseAddress, static_cast<std::size_t>(viewedBytes), "a storage image access");
     if (DepthSurfaceStorage(context, {}, viewed, 0) != nullptr) return nullptr;
-    if (DepthPlanesStale()) static_cast<void>(FlushDepthPlanes(viewed.baseAddress, static_cast<std::size_t>(DescribeSurface(viewed).guestBytes), DepthPlaneScope::Overlapped));
+    if (DepthPlanesStale()) static_cast<void>(FlushDepthPlanes(viewed.baseAddress, static_cast<std::size_t>(viewedBytes), DepthPlaneScope::Overlapped));
     if (auto* recorder = Recorder::Active(); recorder != nullptr) recorder->BoundKeptBytes();
     const bool profile = LookupOutcomes::Profiled();
     const auto start = profile ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
