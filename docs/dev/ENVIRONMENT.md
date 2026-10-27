@@ -110,7 +110,7 @@ The code reads environment names through `getenv`, `IsEnvironmentSet`, `kibSetti
 | `APS5_COPY_DESTINATION_STRICT` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | refuses a CPU copy whose destination has any pending writer, not only an unsettled one |
 | `APS5_COPY_HLE_CPU_MAX` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/BufferCopy.cpp` | 262144 | largest copy in bytes the CPU side of the copy HLE handles |
 | `APS5_COPY_HLE_GPU_MAX` | integer | `core/libs/prx/libSceAgcDriver/Execution/src/Driver/Memory/BufferCopy.cpp` |  | largest copy in bytes the GPU side of the copy HLE handles; unset means no limit |
-| `APS5_COPY_READ_TRACKING` | presence | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | notes in-place reads of a range; set to 0 to disable, making the CPU copy path require an idle recorder |
+| `APS5_COPY_READ_TRACKING` | string | `core/libs/prx/libSceAgcDriver/Graphics/src/Recorder.cpp` |  | notes in-place reads of a range; set to 0 to disable, making the CPU copy path require an idle recorder |
 | `APS5_COPY_SYNC` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | treats any pending writer over a copy's range as needing a wait |
 | `APS5_COPY_VERIFY` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | verifies a CPU copy's source and destination bytes against the pre-copy values after a sync |
 | `APS5_COPY_WAIT_SOURCE` | presence | `core/libs/prx/libSceAgcDriver/Execution/src/VulkanDevice.cpp` |  | waits for the source's producer batch when it is the only one in flight, on non-zero queues |
