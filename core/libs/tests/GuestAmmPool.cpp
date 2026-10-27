@@ -199,6 +199,32 @@ void TestEveryAllocationFailsWithASplit() {
     Require(failures >= 8);
 }
 
+void TestPrtAllocationShape() {
+    for (int failAt = 0; failAt < 3; ++failAt) {
+        AmmPool::Records records;
+        records.pool.emplace(0, 2 * page);
+        records.pool.emplace(3 * page, page);
+        records.pool.emplace(5 * page, 2 * page);
+        const auto before = records;
+        int mapped = 0;
+        bool failed = false;
+        try {
+            Map(records, 5 * page, [&](std::uint64_t, std::uint64_t, std::uint64_t) {
+                if (mapped++ == failAt) throw std::runtime_error("AMM: map failed");
+            });
+        } catch (const std::runtime_error&) {
+            failed = true;
+        }
+        Require(failed && Equal(records, before));
+        RequireConsistent(records);
+        std::vector<std::uint64_t> sizes;
+        Map(records, 5 * page, [&](std::uint64_t, std::uint64_t, std::uint64_t size) { sizes.push_back(size); });
+        Require(sizes.size() == 3 && sizes[0] == 2 * page && sizes[1] == page && sizes[2] == 2 * page);
+        Require(FreeBytes(records) == 0 && records.pages.size() == 5);
+        RequireConsistent(records);
+    }
+}
+
 void TestAddPageFailures() {
     long failures = 0;
     for (long allocation = 0;; ++allocation) {
@@ -237,6 +263,7 @@ int main() {
         TestHostMapFailsAfterEachRun();
         TestEveryAllocationFails();
         TestEveryAllocationFailsWithASplit();
+        TestPrtAllocationShape();
         TestAddPageFailures();
         std::puts("AMM scattered pool pages published exactly once");
         return 0;

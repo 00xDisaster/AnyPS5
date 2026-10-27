@@ -333,12 +333,6 @@ bool _tryTakePoolPages(AmmState& state, std::uint64_t bytes, std::uint64_t& offs
     return AmmPool::TryTakeRun(state, bytes, offset);
 }
 
-std::uint64_t _takePoolPages(AmmState& state, std::uint64_t bytes) {
-    std::uint64_t offset = 0;
-    if (!_tryTakePoolPages(state, bytes, offset)) throw std::runtime_error("AMM: no free run of " + std::to_string(bytes) + " bytes in the direct memory given to the mapper");
-    return offset;
-}
-
 void _addPage(AmmState& state, std::uint64_t address, const AmmPage& page) {
     AmmPool::AddPage(state, address, page);
 }
@@ -471,14 +465,12 @@ void _ammAllocatePrt(const Apr::AmmProtectCommand& command) {
             }
             if (DoMprotect(reinterpret_cast<void*>(address), bytes, _ammHostProtection(command.protection)) != 0) throw std::runtime_error("AMM: protection change failed");
         } else {
-            std::vector<AmmPage> pages;
             try {
-                for (std::uint64_t page = 0; page < bytes; page += PS5_PAGE_SIZE) pages.push_back({_takePoolPages(state, PS5_PAGE_SIZE), command.type, command.protection, true});
+                AmmPool::MapScattered(state, address, bytes, command.type, command.protection, [&](std::uint64_t at, std::uint64_t physical, std::uint64_t size) { _mapRun(at, physical, size, command.protection); });
             } catch (...) {
-                for (const auto& page : pages) _returnPoolPages(state, page.physical, PS5_PAGE_SIZE);
+                _reserve(address, bytes);
                 throw;
             }
-            _mapPages(state, address, pages);
         }
         offset = end;
     }
