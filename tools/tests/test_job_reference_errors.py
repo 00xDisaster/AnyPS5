@@ -51,7 +51,7 @@ class ReferenceErrorTests(unittest.TestCase):
                     contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
                 code = runner.main()
             self.assertTrue(artifact.is_dir())
-            self.assertIn(str(artifact), output.getvalue())
+            self.assertIn(str(artifact.resolve()), output.getvalue())
             self.assertNotIn("Traceback", errors.getvalue())
             return code, errors.getvalue()
 
