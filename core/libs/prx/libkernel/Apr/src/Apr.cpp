@@ -364,13 +364,10 @@ std::uint64_t _takePoolPages(AmmState& state, std::uint64_t bytes) {
     return offset;
 }
 
-// Pool pages for `bytes` taken from several runs (first fit), for a map no single free run holds:
-// the PS5 maps the mapper's pages through page tables, so a fragmented pool still serves it
-// (PPSA03671 aborted on an 11 MB map ~4 min into a slot-4 load with only contiguous runs).
 std::vector<AmmPage> _takeScatteredPages(AmmState& state, std::uint64_t bytes, std::int32_t type, std::int32_t protection) {
     std::uint64_t free = 0;
     for (const auto& [offset, size] : state.pool) free += size;
-    if (free < bytes) throw std::runtime_error("AMM: " + std::to_string(bytes) + " bytes requested, " + std::to_string(free) + " free in the direct memory given to the mapper");
+    if (free < bytes) throw std::runtime_error("AMM: no free run of " + std::to_string(bytes) + " bytes in the direct memory given to the mapper");
     std::vector<AmmPage> pages;
     pages.reserve(bytes / PS5_PAGE_SIZE);
     while (pages.size() * PS5_PAGE_SIZE < bytes) {
@@ -541,8 +538,6 @@ void _ammMap(const Apr::AmmMapCommand& command, bool direct) {
     std::uint64_t physical = direct ? command.directOffset : 0;
     if (!direct && !_tryTakePoolPages(state, command.size, physical)) {
         const auto pages = _takeScatteredPages(state, command.size, command.type, command.protection);
-        static std::atomic<int> reported{0};
-        if (reported.fetch_add(1, std::memory_order_relaxed) < 8) std::fprintf(stderr, "[amm] no free run of %llu bytes: mapping 0x%llx from scattered pool pages\n", static_cast<unsigned long long>(command.size), static_cast<unsigned long long>(command.address));
         std::size_t mapped = 0;
         try {
             for (std::size_t first = 0; first < pages.size();) {
