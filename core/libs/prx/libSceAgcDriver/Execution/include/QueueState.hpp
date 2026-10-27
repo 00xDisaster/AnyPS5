@@ -260,8 +260,6 @@ inline Registers InitialContextRegisters() {
     return InitialContextRegisterSet();
 }
 
-// Storage a pushed context state returns to when it is popped, so the next push copies into
-// buffers it already has. A copied queue state starts without one.
 struct SpareRegisters {
     Registers registers;
     SpareRegisters() = default;
