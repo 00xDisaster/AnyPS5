@@ -30,7 +30,7 @@ El [recompilador de shaders](../../core/shader/recompiler/Recompiler.cpp) produc
 
 ## Compatibilidad
 
-El progreso por juego (etapa alcanzada, bloqueos abiertos, cobertura de bibliotecas y GPU) se sigue en el [mapa de bloqueos](https://alxcbtw.github.io/anyps5-roadmap/), un proyecto de la comunidad construido a partir de datos públicos de GitHub ([código fuente](https://github.com/AlxcBTW/anyps5-roadmap)). Los informes de prueba van en las discusiones de [Game bring-up](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up), un hilo por título.
+El estado de cada juego y los informes de prueba están en las discusiones de [Game bring-up](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up), un hilo por título.
 
 ## Mapeo de entrada
 
@@ -39,6 +39,8 @@ Se admiten mandos mapeados por SDL, incluidos los sticks analógicos y los gatil
 ## Aviso legal
 
 Este proyecto está destinado a fines de interoperabilidad, investigación, preservación y compatibilidad. No incluye, distribuye ni requiere software protegido por derechos de autor, firmware, claves criptográficas ni bibliotecas propietarias. Los usuarios son responsables de garantizar que cualquier binario utilizado con este proyecto se obtenga y utilice de acuerdo con las leyes aplicables y sus respectivos términos de licencia.
+
+AnyPS5 es un proyecto independiente y no está afiliado, autorizado ni respaldado por Sony Interactive Entertainment. "PlayStation" y "PS5" son marcas registradas de Sony Interactive Entertainment Inc.
 
 ## Licencia
 

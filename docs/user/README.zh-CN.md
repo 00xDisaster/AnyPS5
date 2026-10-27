@@ -30,7 +30,7 @@
 
 ## 兼容性
 
-每个游戏的进度（已达到的阶段、未解决的阻碍、库和 GPU 覆盖率）记录在[阻碍地图](https://alxcbtw.github.io/anyps5-roadmap/)上，这是一个基于 GitHub 公开数据构建的社区项目（[源码](https://github.com/AlxcBTW/anyps5-roadmap)）。测试报告请发布在 [Game bring-up](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up) 讨论区，每个游戏一个帖子。
+每个游戏的状态和测试报告都在 [Game bring-up](https://github.com/boykopovar/AnyPS5/discussions/categories/game-bring-up) 讨论区，每个游戏一个帖子。
 
 ## 输入映射
 
@@ -39,6 +39,8 @@
 ## 免责声明
 
 本项目旨在用于互操作性、研究、保存和兼容性目的。本项目不包含、不分发也不需要任何受版权保护的软件、固件、加密密钥或专有库。用户有责任确保与本项目一起使用的任何二进制文件均按照适用法律及其各自的许可条款获取和使用。
+
+AnyPS5 是一个独立项目，与 Sony Interactive Entertainment 没有关联，也未获得其授权或认可。“PlayStation”和“PS5”是 Sony Interactive Entertainment Inc. 的商标。
 
 ## 许可证
 
