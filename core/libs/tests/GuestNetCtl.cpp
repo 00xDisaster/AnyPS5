@@ -106,10 +106,15 @@ void CheckCallbacks() {
     int v6 = -1;
     Require(sceNetCtlRegisterCallbackV6(RecordV6, &v6Probe, &v6) == 0 && v6 == 0);
 
+    int stateV6 = -1;
+    Require(sceNetCtlGetStateV6(&stateV6) == 0);
+    const int eventV6 = stateV6 == kStateIpObtained ? kEventIpObtained : kEventDisconnected;
+
     int first = -1;
     Require(sceNetCtlRegisterCallback(RecordFirst, &firstProbe, &first) == 0 && first == 0);
     Require(sceNetCtlCheckCallback() == 0);
     Require(g_first.calls == 1 && g_first.event == event && g_first.arg == &firstProbe);
+    Require(g_v6.calls == 1 && g_v6.event == eventV6 && g_v6.arg == &v6Probe);
     Require(sceNetCtlCheckCallback() == 0);
     Require(g_first.calls == 1);
 
@@ -148,7 +153,8 @@ void CheckCallbacks() {
     Require(sceNetCtlRegisterCallback(RecordFirst, &secondProbe, &first) == 0 && first == 0);
     Require(sceNetCtlCheckCallback() == 0);
     Require(g_first.calls == 2 && g_first.event == event && g_first.arg == &secondProbe);
-    Require(g_second.calls == 2 && g_self.calls == 1 && g_v6.calls == 0);
+    Require(g_second.calls == 2 && g_self.calls == 1 && g_v6.calls == 2);
+    Require(g_v6.event == eventV6 && g_v6.arg == &v6Probe);
     Require(sceNetCtlUnregisterCallback(first) == 0);
     Require(sceNetCtlUnregisterCallbackV6(v6) == 0);
 }
@@ -230,12 +236,17 @@ void CheckIpcIntCallbacks() {
     Require(sceNetCtlUnregisterCallback(internal) == 0);
     Require(sceNetCtlUnregisterCallbackIpcInt(internal) == idNotFound);
 
+    int stateV6 = -1;
+    Require(sceNetCtlGetStateV6(&stateV6) == 0);
+    const int eventV6 = stateV6 == kStateIpObtained ? kEventIpObtained : kEventDisconnected;
     int internalV6 = -1;
     Require(sceNetCtlRegisterCallbackV6IpcInt(RecordIpcInt, &probe, &internalV6) == 0 && internalV6 == 0);
     int sharedV6 = -1;
     Require(sceNetCtlRegisterCallbackV6(RecordIpcInt, &probe, &sharedV6) == 0 && sharedV6 == 1);
     Require(sceNetCtlCheckCallback() == 0);
-    Require(g_ipcInt.calls == 2);
+    Require(g_ipcInt.calls == 4 && g_ipcInt.event == eventV6 && g_ipcInt.arg == &probe);
+    Require(sceNetCtlCheckCallback() == 0);
+    Require(g_ipcInt.calls == 4 && g_ipcInt.event == eventV6 && g_ipcInt.arg == &probe);
     Require(sceNetCtlUnregisterCallbackV6IpcInt(sharedV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6(internalV6) == 0);
     Require(sceNetCtlUnregisterCallbackV6IpcInt(internalV6) == idNotFound);
