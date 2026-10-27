@@ -24,6 +24,68 @@ struct IrUse {
     bool operator==(const IrUse& other) const;
 };
 
+class IrOperands {
+public:
+    IrOperands() = default;
+    IrOperands(const IrOperands&) = delete;
+    IrOperands& operator=(const IrOperands&) = delete;
+    ~IrOperands() {
+        if (capacity > Inline) delete[] heap;
+    }
+
+    IrOperands& operator=(std::vector<IrValue*>&& values) {
+        count = 0;
+        reserve(values.size());
+        for (IrValue* value : values) data()[count++] = value;
+        values.clear();
+        return *this;
+    }
+
+    void reserve(std::size_t size) {
+        if (size > capacity) grow(size);
+    }
+    void push_back(IrValue* value) {
+        if (count == capacity) grow(static_cast<std::size_t>(capacity) * 2u);
+        data()[count++] = value;
+    }
+    void clear() {
+        count = 0;
+    }
+
+    [[nodiscard]] std::size_t size() const { return count; }
+    [[nodiscard]] bool empty() const { return count == 0; }
+    [[nodiscard]] IrValue* const* begin() const { return data(); }
+    [[nodiscard]] IrValue* const* end() const { return data() + count; }
+    [[nodiscard]] IrValue* const& operator[](std::size_t index) const { return data()[index]; }
+    [[nodiscard]] IrValue*& operator[](std::size_t index) { return data()[index]; }
+    [[nodiscard]] IrValue* at(std::size_t index) const {
+        if (index >= count) throw std::out_of_range("IrOperands::at index is out of range");
+        return data()[index];
+    }
+    [[nodiscard]] IrValue* front() const { return data()[0]; }
+    [[nodiscard]] IrValue* back() const { return data()[count - 1]; }
+
+private:
+    static constexpr std::uint32_t Inline = 3;
+
+    [[nodiscard]] IrValue* const* data() const { return capacity > Inline ? heap : local; }
+    [[nodiscard]] IrValue** data() { return capacity > Inline ? heap : local; }
+    void grow(std::size_t size) {
+        auto* grown = new IrValue*[size];
+        for (std::uint32_t index = 0; index < count; ++index) grown[index] = data()[index];
+        if (capacity > Inline) delete[] heap;
+        heap = grown;
+        capacity = static_cast<std::uint32_t>(size);
+    }
+
+    std::uint32_t count = 0;
+    std::uint32_t capacity = Inline;
+    union {
+        IrValue* local[Inline];
+        IrValue** heap;
+    };
+};
+
 class IrValue {
 public:
     IrValue(IrOpcode opcode, IrType type, std::uint32_t id);
@@ -35,7 +97,7 @@ public:
     [[nodiscard]] IrOpcode Opcode() const;
     [[nodiscard]] IrType Type() const;
     [[nodiscard]] std::uint32_t Id() const;
-    [[nodiscard]] const std::vector<IrValue*>& Arguments() const;
+    [[nodiscard]] const IrOperands& Arguments() const;
     [[nodiscard]] auto Uses() const;
     [[nodiscard]] IrBlock* Parent() const;
     [[nodiscard]] bool HasImmediate() const;
@@ -103,7 +165,7 @@ private:
     std::vector<IrBlock*> phiBlocks;
     std::vector<IrUse> operandUses;
     bool hasImmediate;
-    std::vector<IrValue*> arguments;
+    IrOperands arguments;
     IrBlock* parent;
 };
 
