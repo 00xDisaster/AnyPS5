@@ -84,6 +84,12 @@ template<class TValue> void AppendNumber(std::u16string& out, const std::string&
     out.append(text.begin(), text.begin() + size);
 }
 
+int AppendDecimalDigit(int value, char16_t digit) {
+    const int next = digit - u'0';
+    if (value > (INT_MAX - next) / 10) throw std::invalid_argument("Format width or precision out of range");
+    return value * 10 + next;
+}
+
 std::u16string WideNanText(const std::string& spec, bool negative, bool upper) {
     char16_t sign = negative ? u'-' : u'\0';
     for (std::size_t index = 1; !negative && index < spec.size() && std::strchr("-+ #0", spec[index]); ++index) {
@@ -138,10 +144,11 @@ std::u16string FormatWide(const char16_t* format, VaList* source, bool secure = 
         if (*format == u'*') {
             ++format;
             width = star();
+            if (width == INT_MIN) throw std::invalid_argument("Format width out of range");
             if (width < 0) { left = true; spec += '-'; width = -width; }
             spec += std::to_string(width);
         } else {
-            while (*format >= u'0' && *format <= u'9') { width = width * 10 + (*format - u'0'); spec += static_cast<char>(*format++); }
+            while (*format >= u'0' && *format <= u'9') { width = AppendDecimalDigit(width, *format); spec += static_cast<char>(*format++); }
         }
         if (*format == u'.') {
             ++format;
@@ -152,7 +159,7 @@ std::u16string FormatWide(const char16_t* format, VaList* source, bool secure = 
                 if (precision >= 0) spec += "." + std::to_string(precision);
             } else {
                 spec += '.';
-                while (*format >= u'0' && *format <= u'9') { precision = precision * 10 + (*format - u'0'); spec += static_cast<char>(*format++); }
+                while (*format >= u'0' && *format <= u'9') { precision = AppendDecimalDigit(precision, *format); spec += static_cast<char>(*format++); }
             }
         }
         std::string length;
