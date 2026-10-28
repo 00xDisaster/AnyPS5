@@ -774,7 +774,8 @@ int APS5_VABI waitpid_nid_postfix(int pid, int* status, int options) {
 }
 
 int APS5_VABI setrlimit_nid_postfix(int resource, const GuestResourceLimit* limit) {
-    if (limit == nullptr) {
+    GuestResourceLimit requested{};
+    if (limit == nullptr || !GuestCopyIn_nid_no_patch(&requested, limit, sizeof(requested))) {
         *__error_nid_postfix() = guestFault;
         return -1;
     }
@@ -783,7 +784,6 @@ int APS5_VABI setrlimit_nid_postfix(int resource, const GuestResourceLimit* limi
         return -1;
     }
 
-    GuestResourceLimit requested = *limit;
     if (requested.rlim_cur < 0)
         requested.rlim_cur = guestRlimitInfinity;
     if (requested.rlim_max < 0)
