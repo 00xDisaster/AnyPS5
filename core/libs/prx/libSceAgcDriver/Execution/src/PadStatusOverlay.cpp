@@ -81,6 +81,33 @@ std::string FormatPadStatusLine(std::size_t slot, const PadSlotStatus& status) {
     return prefix + kind + "  " + std::string(powerText(status.power));
 }
 
+OverlayCorner PadStatusCorner(OverlayCorner overlay) {
+    switch (overlay) {
+        case OverlayCorner::TopLeft: return OverlayCorner::TopRight;
+        case OverlayCorner::TopRight: return OverlayCorner::TopLeft;
+        case OverlayCorner::BottomLeft: return OverlayCorner::BottomRight;
+        case OverlayCorner::BottomRight: return OverlayCorner::BottomLeft;
+    }
+    throw std::runtime_error("the performance overlay has no such corner");
+}
+
+OverlayContent ComposePadStatus(const std::vector<std::string>& lines) {
+    Graphics::Require(!lines.empty(), "the pad status panel has nothing to show");
+    OverlayContent content;
+    content.above = lines;
+    content.columns = PadStatusMetrics::Columns;
+    content.graph = false;
+    return content;
+}
+
+OverlayLayout LayOutPadStatus(const std::vector<std::string>& lines, VkExtent2D extent, OverlayCorner overlay) {
+    return LayOutOverlay(ComposePadStatus(lines), extent, PadStatusCorner(overlay));
+}
+
+bool PadStatusDrawn(bool visible, bool keyboardShown) {
+    return visible && !keyboardShown;
+}
+
 PadStatusDisplay::PadStatusDisplay(PadStatusMode mode) : mode(mode) {
 }
 
@@ -123,6 +150,13 @@ PadStatusDisplay& display() {
     return shared;
 }
 
+}
+
+std::optional<std::vector<std::string>> PadStatusOverlayLines() {
+    std::lock_guard lock(displayMutex);
+    auto& shared = display();
+    if (!shared.Visible(PadStatusDisplay::Clock::now())) return std::nullopt;
+    return shared.Lines();
 }
 
 }

@@ -1,6 +1,9 @@
 #ifndef CORE_LIBS_PRX_LIBSCEAGCDRIVER_EXECUTION_INCLUDE_PADSTATUSOVERLAY_HPP
 #define CORE_LIBS_PRX_LIBSCEAGCDRIVER_EXECUTION_INCLUDE_PADSTATUSOVERLAY_HPP
 
+#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+#include "prx/libSceAgcDriver/Execution/include/PerformanceOverlay.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -44,6 +47,11 @@ struct PadStatusMetrics {
 
 PadStatusMode ParsePadStatusMode(const char* value);
 std::string FormatPadStatusLine(std::size_t slot, const PadSlotStatus& status);
+OverlayCorner PadStatusCorner(OverlayCorner overlay);
+OverlayContent ComposePadStatus(const std::vector<std::string>& lines);
+OverlayLayout LayOutPadStatus(const std::vector<std::string>& lines, VkExtent2D extent, OverlayCorner overlay);
+bool PadStatusDrawn(bool visible, bool keyboardShown);
+std::optional<std::vector<std::string>> PadStatusOverlayLines();
 
 class PadStatusDisplay {
 public:
