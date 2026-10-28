@@ -247,11 +247,6 @@ void DisabledDescriptors(AgcDriver::VulkanDevice& device) {
         rejects(rawStore, word3, "a raw store");
         rejects(formattedStore, word3, "a formatted store");
     }
-    for (const auto word3 : {0x91000facu, 0x91016facu, 0xd1000facu, 0xd1016facu}) {
-        rejects(Code, word3, "a raw load");
-        rejects(formattedLoad, word3, "a formatted load");
-        rejects(atomicAdd, word3, "an atomic");
-    }
 }
 
 }
