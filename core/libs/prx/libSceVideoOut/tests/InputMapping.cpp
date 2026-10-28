@@ -1,4 +1,5 @@
 #include "prx/libScePad/include/InputMapping.hpp"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
@@ -9,6 +10,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -44,6 +46,18 @@ bool rejects(const std::string& text) {
         return true;
     }
     return false;
+}
+
+std::vector<SDL_Scancode> keysFor(Pad::InputControl control) {
+    std::vector<SDL_Scancode> keys;
+    for (const auto& binding : Pad::LoadInputMapping().bindings) {
+        if (binding.control == control && binding.key != SDL_SCANCODE_UNKNOWN) keys.push_back(binding.key);
+    }
+    return keys;
+}
+
+bool hasKey(const std::vector<SDL_Scancode>& keys, SDL_Scancode key) {
+    return std::find(keys.begin(), keys.end(), key) != keys.end();
 }
 
 std::uint8_t plainStickByte(std::int16_t axis) {
@@ -165,6 +179,19 @@ void padStatusConflicts() {
     useConfig("ShowPadStatus = KEY:F4\nTogglePerformanceOverlay = KEY:F9\n");
     const auto swapped = Pad::LoadInputMapping();
     require(padStatusBindingsOn(swapped, SDL_SCANCODE_F4) == 1 && padStatusBindingsOn(swapped, SDL_SCANCODE_F9) == 0, "moving the pad status key off F9 keeps it off");
+void volumeUpAction() {
+    useConfig("volumeup = KEY:F2\nVolumeUp = KEY:F3\n");
+    const auto keys = keysFor(Pad::InputControl::VolumeUp);
+    require(keys.size() == 2 && hasKey(keys, SDL_SCANCODE_F2) && hasKey(keys, SDL_SCANCODE_F3), "VolumeUp takes a first key and an alternate, case-insensitively");
+    useConfig("VolumeUp = KEY:F2\nVolumeUp = KEY:F2\n");
+    const auto duplicated = keysFor(Pad::InputControl::VolumeUp);
+    require(duplicated.size() == 1 && duplicated[0] == SDL_SCANCODE_F2, "a duplicate VolumeUp line is ignored");
+    require(rejects("VolumeUp = MOUSE:Left\n"), "VolumeUp refuses a mouse button");
+    require(rejects("VolumeUp = MOUSE:X1\n"), "VolumeUp refuses another mouse button");
+    require(rejects("VolumeUp = WHEEL:Up\n"), "VolumeUp refuses the mouse wheel");
+    require(rejects("VolumeUp = KEY:NoSuchKey\n"), "VolumeUp refuses an unknown key name");
+    require(rejects("VolumeUp =\n"), "VolumeUp refuses an empty source");
+    require(rejects("VolumeUp = F2\n"), "VolumeUp refuses a source without a type");
 }
 
 void mouseLookDefault() {
@@ -332,6 +359,7 @@ int main() try {
     screenshotBinding();
     padStatusBinding();
     padStatusConflicts();
+    volumeUpAction();
     mouseLookDefault();
     mouseLookParse();
     mouseLookReject();
