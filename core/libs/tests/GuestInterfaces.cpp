@@ -14,6 +14,7 @@
 #include <netpacket/packet.h>
 #elif defined(__APPLE__)
 #include <net/if_dl.h>
+#include <net/if_types.h>
 #endif
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -187,7 +188,7 @@ static std::vector<HostInterfaceAddress> HostSnapshot() {
                 entry.family = AF_LINK;
                 std::strncpy(entry.name, item->ifa_name, sizeof(entry.name) - 1);
                 entry.index = link.sdl_index;
-                entry.type = link.sdl_type;
+                entry.type = link.sdl_type == IFT_ETHER ? 0x6 : link.sdl_type == IFT_LOOP ? 0x18 : link.sdl_type == IFT_PPP ? 0x17 : 0x1;
                 entry.hardwareLength = entry.type == 0x18 ? 0 : std::min<std::uint8_t>(link.sdl_alen, sizeof(entry.hardware));
                 std::memcpy(entry.hardware, link.sdl_data + link.sdl_nlen, entry.hardwareLength);
                 entry.loopbackUp = (item->ifa_flags & IFF_UP) != 0;

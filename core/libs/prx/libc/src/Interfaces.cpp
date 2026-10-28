@@ -15,6 +15,7 @@
 #elif defined(__APPLE__)
 #include <net/if_dl.h>
 #include <net/if_media.h>
+#include <net/if_types.h>
 #endif
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -361,7 +362,8 @@ int HostEntries(std::vector<Entry>& entries) {
                 HostInterface& owner = interfaceFor(CheckedName(item->ifa_name));
                 if (owner.linked) throw std::runtime_error("getifaddrs: two link-level entries for " + owner.name);
                 if (link.sdl_index == 0) throw std::runtime_error("getifaddrs: link-level entry of " + owner.name + " has no interface index");
-                const std::uint8_t type = link.sdl_type;
+                const std::uint8_t type = link.sdl_type == IFT_ETHER ? guestTypeEthernet : link.sdl_type == IFT_LOOP ? guestTypeLoopback
+                    : link.sdl_type == IFT_PPP ? guestTypePpp : guestTypeOther;
                 const std::uint8_t hardwareLength = type == guestTypeLoopback ? 0 : link.sdl_alen;
                 owner.link = Entry{owner.name, InterfaceFlags(item->ifa_flags),
                     GuestLinkAddress(owner.name, link.sdl_index, type, reinterpret_cast<const std::uint8_t*>(link.sdl_data + link.sdl_nlen), hardwareLength), {}, {},
