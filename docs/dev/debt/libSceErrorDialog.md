@@ -2,7 +2,7 @@
 
 ### Silent stubs
 
-- [libSceErrorDialog](../../../core/libs/prx/libSceErrorDialog/Export.cpp) - the error dialog runs the state machine but shows nothing; the error code passed to `sceErrorDialogOpen` is only logged
+- [libSceErrorDialog](../../../core/libs/prx/libSceErrorDialog/Export.cpp) - the error dialog shows UI only while the video output has a window to draw it and no other dialog is shown; otherwise it runs the state machine, finishes on the first `sceErrorDialogUpdateStatus` call and the error code passed to `sceErrorDialogOpen` is only logged
 
 ### Unknown function info
 
