@@ -4,7 +4,6 @@
 #include "prx/libSceAgc/Patch/include/Nop.hpp"
 #include "prx/libSceAgc/Patch/include/QueueEndOfPipeAction.hpp"
 #include "prx/libSceAgc/Misc/include/Suspend.hpp"
-#include "prx/libSceAgc/Patch/include/QueueEndOfPipeAction.hpp"
 #include "prx/libSceAgc/Misc/include/RegisterDefaults.hpp"
 #include "prx/libSceAgc/Misc/include/PacketInfo.hpp"
 #include "prx/libSceAgc/Misc/include/Debug.hpp"
