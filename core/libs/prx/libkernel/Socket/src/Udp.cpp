@@ -342,20 +342,22 @@ std::int64_t ZeroPortSend(const Socket& socket, const sockaddr_storage& destinat
     if (bound && remote.sin_addr.s_addr != htonl(INADDR_ANY) && remote.sin_addr.s_addr != htonl(INADDR_BROADCAST)) return static_cast<std::int64_t>(length);
     return Fail(49);
 }
-void ClearLocalAddress(Socket& socket, bool cleared) {
-    std::lock_guard lock(socket.modeMutex);
-    socket.localAddressCleared = cleared;
-}
 int LocalAddress(Socket& socket, sockaddr_storage& address, socklen_t& size) {
+    std::unique_lock lock(socket.modeMutex, std::defer_lock);
+    if (socket.type == 2) lock.lock();
     if (::getsockname(socket.value, reinterpret_cast<sockaddr*>(&address), &size)) return -1;
-    std::lock_guard lock(socket.modeMutex);
-    if (socket.localAddressCleared) {
+    if (socket.type == 2 && socket.localAddressCleared) {
         if (address.ss_family == AF_INET) reinterpret_cast<sockaddr_in&>(address).sin_addr = {};
-        else if (address.ss_family == AF_INET6) reinterpret_cast<sockaddr_in6&>(address).sin6_addr = {};
+        else if (address.ss_family == AF_INET6) {
+            auto& v6 = reinterpret_cast<sockaddr_in6&>(address);
+            v6.sin6_addr = {};
+            v6.sin6_scope_id = 0;
+        }
     }
     return 0;
 }
 int Disconnect(Socket& socket) {
+    std::lock_guard lock(socket.modeMutex);
     sockaddr_storage peer{};
     socklen_t peerSize = sizeof(peer);
     if (::getpeername(socket.value, reinterpret_cast<sockaddr*>(&peer), &peerSize) != 0) return 0;
@@ -375,14 +377,14 @@ int Disconnect(Socket& socket) {
     socklen_t currentSize = sizeof(current);
     if (::getsockname(socket.value, reinterpret_cast<sockaddr*>(&current), &currentSize) != 0) return Fail(NativeError());
     if (PortOf(current) != 0) {
-        ClearLocalAddress(socket, true);
+        socket.localAddressCleared = true;
         return 0;
     }
     sockaddr_storage wildcard{};
     wildcard.ss_family = local.ss_family;
     PortOf(wildcard) = PortOf(local);
     if (::bind(socket.value, reinterpret_cast<sockaddr*>(&wildcard), localSize) != 0) return Fail(NativeError());
-    ClearLocalAddress(socket, true);
+    socket.localAddressCleared = true;
     return 0;
 }
 bool ZeroPortConnect(Socket& socket, const void* address, std::uint32_t length) {
@@ -1335,12 +1337,11 @@ int APS5_VABI connect_nid_postfix(int descriptor, const void* address, std::uint
     if (socket->type == 1) RefuseClosedLoopbackAtOnce_nid_no_patch(socket->value, reinterpret_cast<const sockaddr*>(&native));
 #endif
     if (ZeroPortConnect(*socket, address, length)) return -1;
-    {
-        std::lock_guard lock(socket->modeMutex);
-        socket->options.reportedError = 0;
-    }
+    std::unique_lock lock(socket->modeMutex);
+    socket->options.reportedError = 0;
+    if (socket->type != 2) lock.unlock();
     if (::connect(socket->value, reinterpret_cast<sockaddr*>(&native), size)) return Fail(ConnectError());
-    ClearLocalAddress(*socket, false);
+    if (socket->type == 2) socket->localAddressCleared = false;
     return 0;
 }
 int APS5_VABI listen_nid_postfix(int descriptor, int backlog) {
@@ -1429,8 +1430,10 @@ int APS5_VABI bind_nid_postfix(int descriptor, const void* address, std::uint32_
     const int mapped = LongMappedDualStack(*socket, address, length);
     if (mapped < 0) return -1;
     if (!Address(socket->family, address, mapped ? 28 : length, native, size)) return -1;
+    std::unique_lock lock(socket->modeMutex, std::defer_lock);
+    if (socket->type == 2) lock.lock();
     if (::bind(socket->value, reinterpret_cast<sockaddr*>(&native), size)) return Fail(NativeError());
-    ClearLocalAddress(*socket, false);
+    if (socket->type == 2) socket->localAddressCleared = false;
     return 0;
 }
 namespace {

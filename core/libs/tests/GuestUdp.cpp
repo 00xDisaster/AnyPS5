@@ -144,11 +144,18 @@ static void CheckDissolvedName(int family, int binding) {
             std::array<unsigned char, 28> name{};
             size = name.size();
             Require(getpeername_nid_postfix(descriptor, name.data(), &size) == -1 && *__error_nid_postfix() == 57);
-            for (int attempt = 0; attempt < 2; ++attempt) {
-                size = name.size();
-                Require(getsockname_nid_postfix(descriptor, name.data(), &size) == 0 && size == addressSize);
-                Require(name[2] == connected[2] && name[3] == connected[3]);
-                Require(std::all_of(name.begin() + begin, name.begin() + end, [](auto byte) { return byte == 0; }));
+            size = name.size();
+            Require(getsockname_nid_postfix(descriptor, name.data(), &size) == 0 && size == addressSize);
+            Require(name[2] == connected[2] && name[3] == connected[3]);
+            Require(std::all_of(name.begin() + begin, name.begin() + end, [](auto byte) { return byte == 0; }));
+            if (family == 28) Require(std::all_of(name.begin() + 24, name.end(), [](auto byte) { return byte == 0; }));
+            for (const std::uint32_t capacity : {0u, 1u, 6u, addressSize}) {
+                std::array<unsigned char, 32> truncated;
+                truncated.fill(0xa5);
+                size = capacity;
+                Require(getsockname_nid_postfix(descriptor, truncated.data(), &size) == 0 && size == capacity);
+                Require(std::equal(name.begin(), name.begin() + size, truncated.begin()));
+                Require(std::all_of(truncated.begin() + size, truncated.end(), [](auto byte) { return byte == 0xa5; }));
             }
         }
         Require(connect_nid_postfix(dissolved, peerAddress.data(), addressSize) == 0);
