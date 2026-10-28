@@ -43,6 +43,8 @@ extern "C" {
 int SceMsgDialogNativeModuleLoaded_nid_no_patch = 1;
 
 int APS5_VABI sceMsgDialogClose(void) {
+    if (Status() != COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_NOT_RUNNING;
+    if (g_presented.load()) ModalDialogClose_nid_postfix();
     int expected = COMMON_DIALOG_STATUS_RUNNING;
     if (!g_status.compare_exchange_strong(expected, COMMON_DIALOG_STATUS_FINISHED)) return COMMON_DIALOG_ERROR_NOT_RUNNING;
     return 0;
@@ -75,6 +77,8 @@ int APS5_VABI sceMsgDialogOpen(const void* param) {
 
 int APS5_VABI sceMsgDialogTerminate(void) {
     if (g_status.exchange(0) == 0) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
+    g_presented = false;
+    ModalDialogReset_nid_postfix();
     return 0;
 }
 
