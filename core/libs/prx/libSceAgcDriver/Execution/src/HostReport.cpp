@@ -89,6 +89,7 @@ HostFacts sanitized(const HostFacts& facts) {
             requirement.kind = clean(requirement.kind);
         }
     }
+    result.unavailable = cleanAll(facts.unavailable);
     for (auto& entry : result.environment) {
         entry.first = clean(entry.first);
         entry.second = clean(entry.second);
@@ -323,6 +324,12 @@ std::string FormatHostReport(const HostFacts& original) {
     std::sort(environment.begin(), environment.end());
     if (environment.empty()) output += "none\n";
     for (const auto& entry : environment) line(output, entry.first, entry.second);
+    if (!facts.unavailable.empty()) {
+        auto unavailable = facts.unavailable;
+        std::sort(unavailable.begin(), unavailable.end());
+        output += "[unavailable]\n";
+        for (const auto& item : unavailable) output += item + "\n";
+    }
     return output;
 }
 
