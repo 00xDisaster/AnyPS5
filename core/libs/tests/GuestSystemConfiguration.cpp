@@ -513,8 +513,45 @@ static void CheckBootTimeSysctl() {
     Require(sysctl_nid_postfix(mib, 2, &first, &length, &first, sizeof(first)) == -1 && *__error_nid_postfix() == 1);
     Require(sysctlbyname_nid_postfix("kern.boottime", &first, &length, &first, sizeof(first)) == -1 && *__error_nid_postfix() == 1);
 }
+struct LoadAverage {
+    std::uint32_t ldavg[3];
+    std::int64_t fscale;
+};
+static_assert(sizeof(LoadAverage) == 24);
+
+static void CheckLoadAverageSysctl() {
+    const int mib[] = {2, 2};
+    *__error_nid_postfix() = 13;
+    std::size_t length = 0;
+    Require(sysctl_nid_postfix(mib, 2, nullptr, &length, nullptr, 0) == 0 && length == sizeof(LoadAverage));
+    length = 0;
+    Require(sysctlbyname_nid_postfix("vm.loadavg", nullptr, &length, nullptr, 0) == 0 && length == sizeof(LoadAverage));
+    LoadAverage load{};
+    length = sizeof(load);
+    Require(sysctl_nid_postfix(mib, 2, &load, &length, nullptr, 0) == 0 && length == sizeof(load) && load.fscale == 2048);
+#ifndef _WIN32
+    double host[3]{};
+    Require(getloadavg(host, 3) == 3);
+    for (int index = 0; index < 3; ++index) {
+        const double guest = static_cast<double>(load.ldavg[index]) / static_cast<double>(load.fscale);
+        Require(guest > host[index] - 1.0 && guest < host[index] + 1.0);
+    }
+#endif
+    LoadAverage named{};
+    length = sizeof(named);
+    Require(sysctlbyname_nid_postfix("vm.loadavg", &named, &length, nullptr, 0) == 0 && length == sizeof(named) && named.fscale == 2048);
+    Require(*__error_nid_postfix() == 13);
+
+    int namedMib[3] = {0x5a5a5a5a, 0x5a5a5a5a, 0x5a5a5a5a};
+    std::size_t mibLength = 3;
+    Require(sysctlnametomib_nid_postfix("vm.loadavg", namedMib, &mibLength) == 0 && mibLength == 2);
+    Require(namedMib[0] == 2 && namedMib[1] == 2 && namedMib[2] == 0x5a5a5a5a);
+
+    length = sizeof(load);
+    Require(sysctl_nid_postfix(mib, 2, &load, &length, &load, sizeof(load)) == -1 && *__error_nid_postfix() == 1);
+}
 static void CheckLeafWithTrailingComponent() {
-    const int leaves[][2] = {{6, 3}, {6, 2}, {6, 5}, {6, 7}, {1, 21}, {1, 24}, {1, 37}, {1, 50}};
+    const int leaves[][2] = {{6, 3}, {6, 2}, {6, 5}, {6, 7}, {1, 21}, {1, 24}, {1, 37}, {1, 50}, {2, 2}};
     for (const auto& leaf : leaves) {
         const int mib[] = {leaf[0], leaf[1], 0};
         char buffer[8] = {};
@@ -1114,6 +1151,7 @@ int main() {
     CheckSystemStringNames();
     CheckOsReleaseDateSysctl();
     CheckBootTimeSysctl();
+    CheckLoadAverageSysctl();
     CheckLeafWithTrailingComponent();
     CheckMeasuredAbsentSysctlMibs();
     CheckSystemSwVersion();
