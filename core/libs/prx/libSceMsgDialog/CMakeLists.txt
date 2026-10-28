@@ -1,0 +1,10 @@
+add_library(libSceMsgDialog SHARED EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/Export.cpp)
+target_include_directories(libSceMsgDialog PRIVATE ${LIBS_INCLUDE_DIR})
+configure_windows_unwind(libSceMsgDialog)
+
+if(BUILD_TESTING)
+    add_test_executable(msg_dialog_param_tests ${LIBS_INCLUDE_DIR}/tests/MsgDialogParam.cpp)
+    target_include_directories(msg_dialog_param_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    configure_host_test_executable(msg_dialog_param_tests)
+    add_test(NAME msg_dialog_param COMMAND msg_dialog_param_tests)
+endif()
