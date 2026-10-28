@@ -531,7 +531,7 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
             }
         }
     } else {
-        if (op == 0x0B) {
+        if (op == 0x0B || op == 0xFF) {
             info.FlowKind = ControlFlowKind::Trap;
             return info;
         }

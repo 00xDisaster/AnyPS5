@@ -723,6 +723,7 @@ inline constexpr DecoderRipRelativeCase kDecoderRipRelativeCases[] = {
 
 inline constexpr DecoderBranchCase kDecoderBranchCases[] = {
     {"0f0b", 2, Codegen::ControlFlowKind::Trap, false, 0},
+    {"0fff", 2, Codegen::ControlFlowKind::Trap, false, 0},
     {"0f80c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
     {"0f81c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
     {"0f82c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
