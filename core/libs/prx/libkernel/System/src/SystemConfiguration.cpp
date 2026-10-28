@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -114,12 +115,21 @@ struct GuestLoadAverage {
 };
 static_assert(sizeof(GuestLoadAverage) == 24);
 
+std::uint32_t ScaledLoad(double average, std::int64_t fscale) {
+    const auto scaled = average * static_cast<double>(fscale) + 0.5;
+    if (!(scaled > 0.0)) return 0;
+    if (scaled >= static_cast<double>(std::numeric_limits<std::uint32_t>::max())) return std::numeric_limits<std::uint32_t>::max();
+    return static_cast<std::uint32_t>(scaled);
+}
+
 GuestLoadAverage HostLoadAverage() {
-    GuestLoadAverage load{{0, 0, 0}, 1 << 11};
+    GuestLoadAverage load;
+    std::memset(&load, 0, sizeof(load));
+    load.fscale = 1 << 11;
 #ifndef _WIN32
     double averages[3]{};
     if (getloadavg(averages, 3) == 3) {
-        for (int index = 0; index < 3; ++index) load.ldavg[index] = static_cast<std::uint32_t>(averages[index] * static_cast<double>(load.fscale) + 0.5);
+        for (int index = 0; index < 3; ++index) load.ldavg[index] = ScaledLoad(averages[index], load.fscale);
     }
 #endif
     return load;

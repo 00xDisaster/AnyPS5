@@ -526,16 +526,22 @@ static void CheckLoadAverageSysctl() {
     Require(sysctl_nid_postfix(mib, 2, nullptr, &length, nullptr, 0) == 0 && length == sizeof(LoadAverage));
     length = 0;
     Require(sysctlbyname_nid_postfix("vm.loadavg", nullptr, &length, nullptr, 0) == 0 && length == sizeof(LoadAverage));
-    LoadAverage load{};
+    LoadAverage load;
+    std::memset(&load, 0xaa, sizeof(load));
     length = sizeof(load);
-    Require(sysctl_nid_postfix(mib, 2, &load, &length, nullptr, 0) == 0 && length == sizeof(load) && load.fscale == 2048);
 #ifndef _WIN32
-    double host[3]{};
-    Require(getloadavg(host, 3) == 3);
-    for (int index = 0; index < 3; ++index) {
-        const double guest = static_cast<double>(load.ldavg[index]) / static_cast<double>(load.fscale);
-        Require(guest > host[index] - 1.0 && guest < host[index] + 1.0);
-    }
+    double before[3]{};
+    Require(getloadavg(before, 3) == 3);
+#endif
+    Require(sysctl_nid_postfix(mib, 2, &load, &length, nullptr, 0) == 0 && length == sizeof(load) && load.fscale == 2048);
+    std::uint8_t padding[4];
+    std::memcpy(padding, reinterpret_cast<const std::uint8_t*>(&load) + 12, sizeof(padding));
+    Require(padding[0] == 0 && padding[1] == 0 && padding[2] == 0 && padding[3] == 0);
+#ifndef _WIN32
+    double after[3]{};
+    Require(getloadavg(after, 3) == 3);
+    const auto scaled = [](double average) { return static_cast<std::uint32_t>(average * 2048.0 + 0.5); };
+    for (int index = 0; index < 3; ++index) Require(load.ldavg[index] == scaled(before[index]) || load.ldavg[index] == scaled(after[index]));
 #endif
     LoadAverage named{};
     length = sizeof(named);
