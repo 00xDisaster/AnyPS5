@@ -234,6 +234,21 @@ void levelParsing() {
     }
 }
 
+void messages() {
+    HostVolume state;
+    require(HostVolumeMessage(state) == "Host volume: 100%", "the default message gives the level");
+    state.VolumeDown();
+    require(HostVolumeMessage(state) == "Host volume: 95%", "a step shows the new level");
+    state.ToggleMute();
+    require(HostVolumeMessage(state) == "Host volume: muted (volume 95%)", "a mute shows the level it will return to");
+    state.ToggleMute();
+    state.SetMuteOnFocusLoss(true);
+    state.FocusChanged(false);
+    require(HostVolumeMessage(state) == "Host volume: muted while the window has no focus (volume 95%)", "a focus mute says why");
+    state.ToggleMute();
+    require(HostVolumeMessage(state) == "Host volume: muted (volume 95%)", "the user's mute takes precedence in the message");
+}
+
 }
 
 int main() try {
@@ -257,6 +272,7 @@ int main() try {
     gainIsZeroWhenSilent();
     flagParsing();
     levelParsing();
+    messages();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
