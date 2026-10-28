@@ -678,7 +678,6 @@ static int CheckUpdateStandardOutput() {
     return 0;
 }
 
-#ifdef _WIN32
 static void CheckSetvbufInvalidMode() {
     FileStream stream(std::tmpfile());
     for (const int mode : {3, -1, INT_MAX}) Require(setvbuf_nid_postfix(&stream, nullptr, mode, 0) == EOF);
@@ -694,6 +693,7 @@ static void CheckSetvbufInvalidMode() {
     stream.Close();
 }
 
+#ifdef _WIN32
 static void CheckStandardStreamDeleteSharing() {
     int index = 0;
     for (auto* stream : {__stdinp_nid_postfix, __stderrp_nid_postfix}) {
