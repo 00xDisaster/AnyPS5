@@ -91,6 +91,12 @@ HostStack FindHostStack() {
         if (!RegionOf(stack.low - 1, begin, end, tag) || tag != VM_MEMORY_STACK || end != stack.low) break;
         stack.low = begin;
     }
+    const pthread_t self = pthread_self();
+    const auto top = reinterpret_cast<std::uintptr_t>(pthread_get_stackaddr_np(self));
+    const std::uintptr_t size = pthread_get_stacksize_np(self);
+    stack.low = std::max(stack.low, top - std::min(top, size));
+    stack.high = std::min(stack.high, top);
+    if (stack.low >= stack.high) return {};
     return stack;
 }
 
