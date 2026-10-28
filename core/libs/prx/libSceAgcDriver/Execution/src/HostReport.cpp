@@ -7,6 +7,32 @@ namespace AgcDriver {
 
 namespace {
 
+bool nameCharacter(unsigned char value) {
+    return std::isalnum(value) != 0 || value == '_';
+}
+
+std::string replaceNames(std::string text, const std::vector<std::string>& names) {
+    for (const auto& name : names) {
+        if (name.empty()) continue;
+        std::string result;
+        std::size_t cursor = 0;
+        for (;;) {
+            const auto found = text.find(name, cursor);
+            if (found == std::string::npos) break;
+            const auto end = found + name.size();
+            const bool before = found == 0 || !nameCharacter(static_cast<unsigned char>(text[found - 1]));
+            const bool after = end == text.size() || !nameCharacter(static_cast<unsigned char>(text[end]));
+            result.append(text, cursor, found - cursor);
+            if (before && after) result += "<redacted>";
+            else result.append(text, found, name.size());
+            cursor = end;
+        }
+        result.append(text, cursor, std::string::npos);
+        text = std::move(result);
+    }
+    return text;
+}
+
 bool hardwareAddress(const std::string& token) {
     if (token.size() != 17) return false;
     for (std::size_t index = 0; index < token.size(); ++index) {
@@ -33,7 +59,7 @@ std::string tokenPlaceholder(const std::string& token) {
 }
 
 HostFacts sanitized(const HostFacts& facts) {
-    const auto clean = [&](const std::string& text) { return RedactHostText(text); };
+    const auto clean = [&](const std::string& text) { return RedactHostText(text, facts.redactions); };
     const auto cleanAll = [&](std::vector<std::string> values) {
         for (auto& value : values) value = clean(value);
         return values;
@@ -110,13 +136,13 @@ std::optional<std::string> text(const std::optional<std::uint64_t>& value) {
 
 }
 
-std::string RedactHostText(const std::string& text) {
+std::string RedactHostText(const std::string& text, const std::vector<std::string>& names) {
     std::string flat = text;
     for (auto& character : flat) {
         const auto value = static_cast<unsigned char>(character);
         if (value < 0x20 || value == 0x7f) character = ' ';
     }
-    const auto& named = flat;
+    const auto named = replaceNames(flat, names);
     std::string result;
     std::size_t cursor = 0;
     while (cursor <= named.size()) {
