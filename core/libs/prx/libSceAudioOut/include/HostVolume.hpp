@@ -15,13 +15,17 @@ public:
     }
 
     bool VolumeUp() {
-        if (volume >= MaxVolume) return false;
+        const bool wasMuted = muted;
+        muted = false;
+        if (volume >= MaxVolume) return wasMuted;
         volume = volume + VolumeStep > MaxVolume ? MaxVolume : volume + VolumeStep;
         return true;
     }
 
     bool VolumeDown() {
-        if (volume <= 0) return false;
+        const bool wasMuted = muted;
+        muted = false;
+        if (volume <= 0) return wasMuted;
         volume = volume - VolumeStep < 0 ? 0 : volume - VolumeStep;
         return true;
     }
