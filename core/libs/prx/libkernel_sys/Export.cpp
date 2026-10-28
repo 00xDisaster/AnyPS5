@@ -34,6 +34,8 @@
 #include "prx/libkernel/File/include/DescriptorControl.hpp"
 #include "prx/libc/include/CreationMask.hpp"
 #include "prx/libkernel/File/include/FileFlags.hpp"
+#include "prx/libkernel/File/include/SharedMemory.hpp"
+#include "prx/libkernel/Equeue/Equeue.hpp"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -74,6 +76,7 @@ constexpr int GuestEinval = 22;
 constexpr int GuestEexist = 17;
 constexpr int GuestExdev = 18;
 constexpr int GuestEdeadlk = 11;
+constexpr int GuestEopnotsupp = 45;
 constexpr int GuestEagain = 35;
 constexpr int GuestEloop = 62;
 constexpr int GuestEnametoolong = 63;
@@ -525,6 +528,7 @@ std::int64_t APS5_VABI _fpathconf_nid_postfix(int fd, int name) {
 #endif
     if (name == PcAsyncIo) return PosixAsynchronousIo;
     if (withoutVnode) return name == PcPipeBuf ? 512 : Fail(GuestEinval);
+    if (IsKqueueDescriptor_nid_no_patch(fd) || File::IsSharedMemoryDescriptor_nid_no_patch(fd)) return Fail(GuestEopnotsupp);
     return PathConfigurationValue(name);
 }
 

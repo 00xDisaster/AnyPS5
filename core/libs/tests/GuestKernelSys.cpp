@@ -861,6 +861,13 @@ void CheckKernelEnvironment() {
     Require(Kenv(dump, nullptr, nullptr, 0) == 0);
 }
 
+template <typename F>
+void CheckUnsupportedPathconf(F fn, int descriptor) {
+    Require(fn(descriptor, 53) == 200112);
+    for (const int name : {0, 1, 4, 5, 6, 7, 8, 12, 18, 54, 55, 61, -1})
+        Require(fn(descriptor, name) == -1 && Error() == 45);
+}
+
 int main() {
 #ifdef _WIN32
     auto hostDirectorySpelling = std::filesystem::current_path().native();
@@ -910,6 +917,19 @@ int main() {
     CheckDescriptorPathconf(_fpathconf_nid_postfix, descriptor);
     CheckPipePathconf(fpathconf_nid_postfix);
     CheckPipePathconf(_fpathconf_nid_postfix);
+    const int kqueueDescriptor = kqueue_nid_postfix();
+    Require(kqueueDescriptor >= 0);
+    CheckUnsupportedPathconf(fpathconf_nid_postfix, kqueueDescriptor);
+    CheckUnsupportedPathconf(_fpathconf_nid_postfix, kqueueDescriptor);
+    Require(close_nid_postfix(kqueueDescriptor) == 0);
+    const std::string namedSharedMemory = "/anyps5-kernel-sys-pathconf-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const int sharedMemoryDescriptor = shm_open_nid_postfix(namedSharedMemory.c_str(), SCE_KERNEL_O_RDWR | SCE_KERNEL_O_CREAT, 0600);
+    Require(sharedMemoryDescriptor >= 0);
+    CheckUnsupportedPathconf(fpathconf_nid_postfix, sharedMemoryDescriptor);
+    CheckUnsupportedPathconf(_fpathconf_nid_postfix, sharedMemoryDescriptor);
+    Require(close_nid_postfix(sharedMemoryDescriptor) == 0);
+    Require(shm_unlink_nid_postfix(namedSharedMemory.c_str()) == 0);
     Require(close_nid_postfix(descriptor) == 0);
     Require(fstatfs_nid_postfix(-1, reinterpret_cast<KernelStatfs*>(viaPublic)) == -1 && Error() == 9);
     Require(fstat_nid_postfix(descriptor, &viaFstat) == -1 && Error() == 9);
