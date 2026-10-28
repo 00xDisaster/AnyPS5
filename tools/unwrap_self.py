@@ -11,16 +11,18 @@ differ inside a container:
     bytes holding flags, data offset, size and the size again. A record with flag
     0x800 holds the data of the program header whose index is in flags bits 20
     and up. Segments the table does not cover are placed by the vaddr to file
-    mapping of the PT_LOAD that contains them. Segments without a vaddr that
-    follow the last recorded one in the ELF are stored right after it, back to
-    back in ELF order, except a PT_NOTE, which the container leaves out and which
-    is emitted without file bytes. Some dumps end right after the recorded ones
-    and leave out the version segment as well, so one that would run past the
-    end of the file is emitted without file bytes too. Other segments without a
-    vaddr carry the shift of the last placed one.
+    mapping of the PT_LOAD that contains them, including a PT_PHDR at vaddr zero.
+    Other segments without a vaddr that follow the last recorded one in the ELF
+    are stored right after it, back to back in ELF order, except a PT_NOTE, which
+    the container leaves out and which is emitted without file bytes. Some dumps
+    end right after the recorded ones and leave out the version segment as well,
+    so one that would run past the end of the file is emitted without file bytes
+    too. Other segments without a vaddr carry the shift of the last placed one.
   - The segments are packed without honouring p_align, while ELF requires
     p_offset % p_align == p_vaddr % p_align. Every region is copied to an offset
-    that satisfies it, which the relinker enforces on guest modules.
+    that satisfies it, which the relinker enforces on guest modules. The ELF
+    header points to the rewritten table at the mapped PT_PHDR offset, when
+    present. A PT_PHDR mapping different bytes from the input table is refused.
 
 Only decrypted containers are handled. A container whose load segments all look
 encrypted is refused instead of copied: the entropy of each load segment is
@@ -277,8 +279,13 @@ def unwrap(path, output, verbose=False):
         if any(header["type"] == PT_LOAD and header["index"] < phdr["index"] for header in headers):
             raise Refused("PT_PHDR must precede the load segments")
     place_segments(data, headers, records)
-    if phdr is not None and phdr["host"] is None:
-        raise Refused("PT_PHDR is not in a file-backed load segment")
+    if phdr is not None:
+        if phdr["host"] is None:
+            raise Refused("PT_PHDR is not in a file-backed load segment")
+        table = inner + struct.unpack_from("<Q", elf_header, 0x20)[0]
+        table_size = len(headers) * 56
+        if data[phdr["source"]:phdr["source"] + table_size] != data[table:table + table_size]:
+            raise Refused("PT_PHDR does not map the program header table")
     check_decrypted(data, headers)
 
     regions = []
