@@ -231,11 +231,10 @@ int APS5_VABI libkernel_sysUnknown_1v6DjTPunjs_nid_no_patch() {
 
 APS5_EXPORT("1v6DjTPunjs", libkernel_sysUnknown_1v6DjTPunjs_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_2ICp74QsULo_nid_no_patch() {
+int APS5_VABI sceKernelInternalCreateMapperSharedMemory() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("2ICp74QsULo", libkernel_sysUnknown_2ICp74QsULo_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_2XwZJG3Dkss_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -297,11 +296,10 @@ int APS5_VABI libkernel_sysUnknown_4AMTAyz32fk_nid_no_patch() {
 
 APS5_EXPORT("4AMTAyz32fk", libkernel_sysUnknown_4AMTAyz32fk_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_5EThc7n_plus_PpM_nid_no_patch() {
+int APS5_VABI sceKernelIsCloudkitForDecid() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("5EThc7n+PpM", libkernel_sysUnknown_5EThc7n_plus_PpM_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_5KHFhRhBR78_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -309,23 +307,20 @@ int APS5_VABI libkernel_sysUnknown_5KHFhRhBR78_nid_no_patch() {
 
 APS5_EXPORT("5KHFhRhBR78", libkernel_sysUnknown_5KHFhRhBR78_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_5uP89EdDbB0_nid_no_patch() {
+int APS5_VABI sceKernelIccGetButtonStatus() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("5uP89EdDbB0", libkernel_sysUnknown_5uP89EdDbB0_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_6nv1h9JH1Lk_nid_no_patch() {
+int APS5_VABI sceKernelAbortWithContext() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("6nv1h9JH1Lk", libkernel_sysUnknown_6nv1h9JH1Lk_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_6yzl0ibATw0_nid_no_patch() {
+int APS5_VABI sceKernelGetCanvasHandleByPid() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("6yzl0ibATw0", libkernel_sysUnknown_6yzl0ibATw0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_7BUHmsuhcq4_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -345,11 +340,10 @@ int APS5_VABI libkernel_sysUnknown_7Sd1vnnqEqU_nid_no_patch() {
 
 APS5_EXPORT("7Sd1vnnqEqU", libkernel_sysUnknown_7Sd1vnnqEqU_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_8B_minus_r5ubQLZs_nid_no_patch() {
+int APS5_VABI sceKernelIccReadWlanArea() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("8B-r5ubQLZs", libkernel_sysUnknown_8B_minus_r5ubQLZs_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_8U0nlN0TpDU_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -369,11 +363,10 @@ int APS5_VABI libkernel_sysUnknown_940JfV9yJto_nid_no_patch() {
 
 APS5_EXPORT("940JfV9yJto", libkernel_sysUnknown_940JfV9yJto_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_9KpeTiVh5Hk_nid_no_patch() {
+int APS5_VABI sceKernelGetAppMemoryInfo() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("9KpeTiVh5Hk", libkernel_sysUnknown_9KpeTiVh5Hk_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_9ncS0kCRRSA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -441,17 +434,15 @@ int APS5_VABI libkernel_sysUnknown_C49jelxiaVE_nid_no_patch() {
 
 APS5_EXPORT("C49jelxiaVE", libkernel_sysUnknown_C49jelxiaVE_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_Cz48pcLnLCY_nid_no_patch() {
+int APS5_VABI sceKernelSwitchToTrinityMode() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("Cz48pcLnLCY", libkernel_sysUnknown_Cz48pcLnLCY_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_DB0muDALi4Y_nid_no_patch() {
+int APS5_VABI sceKernelIsGenuineCronosCex() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("DB0muDALi4Y", libkernel_sysUnknown_DB0muDALi4Y_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_DWWduhQYA3I_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -477,11 +468,10 @@ int APS5_VABI libkernel_sysUnknown_EIz_plus_fSlYCn8_nid_no_patch() {
 
 APS5_EXPORT("EIz+fSlYCn8", libkernel_sysUnknown_EIz_plus_fSlYCn8_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_EKMWpdzszVo_nid_no_patch() {
+int APS5_VABI sceKernelTraceMarkerBookmark() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("EKMWpdzszVo", libkernel_sysUnknown_EKMWpdzszVo_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_EaepepH_minus_LmI_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -501,11 +491,10 @@ int APS5_VABI libkernel_sysUnknown_FR0odl35yQY_nid_no_patch() {
 
 APS5_EXPORT("FR0odl35yQY", libkernel_sysUnknown_FR0odl35yQY_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_GADbvgNm4tY_nid_no_patch() {
+int APS5_VABI sceKernelIccGetExtBDDriveStatus() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("GADbvgNm4tY", libkernel_sysUnknown_GADbvgNm4tY_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_GTyjVeZcdRM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -543,11 +532,10 @@ int APS5_VABI libkernel_sysUnknown_IJQeoUQ3pb4_nid_no_patch() {
 
 APS5_EXPORT("IJQeoUQ3pb4", libkernel_sysUnknown_IJQeoUQ3pb4_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_IJnZ6pAGPcA_nid_no_patch() {
+int APS5_VABI sceKernelInternalUnlockMapperMemory() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("IJnZ6pAGPcA", libkernel_sysUnknown_IJnZ6pAGPcA_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_Ipau2b5eaHM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -561,11 +549,10 @@ int APS5_VABI libkernel_sysUnknown_Ishr1Sdu024_nid_no_patch() {
 
 APS5_EXPORT("Ishr1Sdu024", libkernel_sysUnknown_Ishr1Sdu024_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_J2dqh_plus_RUwEY_nid_no_patch() {
+int APS5_VABI sceKernelIdTableGetStats() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("J2dqh+RUwEY", libkernel_sysUnknown_J2dqh_plus_RUwEY_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_JFpAREOJnag_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -579,11 +566,10 @@ int APS5_VABI libkernel_sysUnknown_JN1D3WtbDPs_nid_no_patch() {
 
 APS5_EXPORT("JN1D3WtbDPs", libkernel_sysUnknown_JN1D3WtbDPs_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_JcG0kUg4TrE_nid_no_patch() {
+int APS5_VABI sceKernelIccNotifyPowerState() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("JcG0kUg4TrE", libkernel_sysUnknown_JcG0kUg4TrE_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_KoDy4Jazz40_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -705,11 +691,10 @@ int APS5_VABI libkernel_sysUnknown_SEKlG1AMRGQ_nid_no_patch() {
 
 APS5_EXPORT("SEKlG1AMRGQ", libkernel_sysUnknown_SEKlG1AMRGQ_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_SP37_plus_6t8PUw_nid_no_patch() {
+int APS5_VABI sceKernelGetContentVersion() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("SP37+6t8PUw", libkernel_sysUnknown_SP37_plus_6t8PUw_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_Sesgl6Zl8YI_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -717,17 +702,15 @@ int APS5_VABI libkernel_sysUnknown_Sesgl6Zl8YI_nid_no_patch() {
 
 APS5_EXPORT("Sesgl6Zl8YI", libkernel_sysUnknown_Sesgl6Zl8YI_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_SgxG1rkVqu8_nid_no_patch() {
+int APS5_VABI sceKernelTraceMarkerPop() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("SgxG1rkVqu8", libkernel_sysUnknown_SgxG1rkVqu8_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_TC_plus_IFjP_plus_pJc_nid_no_patch() {
+int APS5_VABI sceKernelInternalLockMapperMemory() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("TC+IFjP+pJc", libkernel_sysUnknown_TC_plus_IFjP_plus_pJc_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_TVB77yVa_plus_RU_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -747,11 +730,10 @@ int APS5_VABI libkernel_sysUnknown_U9B58Hc5C_plus_8_nid_no_patch() {
 
 APS5_EXPORT("U9B58Hc5C+8", libkernel_sysUnknown_U9B58Hc5C_plus_8_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_U_minus_zqHonxxm4_nid_no_patch() {
+int APS5_VABI sceKernelAddExternalTriggerEvent() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("U-zqHonxxm4", libkernel_sysUnknown_U_minus_zqHonxxm4_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_V4f3CEBQyuM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -837,11 +819,10 @@ int APS5_VABI libkernel_sysUnknown__minus_PNB3tfnD8c_nid_no_patch() {
 
 APS5_EXPORT("-PNB3tfnD8c", libkernel_sysUnknown__minus_PNB3tfnD8c_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown__minus_QipytgE4x0_nid_no_patch() {
+int APS5_VABI sceKernelGetAppLibcData() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("-QipytgE4x0", libkernel_sysUnknown__minus_QipytgE4x0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown__minus_sYN8ucoAWw_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -861,11 +842,10 @@ int APS5_VABI libkernel_sysUnknown__plus_MZfwzH65JQ_nid_no_patch() {
 
 APS5_EXPORT("+MZfwzH65JQ", libkernel_sysUnknown__plus_MZfwzH65JQ_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown__plus_ooJjRJ_plus_xR4_nid_no_patch() {
+int APS5_VABI sceKernelGetAmprSysInfo() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("+ooJjRJ+xR4", libkernel_sysUnknown__plus_ooJjRJ_plus_xR4_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_aH3bEULQH54_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -903,11 +883,10 @@ int APS5_VABI libkernel_sysUnknown_ak6t3JzhOtg_nid_no_patch() {
 
 APS5_EXPORT("ak6t3JzhOtg", libkernel_sysUnknown_ak6t3JzhOtg_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_b3Q5U48bJLI_nid_no_patch() {
+int APS5_VABI sceKernelGetSandboxConfig() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("b3Q5U48bJLI", libkernel_sysUnknown_b3Q5U48bJLI_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_bQ_plus_8uJVyxII_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -915,11 +894,10 @@ int APS5_VABI libkernel_sysUnknown_bQ_plus_8uJVyxII_nid_no_patch() {
 
 APS5_EXPORT("bQ+8uJVyxII", libkernel_sysUnknown_bQ_plus_8uJVyxII_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_c1xs7KJ_plus_uf0_nid_no_patch() {
+int APS5_VABI sceKernelIccResetBootTimestamp() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("c1xs7KJ+uf0", libkernel_sysUnknown_c1xs7KJ_plus_uf0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_cH6vM6sF5YA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -945,11 +923,10 @@ int APS5_VABI libkernel_sysUnknown_ciYlptMdvhc_nid_no_patch() {
 
 APS5_EXPORT("ciYlptMdvhc", libkernel_sysUnknown_ciYlptMdvhc_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_cp8qj9i8zMM_nid_no_patch() {
+int APS5_VABI sceKernelIccWriteWlanArea() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("cp8qj9i8zMM", libkernel_sysUnknown_cp8qj9i8zMM_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_culoiinnxDA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -957,11 +934,10 @@ int APS5_VABI libkernel_sysUnknown_culoiinnxDA_nid_no_patch() {
 
 APS5_EXPORT("culoiinnxDA", libkernel_sysUnknown_culoiinnxDA_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_cvFtKaAYbHE_nid_no_patch() {
+int APS5_VABI sceKernelCheckProsperoSdkVersion() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("cvFtKaAYbHE", libkernel_sysUnknown_cvFtKaAYbHE_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_dnzOA7Vx1AE_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -987,11 +963,10 @@ int APS5_VABI libkernel_sysUnknown_eSgYzXvTPQI_nid_no_patch() {
 
 APS5_EXPORT("eSgYzXvTPQI", libkernel_sysUnknown_eSgYzXvTPQI_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_eu1IgkLPYh8_nid_no_patch() {
+int APS5_VABI sceKernelTraceMarkerPlot() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("eu1IgkLPYh8", libkernel_sysUnknown_eu1IgkLPYh8_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_ftHBlCfIEQo_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1053,11 +1028,10 @@ int APS5_VABI libkernel_sysUnknown_h35fpAz5tf4_nid_no_patch() {
 
 APS5_EXPORT("h35fpAz5tf4", libkernel_sysUnknown_h35fpAz5tf4_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_hYEEJrcB3wU_nid_no_patch() {
+int APS5_VABI sceKernelTraceMarkerPush() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("hYEEJrcB3wU", libkernel_sysUnknown_hYEEJrcB3wU_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_hmqw8GlN_plus_tI_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1065,17 +1039,15 @@ int APS5_VABI libkernel_sysUnknown_hmqw8GlN_plus_tI_nid_no_patch() {
 
 APS5_EXPORT("hmqw8GlN+tI", libkernel_sysUnknown_hmqw8GlN_plus_tI_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_i9ghW7uPndU_nid_no_patch() {
+int APS5_VABI sceKernelGetCanvasHandle() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("i9ghW7uPndU", libkernel_sysUnknown_i9ghW7uPndU_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_iZEvDaPnNL4_nid_no_patch() {
+int APS5_VABI sceKernelSetSandboxId() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("iZEvDaPnNL4", libkernel_sysUnknown_iZEvDaPnNL4_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_ilQLkGlAjWA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1125,11 +1097,10 @@ int APS5_VABI libkernel_sysUnknown_l67TRPy55_minus_U_nid_no_patch() {
 
 APS5_EXPORT("l67TRPy55-U", libkernel_sysUnknown_l67TRPy55_minus_U_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_lRD35KDvDzE_nid_no_patch() {
+int APS5_VABI sceKernelDeleteExternalTriggerEvent() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("lRD35KDvDzE", libkernel_sysUnknown_lRD35KDvDzE_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_l_minus_QGmU3VU_plus_Q_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1161,17 +1132,15 @@ int APS5_VABI libkernel_sysUnknown_o141x2VDeVc_nid_no_patch() {
 
 APS5_EXPORT("o141x2VDeVc", libkernel_sysUnknown_o141x2VDeVc_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_oSQQA8I595Y_nid_no_patch() {
+int APS5_VABI sceKernelGetMainSocSubId() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("oSQQA8I595Y", libkernel_sysUnknown_oSQQA8I595Y_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_pAI_plus_17im1o0_nid_no_patch() {
+int APS5_VABI sceKernelInternalUnmapMapperSharedMemory() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("pAI+17im1o0", libkernel_sysUnknown_pAI_plus_17im1o0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_pCbBddNl66Y_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1185,11 +1154,10 @@ int APS5_VABI libkernel_sysUnknown_pOClGbxrx94_nid_no_patch() {
 
 APS5_EXPORT("pOClGbxrx94", libkernel_sysUnknown_pOClGbxrx94_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_pn68p6w2eK0_nid_no_patch() {
+int APS5_VABI sceKernelSetAppLibcData() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("pn68p6w2eK0", libkernel_sysUnknown_pn68p6w2eK0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_pp_plus_G_plus_UZhiqY_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1257,11 +1225,10 @@ int APS5_VABI libkernel_sysUnknown_rLBfsmdAuvo_nid_no_patch() {
 
 APS5_EXPORT("rLBfsmdAuvo", libkernel_sysUnknown_rLBfsmdAuvo_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_rqiBT75A1po_nid_no_patch() {
+int APS5_VABI sceKernelIccDisableButton() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("rqiBT75A1po", libkernel_sysUnknown_rqiBT75A1po_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_sFW_plus_Ilmw_plus_58_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1311,11 +1278,10 @@ int APS5_VABI libkernel_sysUnknown_vq2_plus_HyP5U5I_nid_no_patch() {
 
 APS5_EXPORT("vq2+HyP5U5I", libkernel_sysUnknown_vq2_plus_HyP5U5I_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_wXnNof3LrrU_nid_no_patch() {
+int APS5_VABI sceKernelSetCanvasHandle() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("wXnNof3LrrU", libkernel_sysUnknown_wXnNof3LrrU_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_wn0XzOue4EM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -1329,11 +1295,10 @@ int APS5_VABI libkernel_sysUnknown_wwWv_plus_0MzhGM_nid_no_patch() {
 
 APS5_EXPORT("wwWv+0MzhGM", libkernel_sysUnknown_wwWv_plus_0MzhGM_nid_no_patch);
 
-int APS5_VABI libkernel_sysUnknown_x0DQK0TXDk0_nid_no_patch() {
+int APS5_VABI sceKernelDebugPauseWithDebugContext() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-APS5_EXPORT("x0DQK0TXDk0", libkernel_sysUnknown_x0DQK0TXDk0_nid_no_patch);
 
 int APS5_VABI libkernel_sysUnknown_xpB6yv8NhhE_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);

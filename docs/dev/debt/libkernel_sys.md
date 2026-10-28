@@ -144,16 +144,16 @@
 | `scePthreadRegisterThreadDeathHook` | `DlCg0QhcgYQ` |
 | `Unknown` | `+1mj9RYU1rs` |
 | `Unknown` | `+MZfwzH65JQ` |
-| `Unknown` | `+ooJjRJ+xR4` |
+| `sceKernelGetAmprSysInfo` | `+ooJjRJ+xR4` |
 | `Unknown` | `-PNB3tfnD8c` |
-| `Unknown` | `-QipytgE4x0` |
+| `sceKernelGetAppLibcData` | `-QipytgE4x0` |
 | `Unknown` | `-sYN8ucoAWw` |
 | `Unknown` | `0CV40L3tznI` |
 | `Unknown` | `1WXQlxMpnNA` |
 | `Unknown` | `1v23w7Rnkic` |
 | `Unknown` | `1v6DjTPunjs` |
 | `Unknown` | `2+KZ4mZKp6E` |
-| `Unknown` | `2ICp74QsULo` |
+| `sceKernelInternalCreateMapperSharedMemory` | `2ICp74QsULo` |
 | `Unknown` | `2XwZJG3Dkss` |
 | `Unknown` | `2YWCKF9-3gM` |
 | `Unknown` | `2fPLezHAV2E` |
@@ -163,19 +163,19 @@
 | `Unknown` | `3YkQPLocySc` |
 | `Unknown` | `3jw-vq4gYLs` |
 | `Unknown` | `4AMTAyz32fk` |
-| `Unknown` | `5EThc7n+PpM` |
+| `sceKernelIsCloudkitForDecid` | `5EThc7n+PpM` |
 | `Unknown` | `5KHFhRhBR78` |
-| `Unknown` | `5uP89EdDbB0` |
-| `Unknown` | `6nv1h9JH1Lk` |
-| `Unknown` | `6yzl0ibATw0` |
+| `sceKernelIccGetButtonStatus` | `5uP89EdDbB0` |
+| `sceKernelAbortWithContext` | `6nv1h9JH1Lk` |
+| `sceKernelGetCanvasHandleByPid` | `6yzl0ibATw0` |
 | `Unknown` | `7BUHmsuhcq4` |
 | `Unknown` | `7FNl8FfSGNw` |
 | `Unknown` | `7Sd1vnnqEqU` |
-| `Unknown` | `8B-r5ubQLZs` |
+| `sceKernelIccReadWlanArea` | `8B-r5ubQLZs` |
 | `Unknown` | `8U0nlN0TpDU` |
 | `Unknown` | `8YkbXeSRxnM` |
 | `Unknown` | `940JfV9yJto` |
-| `Unknown` | `9KpeTiVh5Hk` |
+| `sceKernelGetAppMemoryInfo` | `9KpeTiVh5Hk` |
 | `Unknown` | `9ncS0kCRRSA` |
 | `Unknown` | `A+S5E4RCh7Y` |
 | `Unknown` | `AGHqSV1gdIY` |
@@ -187,30 +187,30 @@
 | `Unknown` | `C3ToW2CA+hM` |
 | `Unknown` | `C3xgqN95IoE` |
 | `Unknown` | `C49jelxiaVE` |
-| `Unknown` | `Cz48pcLnLCY` |
-| `Unknown` | `DB0muDALi4Y` |
+| `sceKernelSwitchToTrinityMode` | `Cz48pcLnLCY` |
+| `sceKernelIsGenuineCronosCex` | `DB0muDALi4Y` |
 | `Unknown` | `DWWduhQYA3I` |
 | `Unknown` | `Dv8In6FvzuM` |
 | `Unknown` | `E58GHGcQT7I` |
 | `Unknown` | `EIz+fSlYCn8` |
-| `Unknown` | `EKMWpdzszVo` |
+| `sceKernelTraceMarkerBookmark` | `EKMWpdzszVo` |
 | `Unknown` | `EaepepH-LmI` |
 | `Unknown` | `FIUPjhnoI+o` |
 | `Unknown` | `FR0odl35yQY` |
-| `Unknown` | `GADbvgNm4tY` |
+| `sceKernelIccGetExtBDDriveStatus` | `GADbvgNm4tY` |
 | `Unknown` | `GTyjVeZcdRM` |
 | `Unknown` | `Gtncco+mxio` |
 | `Unknown` | `HRrfx1wytn0` |
 | `Unknown` | `HnWsxkpJya0` |
 | `Unknown` | `HruYl9uBnNo` |
 | `Unknown` | `IJQeoUQ3pb4` |
-| `Unknown` | `IJnZ6pAGPcA` |
+| `sceKernelInternalUnlockMapperMemory` | `IJnZ6pAGPcA` |
 | `Unknown` | `Ipau2b5eaHM` |
 | `Unknown` | `Ishr1Sdu024` |
-| `Unknown` | `J2dqh+RUwEY` |
+| `sceKernelIdTableGetStats` | `J2dqh+RUwEY` |
 | `Unknown` | `JFpAREOJnag` |
 | `Unknown` | `JN1D3WtbDPs` |
-| `Unknown` | `JcG0kUg4TrE` |
+| `sceKernelIccNotifyPowerState` | `JcG0kUg4TrE` |
 | `Unknown` | `KoDy4Jazz40` |
 | `Unknown` | `KoSCciXA1N0` |
 | `Unknown` | `L4GARHYRW0U` |
@@ -231,13 +231,13 @@
 | `Unknown` | `RDjusrvQ-44` |
 | `Unknown` | `RfzgytiWey0` |
 | `Unknown` | `SEKlG1AMRGQ` |
-| `Unknown` | `SP37+6t8PUw` |
+| `sceKernelGetContentVersion` | `SP37+6t8PUw` |
 | `Unknown` | `Sesgl6Zl8YI` |
-| `Unknown` | `SgxG1rkVqu8` |
-| `Unknown` | `TC+IFjP+pJc` |
+| `sceKernelTraceMarkerPop` | `SgxG1rkVqu8` |
+| `sceKernelInternalLockMapperMemory` | `TC+IFjP+pJc` |
 | `Unknown` | `TVB77yVa+RU` |
 | `Unknown` | `Tca8tetUZCw` |
-| `Unknown` | `U-zqHonxxm4` |
+| `sceKernelAddExternalTriggerEvent` | `U-zqHonxxm4` |
 | `Unknown` | `U9B58Hc5C+8` |
 | `Unknown` | `V4f3CEBQyuM` |
 | `Unknown` | `VU1YkdCmYto` |
@@ -258,21 +258,21 @@
 | `Unknown` | `aekYw+lydSg` |
 | `Unknown` | `aj7wRdAWFeM` |
 | `Unknown` | `ak6t3JzhOtg` |
-| `Unknown` | `b3Q5U48bJLI` |
+| `sceKernelGetSandboxConfig` | `b3Q5U48bJLI` |
 | `Unknown` | `bQ+8uJVyxII` |
-| `Unknown` | `c1xs7KJ+uf0` |
+| `sceKernelIccResetBootTimestamp` | `c1xs7KJ+uf0` |
 | `Unknown` | `cH6vM6sF5YA` |
 | `Unknown` | `cReByBlM5XE` |
 | `Unknown` | `cafDxa64sO4` |
 | `Unknown` | `ciYlptMdvhc` |
-| `Unknown` | `cp8qj9i8zMM` |
+| `sceKernelIccWriteWlanArea` | `cp8qj9i8zMM` |
 | `Unknown` | `culoiinnxDA` |
-| `Unknown` | `cvFtKaAYbHE` |
+| `sceKernelCheckProsperoSdkVersion` | `cvFtKaAYbHE` |
 | `Unknown` | `dnzOA7Vx1AE` |
 | `Unknown` | `drv94FQk-Qw` |
 | `Unknown` | `e7oZmNPlBbU` |
 | `Unknown` | `eSgYzXvTPQI` |
-| `Unknown` | `eu1IgkLPYh8` |
+| `sceKernelTraceMarkerPlot` | `eu1IgkLPYh8` |
 | `Unknown` | `ftHBlCfIEQo` |
 | `Unknown` | `g7MGwZ5UxBE` |
 | `Unknown` | `gBiaAGKEvHM` |
@@ -283,10 +283,10 @@
 | `Unknown` | `gvq6XRoDogE` |
 | `Unknown` | `h26nEKnW8VI` |
 | `Unknown` | `h35fpAz5tf4` |
-| `Unknown` | `hYEEJrcB3wU` |
+| `sceKernelTraceMarkerPush` | `hYEEJrcB3wU` |
 | `Unknown` | `hmqw8GlN+tI` |
-| `Unknown` | `i9ghW7uPndU` |
-| `Unknown` | `iZEvDaPnNL4` |
+| `sceKernelGetCanvasHandle` | `i9ghW7uPndU` |
+| `sceKernelSetSandboxId` | `iZEvDaPnNL4` |
 | `Unknown` | `ilQLkGlAjWA` |
 | `Unknown` | `j6bGtwZkxOQ` |
 | `Unknown` | `jESbu+uFJYU` |
@@ -296,16 +296,16 @@
 | `Unknown` | `km8Fr2Jn4Gg` |
 | `Unknown` | `l-QGmU3VU+Q` |
 | `Unknown` | `l67TRPy55-U` |
-| `Unknown` | `lRD35KDvDzE` |
+| `sceKernelDeleteExternalTriggerEvent` | `lRD35KDvDzE` |
 | `Unknown` | `mIkJUpP5vKo` |
 | `Unknown` | `ncrollDo5u4` |
 | `Unknown` | `nsq826qQ2EI` |
 | `Unknown` | `o141x2VDeVc` |
-| `Unknown` | `oSQQA8I595Y` |
-| `Unknown` | `pAI+17im1o0` |
+| `sceKernelGetMainSocSubId` | `oSQQA8I595Y` |
+| `sceKernelInternalUnmapMapperSharedMemory` | `pAI+17im1o0` |
 | `Unknown` | `pCbBddNl66Y` |
 | `Unknown` | `pOClGbxrx94` |
-| `Unknown` | `pn68p6w2eK0` |
+| `sceKernelSetAppLibcData` | `pn68p6w2eK0` |
 | `Unknown` | `pp+G+UZhiqY` |
 | `Unknown` | `q-2Uxlg-faU` |
 | `Unknown` | `qGzuTSD9cPQ` |
@@ -317,7 +317,7 @@
 | `Unknown` | `rC7zr-oAHCo` |
 | `Unknown` | `rD4PS3f+jKw` |
 | `Unknown` | `rLBfsmdAuvo` |
-| `Unknown` | `rqiBT75A1po` |
+| `sceKernelIccDisableButton` | `rqiBT75A1po` |
 | `Unknown` | `sFW+Ilmw+58` |
 | `Unknown` | `tkZiGUoRJok` |
 | `Unknown` | `u9lxqerTKeA` |
@@ -326,10 +326,10 @@
 | `Unknown` | `v+qTlNjF6kE` |
 | `Unknown` | `vfYaxkxnJXQ` |
 | `Unknown` | `vq2+HyP5U5I` |
-| `Unknown` | `wXnNof3LrrU` |
+| `sceKernelSetCanvasHandle` | `wXnNof3LrrU` |
 | `Unknown` | `wn0XzOue4EM` |
 | `Unknown` | `wwWv+0MzhGM` |
-| `Unknown` | `x0DQK0TXDk0` |
+| `sceKernelDebugPauseWithDebugContext` | `x0DQK0TXDk0` |
 | `Unknown` | `xpB6yv8NhhE` |
 | `Unknown` | `yWOJkfd-DhA` |
 | `Unknown` | `yn0b42DApAI` |
@@ -383,3 +383,22 @@
 - [AMM kernel write commands](../../../core/libs/prx/libkernel_sys/Export.Discovery.cpp) (libkernel_sys) - signatures of the map, map direct, unmap, remap, multimap and protection writers and their GPU mask id forms taken from [ampr_emu's libkernel hook targets](https://github.com/drakmor/ampr_emu/blob/cfa85df379f6eeeb165d7badf9b648e266fe77b7/include/ampr_libkernel_hook_targets.h), which forward to the real kernel; the measure mode (`dst` null reports the size, `outSize` null skips the report) follows ampr_emu's measure-then-record calls, not confirmed on a title. Each writer builds its record with the encoder of its `libSceAmpr` command buffer sibling, so it applies the sibling's checks and writes its bytes. The GPU mask id is ignored, as by the siblings, and a protection or mask with bits above 32 is rejected, as by `sceKernelWriteModifyMtypeProtectCommand`. A wider `type` is cut to the record's 32 bits, as by that writer; the console's handling is not measured
 - [sceKernelWaitCommandBufferCompletion](../../../core/libs/prx/libkernel_sys/Export.Discovery.cpp) (libkernel_sys) - signature taken from [ampr_emu's libkernel hook targets](https://github.com/drakmor/ampr_emu/blob/cfa85df379f6eeeb165d7badf9b648e266fe77b7/include/ampr_libkernel_hook_targets.h), where `sceAmprAmmWaitCommandBufferCompletion` forwards to it; like that sibling it waits for an AMM submission and returns `SCE_KERNEL_ERROR_ESRCH` for an id that was never submitted, not confirmed on a title
 - [kldsym](../../../core/libs/prx/libkernel_sys/Export.cpp) (libkernel_sys) follows FreeBSD 11.4's [`sys_kldsym`](https://github.com/freebsd/freebsd-src/blob/release/11.4.0/sys/kern/kern_linker.c) in the order it checks its arguments: `EFAULT` for an unreadable lookup structure, `EINVAL` for a `version` other than the structure size (32 bytes on amd64) or a command other than `KLDSYM_LOOKUP`, `EFAULT` or `ENAMETOOLONG` for the symbol name, `ENOENT` for a file id that no file has. The linker file list is empty here, as in `kldnext` and `kldfind`, so every file id other than 0 gets `ENOENT`; modules a console preloads are not modelled. A lookup in id 0 (every file) throws, as no symbol table is modelled. Whether a title may query kernel symbols is unverified
+
+#### Inventory identity evidence
+
+The NID set is from the PS5 firmware 13.60 `libkernel_sys` function-export table (defined `STT_FUNC` entries), not the older 3.20 inventory. The table supplies hashed export identities, not C prototypes or plaintext function names. Named declarations are candidate spellings whose repository-computed NID exactly matches an observed function NID.
+
+The 35 formerly literal aliases are named by the [repository-pinned aerolib table](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv). There are now 168 named declarations and 160 unresolved NID aliases; every one of the 328 entries remains a throwing placeholder.
+
+The following eight candidate spellings are absent from that aerolib revision. Their name/NID pairs occur in the [public ps5rs identity database at commit `2304be5131221bae0dac24b9767cabffda33f747`](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv) and independently recompute to the function NIDs in the 13.60 table. This database supports candidate spelling only; it does not establish firmware membership, introduction version or ABI.
+
+| Candidate spelling | NID |
+| --- | --- |
+| `__sys_dynlib_unload_prx` | `GQli4UAXTfQ` |
+| `mmap2` | `tGtH2GTWbyE` |
+| `pthread_setschedother_np` | `ymCrwbFD4fk` |
+| `sceKernelEnableDmemAliasing3` | `RbhD-epf6c0` |
+| `sceKernelGetResidentFmemCount2` | `zx9n-9bt7IA` |
+| `sceKernelIsCloudDevkit` | `XyW5rUlKP1w` |
+| `sceKernelKernelHeapUsage2` | `pQiLz-exzR4` |
+| `sceKernelSetAppInfoByAppId` | `fIyST5BItRg` |
