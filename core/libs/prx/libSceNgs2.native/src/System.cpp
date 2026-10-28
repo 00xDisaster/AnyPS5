@@ -17,11 +17,10 @@
 #include <vector>
 
 #include "prx/libc/include/General.hpp"
+#include "prx/libSceNgs2/include/Api.hpp"
 #include "Ngs2Internal.hpp"
 
 using Ngs2ParseReadHandler = std::int32_t (APS5_VABI *)(std::uintptr_t user_data, std::uint32_t offset, void* data, std::size_t size);
-
-extern "C" int APS5_VABI sceNgs2ParseWaveformData(const void* data, std::size_t data_size, Ngs2WaveformInfo* info);
 
 static std::vector<Ngs2System*>& Systems() {
     static auto* const systems = new std::vector<Ngs2System*>();
