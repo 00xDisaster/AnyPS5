@@ -1,17 +1,27 @@
 #ifndef CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUME_HPP
 #define CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUME_HPP
 
+#include <cstdint>
 #include <stdexcept>
 
 class HostVolume {
 public:
     static constexpr int MaxVolume = 100;
     static constexpr int VolumeStep = 5;
+    static constexpr std::uint32_t UnityGain = 65536;
 
     int Volume() const { return volume; }
     bool Muted() const { return muted; }
     bool MuteOnFocusLoss() const { return muteOnFocusLoss; }
     bool FocusMuted() const { return muteOnFocusLoss && !focused; }
+
+    bool Silent() const { return muted || FocusMuted(); }
+
+    std::uint32_t Gain() const {
+        if (Silent()) return 0;
+        const auto level = static_cast<std::uint32_t>(volume);
+        return (level * level * UnityGain + (MaxVolume * MaxVolume) / 2) / (MaxVolume * MaxVolume);
+    }
 
     bool SetMuteOnFocusLoss(bool enabled) {
         const bool before = FocusMuted();
