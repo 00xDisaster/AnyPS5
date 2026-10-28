@@ -28,4 +28,22 @@ void APS5_VABI u_UCharsToChars_nid_postfix(const char16_t* units, char* chars, s
     }
 }
 
+char* APS5_VABI u_austrcpy_nid_postfix(char* chars, const char16_t* units) {
+    if (!chars || !units) APS5_INVALID_ARG_EX;
+    std::int32_t length = 0;
+    while (units[length] != 0) ++length;
+    u_UCharsToChars_nid_postfix(units, chars, length + 1);
+    return chars;
+}
+
+char* APS5_VABI u_austrncpy_nid_postfix(char* chars, const char16_t* units, std::int32_t length) {
+    if (length > 0 && (!chars || !units)) APS5_INVALID_ARG_EX;
+    if (length <= 0) return chars;
+    std::int32_t copied = 0;
+    while (copied < length && units[copied] != 0) ++copied;
+    u_UCharsToChars_nid_postfix(units, chars, copied);
+    if (copied < length) chars[copied] = 0;
+    return chars;
+}
+
 }

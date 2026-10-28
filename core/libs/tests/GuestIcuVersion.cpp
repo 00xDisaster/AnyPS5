@@ -91,6 +91,57 @@ void UCharsToChars() {
     Require(Rejects([&] { u_UCharsToChars_nid_postfix(units.data(), nullptr, 1); }), "null destination rejected");
 }
 
+void AuStrcpy() {
+    std::array<char, 8> chars;
+    chars.fill('X');
+    Require(u_austrcpy_nid_postfix(chars.data(), u"") == chars.data(), "empty copy returns destination");
+    Require(chars[0] == 0 && chars[1] == 'X', "empty copy writes only terminator");
+
+    chars.fill('X');
+    Require(u_austrcpy_nid_postfix(chars.data(), u"Ab_9") == chars.data(), "invariant copy returns destination");
+    Require(std::memcmp(chars.data(), "Ab_9\0XXX", chars.size()) == 0, "invariant characters and terminator copy");
+
+    chars.fill('X');
+    u_austrcpy_nid_postfix(chars.data(), u"A$B\u00e9C");
+    Require(std::memcmp(chars.data(), "A\0B\0C\0XX", chars.size()) == 0, "non-invariant units become zero before the terminator");
+
+    Require(Rejects([&] { u_austrcpy_nid_postfix(nullptr, u"a"); }), "null destination rejected");
+    Require(Rejects([&] { u_austrcpy_nid_postfix(chars.data(), nullptr); }), "null source rejected");
+}
+
+void AuStrncpy() {
+    std::array<char, 8> chars;
+    chars.fill('X');
+    Require(u_austrncpy_nid_postfix(chars.data(), u"Abcdef", 3) == chars.data(), "truncated copy returns destination");
+    Require(std::memcmp(chars.data(), "AbcXXXXX", chars.size()) == 0, "truncated copy omits terminator");
+
+    chars.fill('X');
+    u_austrncpy_nid_postfix(chars.data(), u"Abc", 3);
+    Require(std::memcmp(chars.data(), "AbcXXXXX", chars.size()) == 0, "exact-length copy omits terminator");
+
+    chars.fill('X');
+    u_austrncpy_nid_postfix(chars.data(), u"Abc", 6);
+    Require(std::memcmp(chars.data(), "Abc\0XXXX", chars.size()) == 0, "longer bound writes one terminator without padding");
+
+    chars.fill('X');
+    u_austrncpy_nid_postfix(chars.data(), u"A!B\u0100", 5);
+    Require(std::memcmp(chars.data(), "A\0B\0\0XXX", chars.size()) == 0, "non-invariant units narrow to zero within bound");
+
+    const std::array<char16_t, 3> unterminated{u'Q', u'R', u'S'};
+    chars.fill('X');
+    u_austrncpy_nid_postfix(chars.data(), unterminated.data(), 3);
+    Require(std::memcmp(chars.data(), "QRSXXXXX", chars.size()) == 0, "bounded copy stops at count without reading past it");
+
+    chars.fill('X');
+    Require(u_austrncpy_nid_postfix(chars.data(), u"Abc", 0) == chars.data(), "zero count returns destination");
+    Require(u_austrncpy_nid_postfix(chars.data(), u"Abc", -2) == chars.data(), "negative count returns destination");
+    Require(chars[0] == 'X', "nonpositive counts write nothing");
+    Require(u_austrncpy_nid_postfix(nullptr, nullptr, 0) == nullptr, "zero count allows null pointers");
+    Require(u_austrncpy_nid_postfix(chars.data(), nullptr, -1) == chars.data(), "negative count allows null source");
+    Require(Rejects([&] { u_austrncpy_nid_postfix(nullptr, u"a", 1); }), "null destination with positive count rejected");
+    Require(Rejects([&] { u_austrncpy_nid_postfix(chars.data(), nullptr, 1); }), "null source with positive count rejected");
+}
+
 void VersionFromString() {
     Require(FromString("1.2.3.4") == Version{1, 2, 3, 4}, "four parts");
     Require(FromString("65.1") == Version{65, 1, 0, 0}, "missing parts are zero");
@@ -150,6 +201,8 @@ void RoundTrip() {
 int main() {
     CharsToUChars();
     UCharsToChars();
+    AuStrcpy();
+    AuStrncpy();
     VersionFromString();
     VersionFromUString();
     VersionToString();
