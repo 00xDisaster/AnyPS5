@@ -8,6 +8,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace AgcDriver {
 
@@ -36,7 +37,13 @@ struct PadStatusProvider {
     std::function<PadStatusSnapshot()> read;
 };
 
+struct PadStatusMetrics {
+    static constexpr std::int32_t Columns = 32;
+    static constexpr std::int32_t KindColumns = 12;
+};
+
 PadStatusMode ParsePadStatusMode(const char* value);
+std::string FormatPadStatusLine(std::size_t slot, const PadSlotStatus& status);
 
 class PadStatusDisplay {
 public:
@@ -48,6 +55,7 @@ public:
     bool Observe(Clock::time_point now, const PadStatusSnapshot& snapshot);
     void Request(Clock::time_point now);
     bool Visible(Clock::time_point now) const;
+    std::vector<std::string> Lines() const;
 
 private:
     PadStatusMode mode;
