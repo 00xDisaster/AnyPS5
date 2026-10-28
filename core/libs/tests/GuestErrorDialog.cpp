@@ -63,6 +63,23 @@ void CloseAndFallback() {
     Require(sceErrorDialogTerminate() == 0);
 }
 
+void OtherLibraryDialog() {
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogRequest other;
+    other.owner = ModalDialogOwnerMsgDialog;
+    other.message = u"Question";
+    other.buttons = {u"Yes", u"No"};
+    Require(ModalDialogOpen_nid_postfix(other));
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogTerminate() == 0);
+    std::size_t chosen = 0;
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerMsgDialog) == ModalDialogState::Showing && ModalDialogCapturesInput_nid_postfix());
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerMsgDialog) == ModalDialogState::Answered && chosen == 0);
+    ModalDialogReset_nid_postfix();
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 void WithoutFlips() {
     ErrorDialogParam param{16, static_cast<std::int32_t>(0x80020001), 0, 0};
     ModalDialogSetPresenter_nid_postfix(true);
@@ -160,4 +177,5 @@ int main() {
     ShownDialog();
     CloseAndFallback();
     WithoutFlips();
+    OtherLibraryDialog();
 }
