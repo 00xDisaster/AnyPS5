@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 static constexpr float DEFAULT_PAD_SPEAKER_FALLBACK_GAIN = 1.0f;
 static constexpr float PAD_SPEAKER_FALLBACK_MIN_DB = -60.0f;
@@ -31,15 +32,14 @@ static bool IsMutedText(const char* text) {
 float AudioPadSpeakerFallbackGainFrom(const char* dbText) {
     if (dbText == nullptr) return DEFAULT_PAD_SPEAKER_FALLBACK_GAIN;
     while (std::isspace(static_cast<unsigned char>(*dbText))) dbText++;
-    if (*dbText == '\0') return DEFAULT_PAD_SPEAKER_FALLBACK_GAIN;
     if (IsMutedText(dbText)) return 0.0f;
     char* end = nullptr;
     const float db = std::strtof(dbText, &end);
-    if (end == dbText || !std::isfinite(db)) return DEFAULT_PAD_SPEAKER_FALLBACK_GAIN;
     while (std::isspace(static_cast<unsigned char>(*end))) end++;
-    if (*end != '\0') return DEFAULT_PAD_SPEAKER_FALLBACK_GAIN;
-    const float clamped = std::clamp(db, PAD_SPEAKER_FALLBACK_MIN_DB, PAD_SPEAKER_FALLBACK_MAX_DB);
-    return std::pow(10.0f, clamped / 20.0f);
+    if (end == dbText || !std::isfinite(db) || *end != '\0' || db < PAD_SPEAKER_FALLBACK_MIN_DB || db > PAD_SPEAKER_FALLBACK_MAX_DB) {
+        throw std::runtime_error(std::string(AUDIO_PAD_SPEAKER_FALLBACK_ENV) + '=' + dbText + ": expected mute, off, -inf or a number of dB from -60 to 0");
+    }
+    return std::pow(10.0f, db / 20.0f);
 }
 
 float AudioPadSpeakerFallbackGain() {

@@ -147,7 +147,7 @@ std::uint32_t AudioOut2MixPorts(const AudioOut2Context& context, const AudioOut2
         const auto route = AudioOut2RouteForPort(port.type, port.channels);
         const float* volume = captured.pcm.empty() ? port.volume : captured.volume.data();
         if (route == AudioOut2Route::Main) AccumulatePort(port, data, out, frames, volume, 1.0f);
-        else if (context.padDevice == 0 && route == AudioOut2Route::PadSpeaker) AccumulatePort(port, data, out, frames, volume, AudioPadSpeakerFallbackGain());
+        else if (context.padDevice == 0 && route == AudioOut2Route::PadSpeaker) AccumulatePort(port, data, out, frames, volume, context.padSpeakerFallbackGain);
         else if (padOut != nullptr) AccumulatePadPort(port, data, route, padOut, frames, volume);
         mixed++;
     }

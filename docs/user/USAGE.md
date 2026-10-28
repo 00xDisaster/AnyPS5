@@ -297,7 +297,7 @@ Set `APS5_VIDEOOUT_TELEMETRY_DIR` to a directory before launching the applicatio
 
 ### Controller-speaker fallback audio
 
-Set `APS5_PAD_SPEAKER_FALLBACK_DB` before launching the application to change the gain for AudioOut2 controller-speaker ports that are folded into the main stereo output when no controller speaker is present. The default is `0` dB, which leaves the mix unchanged. The value accepts `-60` to `0`, or `mute`, `off` or `-inf` for silence. It does not affect main-mix ports or a real controller speaker, and it does not apply to the legacy AudioOut controller-speaker port.
+Set `APS5_PAD_SPEAKER_FALLBACK_DB` before launching the application to change the gain for AudioOut2 controller-speaker ports that are folded into the main stereo output when no controller speaker is present. The value is read once when a title creates its AudioOut2 context. The default is `0` dB, which leaves the mix unchanged. It accepts a number from `-60` to `0`, or `mute`, `off` or `-inf` for silence, with surrounding whitespace ignored. Any other value, including an empty one, an out-of-range number, a non-finite number or trailing text, stops the title with an error naming the variable and the value. It does not affect main-mix ports or a real controller speaker, and it does not apply to the legacy AudioOut controller-speaker port.
 
 A title that plays a sound on both a main port and a controller-speaker port keeps the main-port copy when the fallback is muted. That copy follows the title's own volume settings, while the controller-speaker copy may not.
 
