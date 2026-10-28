@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <vector>
 
 class HostGainRamp {
 public:
@@ -56,5 +58,17 @@ private:
     std::uint32_t current = Unity;
     std::uint32_t step = Unity;
 };
+
+inline const void* HostGainFilter(HostGainRamp& ramp, std::uint32_t target, const void* data, bool isFloat, std::size_t frames, unsigned channels, std::vector<std::uint8_t>& scratch) {
+    if (ramp.Bypass(target)) return data;
+    const std::size_t bytes = frames * channels * (isFloat ? sizeof(float) : sizeof(std::int16_t));
+    if (data != scratch.data()) {
+        scratch.resize(bytes);
+        std::memcpy(scratch.data(), data, bytes);
+    }
+    if (isFloat) ramp.Apply(reinterpret_cast<float*>(scratch.data()), frames, channels, target);
+    else ramp.Apply(reinterpret_cast<std::int16_t*>(scratch.data()), frames, channels, target);
+    return scratch.data();
+}
 
 #endif
