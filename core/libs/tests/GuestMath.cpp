@@ -573,6 +573,18 @@ static void CheckPowfUnderflowFlag() {
     std::feclearexcept(FE_ALL_EXCEPT);
     Require(std::bit_cast<std::uint32_t>(powf_nid_postfix(2.0f, -140.0f)) == 0x00000200u);
     Require(errno == 1234 && std::fetestexcept(FE_UNDERFLOW) == 0);
+    constexpr struct {
+        float x;
+        float y;
+        std::uint32_t expected;
+        int flags;
+    } subnormals[] = {{2.0f, -149.0f, 0x00000001u, 0}, {-2.0f, -141.0f, 0x80000100u, 0}, {3.0f, -90.0f, 0x00000052u, FE_UNDERFLOW | FE_INEXACT}};
+    for (const auto& item : subnormals) {
+        errno = 1234;
+        std::feclearexcept(FE_ALL_EXCEPT);
+        Require(std::bit_cast<std::uint32_t>(powf_nid_postfix(item.x, item.y)) == item.expected);
+        Require(errno == 1234 && std::fetestexcept(FE_UNDERFLOW | FE_INEXACT) == item.flags);
+    }
 }
 
 static void CheckPowfSpecialValue() {
