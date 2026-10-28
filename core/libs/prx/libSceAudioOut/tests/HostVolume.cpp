@@ -121,6 +121,48 @@ void setVolumeRefusesOutOfRange() {
     }
 }
 
+void focusIgnoredByDefault() {
+    HostVolume state;
+    require(!state.MuteOnFocusLoss(), "muting on focus loss is off by default");
+    require(!state.FocusChanged(false), "losing focus changes nothing with the option off");
+    require(!state.FocusMuted(), "no focus mute with the option off");
+    require(!state.FocusChanged(true), "gaining focus changes nothing with the option off");
+}
+
+void focusLossMutesAndGainRestores() {
+    HostVolume state;
+    state.SetMuteOnFocusLoss(true);
+    require(!state.FocusMuted(), "a focused window is not focus muted");
+    require(state.FocusChanged(false), "losing focus reports a change");
+    require(state.FocusMuted(), "a window without focus is focus muted");
+    require(!state.FocusChanged(false), "losing focus twice reports no second change");
+    require(state.FocusChanged(true), "gaining focus reports a change");
+    require(!state.FocusMuted(), "gaining focus ends the focus mute");
+}
+
+void focusMuteKeepsUserState() {
+    HostVolume state;
+    state.SetMuteOnFocusLoss(true);
+    state.VolumeDown();
+    state.ToggleMute();
+    state.FocusChanged(false);
+    state.FocusChanged(true);
+    require(state.Muted() && state.Volume() == 95, "a focus round trip leaves the user's mute and volume");
+    state.ToggleMute();
+    state.FocusChanged(false);
+    require(!state.Muted() && state.Volume() == 95, "the focus mute does not touch the muted flag");
+}
+
+void focusOptionTogglesWhileUnfocused() {
+    HostVolume state;
+    state.FocusChanged(false);
+    require(!state.FocusMuted(), "an unfocused window is not muted with the option off");
+    require(state.SetMuteOnFocusLoss(true), "turning the option on while unfocused mutes");
+    require(state.FocusMuted(), "the unfocused window is muted once the option is on");
+    require(state.SetMuteOnFocusLoss(false), "turning the option off ends the focus mute");
+    require(!state.FocusMuted(), "the focus mute is gone with the option off");
+}
+
 }
 
 int main() try {
@@ -135,6 +177,10 @@ int main() try {
     stepsAtLimitsStillEndMute();
     setVolumeDirectly();
     setVolumeRefusesOutOfRange();
+    focusIgnoredByDefault();
+    focusLossMutesAndGainRestores();
+    focusMuteKeepsUserState();
+    focusOptionTogglesWhileUnfocused();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
