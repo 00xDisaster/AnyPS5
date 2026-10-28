@@ -334,7 +334,7 @@ public:
     }
 
     void KeepDirectoryReadError(bool failed) {
-        if (failed && directory && (_guest.flags & 0x40) != 0) errno = 21;
+        if (failed && directory && (__atomic_load_n(&_guest.flags, __ATOMIC_RELAXED) & 0x40) != 0) errno = 21;
     }
 
     void SetError() {
