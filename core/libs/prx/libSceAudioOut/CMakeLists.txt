@@ -33,6 +33,17 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 
+    add_test_executable(audio_out_host_volume_tests tests/HostVolume.cpp)
+    target_include_directories(audio_out_host_volume_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(audio_out_host_volume_tests PRIVATE libc)
+    configure_windows_unwind(audio_out_host_volume_tests)
+    add_test(NAME audio_out_host_volume COMMAND audio_out_host_volume_tests)
+    set_tests_properties(audio_out_host_volume PROPERTIES TIMEOUT 5)
+    if(WIN32)
+        set_tests_properties(audio_out_host_volume PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
+
     add_test_executable(audio_out_vibration_device_tests tests/AudioOutVibrationDevice.cpp src/AudioOut.cpp src/AudioOut2PadMix.cpp src/AudioOutShutdown.cpp)
     target_compile_definitions(audio_out_vibration_device_tests PRIVATE SDL_MAIN_HANDLED)
     target_include_directories(audio_out_vibration_device_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_SDL2_INCLUDE_DIR})
