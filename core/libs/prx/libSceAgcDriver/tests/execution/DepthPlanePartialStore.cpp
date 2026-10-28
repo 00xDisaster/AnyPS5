@@ -146,8 +146,19 @@ int main(int argc, char** argv) {
         const bool partialWatch = pageWatch || (argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-partial-unwatch");
         if (partialWatch || (argc == 2 && std::string_view(argv[1]) == "--cpu-write-after-memo")) {
             if (!AgcDriver::GuestMemory::WriteWatched() || !AgcDriver::GuestMemory::Watched(base, PlaneBytes)) return VulkanTestSkipped;
+            if (pageWatch) {
+#ifdef _WIN32
+                // Windows unwatches whole 64 KiB blocks, so leave the unit partly watched by returning only its descriptor page.
+                AgcDriver::GuestMemory::Unwatch(base + 4u * Block, Block);
+                const std::array<std::pair<std::uint64_t, std::uint64_t>, 1> descriptorPage{{{base + 4u * Block + 4096u, base + 4u * Block + 8192u}}};
+                AgcDriver::GuestMemory::Rewatch(descriptorPage);
+#else
+                AgcDriver::GuestMemory::Unwatch(base + 4u * Block + 8192u, 4096u);
+#endif
+            } else if (partialWatch) {
+                AgcDriver::GuestMemory::Unwatch(base + 5u * Block, Block);
+            }
             if (partialWatch) {
-                AgcDriver::GuestMemory::Unwatch(pageWatch ? base + 4u * Block + 8192u : base + 5u * Block, pageWatch ? 4096u : Block);
                 Require(!AgcDriver::GuestMemory::Watched(base, PlaneBytes), "the regression plane remains fully watched");
                 Require(AgcDriver::GuestMemory::Watched(base + 4u * Block + 4096u, pageWatch ? 4096u : Block - 4096u), "the descriptor page lost write watching");
                 Require(!pageWatch || !AgcDriver::GuestMemory::Watched(base + 4u * Block, Block), "the descriptor unit remains fully watched");
