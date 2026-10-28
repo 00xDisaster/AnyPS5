@@ -116,11 +116,44 @@ void MissingFactsAreNamed() {
     Check(AgcDriver::FormatHostReport(facts).find("state: absent\n") != std::string::npos, "an absent shader cache directory is not reported");
 }
 
+void PathsAndAddressesAreRedacted() {
+    Check(AgcDriver::RedactHostText("/home/alice/.cache/shader_cache") == "<path>", "an absolute path was kept");
+    Check(AgcDriver::RedactHostText("loaded from ~/games/x") == "loaded from <path>", "a home-relative path was kept");
+    Check(AgcDriver::RedactHostText("C:\\Users\\bob\\AppData") == "<path>", "a Windows path was kept");
+    Check(AgcDriver::RedactHostText("D:/Users/bob") == "<path>", "a Windows drive path with a slash was kept");
+    Check(AgcDriver::RedactHostText("(/usr/lib/libvulkan.so.1)") == "<path>", "a parenthesised path was kept");
+    Check(AgcDriver::RedactHostText("https://user:secret@example.org/a") == "<url>", "a URL was kept");
+    Check(AgcDriver::RedactHostText("nic 00:1a:2B:3c:4d:5e up") == "nic <redacted> up", "a MAC address was kept");
+    Check(AgcDriver::RedactHostText("00-1A-2B-3C-4D-5E") == "<redacted>", "a dashed MAC address was kept");
+    Check(AgcDriver::RedactHostText("LAHF/SAHF") == "LAHF/SAHF", "a feature name with a slash was changed");
+    Check(AgcDriver::RedactHostText("AMD Radeon RX 6750 XT (RADV NAVI22)") == "AMD Radeon RX 6750 XT (RADV NAVI22)", "a device name was changed");
+    Check(AgcDriver::RedactHostText("a\nfake: line\r\tx") == "a fake: line  x", "control characters were kept");
+}
+
+void FormattedReportHasNoSensitiveText() {
+    auto facts = SampleFacts();
+    facts.os = "Linux 6.1 /home/alice/kernel";
+    facts.cpuModel = "CPU at \\\\server\\share";
+    facts.gpu->driverInfo = "Mesa 24 /usr/lib/x86_64-linux-gnu/dri/radeonsi_dri.so";
+    facts.gpu->candidates.push_back("Dev 00:11:22:33:44:55");
+    facts.environment.push_back({"ANYPS5_SHADER_CACHE_DIR", "/home/alice/cache"});
+    facts.environment.push_back({"APS5_TRACE_DIR", "C:\\Users\\alice\\trace"});
+    facts.environment.push_back({"APS5_NOTE", "line\nINJECTED: yes"});
+    const auto text = AgcDriver::FormatHostReport(facts);
+    for (const char* forbidden : {"alice", "/home", "/usr", "C:\\", "00:11:22", "\\\\server", "\nINJECTED"})
+        Check(text.find(forbidden) == std::string::npos, forbidden);
+    Check(text.find("ANYPS5_SHADER_CACHE_DIR: <path>\n") != std::string::npos, "an environment path value was not replaced");
+    Check(text.find("driver_info: Mesa 24 <path>\n") != std::string::npos, "a path in the driver info was not replaced");
+    Check(text.find("APS5_NOTE: line INJECTED: yes\n") != std::string::npos, "a newline in a value was not flattened");
+}
+
 }
 
 int main() {
     GoldenOutput();
     OrderIsStable();
     MissingFactsAreNamed();
+    PathsAndAddressesAreRedacted();
+    FormattedReportHasNoSensitiveText();
     return failures == 0 ? 0 : 1;
 }
