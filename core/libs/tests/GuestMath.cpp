@@ -569,6 +569,10 @@ static void CheckPowfUnderflowFlag() {
         Require(std::bit_cast<std::uint32_t>(powf_nid_postfix(item.x, item.y)) == item.expected);
         Require(errno == ERANGE && std::fetestexcept(FE_UNDERFLOW) != 0);
     }
+    errno = 1234;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    Require(std::bit_cast<std::uint32_t>(powf_nid_postfix(2.0f, -140.0f)) == 0x00000200u);
+    Require(errno == 1234 && std::fetestexcept(FE_UNDERFLOW) == 0);
 }
 
 static void CheckPowfSpecialValue() {
