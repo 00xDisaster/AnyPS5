@@ -98,6 +98,12 @@ int main() {
         Require(Holding(stencilPlane, 0x18u) == StencilBytes, "a read of the stencil plane after a draw wrote stencil 0x18 does not see it in guest memory");
         Require(AgcDriver::Graphics::FlushDepthPlanes(stencilBase, StencilBytes).empty(), "a second read of the stored stencil plane stored it again");
 
+        Require(draw({.depthTest = false, .stencilTest = true, .stencil = Stencil(VK_COMPARE_OP_ALWAYS, VK_STENCIL_OP_REPLACE, 0x2au)}) == PlaneTexels, "the draw writing stencil 0x2a did not cover the plane");
+        AgcDriver::Graphics::RetireDepthSurfaces(device->graphicsContext().device, reinterpret_cast<std::uintptr_t>(depthPlane), DepthBytes);
+        device->WaitIdle();
+        Require(Holding(stencilPlane, 0x2au) == StencilBytes, "retiring the surface for a write over its depth plane only dropped the stencil 0x2a a draw wrote");
+        Require(AgcDriver::Graphics::FlushDepthPlanes(stencilBase, StencilBytes).empty(), "a read of the stencil plane stored after its surface retired stored it again");
+
         if (!AgcDriver::GuestMemory::WriteWatched() || !AgcDriver::GuestMemory::Watched(stencilBase, StencilBytes)) {
             std::puts("guest memory is not write-watched here: a guest write into the stencil plane is not exercised");
         } else {
