@@ -523,7 +523,7 @@ int APS5_VABI sceNpUtilJsonUnescape(char* dst, std::size_t dstSize, const char* 
         emit(encoded, length, JSON_SURROGATE_PAIR_LENGTH);
     }
     ++count;
-    if (count > dstSize) return NP_UTIL_ERROR_BUFFER_TOO_SMALL;
+    if (dst != nullptr && count > dstSize) return NP_UTIL_ERROR_BUFFER_TOO_SMALL;
     if (dstLength != nullptr) *dstLength = count;
     if (out != nullptr) *out = '\0';
     return status;
