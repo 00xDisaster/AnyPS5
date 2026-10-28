@@ -1,6 +1,7 @@
 #include "prx/libSceJsc/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -13,7 +14,19 @@
 
 namespace {
 
+constexpr std::size_t StringHeaderSize = 24;
+constexpr std::size_t MaximumLength = std::min<std::size_t>(std::numeric_limits<std::int32_t>::max(),
+    (std::numeric_limits<std::uint32_t>::max() - StringHeaderSize) / sizeof(std::uint16_t));
+
+std::unique_ptr<GuestJSString> NullString() {
+    auto result = std::make_unique<GuestJSString>();
+    result->nullString = true;
+    result->characters.push_back(0);
+    return result;
+}
+
 std::unique_ptr<GuestJSString> Decode(const char* text) {
+    if (!text) return NullString();
     auto result = std::make_unique<GuestJSString>();
     const auto* cursor = reinterpret_cast<const unsigned char*>(text);
     while (*cursor) {
@@ -70,31 +83,26 @@ bool Equal(const GuestJSString* first, const GuestJSString* second) {
 extern "C" {
 
 GuestJSString* APS5_VABI JSStringCreateWithCharacters(const std::uint16_t* characters, std::size_t count) {
-    if (!characters && count) NotImplemented_nid_no_patch(__func__);
-    if (count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) NotImplemented_nid_no_patch(__func__);
+    if (!characters) return NullString().release();
+    if (count > MaximumLength) throw std::length_error("JSStringCreateWithCharacters: length above the string limit");
     auto string = std::make_unique<GuestJSString>();
-    string->nullString = !characters;
-    if (count) string->characters.assign(characters, characters + count);
+    string->characters.assign(characters, characters + count);
     string->characters.push_back(0);
     return string.release();
 }
 
 GuestJSString* APS5_VABI JSStringCreateWithUTF8CString(const char* text) {
-    if (!text) NotImplemented_nid_no_patch(__func__);
     return Decode(text).release();
 }
 
 GuestJSString* APS5_VABI JSStringRetain(GuestJSString* string) {
-    if (!string) NotImplemented_nid_no_patch(__func__);
-    auto references = string->references.load(std::memory_order_relaxed);
-    for (;;) {
-        if (references == std::numeric_limits<std::size_t>::max()) NotImplemented_nid_no_patch(__func__);
-        if (string->references.compare_exchange_weak(references, references + 1, std::memory_order_relaxed)) return string;
-    }
+    if (!string) throw std::invalid_argument("JSStringRetain: null string");
+    string->references.fetch_add(1, std::memory_order_relaxed);
+    return string;
 }
 
 void APS5_VABI JSStringRelease(GuestJSString* string) {
-    if (!string) NotImplemented_nid_no_patch(__func__);
+    if (!string) throw std::invalid_argument("JSStringRelease: null string");
     if (string->references.fetch_sub(1, std::memory_order_acq_rel) == 1) delete string;
 }
 
@@ -107,10 +115,9 @@ const std::uint16_t* APS5_VABI JSStringGetCharactersPtr(const GuestJSString* str
 }
 
 std::size_t APS5_VABI JSStringGetMaximumUTF8CStringSize(const GuestJSString* string) {
-    if (!string) NotImplemented_nid_no_patch(__func__);
-    const auto length = string->characters.size() - 1;
-    if (length > (std::numeric_limits<std::size_t>::max() - 1) / 3) NotImplemented_nid_no_patch(__func__);
-    return length * 3 + 1;
+    if (!string) throw std::invalid_argument("JSStringGetMaximumUTF8CStringSize: null string");
+    const auto length = static_cast<std::uint32_t>(string->characters.size() - 1);
+    return static_cast<std::uint32_t>(length * 3u + 1u);
 }
 
 std::size_t APS5_VABI JSStringGetUTF8CString(const GuestJSString* string, char* buffer, std::size_t bufferSize) {
@@ -146,7 +153,6 @@ bool APS5_VABI JSStringIsEqual(const GuestJSString* first, const GuestJSString* 
 }
 
 bool APS5_VABI JSStringIsEqualToUTF8CString(const GuestJSString* string, const char* text) {
-    if (!text) NotImplemented_nid_no_patch(__func__);
     const auto other = Decode(text);
     return Equal(string, other.get());
 }

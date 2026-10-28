@@ -7,7 +7,7 @@
 #include <vector>
 
 struct GuestJSString {
-    std::atomic<std::size_t> references{1};
+    std::atomic<std::uint32_t> references{1};
     std::vector<std::uint16_t> characters;
     bool nullString = false;
 };
