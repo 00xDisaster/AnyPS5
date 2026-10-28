@@ -9,6 +9,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <limits>
+#include <xmmintrin.h>
 
 namespace {
 
@@ -52,6 +53,36 @@ void CheckFExp(float x, float y, short offset, float expected, short expectedKin
     const short kind = _FExp_nid_postfix(&result, y, offset);
     const bool same = std::isnan(expected) ? std::isnan(result) : result == expected && std::signbit(result) == std::signbit(expected);
     Require(kind == expectedKind && same && errno == expectedErrno && (std::fetestexcept(FE_ALL_EXCEPT) & FloatingExceptions) == expectedFlags, message);
+}
+
+void TestFloatingRounds() {
+    GuestFloatingPointEnvironment saved;
+    Require(fegetenv_nid_postfix(&saved) == 0, "save floating environment");
+    constexpr int Expected[]{1, 3, 2, 0};
+    const int savedErrno = *__error_nid_postfix();
+    for (const unsigned precision : {0u, 0x200u, 0x300u}) {
+        for (unsigned x87 = 0; x87 != 4; ++x87) {
+            for (unsigned sse = 0; sse != 4; ++sse) {
+                for (const unsigned flush : {0u, 0x40u, 0x8000u, 0x8040u}) {
+                    auto input = saved;
+                    input.control = (input.control & 0xffff0000u) | 0x7fu | precision | (x87 << 10u);
+                    input.status = (input.status & ~0x3fu) | 0x25u;
+                    input.mxcsr = 0x1fa5u | (sse << 13u) | flush;
+                    asm volatile("fldenv %0" : : "m"(input));
+                    _mm_setcsr(input.mxcsr);
+                    *__error_nid_postfix() = 97;
+                    Require(_Fltrounds_nid_postfix() == Expected[x87], "_Fltrounds follows x87 independently of SSE");
+                    GuestFloatingPointEnvironment after;
+                    Require(fegetenv_nid_postfix(&after) == 0, "read floating environment");
+                    Require(after.control == input.control && (after.status & 0x3fu) == 0x25u && after.mxcsr == input.mxcsr, "_Fltrounds preserves controls and flags");
+                    Require(*__error_nid_postfix() == 97, "_Fltrounds preserves errno");
+                }
+            }
+        }
+    }
+    asm volatile("fldenv %0" : : "m"(saved));
+    _mm_setcsr(saved.mxcsr);
+    *__error_nid_postfix() = savedErrno;
 }
 
 void TestStod() {
@@ -415,6 +446,7 @@ void TestLongDoubleHelpers() {
 }
 
 int main() {
+    TestFloatingRounds();
     TestStod();
     TestStoll();
     TestDoubleHelpers();
