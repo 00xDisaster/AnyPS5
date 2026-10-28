@@ -1,5 +1,6 @@
 # libkernel_sys technical debt
 
+- [sceKernelGetCpuUsage, sceKernelGetThreadName, sceKernelLwfsAllocateBlock, sceKernelLwfsLseek, sceKernelLwfsSetAttribute, sceKernelLwfsWrite, sceKernelSetCompressionAttribute and sceKernelSetFsstParam](../../../core/libs/prx/libkernel_sys/Export.Discovery.cpp) (libkernel_sys) - throw through `NotImplemented_nid_no_patch`; behaviour and the PS5 prototypes are unmeasured. The parameter lists come from a single source, the PS4 OpenOrbis `libkernel.h`, with no second reference: `off_t` and `ssize_t` are taken as 64-bit, the `Lwfs*` and `Set*` parameters are unnamed there (the names here are guesses), and the `Proc_Stats` of `sceKernelGetCpuUsage` is declared as `void*` because its layout is unknown.
 ### Silent stubs
 - [fchmodat](../../../core/libs/prx/libkernel_sys/Export.cpp) (libkernel_sys) - `AT_SYMLINK_NOFOLLOW` on a symbolic link (on Windows and Linux)
 
