@@ -130,6 +130,66 @@ void s16ReturnToUnityBypassesAgain() {
     require(steady == before, "samples after the return are bit-identical");
 }
 
+std::vector<float> constantF32(std::size_t frames, unsigned channels, float value) {
+    return std::vector<float>(frames * channels, value);
+}
+
+void f32BypassAtUnity() {
+    for (const unsigned channels : {1u, 2u, 8u}) {
+        std::vector<float> samples(256 * channels);
+        for (std::size_t index = 0; index < samples.size(); ++index) samples[index] = static_cast<float>(static_cast<int>(index % 2001) - 1000) / 777.0f;
+        const auto before = samples;
+        HostGainRamp ramp;
+        ramp.Apply(samples.data(), 256, channels, HostGainRamp::Unity);
+        require(std::memcmp(before.data(), samples.data(), samples.size() * sizeof(float)) == 0, "unity leaves float samples bit-identical");
+    }
+}
+
+void f32FirstSampleAndLanding() {
+    HostGainRamp ramp;
+    auto samples = constantF32(2000, 1, 1.0f);
+    ramp.Apply(samples.data(), 2000, 1, 32768);
+    require(samples[0] == static_cast<float>(65536 - 136) / 65536.0f, "the first float frame is scaled by the first step");
+    require(samples[240] == 0.5f && samples[239] != 0.5f, "the float ramp lands on the target at the same frame as the 16-bit one");
+    require(samples.back() == 0.5f, "float samples stay at the target after the ramp");
+}
+
+void f32RampHasNoDiscontinuity() {
+    HostGainRamp ramp;
+    auto samples = constantF32(1000, 2, 1.0f);
+    ramp.Apply(samples.data(), 1000, 2, 0);
+    float previous = 1.0f;
+    for (std::size_t frame = 0; frame < 1000; ++frame) {
+        require(samples[frame * 2] == samples[frame * 2 + 1], "both channels get the same gain");
+        require(previous - samples[frame * 2] <= 136.0f / 65536.0f + 1e-6f, "no float step exceeds the ramp slope");
+        require(samples[frame * 2] <= previous, "a float ramp down never rises");
+        previous = samples[frame * 2];
+    }
+    require(previous == 0.0f, "the float ramp ends in silence");
+}
+
+void f32RampContinuesAcrossBuffers() {
+    auto whole = constantF32(3000, 8, 0.75f);
+    HostGainRamp wholeRamp;
+    wholeRamp.Apply(whole.data(), 3000, 8, 16384);
+    auto split = constantF32(3000, 8, 0.75f);
+    HostGainRamp splitRamp;
+    std::size_t done = 0;
+    for (const std::size_t chunk : {5u, 1u, 480u, 481u, 2033u}) {
+        splitRamp.Apply(split.data() + done * 8, chunk, 8, 16384);
+        done += chunk;
+    }
+    require(done == 3000, "the float chunks cover the buffer");
+    require(std::memcmp(whole.data(), split.data(), whole.size() * sizeof(float)) == 0, "a float ramp split across buffers equals the same ramp in one buffer");
+}
+
+void f32DoesNotClamp() {
+    HostGainRamp ramp(1);
+    auto samples = constantF32(2, 1, 0.75f);
+    ramp.Apply(samples.data(), 2, 1, 4 * HostGainRamp::Unity);
+    require(samples[0] == 1.5f && samples[1] == 2.25f, "float samples above one are left for the device to clip");
+}
+
 }
 
 int main() try {
@@ -142,6 +202,11 @@ int main() try {
     s16ChannelsShareTheFrameGain();
     s16SilentTargetSilencesAfterRamp();
     s16ReturnToUnityBypassesAgain();
+    f32BypassAtUnity();
+    f32FirstSampleAndLanding();
+    f32RampHasNoDiscontinuity();
+    f32RampContinuesAcrossBuffers();
+    f32DoesNotClamp();
     std::puts("host gain tests passed");
     return 0;
 } catch (const std::exception& error) {
