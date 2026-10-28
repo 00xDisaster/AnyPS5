@@ -136,12 +136,33 @@ void DialogButtonPress(MouseInput& input, std::int32_t handle) {
     ModalDialogSetPresenter_nid_postfix(true);
     OpenDialog();
     input.HandleEvent(Button(3, SDL_BUTTON_LEFT, true), 3);
-    Require(Drain(handle).count == 0, "a button press reached the title while a dialog was shown");
+    Require(Drain(handle).buttons == 0, "a button press reached the title while a dialog was shown");
     ModalDialogClose_nid_postfix();
     input.HandleEvent(Button(3, SDL_BUTTON_LEFT, true), 3);
     Require(Drain(handle).buttons == 1, "a button press does not reach the title after the dialog closed");
     input.HandleEvent(Button(3, SDL_BUTTON_LEFT, false), 3);
     Require(Drain(handle).buttons == 0, "a button release does not reach the title");
+    ModalDialogReset_nid_postfix();
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
+void DialogButtonRelease(MouseInput& input, std::int32_t handle) {
+    static_cast<void>(Drain(handle));
+    ModalDialogSetPresenter_nid_postfix(true);
+    input.HandleEvent(Button(3, SDL_BUTTON_RIGHT, true), 3);
+    Require(Drain(handle).buttons == 2, "a button press does not reach the title without a dialog");
+    OpenDialog();
+    input.HandleEvent(Button(3, SDL_BUTTON_RIGHT, false), 3);
+    auto drained = Drain(handle);
+    Require(drained.count == 1 && drained.buttons == 0, "the held button was not released when the dialog started taking clicks");
+    input.HandleEvent(Button(3, SDL_BUTTON_LEFT, true), 3);
+    input.HandleEvent(Button(3, SDL_BUTTON_LEFT, false), 3);
+    Require(Drain(handle).count == 0, "a button press or release reached the title while a dialog was shown");
+    ModalDialogClose_nid_postfix();
+    input.HandleEvent(Button(3, SDL_BUTTON_LEFT, true), 3);
+    Require(Drain(handle).buttons == 1, "a button press does not reach the title after the dialog closed");
+    input.HandleEvent(Button(3, SDL_BUTTON_LEFT, false), 3);
+    Require(Drain(handle).buttons == 0, "a button release does not reach the title after the dialog closed");
     ModalDialogReset_nid_postfix();
     ModalDialogSetPresenter_nid_postfix(false);
 }
@@ -197,6 +218,7 @@ int main() {
     Require(x == 6 && y == 6, "an empty presentation changed the scale");
     DialogMotionAndWheel(input, handle);
     DialogButtonPress(input, handle);
+    DialogButtonRelease(input, handle);
     CaptureDecision(input, handle);
     CaptureApplied(input);
     std::puts("mouse input tests passed");
