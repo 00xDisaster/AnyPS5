@@ -62,7 +62,7 @@ void CopyFromBase(std::uint8_t* buffer, const GuestStreamRec& stream, std::uint6
 std::uint8_t* QAlloc(GuestMemoryRec* memory, std::int64_t size, int& error, const char* function) {
     error = 0;
     if (size > 0) {
-        if (!memory || !memory->alloc) Unsupported(function, "null memory allocator");
+        if (!memory || !memory->alloc || !memory->free) Unsupported(function, "null memory allocator or release");
         auto* block = static_cast<std::uint8_t*>(memory->alloc(memory, size));
         if (!block) error = OutOfMemory;
         return block;
@@ -251,9 +251,9 @@ void APS5_VABI FT_Stream_ExitFrame_nid_postfix(GuestStreamRec* stream) {
 }
 
 int APS5_VABI FT_Stream_ExtractFrame_nid_postfix(GuestStreamRec* stream, std::uint64_t count, std::uint8_t** bytes) {
+    if (!bytes) Unsupported(__func__, "null frame pointer");
     const int error = EnterFrame(stream, count, __func__);
     if (!error) {
-        if (!bytes) Unsupported(__func__, "null frame pointer");
         *bytes = stream->cursor;
         stream->cursor = nullptr;
         stream->limit = nullptr;
@@ -391,6 +391,10 @@ int APS5_VABI FT_Stream_ReadFields_nid_postfix(GuestStreamRec* stream, const Gue
         if (frameAccessed) ExitFrame(stream, function);
         return error;
     };
+    const auto refuse = [&](const char* what) {
+        if (frameAccessed) ExitFrame(stream, function);
+        Unsupported(function, what);
+    };
     for (;; ++fields) {
         const GuestFrameField field = *fields;
         if (field.value == FrameStart) {
@@ -407,8 +411,8 @@ int APS5_VABI FT_Stream_ReadFields_nid_postfix(GuestStreamRec* stream, const Gue
                 return finish();
             }
             if (field.value == FrameBytes && length != 0) {
-                if (!structure) Unsupported(function, "null structure");
-                if (!cursor) Unsupported(function, "null frame cursor");
+                if (!structure) refuse("null structure");
+                if (!cursor) refuse("null frame cursor");
                 std::memmove(static_cast<std::uint8_t*>(structure) + field.offset, cursor, length);
             }
             cursor = Offset(cursor, length);
@@ -428,14 +432,14 @@ int APS5_VABI FT_Stream_ReadFields_nid_postfix(GuestStreamRec* stream, const Gue
             record.cursor = cursor;
             return finish();
         }
-        if (!cursor) Unsupported(function, "null frame cursor");
+        if (!cursor) refuse("null frame cursor");
         std::uint64_t value = little ? LittleEndian(cursor, bytes) : BigEndian(cursor, bytes);
         cursor += bytes;
         if (field.value & FrameSigned) {
             const unsigned shift = 32 - bytes * 8;
             value = static_cast<std::uint64_t>(static_cast<std::int64_t>(static_cast<std::int32_t>(static_cast<std::uint32_t>(value << shift)) >> shift));
         }
-        if (!structure) Unsupported(function, "null structure");
+        if (!structure) refuse("null structure");
         auto* target = static_cast<std::uint8_t*>(structure) + field.offset;
         switch (field.size) {
         case 1: Store<std::uint8_t>(target, value); break;
@@ -449,6 +453,7 @@ int APS5_VABI FT_Stream_ReadFields_nid_postfix(GuestStreamRec* stream, const Gue
 void APS5_VABI FT_Stream_Free_nid_postfix(GuestStreamRec* stream, std::int32_t external) {
     if (!stream) return;
     auto* memory = stream->memory;
+    if (!external && (!memory || !memory->free)) Unsupported(__func__, "null memory release");
     FT_Stream_Close_nid_postfix(stream);
     if (!external) Free(memory, stream, __func__);
 }

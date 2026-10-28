@@ -200,6 +200,9 @@ void TestMemoryReads() {
     Require(api.ExtractFrame(&stream, 4, &frame) == InvalidStreamOperation && frame == At(0x99), "failed extraction leaves the pointer");
     api.ReleaseFrame(nullptr, &frame);
     Require(!frame, "release without a stream clears the pointer");
+    stream.pos = 1;
+    Require(Throws([&] { api.ExtractFrame(&stream, 3, nullptr); }), "null memory frame pointer is unsupported");
+    Require(stream.pos == 1 && !stream.cursor && !stream.limit, "null memory frame pointer enters no frame");
 }
 
 void TestFrameGetters() {
@@ -331,6 +334,22 @@ void TestDeviceStream() {
     api.ReleaseFrame(&stream, &frame);
     Require(!frame && device.releases.size() == 1, "release a device frame");
     Require(Throws([&] { api.ReleaseFrame(&stream, nullptr); }), "null frame pointer is unsupported");
+    device.allocations.clear();
+    device.calls.clear();
+    device.releases.clear();
+    stream.base = At(0x55);
+    stream.pos = 1;
+    Require(Throws([&] { api.ExtractFrame(&stream, 2, nullptr); }), "null device frame pointer is unsupported");
+    Require(device.allocations.empty() && device.calls.empty() && device.releases.empty(), "null device frame pointer allocates and reads nothing");
+    Require(stream.base == At(0x55) && stream.pos == 1 && !stream.cursor && !stream.limit, "null device frame pointer leaves the stream");
+    GuestMemoryRec noRelease{nullptr, DeviceAlloc, nullptr, nullptr};
+    stream.memory = &noRelease;
+    Require(Throws([&] { api.EnterFrame(&stream, 2); }), "allocator without release is unsupported");
+    Require(device.allocations.empty() && device.calls.empty() && stream.base == At(0x55) && stream.pos == 1, "allocator without release allocates and reads nothing");
+    Require(api.EnterFrame(&stream, 9) == InvalidStreamOperation && device.calls.empty(), "frame larger than the stream does not need the allocator");
+    Require(api.EnterFrame(&stream, 0) == 0 && device.allocations.empty() && !stream.base, "empty frame does not need the allocator");
+    api.ExitFrame(&stream);
+    stream.memory = &memory;
     int error = -1;
     stream.base = nullptr;
     stream.pos = 0;
@@ -368,8 +387,9 @@ void TestCloseAndFree() {
     Require(device.releases.size() == 1 && device.releases[0] == owned, "owned stream is released with the memory read before closing");
     Require(device.order.size() == 2 && device.order[0] == 'c' && device.order[1] == 'f', "close runs before release");
     stream.memory = nullptr;
-    stream.close = nullptr;
+    const auto closes = device.closes;
     Require(Throws([&] { api.Free(&stream, 0); }), "release without memory is unsupported");
+    Require(device.closes == closes, "release without memory does not close the stream");
 }
 
 void TestReadFields() {
@@ -416,6 +436,15 @@ void TestReadFields() {
     const std::array<GuestFrameField, 3> deviceFields{{{4, 0, 3}, {20, 4, 0}, {0, 0, 0}}};
     Require(api.ReadFields(&deviceStream, deviceFields.data(), target.data()) == 0 && load(0, 4) == 0x123456, "device fields");
     Require(device.allocations.size() == 1 && device.releases.size() == 1 && !deviceStream.base && !deviceStream.cursor, "device fields release their frame");
+    deviceStream = DeviceStream({0x12, 0x34, 0x56}, 3);
+    const std::array<GuestFrameField, 3> deviceByte{{{4, 0, 3}, {8, 1, 0}, {0, 0, 0}}};
+    Require(Throws([&] { api.ReadFields(&deviceStream, deviceByte.data(), nullptr); }), "null structure in a device frame is unsupported");
+    Require(device.allocations.size() == 1 && device.releases.size() == 1, "refused fields release their device frame");
+    Require(!deviceStream.base && !deviceStream.cursor && !deviceStream.limit && deviceStream.pos == 3, "refused fields leave no frame");
+    stream.pos = 0;
+    const std::array<GuestFrameField, 3> memoryBytes{{{4, 0, 4}, {24, 2, 0}, {0, 0, 0}}};
+    Require(Throws([&] { api.ReadFields(&stream, memoryBytes.data(), nullptr); }), "null structure in a memory frame is unsupported");
+    Require(!stream.cursor && !stream.limit && stream.base == data.data() && stream.pos == 4, "refused fields leave no memory frame");
 }
 
 void TestNullStream() {
