@@ -6,6 +6,14 @@
 
 namespace {
 
+SDL_Event windowEvent(Uint32 windowId, Uint8 kind) {
+    SDL_Event event{};
+    event.type = SDL_WINDOWEVENT;
+    event.window.windowID = windowId;
+    event.window.event = kind;
+    return event;
+}
+
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
@@ -66,6 +74,51 @@ void otherRequestsAreIgnored() {
     require(HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "the other host requests leave the volume alone");
 }
 
+void focusIsIgnoredByDefault() {
+    HostVolumeConfigure_nid_no_patch(nullptr, nullptr);
+    HostVolume after;
+    require(!ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_LOST), 7, &after), "losing focus changes nothing by default");
+    require(HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "the gain stays at unity without the option");
+    require(!ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_GAINED), 7, &after), "gaining focus changes nothing by default");
+    require(HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "the gain is still unity");
+}
+
+void focusLossMutesAndGainRestores() {
+    HostVolumeConfigure_nid_no_patch(nullptr, "1");
+    HostVolume after;
+    require(ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_LOST), 7, &after), "losing focus with the option on is a change");
+    require(after.FocusMuted() && HostVolumeGain_nid_no_patch() == 0, "the output goes silent");
+    require(!ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_LOST), 7, &after), "a second focus lost is not a change");
+    require(ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_GAINED), 7, &after), "gaining focus is a change");
+    require(!after.FocusMuted() && HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "the output returns to exactly unity");
+}
+
+void otherWindowEventsAreIgnored() {
+    HostVolumeConfigure_nid_no_patch(nullptr, "1");
+    HostVolume after;
+    for (const Uint8 kind : {SDL_WINDOWEVENT_MINIMIZED, SDL_WINDOWEVENT_RESTORED, SDL_WINDOWEVENT_HIDDEN, SDL_WINDOWEVENT_SHOWN, SDL_WINDOWEVENT_CLOSE, SDL_WINDOWEVENT_RESIZED, SDL_WINDOWEVENT_ENTER, SDL_WINDOWEVENT_LEAVE}) {
+        require(!ApplyHostFocusEvent(windowEvent(7, kind), 7, &after), "a window event that is not a focus event changes nothing");
+    }
+    require(HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "none of them silenced the output");
+    require(!ApplyHostFocusEvent(windowEvent(8, SDL_WINDOWEVENT_FOCUS_LOST), 7, &after), "another window losing focus changes nothing");
+    SDL_Event key{};
+    key.type = SDL_KEYDOWN;
+    key.key.windowID = 7;
+    require(!ApplyHostFocusEvent(key, 7, &after), "a key event is not a focus event");
+    require(HostVolumeGain_nid_no_patch() == HostVolume::UnityGain, "the output is still at unity");
+}
+
+void focusMuteKeepsTheUsersMute() {
+    HostVolumeConfigure_nid_no_patch(nullptr, "1");
+    HostVolume after;
+    Pad::InputRequests mute;
+    mute.toggleMute = true;
+    ApplyHostVolumeRequests(mute, &after);
+    ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_LOST), 7, &after);
+    ApplyHostFocusEvent(windowEvent(7, SDL_WINDOWEVENT_FOCUS_GAINED), 7, &after);
+    require(after.Muted() && HostVolumeGain_nid_no_patch() == 0, "regaining focus does not undo the user's mute");
+}
+
 }
 
 int main() try {
@@ -74,6 +127,10 @@ int main() try {
     muteRequestToggles();
     requestsRunInOrder();
     otherRequestsAreIgnored();
+    focusIsIgnoredByDefault();
+    focusLossMutesAndGainRestores();
+    otherWindowEventsAreIgnored();
+    focusMuteKeepsTheUsersMute();
     HostVolumeConfigure_nid_no_patch(nullptr, nullptr);
     std::puts("host volume input tests passed");
     return 0;
