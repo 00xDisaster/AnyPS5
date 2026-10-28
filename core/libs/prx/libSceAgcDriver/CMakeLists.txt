@@ -996,6 +996,20 @@ if(BUILD_TESTING)
     set_tests_properties(agc_host_report PROPERTIES TIMEOUT 20)
 endif()
 
+add_test_executable(agc_host_report_vulkan_tests EXCLUDE_FROM_ALL
+        tests/HostReportVulkan.cpp
+        Execution/src/HostReportVulkan.cpp
+        Execution/src/HostReport.cpp
+)
+target_include_directories(agc_host_report_vulkan_tests PRIVATE ${LIBS_INCLUDE_DIR} ${ANYPS5_VULKAN_HEADERS_INCLUDE_DIR})
+set_target_properties(agc_host_report_vulkan_tests PROPERTIES CXX_EXTENSIONS OFF)
+configure_windows_unwind(agc_host_report_vulkan_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_host_report_vulkan_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_host_report_vulkan COMMAND agc_host_report_vulkan_tests)
+    set_tests_properties(agc_host_report_vulkan PROPERTIES TIMEOUT 20)
+endif()
+
 add_test_executable(agc_tessellation_factor_ring_tests EXCLUDE_FROM_ALL
         tests/TessellationFactorRing.cpp
         State/src/Configuration.cpp
