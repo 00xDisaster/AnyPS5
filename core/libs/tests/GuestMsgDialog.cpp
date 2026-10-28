@@ -103,6 +103,23 @@ void NotPresented() {
     ModalDialogReset_nid_postfix();
 }
 
+void OtherLibraryDialog() {
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogRequest other;
+    other.owner = ModalDialogOwnerErrorDialog;
+    other.message = u"Error";
+    other.buttons = {u"OK"};
+    Require(ModalDialogOpen_nid_postfix(other), "the other library's dialog did not open");
+    Require(sceMsgDialogInitialize() == 0, "initialize");
+    Require(sceMsgDialogTerminate() == 0, "terminate");
+    std::size_t chosen = 0;
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerErrorDialog) == ModalDialogState::Showing && ModalDialogCapturesInput_nid_postfix(), "terminating libSceMsgDialog ended another library's dialog");
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerErrorDialog) == ModalDialogState::Answered && chosen == 0, "the other library's dialog was not answerable");
+    ModalDialogReset_nid_postfix();
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 void WithoutFlips() {
     ModalDialogSetPresenter_nid_postfix(true);
     ModalDialogSetShowTimeout_nid_postfix(40);
@@ -132,5 +149,6 @@ int main() {
     Shown();
     NotPresented();
     WithoutFlips();
+    OtherLibraryDialog();
     ModalDialogSetPresenter_nid_postfix(false);
 }
