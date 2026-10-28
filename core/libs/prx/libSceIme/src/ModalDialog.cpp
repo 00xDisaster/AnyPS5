@@ -1,6 +1,7 @@
 #include "prx/libSceIme/include/ModalDialog.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 
 namespace {
@@ -23,6 +24,8 @@ struct Session {
     std::size_t chosen = ModalDialogNoButton;
     std::uint32_t held = 0;
     bool armed = false;
+    bool drawn = false;
+    std::chrono::steady_clock::time_point openedAt;
 };
 
 std::mutex g_mutex;
@@ -77,6 +80,7 @@ bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request) {
     g_session.request = request;
     g_session.focus = request.focus;
     g_session.state = ModalDialogState::Showing;
+    g_session.openedAt = std::chrono::steady_clock::now();
     return true;
 }
 
@@ -100,6 +104,7 @@ bool ModalDialogReadView_nid_postfix(ModalDialogView& view) {
     if (InputOwnedByIme()) return false;
     std::lock_guard lock(g_mutex);
     if (g_session.state != ModalDialogState::Showing) return false;
+    g_session.drawn = true;
     view.message = g_session.request.message;
     view.buttons.clear();
     for (std::size_t index = 0; index < g_session.request.buttons.size(); ++index) {
