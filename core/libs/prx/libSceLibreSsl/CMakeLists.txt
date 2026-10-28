@@ -270,10 +270,14 @@ endif()
 if(BUILD_TESTING AND ANYPS5_LIBRESSL_ORACLE)
     include(ExternalProject)
     set(libressl_reference_build "${CMAKE_BINARY_DIR}/libressl-reference-build")
+    set(libressl_reference_timestamp)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+        set(libressl_reference_timestamp DOWNLOAD_EXTRACT_TIMESTAMP ON)
+    endif()
     ExternalProject_Add(libressl_reference
         URL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-2.5.4.tar.gz
         URL_HASH SHA256=107a5b522fbb8318d4c3be668075e5e607296f0a9255d71674caa94571336efa
-        DOWNLOAD_EXTRACT_TIMESTAMP ON
+        ${libressl_reference_timestamp}
         PREFIX "${CMAKE_BINARY_DIR}/libressl-reference"
         BINARY_DIR "${libressl_reference_build}"
         CMAKE_ARGS
