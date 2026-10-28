@@ -652,7 +652,6 @@ static void ApplySamplerParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& para
         case SCE_NGS2_SAMPLER_VOICE_PARAM_SETUP:
         case SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP: {
             const auto& setup = ParamAs<Ngs2SamplerVoiceSetupParam>(param);
-            if (setup.channel_mask != 0) throw std::runtime_error("NGS2: sampler setup channel masks are not implemented");
             SetupSampler(voice, setup.format);
             break;
         }

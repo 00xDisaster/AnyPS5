@@ -180,7 +180,7 @@ static void TestStreaming(std::uint32_t mode, std::uint32_t capacity = 2) {
     Stream stream{Voice(rack), std::vector<std::int16_t>(1280), mode};
     for (std::uint32_t i = 0; i < stream.pcm.size(); ++i) stream.pcm[i] = static_cast<std::int16_t>((i / 128 + 1) * 1000);
     Control(stream.voice, SCE_NGS2_CUSTOM_SAMPLER_VOICE_PARAM_SETUP,
-            Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 2, 48000, 0, 0, 0}});
+            Ngs2SamplerVoiceSetupParam{{}, {SCE_NGS2_WAVEFORM_TYPE_PCM_I16L, 2, 48000, 0, 0, 0}, 0x10});
     Patch(stream.voice, master);
     Require(SubmitStream(stream, 0, SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE) == SCE_NGS2_OK);
     if (mode == 0) {
