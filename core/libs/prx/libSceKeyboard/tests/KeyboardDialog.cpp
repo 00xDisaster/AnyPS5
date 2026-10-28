@@ -48,17 +48,26 @@ int main() {
     KeyboardInput input;
     ModalDialogSetPresenter_nid_postfix(true);
 
+    input.HandleEvent(Key(SDL_KEYDOWN, SDL_SCANCODE_B), Window);
+    Require(Read(data) == 1 && data[0].key_code[0] == 0x05, "a key press did not reach the title without a dialog");
     OpenDialog();
+    input.HandleEvent(Key(SDL_KEYUP, SDL_SCANCODE_B), Window);
+    Require(Read(data) == 1 && data[0].length == 1 && data[0].key_code[0] == 0, "the held key was not released when the dialog started taking keys");
     input.HandleEvent(Key(SDL_KEYDOWN, SDL_SCANCODE_A), Window);
-    Require(Read(data) == 0, "a key press reached the title while a dialog was shown");
+    input.HandleEvent(Key(SDL_KEYUP, SDL_SCANCODE_A), Window);
+    input.HandleEvent(Key(SDL_KEYDOWN, SDL_SCANCODE_RETURN), Window);
+    Require(Read(data) == 0, "a key press or release reached the title while a dialog was shown");
     ModalDialogClose_nid_postfix();
     input.HandleEvent(Key(SDL_KEYDOWN, SDL_SCANCODE_A), Window);
     Require(Read(data) == 1 && data[0].key_code[0] == 0x04, "a key press did not reach the title after the dialog closed");
+    input.HandleEvent(Key(SDL_KEYUP, SDL_SCANCODE_A), Window);
+    Require(Read(data) == 1 && data[0].key_code[0] == 0, "a key release did not reach the title after the dialog closed");
     ModalDialogReset_nid_postfix();
 
     OpenDialog();
-    input.HandleEvent(Key(SDL_KEYUP, SDL_SCANCODE_A), Window);
-    Require(Read(data) == 1 && data[0].length == 1 && data[0].key_code[0] == 0, "a key release did not reach the title while a dialog was shown");
+    input.HandleEvent(Key(SDL_KEYDOWN, SDL_SCANCODE_A), Window);
+    Require(Read(data) == 1 && data[0].length == 1 && data[0].key_code[0] == 0, "a dialog that starts taking keys on a key press did not reset them");
+    Require(Read(data) == 0, "the key press itself reached the title");
     ModalDialogClose_nid_postfix();
     ModalDialogReset_nid_postfix();
 
