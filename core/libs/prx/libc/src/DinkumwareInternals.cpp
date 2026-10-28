@@ -7,8 +7,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <xmmintrin.h>
 
 #include "prx/libc/include/General.hpp"
 
@@ -24,12 +26,124 @@ bool Hexadecimal(const char* text) {
     return text[0] == '0' && (text[1] == 'x' || text[1] == 'X');
 }
 
+int HexadecimalDigit(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
+}
+
+template<typename TFloat>
+std::optional<TFloat> UnscaledHexadecimal(const char* text, char** end) {
+    const char* cursor = text;
+    while (std::isspace(static_cast<unsigned char>(*cursor))) ++cursor;
+    const bool negative = *cursor == '-';
+    if (*cursor == '+' || *cursor == '-') ++cursor;
+    cursor += 2;
+    constexpr std::size_t Capacity = 7 * ((std::numeric_limits<TFloat>::digits + 27) / 28);
+    static_assert(Capacity * 4 < std::numeric_limits<TFloat>::max_exponent);
+    constexpr auto CountLimit = std::numeric_limits<std::int64_t>::max() / 16;
+    std::string digits;
+    bool point = false;
+    bool any = false;
+    bool significant = false;
+    std::int64_t fractional = 0;
+    std::int64_t discarded = 0;
+    int carry = 0;
+    for (;;) {
+        const int digit = HexadecimalDigit(*cursor);
+        if (digit < 0) {
+            if (*cursor == '.' && !point) { point = true; ++cursor; continue; }
+            break;
+        }
+        any = true;
+        if (point) {
+            if (fractional == CountLimit) throw std::length_error("hexadecimal floating input is too long");
+            ++fractional;
+        }
+        significant |= digit != 0;
+        if (significant) {
+            if (digits.size() < Capacity) digits += "0123456789abcdef"[digit];
+            else {
+                if (discarded == 0) carry = digit >= 8;
+                if (discarded == CountLimit) throw std::length_error("hexadecimal floating input is too long");
+                ++discarded;
+            }
+        }
+        ++cursor;
+    }
+    if (!any) return std::nullopt;
+    const auto adjustment = 4 * (discarded - fractional);
+    const auto bound = std::abs(adjustment) + 2 * std::numeric_limits<TFloat>::max_exponent + static_cast<std::int64_t>(Capacity * 4 + 1);
+    std::int64_t exponent = 0;
+    if (*cursor == 'p' || *cursor == 'P') {
+        const char* first = cursor + 1;
+        const bool minus = *first == '-';
+        if (*first == '+' || *first == '-') ++first;
+        if (std::isdigit(static_cast<unsigned char>(*first))) {
+            do {
+                const int digit = *first++ - '0';
+                exponent = exponent > (bound - digit) / 10 ? bound : exponent * 10 + digit;
+            } while (std::isdigit(static_cast<unsigned char>(*first)));
+            if (minus) exponent = -exponent;
+            cursor = first;
+        }
+    }
+    if (end != nullptr) *end = const_cast<char*>(cursor);
+    if (digits.empty()) return std::copysign(static_cast<TFloat>(0), negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));
+    exponent += adjustment;
+    for (std::size_t position = digits.size(); position != 0 && carry;) {
+        --position;
+        const int digit = HexadecimalDigit(digits[position]) + carry;
+        digits[position] = "0123456789abcdef"[digit & 15];
+        carry = digit >> 4;
+    }
+    if (carry) digits.insert(digits.begin(), '1');
+    while (digits.back() == '0') { digits.pop_back(); exponent += 4; }
+    std::uint64_t high = 0;
+    std::uint64_t low = 0;
+    for (const char digit : digits) {
+        high = (high << 4u) | (low >> 60u);
+        low = (low << 4u) | static_cast<unsigned>(HexadecimalDigit(digit));
+    }
+    TFloat value;
+    if constexpr (std::numeric_limits<TFloat>::digits <= 53) value = static_cast<TFloat>(low);
+    else value = std::ldexp(static_cast<TFloat>(high), 64) + static_cast<TFloat>(low);
+    if (exponent != 0) {
+        const int rounding = std::fegetround();
+        const int savedErrno = errno;
+        std::fenv_t saved;
+        if (std::feholdexcept(&saved) != 0) throw std::runtime_error("cannot hold hexadecimal floating environment");
+        if (std::fesetround(rounding) != 0) {
+            std::fesetenv(&saved);
+            errno = savedErrno;
+            throw std::runtime_error("cannot select hexadecimal binary rounding");
+        }
+        _mm_setcsr(_mm_getcsr() & ~0x8040u);
+        int binary = 0;
+        std::frexp(value, &binary);
+        const auto combined = exponent + binary;
+        if (combined > std::numeric_limits<TFloat>::max_exponent) value = std::numeric_limits<TFloat>::infinity();
+        else if (combined < std::numeric_limits<TFloat>::min_exponent - std::numeric_limits<TFloat>::digits) value = 0;
+        else value = std::scalbn(value, static_cast<int>(exponent));
+        if (std::fesetenv(&saved) != 0) throw std::runtime_error("cannot restore hexadecimal floating environment");
+        errno = savedErrno;
+    }
+    return std::copysign(value, negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));
+}
+
 template<typename TFloat>
 TFloat ScaledFloat(const char* text, char** end, std::int64_t pten, int* error, TFloat (APS5_VABI *parse)(const char*, char**), const char* function) {
     int& guestErrno = *__error_nid_postfix();
     const int saved = guestErrno;
     if (error != nullptr) *error = 0;
     guestErrno = 0;
+    if (pten == 0 && text != nullptr && Hexadecimal(text)) {
+        if (const auto value = UnscaledHexadecimal<TFloat>(text, end)) {
+            guestErrno = saved;
+            return *value;
+        }
+    }
     char* stop = nullptr;
     TFloat value = parse(text, &stop);
     if (end != nullptr) *end = stop;
