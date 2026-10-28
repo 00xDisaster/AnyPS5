@@ -2,7 +2,9 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "prx/libSceIme/include/ModalDialog.hpp"
 #include <cstdint>
+#include <chrono>
 #include <cstdlib>
+#include <thread>
 
 namespace {
 
@@ -59,6 +61,29 @@ void CloseAndFallback() {
     Require(sceErrorDialogOpen(&param) == 0 && Session() == ModalDialogState::Idle);
     Require(sceErrorDialogUpdateStatus() == kStatusFinished);
     Require(sceErrorDialogTerminate() == 0);
+}
+
+void WithoutFlips() {
+    ErrorDialogParam param{16, static_cast<std::int32_t>(0x80020001), 0, 0};
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogSetShowTimeout_nid_postfix(40);
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogOpen(&param) == 0);
+    Require(sceErrorDialogGetStatus() == kStatusRunning);
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+    Require(!ModalDialogCapturesInput_nid_postfix() && Session() == ModalDialogState::Unshown);
+
+    Require(sceErrorDialogOpen(&param) == 0 && sceErrorDialogGetStatus() == kStatusRunning);
+    ModalDialogView view;
+    Require(ModalDialogReadView_nid_postfix(view));
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceErrorDialogUpdateStatus() == kStatusRunning);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+    Require(sceErrorDialogTerminate() == 0);
+    ModalDialogSetShowTimeout_nid_postfix(ModalDialogShowTimeoutMilliseconds);
+    ModalDialogSetPresenter_nid_postfix(false);
 }
 
 void ShownDialog() {
@@ -134,4 +159,5 @@ int main() {
 
     ShownDialog();
     CloseAndFallback();
+    WithoutFlips();
 }
