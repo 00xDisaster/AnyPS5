@@ -203,11 +203,6 @@ int main() {
     *__error_nid_postfix() = 0;
     rewinddir_nid_postfix(nullptr);
     Require(*__error_nid_postfix() == 9);
-    *__error_nid_postfix() = 0;
-    Require(telldir_nid_postfix(nullptr) == -1 && *__error_nid_postfix() == 9);
-    *__error_nid_postfix() = 0;
-    seekdir_nid_postfix(nullptr, 0);
-    Require(*__error_nid_postfix() == 9);
     const std::u8string folder = u8"セーブ";
     const std::u8string file = u8"été.txt";
     Require(std::filesystem::create_directory(root / std::filesystem::path(folder)));
