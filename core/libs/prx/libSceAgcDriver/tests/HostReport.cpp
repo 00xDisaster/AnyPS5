@@ -130,6 +130,24 @@ void PathsAndAddressesAreRedacted() {
     Check(AgcDriver::RedactHostText("a\nfake: line\r\tx") == "a fake: line  x", "control characters were kept");
 }
 
+void NamedValuesAreRedacted() {
+    const std::vector<std::string> names{"alice", "al", "workstation-7", ""};
+    Check(AgcDriver::RedactHostText("user alice on workstation-7", names) == "user <redacted> on <redacted>", "a listed name was kept");
+    Check(AgcDriver::RedactHostText("al's radeon", names) == "<redacted>'s radeon", "a short name hit inside a word or was kept");
+    Check(AgcDriver::RedactHostText("alicia palice", names) == "alicia palice", "a name inside another word was replaced");
+    Check(AgcDriver::RedactHostText("alice-pc", names) == "<redacted>-pc", "a name before a dash was kept");
+    Check(AgcDriver::RedactHostText("no names here", {}) == "no names here", "text without names changed");
+    auto facts = SampleFacts();
+    facts.redactions = {"alice", "workstation-7"};
+    facts.os = "Linux workstation-7 6.1";
+    facts.gpu->name = "GPU of alice";
+    facts.environment.push_back({"APS5_NOTE", "alice"});
+    const auto text = AgcDriver::FormatHostReport(facts);
+    Check(text.find("alice") == std::string::npos && text.find("workstation-7") == std::string::npos, "a listed name reached the report");
+    Check(text.find("os: Linux <redacted> 6.1\n") != std::string::npos, "the host name was not replaced in the OS line");
+    Check(text.find("device: GPU of <redacted>\n") != std::string::npos, "the user name was not replaced in the GPU name");
+}
+
 void FormattedReportHasNoSensitiveText() {
     auto facts = SampleFacts();
     facts.os = "Linux 6.1 /home/alice/kernel";
@@ -154,6 +172,7 @@ int main() {
     OrderIsStable();
     MissingFactsAreNamed();
     PathsAndAddressesAreRedacted();
+    NamedValuesAreRedacted();
     FormattedReportHasNoSensitiveText();
     return failures == 0 ? 0 : 1;
 }
