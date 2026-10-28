@@ -55,6 +55,7 @@ struct HostFacts {
     std::vector<std::string> unavailable;
 };
 
+std::string RedactHostText(const std::string& text);
 std::string FormatHostReport(const HostFacts& facts);
 
 }
