@@ -76,7 +76,7 @@ std::uint32_t APS5_VABI sceAgcDriverUserDataGetPacketSize(std::uint32_t bytes) {
 
 std::uint32_t APS5_VABI sceAgcDriverWaitUntilSafeForRendering(std::uint32_t** command,
     std::uint32_t capacity, std::uint32_t mode, std::uint32_t handle, int index) {
-    if (!command || capacity < AgcDriver::RenderingWaitPacketWords || mode != 0 || index < 0)
+    if (!command || !*command || capacity < AgcDriver::RenderingWaitPacketWords || mode != 0 || index < 0)
         throw std::invalid_argument("AGC driver: invalid rendering wait arguments");
     AgcDriver::GuestMemory::CheckRange(command, sizeof(*command), alignof(std::uint32_t*), true);
     AgcDriver::GuestMemory::CheckRange(*command, AgcDriver::RenderingWaitPacketWords * sizeof(std::uint32_t), alignof(std::uint32_t), true);
