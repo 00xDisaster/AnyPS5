@@ -834,6 +834,86 @@ static void CheckTanhConsoleBits() {
     }
 }
 
+static void CheckSinhMsunBits() {
+    constexpr std::uint64_t cases[][2] = {
+        {0x0000000000000000ull, 0x0000000000000000ull}, {0x8000000000000000ull, 0x8000000000000000ull},
+        {0x3e2fffffffffffffull, 0x3e2fffffffffffffull}, {0x3e30000000000000ull, 0x3e30000000000000ull},
+        {0xbe30000000000000ull, 0xbe30000000000000ull}, {0x3ff0000000000000ull, 0x3ff2cd9fc44eb982ull},
+        {0xbff0000000000000ull, 0xbff2cd9fc44eb982ull}, {0x3fefffffffffffffull, 0x3ff2cd9fc44eb982ull},
+        {0x4035ffffffffffffull, 0x41dab5adb9c435e5ull}, {0xc035ffffffffffffull, 0xc1dab5adb9c435e5ull},
+        {0x0000000000000001ull, 0x0000000000000001ull}, {0x7ff0000000000000ull, 0x7ff0000000000000ull},
+        {0xfff0000000000000ull, 0xfff0000000000000ull},
+        {0xbfd6a0128184d680ull, 0xbfd719794d320780ull}, {0xbfbdff8696a49900ull, 0xbfbe111cd84473d7ull},
+        {0xbfd6d8bb6b4dca00ull, 0xbfd755bf29c06d04ull}, {0xbfcd8f04fd096d80ull, 0xbfcdd2743062c130ull},
+        {0xbfdaafb23b684980ull, 0xbfdb7764637ce2b1ull}, {0x4030fc47aee85be4ull, 0x4166b421a358e13dull},
+        {0x3ff0ed5ed6534a20ull, 0x3ff444323b77d92aull}, {0x402e263f514d91a0ull, 0x413ae005c1e986f0ull},
+        {0x402dc690717af4e8ull, 0x41364b45352a81bdull}, {0x403270a47f0a53e2ull, 0x41884ea3c3c84121ull},
+        {0xc012535983b8e876ull, 0xc04868fc3820124dull}, {0xc0304bcc37b4b009ull, 0xc156ca0b8a37acd3ull},
+        {0xc01a5966b21f1396ull, 0xc076ae9222cc12f7ull}, {0xc02ddcff626eb852ull, 0xc1374ae500e7533full},
+        {0xc020ed9a3019cd6eull, 0xc0a2854d2aab8a5full},
+        {0x4035dab76b89b207ull, 0x41d716f7bb9c87dbull}, {0x4035d187a12d7d23ull, 0x41d6469c55754089ull},
+        {0x403527ff77fdabb1ull, 0x41c6f9a671b8ec60ull}, {0x4035deab000d3561ull, 0x41d772ea071259caull},
+        {0xc035232f2cb69934ull, 0xc1c68c16c49344beull},
+    };
+    for (const auto& [input, expected] : cases) {
+        const std::uint64_t result = std::bit_cast<std::uint64_t>(sinh_nid_postfix(std::bit_cast<double>(input)));
+        if (result != expected) {
+            std::fprintf(stderr, "Guest sinh failed for %016llx: got %016llx, expected %016llx\n", static_cast<unsigned long long>(input), static_cast<unsigned long long>(result), static_cast<unsigned long long>(expected));
+            std::abort();
+        }
+    }
+}
+
+static bool SinhWithinUlps(std::uint64_t result, std::uint64_t expected, std::uint64_t ulps) {
+    return ((result ^ expected) >> 63) == 0 && (result > expected ? result - expected : expected - result) <= ulps;
+}
+
+static void CheckSinhLargeArguments() {
+    constexpr std::uint64_t cases[][2] = {
+        {0x4036000000000000ull, 0x41dab5adb9c43600ull}, {0x4036000000000001ull, 0x41dab5adb9c4361aull},
+        {0x4059000000000000ull, 0x48e3494a9b171bf5ull}, {0x4062c00000000000ull, 0x4d652cac29822593ull},
+        {0x40862e41ffffffffull, 0x7fdffc045692fc9eull}, {0x40862e4200000000ull, 0x7fdffc045693009eull},
+        {0x40862e4200000001ull, 0x7fdffc045693049eull}, {0x40862e42ffffffffull, 0x7fe000020b8c410bull},
+        {0x4086330000000000ull, 0x7fecee0e3df7d1f3ull},
+        {0x408633cdffffffffull, 0x7feffdc12c49df1cull}, {0x408633ce00000000ull, 0x7feffdc12c49e31cull},
+        {0x408633ce8fb9e87dull, 0x7fefffffffbffd3cull}, {0x408633ce8fba087dull, 0x7ff0000000000000ull},
+        {0x408633ceffffffffull, 0x7ff0000000000000ull}, {0x408633cf00000000ull, 0x7ff0000000000000ull},
+        {0x7fefffffffffffffull, 0x7ff0000000000000ull},
+    };
+    for (const auto& [input, expected] : cases) {
+        for (const std::uint64_t sign : {std::uint64_t{0}, std::uint64_t{1} << 63}) {
+            const std::uint64_t result = std::bit_cast<std::uint64_t>(sinh_nid_postfix(std::bit_cast<double>(input | sign)));
+            const bool overflow = expected == 0x7ff0000000000000ull;
+            if (overflow ? result != (expected | sign) : !SinhWithinUlps(result, expected | sign, 4)) {
+                std::fprintf(stderr, "Guest sinh failed for %016llx: got %016llx, expected %016llx\n", static_cast<unsigned long long>(input | sign), static_cast<unsigned long long>(result), static_cast<unsigned long long>(expected | sign));
+                std::abort();
+            }
+        }
+    }
+}
+
+static void CheckSinhOverflowErrno() {
+    constexpr int sentinel = 1234;
+    for (const std::uint64_t sign : {std::uint64_t{0}, std::uint64_t{1} << 63}) {
+        for (const std::uint64_t input : {0x408633cf00000000ull, 0x7fefffffffffffffull}) {
+            errno = sentinel;
+            const std::uint64_t result = std::bit_cast<std::uint64_t>(sinh_nid_postfix(std::bit_cast<double>(input | sign)));
+            if (result != (0x7ff0000000000000ull | sign) || errno != ERANGE) {
+                std::fprintf(stderr, "Guest sinh overflow failed for %016llx: got %016llx, errno %d\n", static_cast<unsigned long long>(input | sign), static_cast<unsigned long long>(result), errno);
+                std::abort();
+            }
+        }
+        for (const std::uint64_t input : {0x408633ce8fb9e87dull, 0x7ff0000000000000ull, 0x3ff0000000000000ull, 0ull}) {
+            errno = sentinel;
+            sinh_nid_postfix(std::bit_cast<double>(input | sign));
+            if (errno != sentinel) {
+                std::fprintf(stderr, "Guest sinh changed errno for %016llx: errno %d\n", static_cast<unsigned long long>(input | sign), errno);
+                std::abort();
+            }
+        }
+    }
+}
+
 static void CheckRoundingNaNConsoleBits() {
     constexpr std::uint64_t cases[][2] = {
         {0x7ff0000000000001ull, 0x7ff8000000000001ull}, {0xfff4000000000123ull, 0xfffc000000000123ull}, {0x7ff8000000000456ull, 0x7ff8000000000456ull},
@@ -2238,6 +2318,9 @@ int main() {
     CheckLog1pConsoleBits();
     CheckNextafterConsoleBits();
     CheckTanhConsoleBits();
+    CheckSinhMsunBits();
+    CheckSinhLargeArguments();
+    CheckSinhOverflowErrno();
     CheckRoundingNaNConsoleBits();
     CheckNextafterEnvironment(nextafterf_nid_postfix, 0x80000000u, 0x3f800000u, 0x00800000u, 0x7f7fffffu, 0x7f800000u);
     CheckNextafterEnvironment(nextafter_nid_postfix, std::uint64_t{0x8000000000000000ull}, std::uint64_t{0x3ff0000000000000ull}, std::uint64_t{0x0010000000000000ull}, std::uint64_t{0x7fefffffffffffffull}, std::uint64_t{0x7ff0000000000000ull});
