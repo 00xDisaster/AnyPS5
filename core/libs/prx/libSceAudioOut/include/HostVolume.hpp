@@ -7,6 +7,12 @@ public:
     static constexpr int VolumeStep = 5;
 
     int Volume() const { return volume; }
+    bool Muted() const { return muted; }
+
+    bool ToggleMute() {
+        muted = !muted;
+        return true;
+    }
 
     bool VolumeUp() {
         if (volume >= MaxVolume) return false;
@@ -22,6 +28,7 @@ public:
 
 private:
     int volume = MaxVolume;
+    bool muted = false;
 };
 
 #endif
