@@ -1,6 +1,8 @@
 #ifndef CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUME_HPP
 #define CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUME_HPP
 
+#include <stdexcept>
+
 class HostVolume {
 public:
     static constexpr int MaxVolume = 100;
@@ -8,6 +10,13 @@ public:
 
     int Volume() const { return volume; }
     bool Muted() const { return muted; }
+
+    bool SetVolume(int value) {
+        if (value < 0 || value > MaxVolume) throw std::invalid_argument("HostVolume: volume out of range");
+        const bool changed = value != volume;
+        volume = value;
+        return changed;
+    }
 
     bool ToggleMute() {
         muted = !muted;
