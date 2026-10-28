@@ -18,7 +18,13 @@ void MouseInput::HandleEvent(const SDL_Event& event, unsigned windowId) {
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
             if (event.button.windowID != windowId || !focused) return;
-            if (event.type == SDL_MOUSEBUTTONDOWN && ModalDialogCapturesInput_nid_postfix()) return;
+            if (ModalDialogCapturesInput_nid_postfix()) {
+                if (suspended) return;
+                suspended = true;
+                input.resetButtons = true;
+                break;
+            }
+            suspended = false;
             switch (event.button.button) {
                 case SDL_BUTTON_LEFT: input.button = 1; break;
                 case SDL_BUTTON_RIGHT: input.button = 2; break;
