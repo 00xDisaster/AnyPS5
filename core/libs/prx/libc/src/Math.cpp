@@ -11,6 +11,9 @@
  * lib/msun/src/k_cosf.c (release/11.4.0); lib/msun/src/e_rem_pio2f.c (release/11.4.0) */
 /* Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
  * Optimized by Bruce D. Evans. */
+/* e_rem_pio2f.c, k_cosf.c and s_cbrtf.c:
+ * Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com.
+ * Debugged and optimized by Bruce D. Evans. */
 /*
  * ====================================================
  * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
