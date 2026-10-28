@@ -131,6 +131,33 @@ void PathsAndAddressesAreRedacted() {
     Check(AgcDriver::RedactHostText("a\nfake: line\r\tx") == "a fake: line  x", "control characters were kept");
 }
 
+void MissingRequirementsAreDescribed() {
+    auto facts = SampleFacts();
+    Check(AgcDriver::DescribeMissingRequirements(*facts.gpu).empty(), "a GPU with every required item got a message");
+    Check(AgcDriver::MissingRequirements(*facts.gpu).empty(), "a GPU with every required item lists missing items");
+    facts.gpu->requirements.push_back({"VK_KHR_8bit_storage", "extension", true, false});
+    facts.gpu->requirements.push_back({"bufferDeviceAddress", "feature", true, false});
+    facts.gpu->requirements.push_back({"VK_KHR_present_wait", "extension", false, false});
+    const auto message = AgcDriver::DescribeMissingRequirements(*facts.gpu);
+    const std::string expected = "Vulkan: Test GPU (test-driver Test 1.2.3, Vulkan 1.3.280) lacks 2 items AnyPS5 needs: "
+        "VK_KHR_8bit_storage (extension), bufferDeviceAddress (feature). Update the graphics driver; an older GPU or driver may not offer them. "
+        "Other Vulkan devices on this machine: Other GPU; set ANYPS5_GPU to a part of one name to run on it. "
+        "Start again with ANYPS5_HOST_REPORT=1 and attach the report to the issue.";
+    Check(message == expected, "the message differs from the expected text");
+    Check(message.find("VK_KHR_present_wait") == std::string::npos, "an optional item was listed as needed");
+    facts.gpu->candidates = {"Test GPU"};
+    facts.gpu->requirements = {{"shaderInt64", "feature", true, false}};
+    facts.gpu->driverName.clear();
+    facts.gpu->driverInfo.clear();
+    const auto single = AgcDriver::DescribeMissingRequirements(*facts.gpu);
+    Check(single.find("lacks 1 item AnyPS5 needs: shaderInt64 (feature).") != std::string::npos, "the singular form is wrong");
+    Check(single.find("unknown driver") != std::string::npos, "an unknown driver is not named as unknown");
+    Check(single.find("Other Vulkan devices") == std::string::npos, "the only device was offered as an alternative");
+    facts.gpu->name = "GPU of alice at /home/alice";
+    const auto redacted = AgcDriver::DescribeMissingRequirements(*facts.gpu, {"alice"});
+    Check(redacted.find("alice") == std::string::npos, "the message leaked a listed name");
+}
+
 bool Refused(const char* value, std::string& message) {
     try {
         static_cast<void>(AgcDriver::ParseHostReportSetting(value));
@@ -197,6 +224,7 @@ int main() {
     PathsAndAddressesAreRedacted();
     NamedValuesAreRedacted();
     SettingIsParsed();
+    MissingRequirementsAreDescribed();
     FormattedReportHasNoSensitiveText();
     return failures == 0 ? 0 : 1;
 }
