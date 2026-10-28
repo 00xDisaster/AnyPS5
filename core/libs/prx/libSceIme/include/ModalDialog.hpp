@@ -28,12 +28,15 @@ struct ModalDialogView {
     std::vector<ModalDialogButtonView> buttons;
 };
 
-enum class ModalDialogState : std::uint8_t { Idle, Showing, Answered, Closed };
+enum class ModalDialogState : std::uint8_t { Idle, Showing, Answered, Closed, Unshown };
+
+inline constexpr std::uint32_t ModalDialogShowTimeoutMilliseconds = 3000;
 
 enum class ModalDialogInputKind : std::uint8_t { Previous, Next, Confirm, Cancel };
 
 extern "C" void ModalDialogSetPresenter_nid_postfix(bool present);
 extern "C" bool ModalDialogHasPresenter_nid_postfix();
+extern "C" void ModalDialogSetShowTimeout_nid_postfix(std::uint32_t milliseconds);
 extern "C" bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request);
 extern "C" ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen);
 extern "C" void ModalDialogClose_nid_postfix();

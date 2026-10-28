@@ -31,9 +31,15 @@ struct Session {
 std::mutex g_mutex;
 Session g_session;
 std::atomic<bool> g_presenter{false};
+std::atomic<std::uint32_t> g_showTimeout{ModalDialogShowTimeoutMilliseconds};
 
 bool InputOwnedByIme() {
     return ImeCapturesKeyboard_nid_postfix() || ImeCapturesPad_nid_postfix();
+}
+
+void Expire(Session& session) {
+    if (session.state != ModalDialogState::Showing || session.drawn) return;
+    if (std::chrono::steady_clock::now() - session.openedAt >= std::chrono::milliseconds(g_showTimeout.load())) session.state = ModalDialogState::Unshown;
 }
 
 void Apply(Session& session, ModalDialogInputKind kind) {
@@ -69,6 +75,10 @@ bool ModalDialogHasPresenter_nid_postfix() {
     return g_presenter.load();
 }
 
+void ModalDialogSetShowTimeout_nid_postfix(std::uint32_t milliseconds) {
+    g_showTimeout = milliseconds;
+}
+
 bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request) {
     if (!g_presenter.load()) return false;
     if (request.buttons.empty() || request.buttons.size() > ModalDialogMaxButtons) return false;
@@ -86,6 +96,7 @@ bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request) {
 
 ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen) {
     std::lock_guard lock(g_mutex);
+    Expire(g_session);
     chosen = g_session.chosen;
     return g_session.state;
 }
@@ -103,6 +114,7 @@ void ModalDialogReset_nid_postfix() {
 bool ModalDialogReadView_nid_postfix(ModalDialogView& view) {
     if (InputOwnedByIme()) return false;
     std::lock_guard lock(g_mutex);
+    Expire(g_session);
     if (g_session.state != ModalDialogState::Showing) return false;
     g_session.drawn = true;
     view.message = g_session.request.message;
@@ -116,12 +128,14 @@ bool ModalDialogReadView_nid_postfix(ModalDialogView& view) {
 bool ModalDialogCapturesInput_nid_postfix() {
     if (InputOwnedByIme()) return false;
     std::lock_guard lock(g_mutex);
+    Expire(g_session);
     return g_session.state == ModalDialogState::Showing;
 }
 
 void ModalDialogPublishInput_nid_postfix(ModalDialogInputKind kind) {
     if (InputOwnedByIme()) return;
     std::lock_guard lock(g_mutex);
+    Expire(g_session);
     Apply(g_session, kind);
 }
 
@@ -129,6 +143,7 @@ void ModalDialogPublishPad_nid_postfix(const ImeHostPad& pad) {
     if (InputOwnedByIme()) return;
     std::lock_guard lock(g_mutex);
     Session& session = g_session;
+    Expire(session);
     if (session.state != ModalDialogState::Showing) return;
     std::uint32_t now = pad.buttons;
     if (pad.leftX < StickLow) now |= StickLeft;
