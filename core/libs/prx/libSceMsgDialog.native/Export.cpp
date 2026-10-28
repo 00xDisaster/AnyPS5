@@ -27,7 +27,7 @@ int Status() {
     int status = g_status.load();
     if (status == COMMON_DIALOG_STATUS_RUNNING && g_presented.load()) {
         std::size_t chosen = 0;
-        const ModalDialogState state = ModalDialogPoll_nid_postfix(chosen);
+        const ModalDialogState state = ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerMsgDialog);
         if (state == ModalDialogState::Showing) return status;
         if (state == ModalDialogState::Answered) g_buttonId = MsgDialog::ButtonIdOf(chosen);
         int expected = COMMON_DIALOG_STATUS_RUNNING;
@@ -44,7 +44,7 @@ int SceMsgDialogNativeModuleLoaded_nid_no_patch = 1;
 
 int APS5_VABI sceMsgDialogClose(void) {
     if (Status() != COMMON_DIALOG_STATUS_RUNNING) return COMMON_DIALOG_ERROR_NOT_RUNNING;
-    if (g_presented.load()) ModalDialogClose_nid_postfix();
+    if (g_presented.load()) ModalDialogClose_nid_postfix(ModalDialogOwnerMsgDialog);
     int expected = COMMON_DIALOG_STATUS_RUNNING;
     if (!g_status.compare_exchange_strong(expected, COMMON_DIALOG_STATUS_FINISHED)) return COMMON_DIALOG_ERROR_NOT_RUNNING;
     return 0;
@@ -71,9 +71,11 @@ int APS5_VABI sceMsgDialogOpen(const void* param) {
     const int status = g_status.load();
     if (status == 0) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
     if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
-    if (g_presented.load()) ModalDialogClose_nid_postfix();
+    if (g_presented.load()) ModalDialogClose_nid_postfix(ModalDialogOwnerMsgDialog);
     ModalDialogRequest request;
-    const bool presented = MsgDialog::BuildRequest(MsgDialog::ParseParam(param), request) && ModalDialogOpen_nid_postfix(request);
+    bool presented = MsgDialog::BuildRequest(MsgDialog::ParseParam(param), request);
+    request.owner = ModalDialogOwnerMsgDialog;
+    presented = presented && ModalDialogOpen_nid_postfix(request);
     g_buttonId = BUTTON_ID_OK;
     g_presented = presented;
     g_status = presented ? COMMON_DIALOG_STATUS_RUNNING : COMMON_DIALOG_STATUS_FINISHED;
@@ -83,7 +85,7 @@ int APS5_VABI sceMsgDialogOpen(const void* param) {
 int APS5_VABI sceMsgDialogTerminate(void) {
     if (g_status.exchange(0) == 0) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
     g_presented = false;
-    ModalDialogReset_nid_postfix();
+    ModalDialogReset_nid_postfix(ModalDialogOwnerMsgDialog);
     return 0;
 }
 
