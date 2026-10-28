@@ -15,3 +15,22 @@
 - [sceBgftServiceIntPlayGoCheckDiscIniChunksInstall and sceBgftServiceIntPlayGoStartDataDiscInstall](../../../core/libs/prx/libSceBgft/Export.cpp) (libSceBgft) - The list is the intersection of the export table of the console's libSceBgft (function symbols only), the pinned aerolib names and the functions not yet defined anywhere in the repo; names and NIDs are present in the [PS5 3.20 export inventory](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceBgft.c) and the [verified NID name database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv), but no credible prototypes were found. They are declared without parameters solely to resolve known imports; this is not an ABI claim and callers must not call them until signatures are verified.
 - [sceBgftServiceIntSetTaskVisible, sceBgftServiceIntUploadGetAvailableTaskCount, sceBgftServiceIntUploadGetTaskInfo and sceBgftServiceIntUploadHideTask](../../../core/libs/prx/libSceBgft/Export.cpp) (libSceBgft) - The list is the intersection of the export table of the console's libSceBgft (function symbols only), the pinned aerolib names and the functions not yet defined anywhere in the repo; names and NIDs are present in the [PS5 3.20 export inventory](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceBgft.c) and the [verified NID name database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv), but no credible prototypes were found. They are declared without parameters solely to resolve known imports; this is not an ABI claim and callers must not call them until signatures are verified.
 - [sceBgftServiceIntUploadSetStartState and sceBgftServiceIntUploadSetUploadError](../../../core/libs/prx/libSceBgft/Export.cpp) (libSceBgft) - The list is the intersection of the export table of the console's libSceBgft (function symbols only), the pinned aerolib names and the functions not yet defined anywhere in the repo; names and NIDs are present in the [PS5 3.20 export inventory](https://github.com/DNNDHH/PS5-3.20_Libs/blob/b2a77c09cd71c01f34c790cfbe98c751a13262ad/libSceBgft.c) and the [verified NID name database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv), but no credible prototypes were found. They are declared without parameters solely to resolve known imports; this is not an ABI claim and callers must not call them until signatures are verified.
+
+### Additional callable export inventory
+
+- [Additional callable exports](../../../core/libs/prx/libSceBgft/Export.cpp) - 12 entries have import-resolution declarations only. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime support, implemented-function increase or title unblock is claimed.
+
+| Name | NID |
+| --- | --- |
+| `sceBgftServiceIntDownloadClearAllInstalled` | `XEJKc+Ivvm4` |
+| `sceBgftServiceIntDownloadClearInstalled` | `bmSUGdmdJto` |
+| `sceBgftServiceIntDownloadPauseGroupTasks` | `cHMDnBGpQoo` |
+| `sceBgftServiceIntDownloadResumeGroupTasks` | `Ys2nTRwMM8M` |
+| `sceBgftServiceIntDownloadStartGroupTasks` | `3DeLtzqsmG8` |
+| `sceBgftServiceIntDownloadUnregisterCompleteTask` | `TAee3wrD-M0` |
+| `sceBgftServiceIntUploadUnregisterCompleteTask` | `I9k+LTS1OlI` |
+| `Unknown` | `3cvL6QTobNg` |
+| `Unknown` | `4JQKNtsVDpg` |
+| `Unknown` | `85axuUkg9eE` |
+| `Unknown` | `fJnnIc5sHOU` |
+| `Unknown` | `tBOVSvi9EjY` |
