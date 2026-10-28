@@ -143,7 +143,8 @@ static void CheckScan() {
     Require(swscanf_s_nid_postfix(nullptr, u"%d", &first) == -1, "null buffer");
     Require(swscanf_s_nid_postfix(u"5", nullptr) == -1, "null format");
     Require(swscanf_s_nid_postfix(u"abcz", u"%l[a-c]", text, std::size_t{6}) == 1 && std::u16string(text) == u"abc", "scanset range");
-    Require(Throws([&] { swscanf_s_nid_postfix(u"5", u"%Ld", &wide); }), "%Ld throws");
+    first = -1;
+    Require(swscanf_s_nid_postfix(u"5", u"%Ld", &first) == 1 && first == 5, "%Ld reads an int");
     Require(swscanf_s_nid_postfix(u"Ā", u"%s", narrow, std::size_t{4}) == 1 && std::strcmp(narrow, "\xc4\x80") == 0, "narrow %s stores UTF-8");
 }
 
@@ -245,8 +246,15 @@ static void CheckUnsizedScan() {
     char letters[4] = {'!', '!', '!', '!'};
     Require(swscanf_nid_postfix(u"abc", u"%2hc", letters) == 1 && letters[0] == 'a' && letters[1] == 'b' && letters[2] == '!', "swscanf %hc");
     Require(swscanf_nid_postfix(u"ab", u"%ls%y", text) == 1 && std::u16string(text) == u"ab", "swscanf stops at an unknown conversion");
-    Require(Throws([&] { swscanf_nid_postfix(u"5", u"%Ld", &wide); }), "swscanf %Ld throws");
-    Require(Throws([&] { swscanf_nid_postfix(u"1", u"%lp", &pointer); }), "swscanf %lp throws");
+    first = -1;
+    Require(swscanf_nid_postfix(u"5", u"%Ld", &first) == 1 && first == 5, "swscanf %Ld reads an int");
+    pointer = nullptr;
+    Require(swscanf_nid_postfix(u"1f", u"%lp", &pointer) == 1 && pointer == reinterpret_cast<void*>(0x1f), "swscanf %lp reads a pointer");
+    pointer = nullptr;
+    Require(swscanf_nid_postfix(u"1f", u"%hp", &pointer) == 1 && pointer == reinterpret_cast<void*>(0x1f), "swscanf %hp reads a pointer");
+    char unset[4] = {'!', '!', '!', '!'};
+    Require(swscanf_nid_postfix(u"ab", u"%[^]", unset) == 0 && swscanf_nid_postfix(u"ab", u"%[ab", unset) == 0, "swscanf unterminated set");
+    Require(swscanf_nid_postfix(u"", u"%[^]", unset) == 0 && unset[0] == '!', "swscanf unterminated set at end of input");
     Require(swscanf_nid_postfix(u"Ā", u"%s", narrow) == 1 && std::strcmp(narrow, "\xc4\x80") == 0, "swscanf narrow %s stores UTF-8");
 }
 
