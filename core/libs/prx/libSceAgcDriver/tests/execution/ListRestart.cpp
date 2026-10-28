@@ -162,6 +162,11 @@ int main() {
         indirect.indirect->count = 2u;
         Draw(*device, indirect);
         Check("two indirect records", true, true);
+        if (!device->PrimitiveListRestart()) {
+            indirect.indexCount = 0;
+            Draw(*device, indirect);
+            Check("indirect records over an empty index range", false, false);
+        }
         std::puts("list restart tests passed");
         return 0;
     } catch (const std::exception& error) {
