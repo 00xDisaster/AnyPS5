@@ -158,6 +158,62 @@ void MissingRequirementsAreDescribed() {
     Check(redacted.find("alice") == std::string::npos, "the message leaked a listed name");
 }
 
+AgcDriver::HostSources FakeSources() {
+    AgcDriver::HostSources sources;
+    sources.commit = "feedface";
+    sources.os = [] { return std::string("Fake OS 1"); };
+    sources.cpuModel = [] { return std::string("Fake CPU"); };
+    sources.cpuThreads = [] { return std::uint64_t{8}; };
+    sources.memoryMiB = [] { return std::uint64_t{16000}; };
+    sources.cpuMissing = [] { return std::vector<std::string>{"BMI2"}; };
+    sources.sdlLinked = [] { return std::string("2.30.0"); };
+    sources.sdlCompiled = [] { return std::string("2.30.1"); };
+    sources.shaderCache = [] { return AgcDriver::HostShaderCacheFacts{true, true, 7}; };
+    sources.environment = [] { return std::vector<std::string>{"HOME=/home/alice", "VK_INSTANCE_LAYERS=layer", "APS5_B=2", "ANYPS5_A=1", "SDL_VIDEODRIVER=x11", "NOEQUALS", "=x", "PATH=/bin"}; };
+    sources.redactions = [] { return std::vector<std::string>{"alice"}; };
+    return sources;
+}
+
+void SourcesAreCollected() {
+    const auto facts = AgcDriver::CollectHostFacts(FakeSources());
+    Check(facts.commit == "feedface" && facts.os == "Fake OS 1" && facts.cpuModel == "Fake CPU", "a text source was not collected");
+    Check(facts.cpuThreads == 8 && facts.memoryMiB == 16000, "a number source was not collected");
+    Check(facts.cpuMissing && *facts.cpuMissing == std::vector<std::string>{"BMI2"}, "the CPU gate source was not collected");
+    Check(facts.sdlLinked == "2.30.0" && facts.sdlCompiled == "2.30.1", "an SDL source was not collected");
+    Check(facts.shaderCache && facts.shaderCache->sizeMiB == 7, "the shader cache source was not collected");
+    Check(facts.redactions == std::vector<std::string>{"alice"}, "the redaction source was not collected");
+    Check(facts.unavailable.empty(), "a working source was reported as unavailable");
+    Check(!facts.gpu, "the collector invented a GPU");
+    const std::vector<std::pair<std::string, std::string>> environment{{"ANYPS5_A", "1"}, {"APS5_B", "2"}, {"SDL_VIDEODRIVER", "x11"}, {"VK_INSTANCE_LAYERS", "layer"}};
+    Check(facts.environment == environment, "the environment was not filtered and sorted");
+}
+
+void FailingSourcesAreRecorded() {
+    auto sources = FakeSources();
+    sources.os = [] () -> std::string { throw std::runtime_error("uname failed"); };
+    sources.memoryMiB = nullptr;
+    sources.cpuModel = [] () -> std::string { throw std::logic_error("cpuid"); };
+    const auto facts = AgcDriver::CollectHostFacts(sources);
+    Check(!facts.os && !facts.memoryMiB && !facts.cpuModel, "a failing source produced a value");
+    Check(facts.cpuThreads == 8 && facts.sdlLinked == "2.30.0", "a failing source hid the others");
+    const std::vector<std::string> unavailable{"os: uname failed", "cpu: cpuid", "memory: no source"};
+    Check(facts.unavailable.size() == 3, "the failures were not all recorded");
+    for (const auto& item : unavailable) Check(std::find(facts.unavailable.begin(), facts.unavailable.end(), item) != facts.unavailable.end(), item.c_str());
+    const auto text = AgcDriver::FormatHostReport(facts);
+    Check(text.find("os: unavailable\n") != std::string::npos && text.find("memory_mib: unavailable\n") != std::string::npos, "a failed source is not shown as unavailable");
+    AgcDriver::HostSources none;
+    const auto empty = AgcDriver::CollectHostFacts(none);
+    Check(empty.unavailable.size() == 10 && !empty.os && empty.environment.empty() && empty.redactions.empty(), "an empty source set did not report every source");
+}
+
+void RedactionNamesAreDerived() {
+    Check(AgcDriver::HostRedactionNames("alice", "alice-pc", "/home/alice/") == std::vector<std::string>{"alice", "alice-pc"}, "the user, host and home names were not derived");
+    Check(AgcDriver::HostRedactionNames("alice", "box", "/home/ally") == std::vector<std::string>{"alice", "box", "ally"}, "a home name that differs from the user was dropped");
+    Check(AgcDriver::HostRedactionNames("", "", "/home/ally/") == std::vector<std::string>{"ally"}, "a trailing separator hid the home directory name");
+    Check(AgcDriver::HostRedactionNames("", "", "C:\\Users\\Bob") == std::vector<std::string>{"Bob"}, "a Windows home directory was not split");
+    Check(AgcDriver::HostRedactionNames("", "", "").empty(), "empty inputs produced names");
+}
+
 bool Refused(const char* value, std::string& message) {
     try {
         static_cast<void>(AgcDriver::ParseHostReportSetting(value));
@@ -225,6 +281,9 @@ int main() {
     NamedValuesAreRedacted();
     SettingIsParsed();
     MissingRequirementsAreDescribed();
+    SourcesAreCollected();
+    FailingSourcesAreRecorded();
+    RedactionNamesAreDerived();
     FormattedReportHasNoSensitiveText();
     return failures == 0 ? 0 : 1;
 }
