@@ -38,10 +38,9 @@ int APS5_VABI libSceResourceArbitratorUnknown_3xRoVp7fPPY_nid_no_patch() {
 }
 APS5_EXPORT("3xRoVp7fPPY", libSceResourceArbitratorUnknown_3xRoVp7fPPY_nid_no_patch);
 
-int APS5_VABI libSceResourceArbitratorUnknown_GmaE0Ew4h4s_nid_no_patch() {
+int APS5_VABI sceResourceArbitratorPostTelemetry() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("GmaE0Ew4h4s", libSceResourceArbitratorUnknown_GmaE0Ew4h4s_nid_no_patch);
 
 int APS5_VABI libSceResourceArbitratorUnknown_OM6SXhDZdiU_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
@@ -63,10 +62,9 @@ int APS5_VABI libSceResourceArbitratorUnknown_jzKwHzhEBIQ_nid_no_patch() {
 }
 APS5_EXPORT("jzKwHzhEBIQ", libSceResourceArbitratorUnknown_jzKwHzhEBIQ_nid_no_patch);
 
-int APS5_VABI libSceResourceArbitratorUnknown_mtLIcm9hwFM_nid_no_patch() {
+int APS5_VABI sceResourceArbitratorSendDebugFunction() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("mtLIcm9hwFM", libSceResourceArbitratorUnknown_mtLIcm9hwFM_nid_no_patch);
 
 int APS5_VABI libSceResourceArbitratorUnknown_rMJnXXj6GIo_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
