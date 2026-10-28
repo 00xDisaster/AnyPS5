@@ -47,6 +47,43 @@ ModalDialogState Session() {
     return ModalDialogPoll_nid_postfix(chosen);
 }
 
+void CancelAndFallbacks() {
+    MsgDialogResult result{};
+    UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
+    UserParam param(MsgDialog::ModeUserMsg, &yesNo);
+    ModalDialogSetPresenter_nid_postfix(true);
+    Require(sceMsgDialogInitialize() == 0);
+    Require(sceMsgDialogOpen(&param) == 0);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Cancel);
+    Require(sceMsgDialogGetStatus() == kStatusFinished);
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdNo);
+
+    UserMessage okOnly{MsgDialog::ButtonTypeOk, 0, "Saved"};
+    UserParam okParam(MsgDialog::ModeUserMsg, &okOnly);
+    Require(sceMsgDialogOpen(&okParam) == 0 && sceMsgDialogGetStatus() == kStatusRunning);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Cancel);
+    Require(sceMsgDialogGetStatus() == kStatusFinished);
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdOk);
+
+    UserMessage none{MsgDialog::ButtonTypeNone, 0, "Wait"};
+    UserParam noneParam(MsgDialog::ModeUserMsg, &none);
+    Require(sceMsgDialogOpen(&noneParam) == 0 && sceMsgDialogGetStatus() == kStatusFinished && Session() != ModalDialogState::Showing);
+    UserParam progress(MsgDialog::ModeProgressBar, &yesNo);
+    Require(sceMsgDialogOpen(&progress) == 0 && sceMsgDialogGetStatus() == kStatusFinished && Session() != ModalDialogState::Showing);
+    UserParam system(MsgDialog::ModeSystemMsg, &yesNo);
+    Require(sceMsgDialogOpen(&system) == 0 && sceMsgDialogGetStatus() == kStatusFinished && Session() != ModalDialogState::Showing);
+    result = MsgDialogResult{};
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdOk);
+
+    ModalDialogSetPresenter_nid_postfix(false);
+    UserMessage focusNo{MsgDialog::ButtonTypeYesNoFocusNo, 0, "Delete?"};
+    UserParam focusParam(MsgDialog::ModeUserMsg, &focusNo);
+    Require(sceMsgDialogOpen(&focusParam) == 0 && sceMsgDialogGetStatus() == kStatusFinished && Session() != ModalDialogState::Showing);
+    result = MsgDialogResult{};
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdOk);
+    Require(sceMsgDialogTerminate() == 0);
+}
+
 void ShownDialog() {
     UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
     UserParam param(MsgDialog::ModeUserMsg, &yesNo);
@@ -132,4 +169,5 @@ int main() {
     Require(sceMsgDialogGetStatus() == 0);
 
     ShownDialog();
+    CancelAndFallbacks();
 }
