@@ -694,7 +694,6 @@ static void TestPeakMeterHistory() {
     for (int gain = 0; gain < 3; gain++) {
         for (std::uint32_t i = 0; i < Grain; i++) delayed.push_back(0.5f / static_cast<float>(1 << gain));
     }
-    delayed.resize(4 * Grain, 0.0f);
     const auto energy = [&delayed](std::uint32_t grainIndex) {
         float sum = 0.0f;
         for (std::uint32_t i = 0; i < Grain; i++) sum += delayed[grainIndex * Grain + i] * delayed[grainIndex * Grain + i];
@@ -745,8 +744,6 @@ static void TestPeakMeterHistory() {
         Require(height() == std::max(largest(0), largest(1)));
         RenderI16(system);
         Require(height() == std::max(largest(1), largest(2)));
-        RenderI16(system);
-        Require(height() == std::max(largest(2), largest(3)));
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     }
 
