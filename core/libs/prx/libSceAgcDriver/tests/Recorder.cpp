@@ -81,6 +81,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -4343,8 +4344,10 @@ void drawDescriptorWriteTests(const Device& device, Recorder& recorder) {
             Require(actual.buffers.size() == original.buffers.size() && actual.images.size() == original.images.size(), "snapshot update omitted unchanged descriptors");
             for (const auto& [key, before] : original.buffers) {
                 const auto after = actual.buffers.at(key);
-                const auto expected = key.first == (allocation == 0 ? 2u : 7u) ? draw->snapshots.front().buffer->Handle() : before.buffer;
-                Require(after.buffer == expected && after.offset == before.offset && after.range == before.range, "snapshot update replaced the wrong buffer or changed its range");
+                const bool replaced = key.first == (allocation == 0 ? 2u : 7u);
+                const auto expected = replaced ? draw->snapshots.front().buffer->Handle() : before.buffer;
+                const auto expectedOffset = replaced ? draw->snapshots.front().offset : before.offset;
+                Require(after.buffer == expected && after.offset == expectedOffset && after.range == before.range, "snapshot update replaced the wrong buffer or changed its range");
             }
             for (const auto& [key, before] : original.images) {
                 const auto after = actual.images.at(key);
@@ -9904,8 +9907,8 @@ void singleCubeTests(const Device& device, Recorder& recorder) {
     context.detiler = &detiler;
     SampleProgram program(context, recorder, SAMPLE_ARRAY_SPV);
     const VkComponentMapping identity{};
-    for (const auto first : {0u, 5u, 6u}) {
-        std::array<std::uint32_t, 8> words{0x1000u, (56u << 20u) | (3u << 30u), 15u | (63u << 14u), 0xb0000facu, first | (first << 16u), 0, 0, 0};
+    for (const auto [first, last] : {std::pair{0u, 0u}, std::pair{5u, 5u}, std::pair{6u, 6u}, std::pair{0u, 4u}, std::pair{2u, 5u}}) {
+        std::array<std::uint32_t, 8> words{0x1000u, (56u << 20u) | (3u << 30u), 15u | (63u << 14u), 0xb0000facu, last | (first << 16u), 0, 0, 0};
         auto resource = DecodeTextureResource(words);
         const auto geometry = DescribeSurface(resource);
         std::vector<std::byte> memory(static_cast<std::size_t>(geometry.guestBytes) + 256);
