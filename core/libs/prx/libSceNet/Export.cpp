@@ -2538,7 +2538,9 @@ int APS5_VABI sceNetClearDnsCache(int flags) {
 }
 
 int APS5_VABI sceNetGetStatisticsInfo(NetStatisticsInfo* info, std::uint32_t flags) {
-    NotImplemented_nid_no_patch(__func__);
+    if (info == nullptr) return fail(NET_EFAULT);
+    constexpr std::int32_t FREE_BYTES = 16 * 1024 * 1024;
+    *info = {FREE_BYTES, FREE_BYTES, 0, 0, FREE_BYTES, FREE_BYTES};
     return 0;
 }
 

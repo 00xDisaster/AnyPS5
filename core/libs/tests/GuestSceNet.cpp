@@ -301,6 +301,22 @@ static void CheckPoolStats() {
     Require(Failed(sceNetGetMemoryPoolStats(pool, &stats), 9));
 }
 
+static void CheckStatisticsInfo() {
+    Require(Failed(sceNetGetStatisticsInfo(nullptr, 0), 14));
+    NetStatisticsInfo info;
+    std::memset(&info, 0xaa, sizeof(info));
+    Require(sceNetGetStatisticsInfo(&info, 0) == 0);
+    Require(sizeof(info) == 24);
+    Require(info.kernel_mem_free_size > 0 && info.kernel_mem_free_min > 0);
+    Require(info.libnet_mem_free_size > 0 && info.libnet_mem_free_min > 0);
+    Require(info.kernel_mem_free_min <= info.kernel_mem_free_size);
+    Require(info.libnet_mem_free_min <= info.libnet_mem_free_size);
+    Require(info.packet_count == 0 && info.packet_qos_count == 0);
+    NetStatisticsInfo again;
+    Require(sceNetGetStatisticsInfo(&again, 0x1234) == 0);
+    Require(std::memcmp(&again, &info, sizeof(info)) == 0);
+}
+
 static void CheckIfName() {
     constexpr std::array<const char*, 10> names = {
         "lo0", "eth0", "eth1", "dbg0", "wlan0", "wlan1", "gbe0", "bt0", "phone0", "pppoe0"};
@@ -2169,6 +2185,7 @@ int main() {
     CheckEpollWritable();
     CheckSocketHostErrors();
     CheckPoolStats();
+    CheckStatisticsInfo();
     CheckIfName();
     CheckRandom();
     CheckByteOrderConversion();
