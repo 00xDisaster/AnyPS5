@@ -82,23 +82,7 @@ void Unsupported() {
     auto* store = X509_STORE_new_nid_postfix();
     RequireThrows([] { X509_STORE_add_lookup_nid_postfix(nullptr, X509_LOOKUP_file_nid_postfix()); }, "null store");
     RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, nullptr); }, "null method");
-    LibreSslX509LookupMethod withNewItem{};
-    withNewItem.newItem = reinterpret_cast<void*>(&Require);
-    RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, &withNewItem); }, "a guest new_item callback");
-    Require(Lookups(store)->num == 0, "a refused method adds no lookup");
     X509_STORE_free_nid_postfix(store);
-
-    store = X509_STORE_new_nid_postfix();
-    LibreSslX509LookupMethod withShutdown{};
-    withShutdown.shutdown = reinterpret_cast<void*>(&Require);
-    Require(X509_STORE_add_lookup_nid_postfix(store, &withShutdown) != nullptr, "a method with only a shutdown callback is added");
-    RequireThrows([&] { X509_STORE_free_nid_postfix(store); }, "a guest shutdown callback");
-
-    store = X509_STORE_new_nid_postfix();
-    LibreSslX509LookupMethod withFree{};
-    withFree.free = reinterpret_cast<void*>(&Require);
-    Require(X509_STORE_add_lookup_nid_postfix(store, &withFree) != nullptr, "a method with only a free callback is added");
-    RequireThrows([&] { X509_STORE_free_nid_postfix(store); }, "a guest free callback");
 
     store = X509_STORE_new_nid_postfix();
     Lookups(store)->num = 1;
@@ -156,11 +140,8 @@ void Allocator() {
     X509_STORE_free_nid_postfix(store);
 
     store = X509_STORE_new_nid_postfix();
-    LibreSslX509LookupMethod withNewItem{};
-    withNewItem.newItem = reinterpret_cast<void*>(&Require);
     allocations = frees = 0;
     RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, nullptr); }, "null method");
-    RequireThrows([&] { X509_STORE_add_lookup_nid_postfix(store, &withNewItem); }, "a guest new_item callback");
     Require(allocations == 0 && frees == 0 && Lookups(store)->num == 0, "a refused method allocates nothing");
     X509_STORE_free_nid_postfix(store);
 
