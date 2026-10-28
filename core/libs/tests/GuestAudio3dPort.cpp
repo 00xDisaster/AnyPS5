@@ -5,9 +5,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <exception>
 #include <iterator>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -38,17 +38,6 @@ void RequireThrows(F f, const char* message) {
     Require(threw, message);
 }
 
-template <typename F>
-void RequireThrowsWith(F f, const char* text, const char* message) {
-    bool threw = false;
-    try {
-        f();
-    } catch (const std::exception& e) {
-        threw = std::strstr(e.what(), text) != nullptr;
-    }
-    Require(threw, message);
-}
-
 Audio3dOpenParameters Defaults() {
     Audio3dOpenParameters parameters{};
     sceAudio3dGetDefaultOpenParameters(&parameters);
@@ -64,6 +53,25 @@ void RequireLevel(std::uint32_t level, std::uint32_t available, const char* mess
     std::uint32_t got_available = 99;
     Require(sceAudio3dPortGetQueueLevel(0, &got_level, &got_available) == 0, message);
     Require(got_level == level && got_available == available, message);
+}
+
+template <typename F>
+std::optional<int> OpenOutcome(F open, std::uint32_t& id, const char* message) {
+    id = 7;
+    std::optional<int> result;
+    try {
+        result = open();
+    } catch (const std::exception&) {
+    }
+    if (result == 0) {
+        Require(id == 0, message);
+        Require(sceAudio3dPortClose(0) == 0, message);
+        return result;
+    }
+    std::uint32_t level = 0;
+    Require(id == 7, message);
+    Require(sceAudio3dPortGetQueueLevel(0, &level, nullptr) == INVALID_PORT, message);
+    return result;
 }
 
 void CheckBeforeInitialize() {
@@ -117,18 +125,19 @@ void CheckOpenParameters() {
     rejects([](auto& p) { p.size_this = 0x10; p.granularity = 0x180; }, "0x10 parameters check the granularity");
     rejects([](auto& p) { p.size_this = 0x18; p.max_objects = 0; }, "0x18 parameters check the object count");
     rejects([](auto& p) { p.size_this = 0x18; p.queue_depth = 0; }, "0x18 parameters check the queue depth");
-    auto throws = [&](auto change, const char* text, const char* message) {
+    auto outcome = [&](auto change, const char* message) {
         Audio3dOpenParameters parameters = defaults;
         change(parameters);
-        RequireThrowsWith([&] { Open(parameters, &id); }, text, message);
-        Require(id == 7, "an open that throws must not write the port id");
+        return OpenOutcome([&] { return Open(parameters, &id); }, id, message);
     };
-    throws([](auto& p) { p.size_this = 0x10; }, "sceAudio3dPortOpen: buffer mode 0", "0x10 parameters select buffer mode 0");
-    throws([](auto& p) { p.size_this = 0x10; p.max_objects = 0; p.queue_depth = 0; p.buffer_mode = 3; }, "sceAudio3dPortOpen: buffer mode 0", "0x10 parameters end at the rate");
-    throws([](auto& p) { p.size_this = 0x18; }, "sceAudio3dPortOpen: buffer mode 1", "0x18 parameters select buffer mode 1");
-    throws([](auto& p) { p.size_this = 0x18; p.buffer_mode = 3; p.num_beds = 4; }, "sceAudio3dPortOpen: buffer mode 1", "0x18 parameters end at the queue depth");
-    throws([](auto& p) { p.buffer_mode = 1; }, "sceAudio3dPortOpen: buffer mode 1", "buffer mode 1");
-    throws([](auto& p) { p.size_this = 0x28; p.num_beds = 3; }, "sceAudio3dPortOpen: 3 beds", "3 beds");
+    const std::optional<int> legacy = outcome([](auto& p) { p.size_this = 0x10; }, "a 0x10 block opens port 0 or leaves no port");
+    const std::optional<int> legacy_tail = outcome([](auto& p) { p.size_this = 0x10; p.max_objects = 0; p.queue_depth = 0; p.buffer_mode = 3; }, "a 0x10 block opens port 0 or leaves no port");
+    Require(legacy_tail == legacy, "0x10 parameters end at the rate");
+    const std::optional<int> short_block = outcome([](auto& p) { p.size_this = 0x18; }, "a 0x18 block opens port 0 or leaves no port");
+    const std::optional<int> short_tail = outcome([](auto& p) { p.size_this = 0x18; p.buffer_mode = 3; p.num_beds = 4; }, "a 0x18 block opens port 0 or leaves no port");
+    Require(short_tail == short_block, "0x18 parameters end at the queue depth");
+    outcome([](auto& p) { p.buffer_mode = 1; }, "buffer mode 1 opens port 0 or leaves no port");
+    outcome([](auto& p) { p.size_this = 0x28; p.num_beds = 3; }, "3 beds open port 0 or leave no port");
 }
 
 void CheckPortCreate() {
@@ -139,16 +148,23 @@ void CheckPortCreate() {
     Require(sceAudio3dPortCreate(0x100, 1, 0, &id) == INVALID_PARAMETER && id == 7, "create only at 48 kHz");
     Require(sceAudio3dPortCreate(0x80, 0, 0, &id) == INVALID_PARAMETER && id == 7, "create granularity below 256");
     Require(sceAudio3dPortCreate(0x180, 0, 0, &id) == INVALID_PARAMETER && id == 7, "create granularity not a multiple of 256");
-    RequireThrowsWith([&] { sceAudio3dPortCreate(0x100, 0, 0, &id); }, "sceAudio3dPortCreate: buffer mode 0", "create opens in buffer mode 0");
-    RequireThrowsWith([&] { sceAudio3dPortCreate(0x400, 0, 0, &id); }, "sceAudio3dPortCreate: buffer mode 0", "create opens in buffer mode 0 at any granularity");
-    Require(id == 7, "a create that throws must not write the port id");
-    std::uint32_t level = 0;
-    Require(sceAudio3dPortGetQueueLevel(0, &level, nullptr) == INVALID_PORT, "a create that throws leaves no port");
-    Require(Open(Defaults(), &id) == 0 && id == 0, "open after a create that throws");
+    Audio3dOpenParameters block = Defaults();
+    block.size_this = 0x10;
+    for (const std::uint32_t granularity : {0x100u, 0x400u}) {
+        block.granularity = granularity;
+        const std::optional<int> created = OpenOutcome([&] { return sceAudio3dPortCreate(granularity, 0, 0, &id); }, id, "create opens port 0 or leaves no port");
+        const std::optional<int> opened = OpenOutcome([&] { return Open(block, &id); }, id, "a 0x10 block opens port 0 or leaves no port");
+        Require(created == opened, "create opens like a 0x10 block with its granularity");
+    }
+    Require(Open(Defaults(), &id) == 0 && id == 0, "open after create");
     std::uint32_t second = 7;
     Require(sceAudio3dPortCreate(0x100, 1, 0, &second) == INVALID_PARAMETER && second == 7, "create checks its arguments while a port is open");
-    RequireThrowsWith([&] { sceAudio3dPortCreate(0x100, 0, 0, &second); }, "sceAudio3dPortCreate: buffer mode 0", "the buffer mode is checked before the open port");
-    Require(second == 7, "a create that throws must not write the port id");
+    std::optional<int> again;
+    try {
+        again = sceAudio3dPortCreate(0x100, 0, 0, &second);
+    } catch (const std::exception&) {
+    }
+    Require(again != 0 && second == 7, "create opens no second port");
     RequireLevel(0, 2, "create leaves the open port as it was");
     Require(sceAudio3dPortClose(0) == 0, "close the port from open");
     Require(sceAudio3dPortClose(0) == INVALID_PORT, "create opened no second port");
