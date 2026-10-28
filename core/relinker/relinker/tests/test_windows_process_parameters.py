@@ -1,4 +1,5 @@
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,11 @@ def main():
         data = output.read_bytes()
         metadata = [section for section in pe_sections(data) if section[0] == b".procpar"]
         assert len(metadata) == 1, metadata
+        header, = struct.unpack_from("<I", data, 0x3C)
+        optional_size, = struct.unpack_from("<H", data, header + 20)
+        index = [section[0] for section in pe_sections(data)].index(b".procpar")
+        virtual_size, = struct.unpack_from("<I", data, header + 24 + optional_size + index * 40 + 8)
+        assert virtual_size == 8, virtual_size
         _, _, raw_size, raw_offset, _ = metadata[0]
         stored = data[raw_offset:raw_offset + min(raw_size, 8)] if raw_offset else b""
         assert stored == bytes(len(stored)), stored
