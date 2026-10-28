@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 import contextlib
 import io
@@ -226,6 +228,64 @@ class RepositoryKnownFailuresTests(unittest.TestCase):
     def test_entries_stay_sorted_by_test_name(self):
         names = [line.split(None, 1)[0] for line in KNOWN_FAILURES.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertEqual(names, sorted(names))
+
+
+
+class SummaryInputAliasTests(unittest.TestCase):
+    def check_aliases(self, kind):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for target in ("junit", "known"):
+                with self.subTest(target=target):
+                    source = root / "input.xml"
+                    known = root / "known.txt"
+                    source.write_text(suite(case("unit")), encoding="utf-8")
+                    known.write_text("unit address a known failure\n", encoding="utf-8")
+                    original = {path: path.read_bytes() for path in (source, known)}
+                    selected = source if target == "junit" else known
+                    alias = root / "summary"
+                    if kind == "direct":
+                        alias = selected
+                    elif kind == "hardlink":
+                        os.link(selected, alias)
+                    else:
+                        try:
+                            alias.symlink_to(selected)
+                        except OSError as error:
+                            if getattr(error, "winerror", None) == 1314:
+                                self.skipTest("needs symbolic-link creation privilege")
+                            raise
+                    completed = subprocess.run([sys.executable, str(Path(sanitizer_report.__file__)), str(source),
+                                                "--known", str(known), "--sanitizer", "address", "--summary", str(alias)],
+                                               capture_output=True)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(completed.stdout, b"")
+                    self.assertIn(b"summary output must differ from input", completed.stderr)
+                    self.assertNotIn(b"Traceback", completed.stderr)
+                    self.assertEqual({path: path.read_bytes() for path in original}, original)
+                    if kind != "direct":
+                        alias.unlink()
+
+    def test_direct_input_aliases_are_rejected(self):
+        self.check_aliases("direct")
+
+    def test_hardlink_input_aliases_are_rejected(self):
+        self.check_aliases("hardlink")
+
+    def test_symlink_input_aliases_are_rejected(self):
+        self.check_aliases("symlink")
+
+    def test_separate_summary_still_appends(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "input.xml"
+            source.write_text(suite(case("unit")), encoding="utf-8")
+            output = root / "summary"
+            output.write_bytes(b"existing\n")
+            completed = subprocess.run([sys.executable, str(Path(sanitizer_report.__file__)), str(source), "--summary", str(output)], capture_output=True)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(output.read_bytes(), b"existing\n" + completed.stdout)
+            self.assertEqual(source.read_text(), suite(case("unit")))
 
 
 if __name__ == "__main__":

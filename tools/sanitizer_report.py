@@ -121,6 +121,11 @@ def main(argv=None):
     if args.known and not args.sanitizer:
         parser.error("--known needs at least one --sanitizer")
     try:
+        if args.summary:
+            for source in (args.junit, args.known):
+                if source is not None and (source.resolve() == args.summary.resolve() or
+                                           (source.exists() and args.summary.exists() and source.samefile(args.summary))):
+                    raise ValueError(f"summary output must differ from input: {source}")
         known = load_known(args.known, args.sanitizer) if args.known else {}
         text, failing = summarize(args.title, results(args.junit), known, reports(args.junit))
     except (OSError, ET.ParseError, ValueError) as error:
