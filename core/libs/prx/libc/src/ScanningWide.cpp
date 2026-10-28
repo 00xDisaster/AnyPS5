@@ -288,9 +288,6 @@ private:
             while (*format != 0 && *format != u']') ++format;
             if (*format == 0) Fail("unterminated scanset");
             directive.setEnd = format++;
-            for (const char16_t* member = directive.setBegin + 1; member + 1 < directive.setEnd; ++member) {
-                if (*member == u'-') Fail("scanset range is implementation-defined");
-            }
         }
         return directive;
     }
@@ -319,7 +316,7 @@ private:
         case u'S':
         case u'C': return Outcome::Matching;
         case u'n': return Count(directive);
-        default: Fail("unsupported conversion " + std::to_string(directive.conversion));
+        default: return Outcome::Matching;
         }
     }
 
@@ -397,7 +394,12 @@ private:
 
     static bool InSet(const Directive& directive, char16_t character) {
         bool found = false;
-        for (const char16_t* member = directive.setBegin; member != directive.setEnd && !found; ++member) found = *member == character;
+        for (const char16_t* member = directive.setBegin; member != directive.setEnd && !found;) {
+            if (member + 2 < directive.setEnd && member[1] == u'-') {
+                found = character >= member[0] && character <= member[2];
+                member += 3;
+            } else found = *member++ == character;
+        }
         return found != directive.setExcluded;
     }
 
@@ -410,8 +412,6 @@ private:
     }
 
     Outcome Text(const Directive& directive) {
-        if (!directive.length.empty() && directive.length != "l")
-            Fail("invalid string length modifier " + directive.length);
         void* target = nullptr;
         std::size_t capacity = 0;
         if (!directive.suppress) {
