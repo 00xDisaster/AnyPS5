@@ -294,9 +294,6 @@ void SpirvModule::PatchDeferredPhi(SpirvDeferredPhi phi, std::size_t incoming, s
     }
     functionInstructions[valueWord] = value;
     functionInstructions[parentWord] = parent;
-    if (unpatchedPhiIncomings == 0) {
-        throw std::runtime_error("SpirvModule::PatchDeferredPhi unpatchedPhiIncomings underflow");
-    }
     unpatchedPhiIncomings--;
     if (--it->second.second == 0) {
         pendingDeferredPhis.erase(it);
