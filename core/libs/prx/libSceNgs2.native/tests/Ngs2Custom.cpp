@@ -283,6 +283,7 @@ static void TestCustomFilterResetIndex() {
     for (auto& module : option.custom_rack_option.module) {
         module.module_id = SCE_NGS2_CUSTOM_MODULE_ID_FILTER;
     }
+    option.max_waveform_blocks = 1;
     option.max_channel_works = 1;
 
     Ngs2ContextBufferInfo query{};
