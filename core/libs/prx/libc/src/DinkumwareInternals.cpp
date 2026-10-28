@@ -160,7 +160,15 @@ std::optional<TFloat> UnscaledHexadecimal(const char* text, char** end) {
     }
     TFloat value;
     if constexpr (std::numeric_limits<TFloat>::digits <= 53) value = static_cast<TFloat>(low);
-    else value = std::ldexp(static_cast<TFloat>(high), 64) + static_cast<TFloat>(low);
+    else {
+        const auto top = static_cast<unsigned>((high << 8u) | (low >> 56u));
+        const auto middle = static_cast<unsigned>((low >> 28u) & 0xfffffffu);
+        const auto bottom = static_cast<unsigned>(low & 0xfffffffu);
+        constexpr TFloat Radix = static_cast<TFloat>(0x1p28L);
+        if (top != 0) value = (static_cast<TFloat>(top) * Radix + static_cast<TFloat>(middle)) * Radix + static_cast<TFloat>(bottom);
+        else if (middle != 0) value = static_cast<TFloat>(middle) * Radix + static_cast<TFloat>(bottom);
+        else value = static_cast<TFloat>(bottom);
+    }
     if (exponent != 0) value = ScaleHexadecimal(value, exponent);
     return std::copysign(value, negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));
 }

@@ -119,6 +119,33 @@ void TestUnscaledHexadecimal() {
     _mm_setcsr(saved.mxcsr);
 }
 
+void TestLongDoubleHexadecimalPrecision() {
+    constexpr long double Expected[3][4]{
+        {0x91a2b40000000000p+17L, 0x91a2b30000000000p+17L, 0x91a2b60000000000p+17L, 0x91a2b30000000000p+17L},
+        {0x91a2b3c4d5e6f800p+17L, 0x91a2b3c4d5e6f000p+17L, 0x91a2b3c4d5e6f800p+17L, 0x91a2b3c4d5e6f000p+17L},
+        {0x91a2b3c4d5e6f789p+17L, 0x91a2b3c4d5e6f789p+17L, 0x91a2b3c4d5e6f78ap+17L, 0x91a2b3c4d5e6f789p+17L}
+    };
+    GuestFloatingPointEnvironment saved;
+    Require(fegetenv_nid_postfix(&saved) == 0, "save hexadecimal precision environment");
+    unsigned index = 0;
+    for (const unsigned precision : {0u, 0x200u, 0x300u}) {
+        for (unsigned rounding = 0; rounding != 4; ++rounding) {
+            for (unsigned sse = 0; sse != 4; ++sse) {
+                for (const unsigned flushing : {0u, 0x40u, 0x8000u, 0x8040u}) {
+                    const auto control = static_cast<unsigned short>(0x7fu | precision | (rounding << 10u));
+                    asm volatile("fnclex\n\tfldcw %0" : : "m"(control));
+                    _mm_setcsr(0x1f80u | (sse << 13u) | flushing);
+                    CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.000001p0tail", 0x1.000001p0L, 0);
+                    CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x123456789abcdef123456p0tail", Expected[index][rounding], FE_INEXACT);
+                }
+            }
+        }
+        ++index;
+    }
+    asm volatile("fldenv %0" : : "m"(saved) : "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)");
+    _mm_setcsr(saved.mxcsr);
+}
+
 void CheckExp(double x, double y, short offset, double expected, short expectedKind, int expectedErrno, int expectedFlags, const char* message) {
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
@@ -501,6 +528,7 @@ int main() {
     TestStod();
     TestHexRange();
     TestUnscaledHexadecimal();
+    TestLongDoubleHexadecimalPrecision();
     TestStoll();
     TestDoubleHelpers();
     TestFloatErrors();
