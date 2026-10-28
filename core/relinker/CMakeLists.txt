@@ -34,6 +34,7 @@ add_library(relinker_core STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/FileIdentity.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/Amd64OnlyConverter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/RedZoneFramer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/MulxLowering.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/InstructionScanner.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionDecoder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionRewriter.cpp
@@ -105,6 +106,11 @@ if(BUILD_TESTING)
     target_link_libraries(masked_store_lowering_tests PRIVATE relinker_core)
     add_test(NAME masked_store_lowering COMMAND masked_store_lowering_tests)
     set_tests_properties(masked_store_lowering PROPERTIES TIMEOUT 20)
+
+    add_test_executable(mulx_lowering_tests ${CMAKE_CURRENT_SOURCE_DIR}/codegen/tests/MulxLoweringTests.cpp)
+    target_link_libraries(mulx_lowering_tests PRIVATE relinker_core)
+    add_test(NAME mulx_lowering COMMAND mulx_lowering_tests)
+    set_tests_properties(mulx_lowering PROPERTIES TIMEOUT 20)
 
     add_test_executable(relinker_conversion_tests ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/ConversionTests.cpp)
     target_link_libraries(relinker_conversion_tests PRIVATE relinker_core)
@@ -211,6 +217,7 @@ if(WIN32)
         ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/src/windows/WindowsPeWriter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/io/src/BufferUtils.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/Amd64OnlyConverter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/MulxLowering.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/InstructionScanner.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionDecoder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionRewriter.cpp
@@ -483,6 +490,7 @@ if(BUILD_TESTING)
     add_test_executable(amd64_only_converter_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/tests/Amd64OnlyConverterTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/Amd64OnlyConverter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/MulxLowering.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/InstructionScanner.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionDecoder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/codegen/src/x86/X64InstructionRewriter.cpp
@@ -895,6 +903,9 @@ if(BUILD_TESTING)
         add_test(NAME guest_gnu_hash COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_guest_gnu_hash.py $<TARGET_FILE:relinker>)
         set_tests_properties(guest_gnu_hash PROPERTIES TIMEOUT 20)
+        add_test(NAME mulx_conversion COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_mulx_conversion.py $<TARGET_FILE:relinker>)
+        set_tests_properties(mulx_conversion PROPERTIES TIMEOUT 20)
         add_test(NAME to_rosetta COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/test_to_rosetta.py $<TARGET_FILE:relinker>)
         add_test(NAME syscall_number COMMAND ${Python3_EXECUTABLE}
