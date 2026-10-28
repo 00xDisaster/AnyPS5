@@ -101,6 +101,11 @@ public:
         return block;
     }
 
+    std::size_t BlockBytesFor(std::size_t total) const {
+        if (total > MaximumSmallBytes) return alignUp(total, LargeGranuleBytes);
+        return _classes[classIndex(total)].bytes;
+    }
+
     void Free(void* raw, std::size_t blockBytes) {
         if (blockBytes > MaximumSmallBytes) {
             _large.Put(raw, blockBytes);
@@ -292,6 +297,17 @@ std::size_t ownedBytes(const void* pointer) {
     return raw + blockBytes - reinterpret_cast<std::uintptr_t>(pointer);
 }
 
+bool keepsBlockSize(const void* pointer, std::size_t alignment, std::size_t bytes) {
+    if (alignment == 0 || (alignment & (alignment - 1)) != 0) return false;
+    alignment = std::max(alignment, MinimumAlignment);
+    const std::size_t padding = alignment > RawAlignment ? alignment : 0;
+    if (bytes > std::numeric_limits<std::size_t>::max() - HeaderBytes - padding - LargeGranuleBytes) return false;
+    const auto blockBytes = reinterpret_cast<const std::size_t*>(pointer)[-1];
+    const auto total = bytes + HeaderBytes + padding;
+    const auto freshBlockBytes = GuestArena::GuestArenaAvailable_nid_postfix() ? ArenaHeap::Get().BlockBytesFor(total) : total;
+    return freshBlockBytes == blockBytes && bytes <= ownedBytes(pointer);
+}
+
 void* resizeInPlace(GuestAllocations::Mutation& mutation, void* pointer, std::size_t bytes, bool gpu) {
     mutation.Remove(pointer);
     mutation.Add(pointer, bytes, true, true, gpu);
@@ -326,7 +342,7 @@ void* GuestHeapReallocate_nid_postfix(void* pointer, std::size_t bytes) {
     const auto range = mutation.Find(pointer);
     mutation.RequireUnpinned(pointer, range.bytes);
     if (bytes == 0) return emptyInPlace(mutation, pointer, range.gpu);
-    if (bytes <= ownedBytes(pointer)) return resizeInPlace(mutation, pointer, bytes, range.gpu);
+    if (keepsBlockSize(pointer, MinimumAlignment, bytes)) return resizeInPlace(mutation, pointer, bytes, range.gpu);
     void* result = allocate(mutation, MinimumAlignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
     free(mutation, pointer);
@@ -344,7 +360,7 @@ void* GuestHeapRealign_nid_postfix(void* pointer, std::size_t bytes, std::size_t
             throw std::invalid_argument("reallocalign to 0 bytes with an alignment the block does not have is not measured on the console");
         return emptyInPlace(mutation, pointer, range.gpu);
     }
-    if (alignment != 0 && (alignment & (alignment - 1)) == 0 && reinterpret_cast<std::uintptr_t>(pointer) % alignment == 0 && bytes <= ownedBytes(pointer))
+    if (alignment != 0 && (alignment & (alignment - 1)) == 0 && reinterpret_cast<std::uintptr_t>(pointer) % alignment == 0 && keepsBlockSize(pointer, alignment, bytes))
         return resizeInPlace(mutation, pointer, bytes, range.gpu);
     void* result = allocate(mutation, alignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
