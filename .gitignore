@@ -64,6 +64,7 @@ env/
 ENV/
 
 __pycache__/
+*.pyc
 *.pyo
 *.pyd
 *.egg
