@@ -254,7 +254,7 @@ std::size_t X64InstructionDecoder::Decode(const std::uint8_t* data, std::size_t 
             hasModRm = true;
             immediateSize = ImmSize8;
         } else if (opcode == TwoByteShldCl || opcode == TwoByteShrdCl ||
-                   opcode == TwoBytePopcnt || opcode == TwoByteUd1 || opcode == TwoByteBtc ||
+                   opcode == TwoBytePopcnt || opcode == TwoByteUd1 || opcode == 0xFF || opcode == TwoByteBtc ||
                    opcode == TwoBytePrefetchw || opcode == TwoByteXaddRm8 ||
                    opcode == TwoByteMovnti || opcode == TwoByteGrp6 ||
                    opcode == TwoByteLar || opcode == TwoByteLsl ||
@@ -531,11 +531,11 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
             }
         }
     } else {
-        if (op == 0x0B || op == 0xFF) {
+        if (op == 0x0B) {
             info.FlowKind = ControlFlowKind::Trap;
             return info;
         }
-        if (op == TwoByteUd1) {
+        if (op == TwoByteUd1 || op == 0xFF) {
             if (pos < info.Length)
                 readModRm(pos, false);
             info.FlowKind = ControlFlowKind::Trap;

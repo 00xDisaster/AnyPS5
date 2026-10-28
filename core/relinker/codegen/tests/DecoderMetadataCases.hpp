@@ -723,7 +723,6 @@ inline constexpr DecoderRipRelativeCase kDecoderRipRelativeCases[] = {
 
 inline constexpr DecoderBranchCase kDecoderBranchCases[] = {
     {"0f0b", 2, Codegen::ControlFlowKind::Trap, false, 0},
-    {"0fff", 2, Codegen::ControlFlowKind::Trap, false, 0},
     {"0f80c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
     {"0f81c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
     {"0f82c0111111", 6, Codegen::ControlFlowKind::ConditionalBranch, true, 286331328},
@@ -793,6 +792,26 @@ inline constexpr DecoderBranchCase kDecoderBranchCases[] = {
     {"6648e9c0111111", 7, Codegen::ControlFlowKind::UnconditionalJump, true, 286331328},
     {"6648ebc0", 4, Codegen::ControlFlowKind::UnconditionalJump, true, -64},
     {"664875c0", 4, Codegen::ControlFlowKind::ConditionalBranch, true, -64},
+};
+
+struct DecoderTrapModRmCase {
+    const char* Bytes;
+    std::size_t Length;
+    std::uint8_t ModRmByte;
+    bool HasMemoryOperand;
+    bool HasRipRelativeDisp;
+    std::size_t DisplacementOffset;
+};
+
+inline constexpr DecoderTrapModRmCase kDecoderTrapModRmCases[] = {
+    {"0fff0511111111", 7, 0x05, true, true, 3},
+    {"0fffc0", 3, 0xc0, false, false, 0},
+    {"0fff042511111111", 8, 0x04, true, false, 0},
+};
+
+inline constexpr const char* kDecoderMissingModRmCases[] = {
+    "0fb9",
+    "0fff",
 };
 
 struct DecoderTruncatedBranchCase {
