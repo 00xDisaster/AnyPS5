@@ -1,10 +1,10 @@
 #include "prx/libSceJsc/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -13,10 +13,6 @@
 
 
 namespace {
-
-constexpr std::size_t StringHeaderSize = 24;
-constexpr std::size_t MaximumLength = std::min<std::size_t>(std::numeric_limits<std::int32_t>::max(),
-    (std::numeric_limits<std::uint32_t>::max() - StringHeaderSize) / sizeof(std::uint16_t));
 
 std::unique_ptr<GuestJSString> NullString() {
     auto result = std::make_unique<GuestJSString>();
@@ -27,10 +23,13 @@ std::unique_ptr<GuestJSString> NullString() {
 
 std::unique_ptr<GuestJSString> Decode(const char* text) {
     if (!text) return NullString();
+    if (!GuestJSStringValidLength<char8_t>(std::strlen(text))) throw std::length_error("JSString: UTF-8 length above the string limit");
     auto result = std::make_unique<GuestJSString>();
+    bool ascii = true;
     const auto* cursor = reinterpret_cast<const unsigned char*>(text);
     while (*cursor) {
         std::uint32_t codepoint = *cursor++;
+        if (codepoint >= 0x80) ascii = false;
         unsigned following = 0;
         std::uint32_t minimum = 0;
         if (codepoint >= 0xC2 && codepoint <= 0xDF) {
@@ -68,6 +67,7 @@ std::unique_ptr<GuestJSString> Decode(const char* text) {
         } else result->characters.push_back(static_cast<std::uint16_t>(codepoint));
     }
     if (result->nullString) result->characters.clear();
+    else if (!ascii && !GuestJSStringValidLength<char16_t>(result->characters.size())) throw std::length_error("JSString: UTF-16 length above the string limit");
     result->characters.push_back(0);
     return result;
 }
@@ -84,7 +84,7 @@ extern "C" {
 
 GuestJSString* APS5_VABI JSStringCreateWithCharacters(const std::uint16_t* characters, std::size_t count) {
     if (!characters) return NullString().release();
-    if (count > MaximumLength) throw std::length_error("JSStringCreateWithCharacters: length above the string limit");
+    if (!GuestJSStringValidLength<char16_t>(count)) throw std::length_error("JSStringCreateWithCharacters: length above the string limit");
     auto string = std::make_unique<GuestJSString>();
     string->characters.assign(characters, characters + count);
     string->characters.push_back(0);

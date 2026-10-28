@@ -1,9 +1,11 @@
 #pragma once
 
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 struct GuestJSString {
@@ -11,6 +13,12 @@ struct GuestJSString {
     std::vector<std::uint16_t> characters;
     bool nullString = false;
 };
+
+template<typename Unit> constexpr bool GuestJSStringValidLength(std::size_t length) {
+    constexpr std::size_t HeaderSize = 24;
+    return length <= std::min<std::size_t>(std::numeric_limits<std::int32_t>::max(),
+        (std::numeric_limits<std::uint32_t>::max() - HeaderSize) / sizeof(Unit));
+}
 
 extern "C" {
 

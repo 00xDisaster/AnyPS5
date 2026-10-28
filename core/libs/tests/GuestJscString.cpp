@@ -198,6 +198,24 @@ static void References() {
     JSStringRelease(string);
 }
 
+static void Limits() {
+    constexpr std::size_t utf8Limit = std::numeric_limits<std::int32_t>::max();
+    constexpr std::size_t utf16Limit = 2147483635;
+    for (const std::size_t length : {std::size_t{0}, std::size_t{1}, utf16Limit, utf16Limit + 1, utf8Limit}) {
+        Require(GuestJSStringValidLength<char8_t>(length));
+    }
+    for (const std::size_t length : {utf8Limit + 1, std::size_t{std::numeric_limits<std::uint32_t>::max()},
+        std::size_t{1} << 32, std::numeric_limits<std::size_t>::max()}) {
+        Require(!GuestJSStringValidLength<char8_t>(length));
+    }
+    for (const std::size_t length : {std::size_t{0}, std::size_t{1}, utf16Limit}) {
+        Require(GuestJSStringValidLength<char16_t>(length));
+    }
+    for (const std::size_t length : {utf16Limit + 1, utf8Limit, utf8Limit + 1, std::numeric_limits<std::size_t>::max()}) {
+        Require(!GuestJSStringValidLength<char16_t>(length));
+    }
+}
+
 static void MaximumSize() {
     for (const auto* text : {"", "a", "\xC2\xA2", "\xE2\x82\xAC", "\xF0\x9F\x98\x80", "abc\xF0\x9F\x98\x80"}) {
         auto* string = JSStringCreateWithUTF8CString(text);
@@ -245,6 +263,7 @@ int main() {
     NullText();
     NullHandles();
     References();
+    Limits();
     MaximumSize();
     Ownership();
 }
