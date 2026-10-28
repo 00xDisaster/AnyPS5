@@ -41,6 +41,9 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual((result, output, errors), (0, "Catalog validation: 2 entries valid.\n", ""))
         run.assert_not_called()
 
+    def test_empty_catalog_is_valid(self):
+        self.assertEqual(self.run_validator([]), (0, "Catalog validation: 0 entries valid.\n", ""))
+
     def test_invalid_entries_are_all_reported_even_for_unrelated_titles(self):
         missing = dict(self.entry, titleId="OTHER0001", patch="missing.toml")
         malformed = dict(self.entry, titleId="THIRD0001", category="not-a-category")
