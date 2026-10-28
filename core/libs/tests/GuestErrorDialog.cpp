@@ -28,6 +28,39 @@ ModalDialogState Session() {
     return ModalDialogPoll_nid_postfix(chosen);
 }
 
+void CloseAndFallback() {
+    ErrorDialogParam param{16, static_cast<std::int32_t>(0x80020001), 0, 0};
+    ModalDialogSetPresenter_nid_postfix(true);
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    Require(sceErrorDialogClose() == 0);
+    Require(Session() == ModalDialogState::Closed);
+    Require(sceErrorDialogGetStatus() == kStatusFinished);
+    Require(sceErrorDialogClose() == kErrInvalidState);
+
+    Require(sceErrorDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    Require(sceErrorDialogTerminate() == 0);
+    Require(Session() == ModalDialogState::Idle);
+    Require(!ModalDialogCapturesInput_nid_postfix());
+
+    ModalDialogRequest other;
+    other.message = u"Other";
+    other.buttons = {u"OK"};
+    Require(ModalDialogOpen_nid_postfix(other));
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogOpen(&param) == 0);
+    Require(sceErrorDialogGetStatus() == kStatusRunning);
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+    ModalDialogReset_nid_postfix();
+    Require(sceErrorDialogTerminate() == 0);
+
+    ModalDialogSetPresenter_nid_postfix(false);
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogOpen(&param) == 0 && Session() == ModalDialogState::Idle);
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+    Require(sceErrorDialogTerminate() == 0);
+}
+
 void ShownDialog() {
     ErrorDialogParam param{16, static_cast<std::int32_t>(0x80020001), 0, 0};
     ModalDialogSetPresenter_nid_postfix(true);
@@ -100,4 +133,5 @@ int main() {
     Require(sceErrorDialogOpenWithReport() == kErrUnexpectedFatal);
 
     ShownDialog();
+    CloseAndFallback();
 }
