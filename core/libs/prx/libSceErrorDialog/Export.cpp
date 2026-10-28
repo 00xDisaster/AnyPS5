@@ -1,4 +1,6 @@
 #include "prx/libSceErrorDialog/include/Api.hpp"
+#include "prx/libSceErrorDialog/include/ErrorDialogRequest.hpp"
+#include "prx/libSceIme/include/ModalDialog.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -29,6 +31,7 @@ constexpr std::size_t kParamSize = 16;
 
 std::mutex g_lock;
 int g_status = kStatusNone;
+bool g_presented = false;
 
 bool Readable(const void* p, std::size_t n) {
 #ifdef _WIN32
@@ -41,6 +44,12 @@ bool Readable(const void* p, std::size_t n) {
 #else
     return p != nullptr;
 #endif
+}
+
+void Refresh() {
+    if (g_status != kStatusRunning || !g_presented) return;
+    std::size_t chosen = 0;
+    if (ModalDialogPoll_nid_postfix(chosen) != ModalDialogState::Showing) g_status = kStatusFinished;
 }
 }  // namespace
 
@@ -71,12 +80,14 @@ int APS5_VABI sceErrorDialogOpen(const void* param) {
 
 int APS5_VABI sceErrorDialogUpdateStatus(void) {
  std::lock_guard g(g_lock);
- if (g_status == kStatusRunning) g_status = kStatusFinished;
+ Refresh();
+ if (g_status == kStatusRunning && !g_presented) g_status = kStatusFinished;
  return g_status;
 }
 
 int APS5_VABI sceErrorDialogGetStatus(void) {
  std::lock_guard g(g_lock);
+ Refresh();
  return g_status;
 }
 
