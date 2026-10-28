@@ -209,6 +209,21 @@ void volumeDownAction() {
     require(rejects("VolumeDown = F2\n"), "VolumeDown refuses a source without a type");
 }
 
+void toggleMuteAction() {
+    useConfig("togglemute = KEY:F2\nToggleMute = KEY:F3\n");
+    const auto keys = keysFor(Pad::InputControl::ToggleMute);
+    require(keys.size() == 2 && hasKey(keys, SDL_SCANCODE_F2) && hasKey(keys, SDL_SCANCODE_F3), "ToggleMute takes a first key and an alternate, case-insensitively");
+    useConfig("ToggleMute = KEY:F2\nToggleMute = KEY:F2\n");
+    const auto duplicated = keysFor(Pad::InputControl::ToggleMute);
+    require(duplicated.size() == 1 && duplicated[0] == SDL_SCANCODE_F2, "a duplicate ToggleMute line is ignored");
+    require(rejects("ToggleMute = MOUSE:Left\n"), "ToggleMute refuses a mouse button");
+    require(rejects("ToggleMute = MOUSE:X1\n"), "ToggleMute refuses another mouse button");
+    require(rejects("ToggleMute = WHEEL:Up\n"), "ToggleMute refuses the mouse wheel");
+    require(rejects("ToggleMute = KEY:NoSuchKey\n"), "ToggleMute refuses an unknown key name");
+    require(rejects("ToggleMute =\n"), "ToggleMute refuses an empty source");
+    require(rejects("ToggleMute = F2\n"), "ToggleMute refuses a source without a type");
+}
+
 void mouseLookDefault() {
     useConfig("Cross = KEY:F\n");
     const auto settings = Pad::LoadInputMapping().settings;
@@ -374,6 +389,7 @@ int main() try {
     screenshotBinding();
     padStatusBinding();
     padStatusConflicts();
+    toggleMuteAction();
     volumeDownAction();
     volumeUpAction();
     mouseLookDefault();
