@@ -11,10 +11,10 @@ enum class HostVolumeCommand {
     ToggleMute
 };
 
-bool HostVolumeApply_nid_no_patch(HostVolumeCommand command, HostVolume* after);
-bool HostVolumeFocus_nid_no_patch(bool focused, HostVolume* after);
-void HostVolumeConfigure_nid_no_patch(const char* initialVolume, const char* muteOnFocusLoss);
-void HostVolumeConfigureFromEnvironment_nid_no_patch();
-std::uint32_t HostVolumeGain_nid_no_patch();
+extern "C" bool HostVolumeApply_nid_no_patch(HostVolumeCommand command, HostVolume* after);
+extern "C" bool HostVolumeFocus_nid_no_patch(bool focused, HostVolume* after);
+extern "C" void HostVolumeConfigure_nid_no_patch(const char* initialVolume, const char* muteOnFocusLoss);
+extern "C" void HostVolumeConfigureFromEnvironment_nid_no_patch();
+extern "C" std::uint32_t HostVolumeGain_nid_no_patch();
 
 #endif
