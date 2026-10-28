@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <limits>
 #include <new>
-#include <stdexcept>
 #include <thread>
 
 namespace {
@@ -49,10 +48,6 @@ void operator delete[](void* memory) noexcept {
 
 void operator delete[](void* memory, std::size_t) noexcept {
     std::free(memory);
-}
-
-extern "C" [[noreturn]] void NotImplemented_nid_no_patch(const char* name) {
-    throw std::runtime_error(name);
 }
 
 int main() {

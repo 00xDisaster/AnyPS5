@@ -816,9 +816,11 @@ if(BUILD_TESTING)
         add_test_executable(rudp_poll_wait_exception_tests tests/RudpPollWaitException.cpp
             prx/libSceRudp/Export.cpp prx/libkernel/Time/TimedWait.cpp)
         target_include_directories(rudp_poll_wait_exception_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_link_libraries(rudp_poll_wait_exception_tests PRIVATE libc)
         configure_windows_unwind(rudp_poll_wait_exception_tests)
         add_test(NAME rudp_poll_wait_exception COMMAND rudp_poll_wait_exception_tests)
-        set_tests_properties(rudp_poll_wait_exception PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
+        set_tests_properties(rudp_poll_wait_exception PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77 ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
 
     add_test_executable(guest_memory_pool_stats_tests tests/GuestMemoryPoolStats.cpp)
