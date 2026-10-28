@@ -552,6 +552,15 @@ void testToggleMuteRequest() {
     check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "the key never reaches the title's pad state");
 }
 
+void testVolumeDownDefaultKey() {
+    Pad::KeyboardMouse keyboardMouse(defaults());
+    const auto now = Pad::KeyboardMouse::Clock::now();
+    check(keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, true), now).volumeDown, "F5 asks for VolumeDown with the built-in bindings");
+    keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, false), now);
+    const auto state = keyboardMouse.Compose(PadInputState{});
+    check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "F5 does not reach the title's pad state");
+}
+
 void testDefaultL2() {
     const auto l2 = static_cast<std::uint32_t>(Pad::PadButton::L2);
     const auto r2 = static_cast<std::uint32_t>(Pad::PadButton::R2);
@@ -643,6 +652,7 @@ int main() {
             {"volume up request", testVolumeUpRequest},
             {"volume down request", testVolumeDownRequest},
             {"toggle mute request", testToggleMuteRequest},
+            {"VolumeDown default key", testVolumeDownDefaultKey},
             {"default L2", testDefaultL2},
             {"title reads the mouse", testTitleReadsMouse},
         };

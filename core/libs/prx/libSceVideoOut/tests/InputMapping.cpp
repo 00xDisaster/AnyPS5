@@ -224,6 +224,15 @@ void toggleMuteAction() {
     require(rejects("ToggleMute = F2\n"), "ToggleMute refuses a source without a type");
 }
 
+void volumeDownDefault() {
+    useConfig("Cross = KEY:F\n");
+    const auto keys = keysFor(Pad::InputControl::VolumeDown);
+    require(keys.size() == 1 && keys[0] == SDL_SCANCODE_F5, "F5 is the only default VolumeDown key");
+    useConfig("VolumeDown = KEY:F2\n");
+    const auto moved = keysFor(Pad::InputControl::VolumeDown);
+    require(moved.size() == 1 && moved[0] == SDL_SCANCODE_F2, "a VolumeDown line replaces the built-in key");
+}
+
 void mouseLookDefault() {
     useConfig("Cross = KEY:F\n");
     const auto settings = Pad::LoadInputMapping().settings;
@@ -391,6 +400,7 @@ int main() try {
     padStatusConflicts();
     toggleMuteAction();
     volumeDownAction();
+    volumeDownDefault();
     volumeUpAction();
     mouseLookDefault();
     mouseLookParse();
