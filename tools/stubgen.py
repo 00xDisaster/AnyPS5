@@ -177,9 +177,33 @@ def generate(module, nids, db, td_path=None, td_lib=None):
     return (code, td_text)
 
 
+def case_insensitive_directory(directory):
+    directory = Path(directory)
+    while not directory.is_dir():
+        if directory.parent == directory:
+            return False
+        directory = directory.parent
+    try:
+        handle, name = tempfile.mkstemp(dir=str(directory))
+    except OSError:
+        return False
+    try:
+        os.close(handle)
+        flipped = Path(name).with_name(Path(name).name.swapcase())
+        return flipped.name != Path(name).name and flipped.exists()
+    finally:
+        os.unlink(name)
+
+
 def same_file(left, right):
-    left, right = Path(left), Path(right)
-    return left.resolve() == right.resolve() or (left.exists() and right.exists() and left.samefile(right))
+    left, right = Path(left).resolve(), Path(right).resolve()
+    if left == right:
+        return True
+    if left.exists() and right.exists() and left.samefile(right):
+        return True
+    if str(left).casefold() == str(right).casefold():
+        return case_insensitive_directory(left.parent)
+    return False
 
 
 def write_outputs(outputs):
