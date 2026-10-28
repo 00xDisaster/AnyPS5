@@ -24,4 +24,11 @@ inline int ParseHostVolumeLevel(std::string_view name, std::string_view value) {
     return parsed;
 }
 
+inline std::string HostVolumeMessage(const HostVolume& state) {
+    const std::string level = std::to_string(state.Volume()) + "%";
+    if (state.Muted()) return "Host volume: muted (volume " + level + ")";
+    if (state.FocusMuted()) return "Host volume: muted while the window has no focus (volume " + level + ")";
+    return "Host volume: " + level;
+}
+
 #endif
