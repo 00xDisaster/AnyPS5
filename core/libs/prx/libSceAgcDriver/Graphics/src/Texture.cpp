@@ -354,9 +354,11 @@ Texture::Texture(const Context& context, TextureDetiler& detiler, const GuestTex
         const auto& mips = geometry.mips;
         const auto arrayLayers = geometry.layers;
         const auto elementBytes = BytesPerElement(descriptor.format);
+#ifdef APS5_DEBUG_LOG
         AGC_LOG_DEFERRED(stdout, "Texture address=0x%llx %ux%u mips=%u layers=%u dim=%d tile=%d format=%u vk=%d element=%u", static_cast<unsigned long long>(descriptor.baseAddress), descriptor.width, descriptor.height, descriptor.mipCount, arrayLayers,
                      static_cast<int>(descriptor.dimension), static_cast<int>(descriptor.tileMode), descriptor.format, static_cast<int>(vkFormat), elementBytes);
         for (const auto& mip : mips) AGC_LOG_DEFERRED(stdout, "  mip %ux%u tiled=0x%llx+0x%llx linear=0x%llx+0x%llx blocksPerRow=%u pitch=%u tail=%d", mip.width, mip.height, static_cast<unsigned long long>(mip.tiledOffset), static_cast<unsigned long long>(mip.tiledSize), static_cast<unsigned long long>(mip.linearOffset), static_cast<unsigned long long>(mip.linearSize), mip.blocksPerRow, mip.pitchBytes, mip.tail ? 1 : 0);
+#endif
 
         const auto guestBytes = geometry.guestBytes;
         Require(snapshot.size() == guestBytes, "texture snapshot size mismatch");
@@ -642,7 +644,9 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         copyLevels = descriptor.mipCount;
         copyLayers = geometry.imageLayers;
         copyElementBytes = BytesPerElement(descriptor.format);
+#ifdef APS5_DEBUG_LOG
         AGC_LOG_DEFERRED(stdout, "Texture address=0x%llx %ux%u mips=%u layers=%u repacked copy of storage image (guest format %u -> vk %d)", static_cast<unsigned long long>(descriptor.baseAddress), descriptor.width, descriptor.height, descriptor.mipCount, copyLayers, descriptor.format, static_cast<int>(format));
+#endif
 
         VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         imageInfo.flags = descriptor.dimension == TextureDimension::kCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u;
@@ -701,7 +705,9 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         copyLevels = descriptor.mipCount;
         copyLayers = geometry.imageLayers;
         copyElementBytes = BytesPerElement(descriptor.format);
+#ifdef APS5_DEBUG_LOG
         AGC_LOG_DEFERRED(stdout, "Texture address=0x%llx %ux%u mips=%u layers=%u block copy of storage image (guest format %u -> vk %d)", static_cast<unsigned long long>(descriptor.baseAddress), descriptor.width, descriptor.height, descriptor.mipCount, copyLayers, source->Descriptor().format, static_cast<int>(blockFormat));
+#endif
 
         VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -759,7 +765,9 @@ Texture::Texture(const Context& context, const std::shared_ptr<StorageTexture>& 
         copyLevels = descriptor.mipCount;
         copyLayers = geometry.imageLayers;
         copyElementBytes = BytesPerElement(descriptor.format);
+#ifdef APS5_DEBUG_LOG
         AGC_LOG_DEFERRED(stdout, "Texture address=0x%llx %ux%u mips=%u layers=%u depth copy of storage image (vk=%d -> %d)", static_cast<unsigned long long>(descriptor.baseAddress), descriptor.width, descriptor.height, descriptor.mipCount, copyLayers, static_cast<int>(colorFormat), static_cast<int>(depthFormat));
+#endif
 
         const bool depth1D = descriptor.dimension == TextureDimension::k1D || descriptor.dimension == TextureDimension::k1DArray;
         VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -1277,7 +1285,7 @@ VkFormat StorageFormatOrUndefined(const Context& context, VkFormat format) {
     return storage;
 }
 
-VkFormat UintFormatOfSint(VkFormat format) {
+VkFormat UintStorageViewFormat(VkFormat format) {
     switch (format) {
         case VK_FORMAT_R8G8_SINT: return VK_FORMAT_R8G8_UINT;
         case VK_FORMAT_R8G8B8A8_SINT: return VK_FORMAT_R8G8B8A8_UINT;
@@ -1287,6 +1295,9 @@ VkFormat UintFormatOfSint(VkFormat format) {
         case VK_FORMAT_R32_SINT: return VK_FORMAT_R32_UINT;
         case VK_FORMAT_R32G32_SINT: return VK_FORMAT_R32G32_UINT;
         case VK_FORMAT_R32G32B32A32_SINT: return VK_FORMAT_R32G32B32A32_UINT;
+        case VK_FORMAT_R16_SFLOAT: return VK_FORMAT_R16_UINT;
+        case VK_FORMAT_R16G16_SFLOAT: return VK_FORMAT_R16G16_UINT;
+        case VK_FORMAT_R16G16B16A16_SFLOAT: return VK_FORMAT_R16G16B16A16_UINT;
         default: return VK_FORMAT_UNDEFINED;
     }
 }
@@ -2038,9 +2049,9 @@ VkImageView StorageTexture::FirstLayerView(std::uint32_t mip) {
     return created;
 }
 
-VkImageView StorageTexture::StorageView(std::uint32_t mip, bool firstLayer) {
+VkImageView StorageTexture::StorageView(std::uint32_t mip, bool firstLayer, bool uintStorage) {
     const auto packed = PackedStorageViewFormat(storageFormat);
-    const auto format = packed != VK_FORMAT_UNDEFINED ? packed : UintFormatOfSint(storageFormat);
+    const auto format = packed != VK_FORMAT_UNDEFINED ? packed : uintStorage ? UintStorageViewFormat(storageFormat) : VK_FORMAT_UNDEFINED;
     if (format == VK_FORMAT_UNDEFINED) return firstLayer ? FirstLayerView(mip) : View(mip);
     if (format == VK_FORMAT_R32_UINT) return AtomicView(mip, firstLayer);
     const auto found = uintViews.find({mip, firstLayer});
