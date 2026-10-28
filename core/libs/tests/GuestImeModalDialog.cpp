@@ -1,6 +1,8 @@
 #include "prx/libSceIme/include/ModalDialog.hpp"
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
 
 namespace {
 
@@ -133,4 +135,27 @@ int main() {
 
     ModalDialogSetPresenter_nid_postfix(false);
     Require(!ModalDialogOpen_nid_postfix(YesNo(0, 1)), "opened after the presenter went away");
+
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogReset_nid_postfix();
+    ModalDialogSetShowTimeout_nid_postfix(40);
+    Require(ModalDialogOpen_nid_postfix(YesNo(0, 1)), "reopen refused before the timeout checks");
+    Chosen(ModalDialogState::Showing);
+    Require(ModalDialogCapturesInput_nid_postfix(), "a new dialog does not capture input before the timeout");
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(!ModalDialogCapturesInput_nid_postfix(), "an undrawn dialog still captures input after the timeout");
+    Chosen(ModalDialogState::Unshown);
+    Require(!ModalDialogReadView_nid_postfix(view), "an undrawn dialog was drawn after the timeout");
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Chosen(ModalDialogState::Unshown);
+    Require(ModalDialogOpen_nid_postfix(YesNo(0, 1)), "an unshown dialog blocks the next one");
+    Require(ModalDialogReadView_nid_postfix(view), "a new dialog is not drawn");
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(ModalDialogCapturesInput_nid_postfix(), "a dialog that was drawn stopped capturing input");
+    Chosen(ModalDialogState::Showing);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(Chosen(ModalDialogState::Answered) == 0, "a drawn dialog could not be answered after the timeout");
+    ModalDialogReset_nid_postfix();
+    ModalDialogSetShowTimeout_nid_postfix(ModalDialogShowTimeoutMilliseconds);
+    ModalDialogSetPresenter_nid_postfix(false);
 }
