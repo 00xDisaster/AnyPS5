@@ -518,6 +518,23 @@ void testVolumeUpRequest() {
     check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "the key never reaches the title's pad state");
 }
 
+void testVolumeDownRequest() {
+    auto configuration = defaults();
+    configuration.bindings.push_back(Pad::InputBinding{SDL_SCANCODE_F6, Pad::MouseButton::None, Pad::InputControl::VolumeDown});
+    Pad::KeyboardMouse keyboardMouse(configuration);
+    const auto now = Pad::KeyboardMouse::Clock::now();
+    const auto down = keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, true), now);
+    check(down.volumeDown && !down.toggleFullscreen && !down.togglePerformanceOverlay && !down.screenshot, "a bound key asks for volume down");
+    auto repeated = KeyEvent(SDL_SCANCODE_F6, true);
+    repeated.key.repeat = 1;
+    check(!keyboardMouse.HandleEvent(repeated, now).volumeDown, "a repeated key asks for nothing");
+    check(!keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, false), now).volumeDown, "releasing the key asks for nothing");
+    check(keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, true), now).volumeDown, "pressing it again asks again");
+    keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, false), now);
+    const auto state = keyboardMouse.Compose(PadInputState{});
+    check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "the key never reaches the title's pad state");
+}
+
 void testDefaultL2() {
     const auto l2 = static_cast<std::uint32_t>(Pad::PadButton::L2);
     const auto r2 = static_cast<std::uint32_t>(Pad::PadButton::R2);
@@ -607,6 +624,7 @@ int main() {
             {"toggle requests", testToggleRequests},
             {"show pad status", testShowPadStatus},
             {"volume up request", testVolumeUpRequest},
+            {"volume down request", testVolumeDownRequest},
             {"default L2", testDefaultL2},
             {"title reads the mouse", testTitleReadsMouse},
         };
