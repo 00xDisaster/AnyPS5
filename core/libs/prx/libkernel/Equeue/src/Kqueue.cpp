@@ -48,6 +48,7 @@ constexpr int GUEST_EPIPE = 32;
 
 constexpr int KQ_NEVENTS = 8;
 constexpr int KQ_STACK_EVENTS = 64;
+constexpr int KQ_MAX_SCAN = 1024;
 constexpr std::int16_t EVFILT_AIO = -3;
 constexpr std::int16_t EVFILT_PROCDESC = -8;
 constexpr std::int16_t EVFILT_LIO = -10;
@@ -639,7 +640,7 @@ int APS5_VABI kevent_nid_postfix(int descriptor, const KernelEvent* changelist, 
     }
     KernelEvent scratch[KQ_STACK_EVENTS];
     std::unique_ptr<KernelEvent[]> heap;
-    const int capacity = eventlist != nullptr ? nevents : std::min(nevents, KQ_NEVENTS);
+    const int capacity = std::min(nevents, eventlist != nullptr ? KQ_MAX_SCAN : KQ_NEVENTS);
     KernelEvent* target = scratch;
     if (capacity > KQ_STACK_EVENTS) {
         heap.reset(new KernelEvent[static_cast<std::size_t>(capacity)]);
