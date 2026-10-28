@@ -1,5 +1,6 @@
 #include "prx/libSceErrorDialog/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceIme/include/ModalDialog.hpp"
 #include <cstdint>
 #include <cstdlib>
 
@@ -21,6 +22,32 @@ struct ErrorDialogParam {
     std::int32_t user_id;
     std::int32_t reserved;
 };
+
+ModalDialogState Session() {
+    std::size_t chosen = 0;
+    return ModalDialogPoll_nid_postfix(chosen);
+}
+
+void ShownDialog() {
+    ErrorDialogParam param{16, static_cast<std::int32_t>(0x80020001), 0, 0};
+    ModalDialogSetPresenter_nid_postfix(true);
+    Require(sceErrorDialogInitialize() == 0);
+    Require(sceErrorDialogOpen(&param) == 0);
+    Require(Session() == ModalDialogState::Showing);
+    ModalDialogView view;
+    Require(ModalDialogReadView_nid_postfix(view));
+    Require(view.message == u"An error occurred.\nError code: 0x80020001" && view.buttons.size() == 1 && view.buttons[0].selected);
+    for (int poll = 0; poll < 3; ++poll) Require(sceErrorDialogUpdateStatus() == kStatusRunning && sceErrorDialogGetStatus() == kStatusRunning);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(sceErrorDialogGetStatus() == kStatusFinished);
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+
+    Require(sceErrorDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Cancel);
+    Require(sceErrorDialogUpdateStatus() == kStatusFinished);
+    Require(sceErrorDialogTerminate() == 0);
+    ModalDialogSetPresenter_nid_postfix(false);
+}
 
 }
 
@@ -71,4 +98,6 @@ int main() {
     Require(sceErrorDialogOpen(&param) == kErrInvalidState);
     Require(sceErrorDialogOpenDetail() == kErrUnexpectedFatal);
     Require(sceErrorDialogOpenWithReport() == kErrUnexpectedFatal);
+
+    ShownDialog();
 }
