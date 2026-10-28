@@ -425,6 +425,16 @@ std::uint32_t APS5_VABI stdc_trailing_zeros_ull_nid_postfix(std::uint64_t value)
 int APS5_VABI __clzsi2_nid_postfix(std::uint32_t value);
 int APS5_VABI __clzdi2_nid_postfix(std::uint64_t value);
 int APS5_VABI __clzti2_nid_postfix(Uint128 value);
+std::uint32_t APS5_VABI stdc_leading_ones_uc_nid_postfix(std::uint8_t value);
+std::uint32_t APS5_VABI stdc_leading_ones_us_nid_postfix(std::uint16_t value);
+std::uint32_t APS5_VABI stdc_leading_ones_ui_nid_postfix(std::uint32_t value);
+std::uint32_t APS5_VABI stdc_leading_ones_ul_nid_postfix(std::uint64_t value);
+std::uint32_t APS5_VABI stdc_leading_ones_ull_nid_postfix(std::uint64_t value);
+std::uint32_t APS5_VABI stdc_trailing_ones_uc_nid_postfix(std::uint8_t value);
+std::uint32_t APS5_VABI stdc_trailing_ones_us_nid_postfix(std::uint16_t value);
+std::uint32_t APS5_VABI stdc_trailing_ones_ui_nid_postfix(std::uint32_t value);
+std::uint32_t APS5_VABI stdc_trailing_ones_ul_nid_postfix(std::uint64_t value);
+std::uint32_t APS5_VABI stdc_trailing_ones_ull_nid_postfix(std::uint64_t value);
 int APS5_VABI __ctzsi2_nid_postfix(std::uint32_t value);
 int APS5_VABI __ctzdi2_nid_postfix(std::uint64_t value);
 int APS5_VABI __ctzti2_nid_postfix(Uint128 value);
