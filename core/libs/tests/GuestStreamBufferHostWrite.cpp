@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -53,6 +54,11 @@ int main() {
     auto* stream = fopen_nid_postfix(path.string().c_str(), "rb");
     Require(stream != nullptr, "open the file");
     Require(setvbuf_nid_postfix(stream, buffer, 0, bufferBytes) == 0, "give the stream a buffer in guest memory");
+    {
+        const GuestArena::HostWrite destination(buffer, bufferBytes);
+        Require(destination.Open(), "fill the stream buffer");
+        std::memset(buffer, '!', bufferBytes);
+    }
     collect();
     Require(collect() == 0, "stream buffer initially clean");
     Require(Protection(buffer) == PAGE_READONLY && Protection(buffer + bufferBytes - 1) == PAGE_READONLY,
@@ -73,6 +79,7 @@ int main() {
     Require(rest == contents.substr(1 + chunk.size()), "stream contents through the watched buffer");
     Require(fgetc_nid_postfix(stream) == EOF && ferror_nid_postfix(stream) == 0, "end of file without an error");
     Require(fclose_nid_postfix(stream) == 0, "close the stream");
+    Require(std::all_of(buffer, buffer + bufferBytes, [](char value) { return value == '!'; }), "guest stream buffer left untouched");
     std::filesystem::remove(path);
     return 0;
 }

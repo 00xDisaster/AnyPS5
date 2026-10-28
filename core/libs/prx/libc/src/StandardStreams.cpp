@@ -269,17 +269,21 @@ int APS5_VABI fileno_unlocked_nid_postfix(FileStream* stream) {
 [[noreturn]] char* APS5_VABI fgetln_nid_postfix(FileStream*, std::size_t*) {
     throw std::runtime_error("fgetln: the console's export is a hlt instruction, which ends the process");
 }
-int APS5_VABI setvbuf_nid_postfix(FileStream* stream, char*, int mode, std::size_t size) {
+int APS5_VABI setvbuf_nid_postfix(FileStream* stream, char* buffer, int mode, std::size_t size) {
     if (stream && !stream->IsOpen()) { errno = 9; return -1; }
     if (mode < 0 || mode > 2) return -1;
     const int native = mode == 0 ? _IOFBF : mode == 1 ? _IOLBF : _IONBF;
-    if (native != _IONBF && size == 0) size = BUFSIZ;
+    if (native != _IONBF && size == 0) {
+        buffer = nullptr;
+        size = BUFSIZ;
+    }
     auto* handle = GetStreamHandle(stream);
 #ifdef _WIN32
     if (handle == __acrt_iob_func(1) && KeepHostStandardOutput_nid_no_patch() < 0) return -1;
     if (handle == __acrt_iob_func(2) && KeepHostStandardError_nid_no_patch() < 0) return -1;
+    buffer = nullptr;
 #endif
-    return std::setvbuf(handle, nullptr, native, size);
+    return std::setvbuf(handle, buffer, native, size);
 }
 void APS5_VABI setbuf_nid_postfix(FileStream* stream, char* buffer) {
     setvbuf_nid_postfix(stream, buffer, buffer ? 0 : 2, buffer ? 1024 : 0);
