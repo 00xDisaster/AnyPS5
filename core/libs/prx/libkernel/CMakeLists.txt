@@ -1635,6 +1635,13 @@ if(BUILD_TESTING)
         target_link_options(guest_udp_name_concurrency_tests PRIVATE LINKER:--export-dynamic-symbol=connect)
         add_test(NAME guest_udp_name_concurrency COMMAND guest_udp_name_concurrency_tests)
         set_tests_properties(guest_udp_name_concurrency PROPERTIES TIMEOUT 10)
+        add_test_executable(guest_udp_disconnect_result_tests ${LIBS_INCLUDE_DIR}/tests/GuestUdpDisconnectResult.cpp)
+        target_include_directories(guest_udp_disconnect_result_tests PRIVATE ${LIBS_INCLUDE_DIR})
+        target_link_libraries(guest_udp_disconnect_result_tests PRIVATE libkernel libc)
+        target_link_options(guest_udp_disconnect_result_tests PRIVATE
+            LINKER:--export-dynamic-symbol=connect LINKER:--export-dynamic-symbol=getpeername)
+        add_test(NAME guest_udp_disconnect_result COMMAND guest_udp_disconnect_result_tests)
+        set_tests_properties(guest_udp_disconnect_result PROPERTIES TIMEOUT 10)
     endif()
     if(WIN32)
         set_tests_properties(guest_udp PROPERTIES ENVIRONMENT_MODIFICATION

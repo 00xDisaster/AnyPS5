@@ -368,7 +368,7 @@ int Disconnect(Socket& socket) {
     sockaddr_storage unspecified{};
     unspecified.ss_family = local.ss_family;
     if (::connect(socket.value, reinterpret_cast<sockaddr*>(&unspecified), localSize) != 0) return Fail(NativeError());
-#elif defined(__APPLE__)
+#else
     sockaddr unspecified{};
     unspecified.sa_family = AF_UNSPEC;
     if (::connect(socket.value, &unspecified, sizeof(unspecified)) != 0) {
@@ -376,10 +376,6 @@ int Disconnect(Socket& socket) {
         peerSize = sizeof(peer);
         if (::getpeername(socket.value, reinterpret_cast<sockaddr*>(&peer), &peerSize) == 0 || errno != ENOTCONN) return Fail(error);
     }
-#else
-    sockaddr unspecified{};
-    unspecified.sa_family = AF_UNSPEC;
-    if (::connect(socket.value, &unspecified, sizeof(unspecified)) != 0) return Fail(NativeError());
 #endif
     sockaddr_storage current{};
     socklen_t currentSize = sizeof(current);
