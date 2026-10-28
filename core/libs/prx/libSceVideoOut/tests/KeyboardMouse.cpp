@@ -561,6 +561,15 @@ void testVolumeDownDefaultKey() {
     check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "F5 does not reach the title's pad state");
 }
 
+void testVolumeUpDefaultKey() {
+    Pad::KeyboardMouse keyboardMouse(defaults());
+    const auto now = Pad::KeyboardMouse::Clock::now();
+    check(keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, true), now).volumeUp, "F6 asks for VolumeUp with the built-in bindings");
+    keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F6, false), now);
+    const auto state = keyboardMouse.Compose(PadInputState{});
+    check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "F6 does not reach the title's pad state");
+}
+
 void testDefaultL2() {
     const auto l2 = static_cast<std::uint32_t>(Pad::PadButton::L2);
     const auto r2 = static_cast<std::uint32_t>(Pad::PadButton::R2);
@@ -653,6 +662,7 @@ int main() {
             {"volume down request", testVolumeDownRequest},
             {"toggle mute request", testToggleMuteRequest},
             {"VolumeDown default key", testVolumeDownDefaultKey},
+            {"VolumeUp default key", testVolumeUpDefaultKey},
             {"default L2", testDefaultL2},
             {"title reads the mouse", testTitleReadsMouse},
         };
