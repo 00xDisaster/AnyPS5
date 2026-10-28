@@ -59,6 +59,22 @@ class ProgressSnapshotTests(unittest.TestCase):
                 self.assertIn(message, stderr.getvalue())
                 self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_deeply_nested_snapshots_are_usage_errors(self):
+        for position in (0, 1):
+            with self.subTest(position=position), tempfile.TemporaryDirectory() as directory:
+                paths = [Path(directory) / "base snapshot.json", Path(directory) / "head snapshot.json"]
+                for path in paths:
+                    path.write_text(json.dumps(self.snapshot()), encoding="utf-8")
+                paths[position].write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
+                    with self.assertRaises(SystemExit) as raised:
+                        progress.main(["--compare", *map(str, paths)])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn(str(paths[position]), stderr.getvalue())
+                self.assertIn("recursion", stderr.getvalue())
+
     def test_non_object_snapshots_are_usage_errors(self):
         for snapshot in (None, [], "progress", 7, True):
             with self.subTest(snapshot=snapshot):
