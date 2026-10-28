@@ -557,7 +557,7 @@ int APS5_VABI sceNpUtilJsonGetOneChar(char* dst, std::size_t dstSize, const char
             } else {
                 used = JSON_SURROGATE_PAIR_LENGTH;
                 std::uint32_t low = 0;
-                if (srcLength < JSON_SURROGATE_PAIR_LENGTH || ParseUtf16Unit(src + 8, &low) < 0
+                if (srcLength < JSON_SURROGATE_PAIR_LENGTH || src[6] != '\\' || src[7] != 'u' || ParseUtf16Unit(src + 8, &low) < 0
                     || (low & SURROGATE_MASK) != LOW_SURROGATE) {
                     status = NP_UTIL_ERROR_BUFFER_TOO_SMALL;
                 } else {
