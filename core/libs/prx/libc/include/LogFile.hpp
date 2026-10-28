@@ -105,7 +105,4 @@ void CrashWrite(int standard, const char* text, std::size_t length);
 
 }
 
-extern "C" void LogFileFlush_nid_no_patch();
-extern "C" void LogFileRelease_nid_no_patch();
-
 #endif

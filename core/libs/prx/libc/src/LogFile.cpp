@@ -1,4 +1,5 @@
 #include "prx/libc/include/LogFile.hpp"
+#include "prx/libc/include/Shutdown.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>

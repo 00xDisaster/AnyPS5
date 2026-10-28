@@ -1,4 +1,5 @@
 #include "prx/libc/include/LogFile.hpp"
+#include "prx/libc/include/Shutdown.hpp"
 #include <atomic>
 #include <chrono>
 #include <cerrno>
@@ -20,8 +21,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-extern "C" void LogFileRelease_nid_no_patch();
-extern "C" void LogFileFlush_nid_no_patch();
 extern char** environ;
 
 namespace {
