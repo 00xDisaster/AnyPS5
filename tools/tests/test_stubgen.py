@@ -368,6 +368,9 @@ class CaseVariantOutputTests(unittest.TestCase):
     def test_case_variant_outputs_stay_distinct_on_case_sensitive_directories(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            missing = root / "MiXeD.CaSe"
+            if missing.resolve().name != missing.name:
+                self.skipTest("Path.resolve() normalizes the case of missing files")
             upper, lower = root / "REPORT.TXT", root / "report.txt"
             try:
                 link = root / "code-link.txt"

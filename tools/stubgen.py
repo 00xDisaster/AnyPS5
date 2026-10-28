@@ -195,8 +195,18 @@ def case_insensitive_directory(directory):
         os.unlink(name)
 
 
+def resolved_path(path):
+    path = Path(path)
+    for _ in range(40):
+        if not path.is_symlink():
+            break
+        target = Path(os.readlink(path))
+        path = target if target.is_absolute() else path.parent / target
+    return path.resolve()
+
+
 def same_file(left, right):
-    left, right = Path(left).resolve(), Path(right).resolve()
+    left, right = resolved_path(left), resolved_path(right)
     if left == right:
         return True
     if left.exists() and right.exists() and left.samefile(right):
