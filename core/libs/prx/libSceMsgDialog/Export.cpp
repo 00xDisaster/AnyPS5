@@ -47,14 +47,16 @@ void Inspect(const MsgDialog::ParsedParam& parsed) {
 
 bool Present(const MsgDialog::ParsedParam& parsed) {
     ModalDialogRequest request;
-    return MsgDialog::BuildRequest(parsed, request) && ModalDialogOpen_nid_postfix(request);
+    if (!MsgDialog::BuildRequest(parsed, request)) return false;
+    request.owner = ModalDialogOwnerMsgDialog;
+    return ModalDialogOpen_nid_postfix(request);
 }
 
 int Poll() {
     std::lock_guard g(g_lock);
     if (g_status == kStatusRunning && g_presented) {
         std::size_t chosen = 0;
-        const ModalDialogState state = ModalDialogPoll_nid_postfix(chosen);
+        const ModalDialogState state = ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerMsgDialog);
         if (state == ModalDialogState::Answered) g_buttonId = MsgDialog::ButtonIdOf(chosen);
         if (state != ModalDialogState::Showing) g_status = kStatusFinished;
     } else if (g_status == kStatusRunning) {
@@ -83,7 +85,7 @@ int APS5_VABI sceMsgDialogTerminate(void) {
  const bool was = g_status != kStatusNone;
  g_status = kStatusNone;
  g_presented = false;
- ModalDialogReset_nid_postfix();
+ ModalDialogReset_nid_postfix(ModalDialogOwnerMsgDialog);
  return was ? kErrOk : kErrNotInitialized;
 }
 int APS5_VABI sceMsgDialogOpen(const void* param) {
@@ -108,7 +110,7 @@ int APS5_VABI sceMsgDialogUpdateStatus(void) {
 int APS5_VABI sceMsgDialogClose(void) {
  std::lock_guard g(g_lock);
  if (g_status != kStatusRunning) return kErrNotRunning;
- if (g_presented) ModalDialogClose_nid_postfix();
+ if (g_presented) ModalDialogClose_nid_postfix(ModalDialogOwnerMsgDialog);
  g_status = kStatusFinished;
  return kErrOk;
 }
