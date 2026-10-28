@@ -38,6 +38,7 @@ using Clock = std::chrono::steady_clock;
 constexpr int WantRead = static_cast<int>(0x8095f013);
 constexpr int WantWrite = static_cast<int>(0x8095f014);
 constexpr int InvalidValue = static_cast<int>(0x817B11FE);
+constexpr std::size_t MaxGzipBytes = 64 * 1024 * 1024;
 
 [[noreturn]] void Unknown(const char* message) {
     NotImplemented_nid_no_patch(message);
@@ -360,7 +361,7 @@ struct Request::State {
             Require(result == Z_OK || result == Z_STREAM_END, "sceHttp2: gzip inflate failed");
             output.insert(output.end(), chunk, chunk + (sizeof(chunk) - inflater.avail_out));
             Require(result == Z_STREAM_END || inflater.avail_in != 0 || inflater.avail_out == 0, "sceHttp2: truncated gzip stream");
-            Require(output.size() <= 64 * 1024 * 1024, "sceHttp2: inflated response exceeds the host limit");
+            Require(output.size() <= MaxGzipBytes, "sceHttp2: inflated response exceeds the host limit");
         }
         Require(inflater.avail_in == 0, "sceHttp2: concatenated gzip members are not implemented");
         const auto readLe32 = [&](std::size_t position) {
@@ -497,11 +498,16 @@ struct Request::State {
         });
     }
 
-    static int Data(nghttp2_session*, std::uint8_t, std::int32_t streamId, const std::uint8_t* bytes, std::size_t size, void* data) {
+    static int Data(nghttp2_session* session, std::uint8_t, std::int32_t streamId, const std::uint8_t* bytes, std::size_t size, void* data) {
         auto& state = *static_cast<State*>(data);
         return Callback(state, [&] {
             if (streamId != state.stream) return;
-            Require(state.body.size() + size <= 65535, "sceHttp2: receive flow-control limit exceeded");
+            if (state.Inflating()) {
+                Require(state.body.size() + size <= MaxGzipBytes, "sceHttp2: encoded gzip response exceeds the host limit");
+                CheckNg(nghttp2_session_consume(session, streamId, size));
+            } else {
+                Require(state.body.size() + size <= 65535, "sceHttp2: receive flow-control limit exceeded");
+            }
             state.body.insert(state.body.end(), bytes, bytes + size);
         });
     }

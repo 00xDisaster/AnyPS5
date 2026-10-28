@@ -52,8 +52,40 @@ bool Throws(TCall call) {
     return false;
 }
 
-enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, Gzip, GzipSplit, GzipTruncated, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload, EarlyFinal, EarlyReset, EarlyEmpty, EarlyLarge, EarlyResetIncomplete };
+enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, Gzip, GzipSplit, GzipTruncated, GzipLarge, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload, EarlyFinal, EarlyReset, EarlyEmpty, EarlyLarge, EarlyResetIncomplete };
 const char* Protocols[] = {"h2", nullptr};
+
+std::string GzipPayload() {
+    std::string payload(70000, '\0');
+    for (std::size_t i = 0; i < payload.size(); ++i) payload[i] = static_cast<char>((i * 31 + 7) & 0xff);
+    return payload;
+}
+
+std::string StoredGzip(const std::string& payload) {
+    static const unsigned char header[] = {0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
+    std::string body(reinterpret_cast<const char*>(header), sizeof(header));
+    std::size_t offset = 0;
+    while (offset < payload.size()) {
+        const std::size_t count = std::min<std::size_t>(payload.size() - offset, 65535);
+        body.push_back(static_cast<char>(offset + count == payload.size() ? 1 : 0));
+        body.push_back(static_cast<char>(count & 0xff));
+        body.push_back(static_cast<char>((count >> 8) & 0xff));
+        body.push_back(static_cast<char>(~count & 0xff));
+        body.push_back(static_cast<char>((~count >> 8) & 0xff));
+        body.append(payload, offset, count);
+        offset += count;
+    }
+    std::uint32_t crc = 0xffffffffu;
+    for (const unsigned char byte : payload) {
+        crc ^= byte;
+        for (int bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+    }
+    crc = ~crc;
+    const std::uint32_t size = static_cast<std::uint32_t>(payload.size());
+    for (int shift = 0; shift < 32; shift += 8) body.push_back(static_cast<char>((crc >> shift) & 0xff));
+    for (int shift = 0; shift < 32; shift += 8) body.push_back(static_cast<char>((size >> shift) & 0xff));
+    return body;
+}
 
 class Server {
 public:
@@ -210,6 +242,10 @@ private:
             if (mode == Mode::GzipTruncated) body.resize(body.size() - 4);
             length = std::to_string(body.size());
         }
+        if (mode == Mode::GzipLarge) {
+            body = StoredGzip(GzipPayload());
+            length = std::to_string(body.size());
+        }
         if (mode == Mode::Informational) {
             nghttp2_nv early{reinterpret_cast<std::uint8_t*>(const_cast<char*>(":status")), reinterpret_cast<std::uint8_t*>(const_cast<char*>("103")), 7, 3, 0};
             Require(nghttp2_submit_headers(session, 0, stream, nullptr, &early, 1, nullptr) == 0, "server informational response");
@@ -217,7 +253,7 @@ private:
         std::vector<std::pair<std::string, std::string>> fields{{":status", status}, {"x-loopback", "yes"}};
         if (mode != Mode::NoLength) fields.emplace_back("content-length", length);
         if (mode == Mode::Redirect) fields.emplace_back("location", "/another");
-        if (mode == Mode::Gzip || mode == Mode::GzipSplit || mode == Mode::GzipTruncated) fields.emplace_back("content-encoding", "gzip");
+        if (mode == Mode::Gzip || mode == Mode::GzipSplit || mode == Mode::GzipTruncated || mode == Mode::GzipLarge) fields.emplace_back("content-encoding", "gzip");
         std::vector<nghttp2_nv> response;
         for (auto& [name, value] : fields) response.push_back({reinterpret_cast<std::uint8_t*>(name.data()), reinterpret_cast<std::uint8_t*>(value.data()), name.size(), value.size(), 0});
         nghttp2_data_provider2 provider{};
@@ -408,12 +444,17 @@ void GzipSplit(int ssl) {
     Require(sceHttp2SetInflateGZIPEnabled(client.tmpl, 1) == 0, "gzip split option");
     client.Create(server.Url());
     Require(sceHttp2SendRequest(client.request, nullptr, 0) == 0, "gzip split send");
+    std::string body;
+    std::array<char, 3> buffer;
+    while (body.size() < 12) {
+        const int count = sceHttp2ReadData(client.request, buffer.data(), buffer.size());
+        Require(count > 0 && count <= static_cast<int>(buffer.size()), "gzip split read count");
+        body.append(buffer.data(), static_cast<std::size_t>(count));
+    }
     int kind = -1;
     std::uint64_t length = 0;
     Require(sceHttp2GetResponseContentLength(client.request, &kind, &length) == 0, "gzip split length");
     Require(kind == 0 && length == 13, "gzip split inflated length");
-    std::string body;
-    std::array<char, 3> buffer;
     for (;;) {
         const int count = sceHttp2ReadData(client.request, buffer.data(), buffer.size());
         Require(count >= 0 && count <= static_cast<int>(buffer.size()), "gzip split read count");
@@ -421,6 +462,29 @@ void GzipSplit(int ssl) {
         body.append(buffer.data(), static_cast<std::size_t>(count));
     }
     Require(body == "response body", "gzip split inflated body");
+    server.Join();
+}
+
+void GzipLarge(int ssl) {
+    std::fprintf(stderr, "HTTP2 gzip large scenario\n");
+    Server server(Mode::GzipLarge);
+    Client client(ssl);
+    Require(sceHttp2SetInflateGZIPEnabled(client.tmpl, 1) == 0, "gzip large option");
+    client.Create(server.Url());
+    Require(sceHttp2SendRequest(client.request, nullptr, 0) == 0, "gzip large send");
+    int kind = -1;
+    std::uint64_t length = 0;
+    Require(sceHttp2GetResponseContentLength(client.request, &kind, &length) == 0, "gzip large length");
+    Require(kind == 0 && length == 70000, "gzip large inflated length");
+    std::string body;
+    std::array<char, 317> buffer;
+    for (;;) {
+        const int count = sceHttp2ReadData(client.request, buffer.data(), buffer.size());
+        Require(count >= 0 && count <= static_cast<int>(buffer.size()), "gzip large read count");
+        if (!count) break;
+        body.append(buffer.data(), static_cast<std::size_t>(count));
+    }
+    Require(body == GzipPayload(), "gzip large inflated body");
     server.Join();
 }
 
@@ -671,6 +735,7 @@ int main(int argc, char** argv) {
         for (const auto mode : {Mode::Normal, Mode::Large, Mode::NoLength, Mode::Head, Mode::NotFound, Mode::Redirect, Mode::Auth, Mode::Informational}) Success(ssl, mode);
         Gzip(ssl);
         GzipSplit(ssl);
+        GzipLarge(ssl);
         GzipFailure(ssl);
         for (const auto mode : {Mode::NoAlpn, Mode::Reset, Mode::Truncate, Mode::Redirect, Mode::Auth}) Failure(ssl, mode);
         Failure(ssl, Mode::Normal, true);
