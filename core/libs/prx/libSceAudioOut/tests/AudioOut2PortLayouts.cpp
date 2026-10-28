@@ -1,4 +1,5 @@
 #include "prx/libSceAudioOut/include/AudioOut2.hpp"
+#include "prx/libSceAudioOut/src/AudioOut2PadMix.hpp"
 #include "SceTypes.hpp"
 
 #include <cmath>
@@ -22,6 +23,14 @@ static void SetEnvironment(const char* name, const std::string& value) {
     _putenv_s(name, value.c_str());
 #else
     setenv(name, value.c_str(), 1);
+#endif
+}
+
+static void UnsetEnvironment(const char* name) {
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
 #endif
 }
 
@@ -277,6 +286,22 @@ void TestPadPortsWithoutPadDevice() {
     Require(Play({{portTypePadVibration, Format(stereo.channels, formatFloat), vibration.data(), unity}}).empty());
 }
 
+void TestPadSpeakerFallbackOverride() {
+    const auto speaker = FloatGrain(mono.channels);
+    SetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV, "-15");
+    const auto played = Play({{portTypePadSpeaker, Format(mono.channels, formatFloat), speaker.data(), {1.0f}}});
+    UnsetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV);
+    RequireFold(played, mono, speaker, {1.0f}, 0.17782794f);
+}
+
+void TestPadSpeakerFallbackMute() {
+    const auto speaker = FloatGrain(mono.channels);
+    SetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV, "mute");
+    const auto played = Play({{portTypePadSpeaker, Format(mono.channels, formatFloat), speaker.data(), {1.0f}}});
+    UnsetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV);
+    Require(played.empty());
+}
+
 void TestMeasuredMainPortFormats() {
     struct Case {
         std::uint32_t format;
@@ -345,6 +370,8 @@ int main() {
     TestHeightChannels();
     TestDroppedLfe();
     TestPadPortsWithoutPadDevice();
+    TestPadSpeakerFallbackOverride();
+    TestPadSpeakerFallbackMute();
     TestMeasuredMainPortFormats();
     return 0;
 }
