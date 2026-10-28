@@ -6,6 +6,7 @@ export const groups = [
     {name: 'Right analog stick', actions: ['RightStickLeft', 'RightStickRight', 'RightStickUp', 'RightStickDown']},
     {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'ShowPadStatus']}
     {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp']}
+    {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown']}
 ];
 
 export const actions = groups.flatMap(group => group.actions);
@@ -23,12 +24,14 @@ export const defaults = {
     TouchLeft: ['KEY:Backspace'], TouchRight: ['KEY:Tab'], StickModifier: [], Shake: ['KEY:X'],
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], ShowPadStatus: ['KEY:F9']
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: []
+    ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: [], VolumeDown: []
 };
 
 export function typesForAction(action) {
     if (!actions.includes(action)) return [];
     if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'ShowPadStatus'].includes(action)) return ['KEY'];
     if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp'].includes(action)) return ['KEY'];
+    if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown'].includes(action)) return ['KEY'];
     return padButtons.has(action) ? ['KEY', 'MOUSE', 'WHEEL'] : ['KEY', 'MOUSE'];
 }
 

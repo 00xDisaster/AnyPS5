@@ -68,6 +68,7 @@ test('mouse values and action restrictions match the current INI format', () => 
         for (const value of mouseValues) {
             assert.equal(validate([binding(action, 'MOUSE', value)]).errors.length === 0, !['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'ShowPadStatus'].includes(action));
             assert.equal(validate([binding(action, 'MOUSE', value)]).errors.length === 0, !['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp'].includes(action));
+            assert.equal(validate([binding(action, 'MOUSE', value)]).errors.length === 0, !['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown'].includes(action));
         }
     }
     assert.ok(validate([binding('Cross', 'MOUSE', 'Button1')]).errors.length);
