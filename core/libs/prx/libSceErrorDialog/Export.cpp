@@ -73,7 +73,9 @@ int APS5_VABI sceErrorDialogOpen(const void* param) {
  std::int32_t userId = 0;
  std::memcpy(&errorCode, static_cast<const std::uint8_t*>(param) + 4, sizeof(errorCode));
  std::memcpy(&userId, static_cast<const std::uint8_t*>(param) + 8, sizeof(userId));
- APS5_HIT("ERRORDIALOG", "open: error_code=0x%08X user_id=%d", errorCode, userId);
+ ModalDialogRequest request = ErrorDialog::BuildRequest(errorCode);
+ g_presented = ModalDialogOpen_nid_postfix(request);
+ APS5_HIT("ERRORDIALOG", "open: error_code=0x%08X user_id=%d -> %s", errorCode, userId, g_presented ? "shown" : "auto answer");
  g_status = kStatusRunning;
  return kErrOk;
 }
