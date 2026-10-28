@@ -365,6 +365,14 @@ class CaseVariantOutputTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
             self.assertEqual(debt.read_text(encoding="utf-8"), original)
 
+    def test_windows_link_targets_drop_the_extended_length_prefix(self):
+        with patch.object(stubgen.os, "name", "nt"):
+            self.assertEqual(stubgen.link_target("\\\\?\\C:\\out\\REPORT.TXT"), "C:\\out\\REPORT.TXT")
+            self.assertEqual(stubgen.link_target("\\\\?\\UNC\\host\\share\\a.txt"), "\\\\host\\share\\a.txt")
+            self.assertEqual(stubgen.link_target("..\\REPORT.TXT"), "..\\REPORT.TXT")
+        with patch.object(stubgen.os, "name", "posix"):
+            self.assertEqual(stubgen.link_target("\\\\?\\C:\\x"), "\\\\?\\C:\\x")
+
     def test_case_variant_outputs_stay_distinct_on_case_sensitive_directories(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

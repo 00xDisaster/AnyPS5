@@ -200,14 +200,24 @@ def resolved_path(path):
     for _ in range(40):
         if not path.is_symlink():
             break
-        target = Path(os.readlink(path))
+        target = Path(link_target(os.readlink(path)))
         path = target if target.is_absolute() else path.parent / target
     return path.resolve()
 
 
+def link_target(text):
+    if os.name != "nt":
+        return text
+    if text.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + text[8:]
+    if text.startswith("\\\\?\\"):
+        return text[4:]
+    return text
+
+
 def same_file(left, right):
     left, right = resolved_path(left), resolved_path(right)
-    if left == right:
+    if str(left) == str(right):
         return True
     if left.exists() and right.exists() and left.samefile(right):
         return True
