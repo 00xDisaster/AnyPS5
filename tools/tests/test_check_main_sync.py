@@ -312,5 +312,22 @@ class CheckMainSyncTests(unittest.TestCase):
         self.assertNotIn("Traceback", stderr.getvalue())
 
 
+    def test_merged_pull_history_treats_shared_names_as_literal_paths(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("check_main_sync", TOOL)
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        self.repo.write("item[1].txt", "initial")
+        self.repo.write("item1.txt", "initial")
+        self.repo.commit("literal baseline")
+        self.repo.git("tag", "literal-base")
+        self.repo.write("item[1].txt", "literal change")
+        self.repo.commit("literal change (#70001)")
+        self.repo.write("item1.txt", "lookalike change")
+        self.repo.commit("lookalike change (#70002)")
+        found = tool.merged_pull_requests(self.repo.path, "literal-base", "HEAD", ["item[1].txt"])
+        self.assertEqual(set(found), {70001})
+
+
 if __name__ == "__main__":
     unittest.main()

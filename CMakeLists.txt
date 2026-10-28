@@ -256,7 +256,85 @@ if(BUILD_TESTING)
         add_test(NAME select_tests COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_select_tests.py)
         add_test(NAME check_main_sync COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py)
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_branch_level_with_main_is_clean_and_not_behind)
+        set_tests_properties(check_main_sync PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_2 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_paths_named_like_revisions_do_not_confuse_the_report)
+        set_tests_properties(check_main_sync_2 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_3 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_main_with_explicit_argv)
+        set_tests_properties(check_main_sync_3 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_4 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_behind_main_is_reported_and_only_fails_when_strict)
+        set_tests_properties(check_main_sync_4 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_5 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_conflict_names_the_file_and_the_merged_pull_request)
+        set_tests_properties(check_main_sync_5 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_6 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_files_changed_on_both_sides_are_listed_when_the_merge_is_clean)
+        set_tests_properties(check_main_sync_6 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_7 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_clean_squash_merge_names_the_pull_request)
+        set_tests_properties(check_main_sync_7 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_8 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_conflicting_squash_merge_names_the_pull_request)
+        set_tests_properties(check_main_sync_8 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_9 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_squash_numbers_must_end_the_subject_and_touch_shared_paths)
+        set_tests_properties(check_main_sync_9 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_10 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_a_subdirectory_reports_the_same_conflicts_and_pull_requests)
+        set_tests_properties(check_main_sync_10 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_11 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_paths_with_spaces_and_unicode_are_reported_verbatim)
+        set_tests_properties(check_main_sync_11 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_12 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_unrelated_histories_are_an_error)
+        set_tests_properties(check_main_sync_12 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_13 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_clean_unicode_report_preserves_exit_status_and_output_encoding)
+        set_tests_properties(check_main_sync_13 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_14 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_conflicting_unicode_report_preserves_exit_status_and_output_encoding)
+        set_tests_properties(check_main_sync_14 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_15 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_git_without_write_tree_names_the_version_it_needs)
+        set_tests_properties(check_main_sync_15 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_16 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_missing_base_is_an_error_not_a_pass)
+        set_tests_properties(check_main_sync_16 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_17 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_explicit_base_is_fetched_before_it_is_resolved)
+        set_tests_properties(check_main_sync_17 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_18 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_default_base_is_fetched_before_it_is_resolved)
+        set_tests_properties(check_main_sync_18 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_19 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_missing_git_executable_reports_usage_error_without_traceback)
+        set_tests_properties(check_main_sync_19 PROPERTIES TIMEOUT 30)
+        add_test(NAME check_main_sync_20 COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_check_main_sync.py
+            CheckMainSyncTests.test_merged_pull_history_treats_shared_names_as_literal_paths)
+        set_tests_properties(check_main_sync_20 PROPERTIES TIMEOUT 30)
         set(select_tests_source "${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_select_tests.py")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${select_tests_source}")
         file(STRINGS "${select_tests_source}" select_tests_classes REGEX "^class [A-Za-z0-9_]*Tests\\(")
