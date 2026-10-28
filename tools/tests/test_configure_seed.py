@@ -436,7 +436,8 @@ class ChecksParsingTests(unittest.TestCase):
             cache.write_text('//Test MINI_COLON\n"MINI_COLON:CHECK":INTERNAL=1\n'
                              '//Test MINI_COLON_QUOTE\n"MINI_"X":COLON":INTERNAL=0\n'
                              '//An ordinary entry\n"ORDINARY:COLON":INTERNAL=1\n'
-                             '"MALFORMED:COLON":INTERNAL=1\n', encoding="utf-8")
+                             '"MALFORMED:COLON":INTERNAL=1\n'
+                             '//Test AMBIGUOUS\n"A:B":INTERNAL=abc":INTERNAL=1\n', encoding="utf-8")
             self.assertEqual(configure_seed.checks(cache), {
                 "MINI_COLON:CHECK": ("1", "Test MINI_COLON"),
                 'MINI_"X":COLON': ("0", "Test MINI_COLON_QUOTE"),
