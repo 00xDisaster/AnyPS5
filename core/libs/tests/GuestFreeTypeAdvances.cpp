@@ -1,5 +1,5 @@
 #include "FreeTypeFontFixture.hpp"
-#include "prx/libSceFreeType/include/GuestFreeType.hpp"
+#include "prx/libSceFreeType/libSceFreeType.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -17,16 +17,6 @@
 
 using namespace FreeType;
 
-extern "C" {
-int APS5_VABI FT_Init_FreeType_nid_postfix(void**);
-int APS5_VABI FT_Done_FreeType_nid_postfix(void*);
-int APS5_VABI FT_New_Memory_Face_nid_postfix(void*, const unsigned char*, std::int64_t, std::int64_t, GuestFaceRec**);
-int APS5_VABI FT_Set_Pixel_Sizes_nid_postfix(GuestFaceRec*, std::uint32_t, std::uint32_t);
-int APS5_VABI FT_Load_Glyph_nid_postfix(GuestFaceRec*, std::uint32_t, std::int32_t);
-int APS5_VABI FT_Get_Advance_nid_postfix(GuestFaceRec*, std::uint32_t, std::int32_t, std::int64_t*);
-int APS5_VABI FT_Get_Advances_nid_postfix(GuestFaceRec*, std::uint32_t, std::uint32_t, std::int32_t, std::int64_t*);
-}
-
 static void Check(bool value, int line) {
     if (!value) {
         std::fprintf(stderr, "FreeType advance check failed at line %d\n", line);
@@ -41,7 +31,7 @@ struct Fixture {
     std::vector<unsigned char> bytes;
     FT_Library library = nullptr;
     FT_Face native = nullptr;
-    void* guestLibrary = nullptr;
+    GuestLibrary* guestLibrary = nullptr;
     GuestFaceRec* guest = nullptr;
 
     explicit Fixture(std::vector<unsigned char> font) : bytes(std::move(font)) {

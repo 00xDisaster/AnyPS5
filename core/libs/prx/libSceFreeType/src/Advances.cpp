@@ -1,3 +1,4 @@
+#include "prx/libSceFreeType/libSceFreeType.hpp"
 #include "prx/libSceFreeType/include/GuestObjects.hpp"
 #include "prx/libc/include/General.hpp"
 
