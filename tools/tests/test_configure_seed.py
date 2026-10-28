@@ -375,7 +375,7 @@ class ChecksParsingTests(unittest.TestCase):
                 "SINGLE": ("", "Test SINGLE"),
             })
 
-    @unittest.skipUnless(shutil.which("cmake"), "CMake is required for cache round trips")
+    @unittest.skipUnless(shutil.which("cmake") and shutil.which("ninja"), "CMake and Ninja are required for cache round trips")
     def test_multiline_help_from_real_cmake_survives_seed_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
