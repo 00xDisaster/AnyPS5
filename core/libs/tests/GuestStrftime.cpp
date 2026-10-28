@@ -271,6 +271,13 @@ int main() {
     past.tm_wday = 7;
     past.tm_mon = 12;
     CheckAsctime("names past the tables", past, "   2 13:05:09 2026\n");
+    GuestTm wrappedNames = base;
+    wrappedNames.tm_wday = 1073741824;
+    wrappedNames.tm_mon = -1073741825;
+    CheckAsctime("wrapped names", wrappedNames, "Sun   2 13:05:09 2026\n");
+    wrappedNames.tm_wday = -1073741825;
+    wrappedNames.tm_mon = -2147483647 - 1;
+    CheckAsctime("wrapped names from INT_MIN", wrappedNames, " Jan  2 13:05:09 2026\n");
     GuestTm big = base;
     big.tm_mday = 40;
     big.tm_hour = 25;
