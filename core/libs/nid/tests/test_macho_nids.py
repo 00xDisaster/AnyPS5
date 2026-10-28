@@ -277,6 +277,9 @@ def check_short_imports(patcher, directory):
     data = path.read_bytes()
     assert exports_of(data) == {"_" + nid("puts"): (0, 0x100)}, exports_of(data)
     assert chained_imports(data) == [("_" + nid("sceXy"), 1), ("_malloc", 2), ("_" + nid("sceKernelFoo"), 1), ("_" + nid("sceNetRecv"), 1)], chained_imports(data)
+    result, path = patch(patcher, directory, "one-byte.dylib", build_dylib([("_puts_nid_postfix", 0, 0x100)], [("_sceNetRecv", 1), ("_sceKernelFoo", 1)]))
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert chained_imports(path.read_bytes()) == [("_" + nid("sceNetRecv"), 1), ("_" + nid("sceKernelFoo"), 1)], chained_imports(path.read_bytes())
 
 
 def main():
