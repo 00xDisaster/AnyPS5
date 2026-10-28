@@ -130,6 +130,36 @@ void s16ReturnToUnityBypassesAgain() {
     require(steady == before, "samples after the return are bit-identical");
 }
 
+void s16RoundsHalfUp() {
+    HostGainRamp ramp(1);
+    auto samples = constantS16(4, 1, 1);
+    samples[1] = 3;
+    samples[2] = -1;
+    samples[3] = -3;
+    ramp.Apply(samples.data(), 4, 1, 32768);
+    require(samples[0] == 1 && samples[1] == 2, "a half rounds up for positive samples");
+    require(samples[2] == 0 && samples[3] == -1, "a half rounds toward positive for negative samples");
+}
+
+void s16RampUpLandsExactly() {
+    HostGainRamp ramp;
+    auto silence = constantS16(1000, 1, 0);
+    ramp.Apply(silence.data(), 1000, 1, 0);
+    require(ramp.Current() == 0, "the ramp reached silence");
+    auto samples = constantS16(2000, 1, 10000);
+    ramp.Apply(samples.data(), 2000, 1, HostGainRamp::Unity);
+    require(ramp.Current() == HostGainRamp::Unity, "a ramp up lands exactly on unity");
+    int previous = 0;
+    int largest = 0;
+    for (const auto sample : samples) {
+        require(sample >= previous, "a ramp up never falls");
+        largest = std::max(largest, sample - previous);
+        previous = sample;
+    }
+    require(largest <= 22, "no step of a ramp up exceeds its per-frame slope");
+    require(samples.back() == 10000, "samples return to the title's own values");
+}
+
 std::vector<float> constantF32(std::size_t frames, unsigned channels, float value) {
     return std::vector<float>(frames * channels, value);
 }
@@ -236,6 +266,8 @@ int main() try {
     s16ChannelsShareTheFrameGain();
     s16SilentTargetSilencesAfterRamp();
     s16ReturnToUnityBypassesAgain();
+    s16RoundsHalfUp();
+    s16RampUpLandsExactly();
     f32BypassAtUnity();
     f32FirstSampleAndLanding();
     f32RampHasNoDiscontinuity();
