@@ -91,8 +91,8 @@ def reads(roots, prefixes=PREFIXES):
         for path in source_files(root):
             try:
                 text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
+            except (OSError, UnicodeDecodeError) as error:
+                raise ValueError(f"cannot read {path.as_posix()}: {error}") from error
             lines = text.splitlines()
             for number, line in enumerate(lines, 1):
                 window = "\n".join(lines[number - 1:number + 2])
@@ -163,6 +163,9 @@ def check(found, doc, prefixes, out):
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser(
         description="list the environment names the code reads, or check them against a reference document")
     parser.add_argument("--check", action="store_true",
@@ -181,7 +184,11 @@ def main(argv=None):
         if not Path(root).is_dir():
             print(f"error: scan root {root} is not a directory", file=sys.stderr)
             return 1
-    found = reads(roots, prefixes)
+    try:
+        found = reads(roots, prefixes)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     if args.check:
         return check(found, args.doc, prefixes, sys.stdout)
     if args.table:
