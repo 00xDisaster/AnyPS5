@@ -144,14 +144,7 @@ std::optional<TFloat> UnscaledHexadecimal(const char* text, char** end) {
     if (end != nullptr) *end = const_cast<char*>(cursor);
     if (digits.empty()) return std::copysign(static_cast<TFloat>(0), negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));
     exponent += adjustment;
-    for (std::size_t position = digits.size(); position != 0 && carry;) {
-        --position;
-        const int digit = HexadecimalDigit(digits[position]) + carry;
-        digits[position] = "0123456789abcdef"[digit & 15];
-        carry = digit >> 4;
-    }
-    if (carry) digits.insert(digits.begin(), '1');
-    while (digits.back() == '0') { digits.pop_back(); exponent += 4; }
+    if (carry == 0) while (digits.back() == '0') { digits.pop_back(); exponent += 4; }
     std::uint64_t high = 0;
     std::uint64_t low = 0;
     for (const char digit : digits) {
@@ -159,15 +152,40 @@ std::optional<TFloat> UnscaledHexadecimal(const char* text, char** end) {
         low = (low << 4u) | static_cast<unsigned>(HexadecimalDigit(digit));
     }
     TFloat value;
-    if constexpr (std::numeric_limits<TFloat>::digits <= 53) value = static_cast<TFloat>(low);
+    if constexpr (std::numeric_limits<TFloat>::digits <= 53) value = static_cast<TFloat>(low + carry);
     else {
         const auto top = static_cast<unsigned>((high << 8u) | (low >> 56u));
         const auto middle = static_cast<unsigned>((low >> 28u) & 0xfffffffu);
-        const auto bottom = static_cast<unsigned>(low & 0xfffffffu);
+        const auto bottom = static_cast<unsigned>(low & 0xfffffffu) + carry;
         constexpr TFloat Radix = static_cast<TFloat>(0x1p28L);
-        if (top != 0) value = (static_cast<TFloat>(top) * Radix + static_cast<TFloat>(middle)) * Radix + static_cast<TFloat>(bottom);
-        else if (middle != 0) value = static_cast<TFloat>(middle) * Radix + static_cast<TFloat>(bottom);
-        else value = static_cast<TFloat>(bottom);
+        constexpr unsigned LimbBits = std::numeric_limits<TFloat>::digits / 2;
+        TFloat limbs[3]{};
+        const auto add = [&](TFloat word) {
+            for (auto& part : limbs) {
+                if (word == 0) return;
+                if (part == 0) { part = word; return; }
+                std::uint16_t partExponent, wordExponent;
+                std::memcpy(&partExponent, reinterpret_cast<const unsigned char*>(&part) + 8, sizeof(partExponent));
+                std::memcpy(&wordExponent, reinterpret_cast<const unsigned char*>(&word) + 8, sizeof(wordExponent));
+                if (static_cast<int>(partExponent) - static_cast<int>(wordExponent) >= static_cast<int>(LimbBits)) continue;
+                const TFloat sum = part + word;
+                std::uint64_t mantissa;
+                std::memcpy(&mantissa, &sum, sizeof(mantissa));
+                mantissa &= ~((std::uint64_t{1} << LimbBits) - 1);
+                TFloat upper = sum;
+                std::memcpy(&upper, &mantissa, sizeof(mantissa));
+                part = upper;
+                word = sum - upper;
+            }
+            if (word != 0) throw std::runtime_error("coefficient expansion exceeded capacity");
+        };
+        add(static_cast<TFloat>(top));
+        for (auto& part : limbs) part *= Radix;
+        add(static_cast<TFloat>(middle));
+        for (auto& part : limbs) part *= Radix;
+        add(static_cast<TFloat>(bottom));
+        value = 0;
+        for (int index = 2; index >= 0; --index) if (limbs[index] != 0) { if (value == 0) value = limbs[index]; else value += limbs[index]; }
     }
     if (exponent != 0) value = ScaleHexadecimal(value, exponent);
     return std::copysign(value, negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));

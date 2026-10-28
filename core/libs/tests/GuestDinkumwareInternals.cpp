@@ -125,6 +125,23 @@ void TestLongDoubleHexadecimalPrecision() {
         {0x91a2b3c4d5e6f800p+17L, 0x91a2b3c4d5e6f000p+17L, 0x91a2b3c4d5e6f800p+17L, 0x91a2b3c4d5e6f000p+17L},
         {0x91a2b3c4d5e6f789p+17L, 0x91a2b3c4d5e6f789p+17L, 0x91a2b3c4d5e6f78ap+17L, 0x91a2b3c4d5e6f789p+17L}
     };
+    const struct { const char* text; long double expected[3][4]; int flags[3]; } limbCases[]{
+        {"-0xea74e640d964730d42e210c725d6d1d20d18364f9a40.437efcca2p100tail", {
+            {-0xea74e60000000000p+212L, -0xea74e60000000000p+212L, -0xea74e80000000000p+212L, -0xea74e60000000000p+212L},
+            {-0xea74e640d9647000p+212L, -0xea74e640d9647000p+212L, -0xea74e640d9647800p+212L, -0xea74e640d9647000p+212L},
+            {-0xea74e640d964730dp+212L, -0xea74e640d964730dp+212L, -0xea74e640d964730ep+212L, -0xea74e640d964730dp+212L}
+        }, {FE_INEXACT, FE_INEXACT, FE_INEXACT}},
+        {"0x1fffffffffffffffffffffp0tail", {
+            {0x8000000000000000p+22L, 0xffffff0000000000p+21L, 0x8000020000000000p+22L, 0xffffff0000000000p+21L},
+            {0x8000000000000000p+22L, 0x8000000000000000p+22L, 0x8000000000000000p+22L, 0x8000000000000000p+22L},
+            {0x8000000000000000p+22L, 0x8000000000000000p+22L, 0x8000000000000000p+22L, 0x8000000000000000p+22L}
+        }, {FE_INEXACT, 0, 0}},
+        {"+0xe.926f9e67ffffffffffffff8p128tail", {
+            {0xe926fa0000000000p+68L, 0xe926f90000000000p+68L, 0xe926fc0000000000p+68L, 0xe926f90000000000p+68L},
+            {0xe926f9e680000000p+68L, 0xe926f9e67ffff800p+68L, 0xe926f9e680000800p+68L, 0xe926f9e67ffff800p+68L},
+            {0xe926f9e680000000p+68L, 0xe926f9e680000000p+68L, 0xe926f9e680000000p+68L, 0xe926f9e680000000p+68L}
+        }, {FE_INEXACT, FE_INEXACT, 0}},
+    };
     GuestFloatingPointEnvironment saved;
     Require(fegetenv_nid_postfix(&saved) == 0, "save hexadecimal precision environment");
     unsigned index = 0;
@@ -137,6 +154,7 @@ void TestLongDoubleHexadecimalPrecision() {
                     _mm_setcsr(0x1f80u | (sse << 13u) | flushing);
                     CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.000001p0tail", 0x1.000001p0L, 0);
                     CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x123456789abcdef123456p0tail", Expected[index][rounding], FE_INEXACT);
+                    for (const auto& item : limbCases) CheckUnscaledHexadecimal(_Stoldx_nid_postfix, item.text, item.expected[index][rounding], item.flags[index]);
                 }
             }
         }
