@@ -25,7 +25,7 @@ execute_process(
 file(WRITE "${runDirectory}/inspection.log" "${output}\n${error}")
 message("${error}")
 if(error MATCHES "APS5_PIPELINE_STATS requires VK_KHR_pipeline_executable_properties")
-    message(STATUS "compute pipeline inspection: skipped unsupported executable statistics")
+    message(STATUS "compute pipeline inspection: skipped, the device reports no executable statistics")
     return()
 endif()
 if(NOT result STREQUAL "0" OR NOT EXISTS "${report}")
