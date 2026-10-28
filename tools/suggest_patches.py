@@ -68,8 +68,8 @@ def conversion_options(args, patch):
     return command_line(options)
 
 
-def read_catalog(directory):
-    data = json.loads(confined(directory, "index.json").read_text(encoding="utf-8"))
+def read_catalog(directory, object_pairs_hook=None):
+    data = json.loads(confined(directory, "index.json").read_text(encoding="utf-8"), object_pairs_hook=object_pairs_hook)
     if not isinstance(data, dict) or set(data) != {"format", "entries"} or type(data["format"]) is not int or data["format"] != 1 or not isinstance(data["entries"], list):
         raise ValueError("catalog must have format 1 and an entries array")
     return data["entries"]

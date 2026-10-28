@@ -7,15 +7,25 @@ from pathlib import Path
 import suggest_patches
 
 
+def unique_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
+
+
 def validate(directory):
     try:
-        entries = suggest_patches.read_catalog(directory)
+        entries = suggest_patches.read_catalog(directory, object_pairs_hook=unique_json_keys)
     except RecursionError as error:
         raise ValueError("index.json is nested too deeply") from error
     seen_ids = {}
     errors = 0
     for number, entry in enumerate(entries, 1):
-        label = f"Catalog entry {number} ({entry.get('patch')!r})" if isinstance(entry, dict) else f"Catalog entry {number}"
+        patch_name = entry.get("patch") if isinstance(entry, dict) else None
+        label = f"Catalog entry {number} ({patch_name!r})" if isinstance(patch_name, str) else f"Catalog entry {number}"
         try:
             if not isinstance(entry, dict):
                 raise ValueError("entry must be an object")
@@ -36,6 +46,9 @@ def validate(directory):
                 seen_ids.setdefault(key, []).append((number, targets))
         except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
             print(f"{label}: invalid: {error}", file=sys.stderr)
+            errors += 1
+        except RecursionError:
+            print(f"{label}: invalid: entry or patch file is nested too deeply", file=sys.stderr)
             errors += 1
     if errors:
         print(f"Catalog validation: {errors} invalid of {len(entries)} entries.", file=sys.stderr)

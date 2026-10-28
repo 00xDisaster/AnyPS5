@@ -120,6 +120,20 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertIn("catalog must have format 1", errors.getvalue())
 
+    def test_duplicate_json_key_is_rejected(self):
+        index = self.catalog / "index.json"
+        digest = self.entry["targets"]["module.prx"]
+        content = ('{"format":1,"entries":[{"titleId":"TEST00001","contentVersion":"01.000.000",'
+                   '"patch":"missing.toml","patch":"patch.toml","targets":{"module.prx":"'
+                   f'{digest}' '"}}]}')
+        index.write_text(content)
+        result = subprocess.run([sys.executable, str(Path(validate_patch_catalog.__file__)),
+                                 "--catalog", str(self.catalog)], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Catalog validation: duplicate JSON key 'patch'", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(index.read_text(), content)
+
     def test_deeply_nested_index_is_reported_without_traceback(self):
         index = self.catalog / "index.json"
         content = '{"format": 1, "entries": ' + "[" * 200000 + "]" * 200000 + "}"
@@ -130,6 +144,17 @@ class CatalogValidatorTests(unittest.TestCase):
         self.assertIn("Catalog validation: index.json is nested too deeply", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(index.read_text(), content)
+
+    def test_deeply_nested_patch_file_is_reported_without_traceback(self):
+        self.run_validator()
+        content = 'format = 1\n[[patch]]\ntarget = "module.prx"\nva = 0x1000\nexpected = "00"\nvalue = "01"\nextra = ' + "[" * 3000 + "0" + "]" * 3000 + "\n"
+        self.patch.write_text(content)
+        result = subprocess.run([sys.executable, str(Path(validate_patch_catalog.__file__)),
+                                 "--catalog", str(self.catalog)], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Catalog entry 1 ('patch.toml'): invalid: entry or patch file is nested too deeply", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(self.patch.read_text(), content)
 
     def test_catalog_symlink_loop_is_reported_without_traceback(self):
         loop = self.root / "loop"
