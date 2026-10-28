@@ -7,6 +7,7 @@ export const groups = [
     {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'ShowPadStatus']}
     {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp']}
     {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown']}
+    {name: 'Touch and utility', actions: ['Options', 'TouchLeft', 'TouchRight', 'StickModifier', 'Shake', 'ToggleMouse', 'ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown', 'ToggleMute']}
 ];
 
 export const actions = groups.flatMap(group => group.actions);
@@ -25,6 +26,7 @@ export const defaults = {
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], ShowPadStatus: ['KEY:F9']
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: []
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: [], VolumeDown: []
+    ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: [], VolumeDown: [], ToggleMute: []
 };
 
 export function typesForAction(action) {
@@ -32,6 +34,7 @@ export function typesForAction(action) {
     if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'ShowPadStatus'].includes(action)) return ['KEY'];
     if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp'].includes(action)) return ['KEY'];
     if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown'].includes(action)) return ['KEY'];
+    if (['ToggleFullscreen', 'TogglePerformanceOverlay', 'Screenshot', 'VolumeUp', 'VolumeDown', 'ToggleMute'].includes(action)) return ['KEY'];
     return padButtons.has(action) ? ['KEY', 'MOUSE', 'WHEEL'] : ['KEY', 'MOUSE'];
 }
 
