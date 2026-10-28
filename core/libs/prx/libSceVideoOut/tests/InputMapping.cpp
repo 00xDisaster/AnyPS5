@@ -242,6 +242,15 @@ void volumeUpDefault() {
     require(moved.size() == 1 && moved[0] == SDL_SCANCODE_F2, "a VolumeUp line replaces the built-in key");
 }
 
+void toggleMuteDefault() {
+    useConfig("Cross = KEY:F\n");
+    const auto keys = keysFor(Pad::InputControl::ToggleMute);
+    require(keys.size() == 1 && keys[0] == SDL_SCANCODE_F8, "F8 is the only default ToggleMute key");
+    useConfig("ToggleMute = KEY:F2\n");
+    const auto moved = keysFor(Pad::InputControl::ToggleMute);
+    require(moved.size() == 1 && moved[0] == SDL_SCANCODE_F2, "a ToggleMute line replaces the built-in key");
+}
+
 void mouseLookDefault() {
     useConfig("Cross = KEY:F\n");
     const auto settings = Pad::LoadInputMapping().settings;
@@ -408,6 +417,7 @@ int main() try {
     padStatusBinding();
     padStatusConflicts();
     toggleMuteAction();
+    toggleMuteDefault();
     volumeDownAction();
     volumeDownDefault();
     volumeUpAction();
