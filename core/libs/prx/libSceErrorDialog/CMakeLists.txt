@@ -11,4 +11,9 @@ if(BUILD_TESTING)
         set_tests_properties(guest_error_dialog PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceErrorDialog>")
     endif()
+
+    add_test_executable(error_dialog_request_tests ${LIBS_INCLUDE_DIR}/tests/ErrorDialogRequest.cpp)
+    target_include_directories(error_dialog_request_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    configure_host_test_executable(error_dialog_request_tests)
+    add_test(NAME error_dialog_request COMMAND error_dialog_request_tests)
 endif()
