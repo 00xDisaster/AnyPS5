@@ -29,6 +29,7 @@ export const defaults = {
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: [], VolumeDown: [], ToggleMute: []
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: [], VolumeDown: ['KEY:F5'], ToggleMute: []
     ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: ['KEY:F6'], VolumeDown: ['KEY:F5'], ToggleMute: []
+    ToggleMouse: ['KEY:F7', 'MOUSE:Middle'], ToggleFullscreen: ['KEY:F11'], TogglePerformanceOverlay: ['KEY:F10'], Screenshot: ['KEY:F12'], VolumeUp: ['KEY:F6'], VolumeDown: ['KEY:F5'], ToggleMute: ['KEY:F8']
 };
 
 export function typesForAction(action) {
