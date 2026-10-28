@@ -136,9 +136,26 @@ void SeparateSharedLoadPages(std::vector<std::uint8_t>& buf, std::vector<Domain:
         return headers[left].MappedAddress < headers[right].MappedAddress;
     });
     for (std::size_t position = 1; position < loads.size(); ++position) {
-        const auto& previous = headers[loads[position - 1]];
-        if (headers[loads[position]].MappedAddress - previous.MappedAddress < previous.MemorySize)
-            throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", headers[loads[position]].MappedAddress);
+        auto& previous = headers[loads[position - 1]];
+        const auto& current = headers[loads[position]];
+        if (current.MappedAddress - previous.MappedAddress >= previous.MemorySize)
+            continue;
+        const auto previousEnd = previous.MappedAddress + previous.MemorySize;
+        if (current.MappedAddress == previous.MappedAddress || previousEnd > current.MappedAddress + current.MemorySize)
+            throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", current.MappedAddress);
+        for (auto address = current.MappedAddress; address < previousEnd; ++address) {
+            const auto fromPrevious = address - previous.MappedAddress < previous.FileSize
+                ? buf[static_cast<std::size_t>(previous.Offset + (address - previous.MappedAddress))]
+                : std::uint8_t{0};
+            const auto fromCurrent = address - current.MappedAddress < current.FileSize
+                ? buf[static_cast<std::size_t>(current.Offset + (address - current.MappedAddress))]
+                : std::uint8_t{0};
+            if (fromPrevious != fromCurrent)
+                throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", current.MappedAddress);
+        }
+        previous.MemorySize = current.MappedAddress - previous.MappedAddress;
+        if (previous.FileSize > previous.MemorySize)
+            previous.FileSize = previous.MemorySize;
     }
     for (std::size_t position = 0; position < loads.size(); ++position) {
         auto& load = headers[loads[position]];

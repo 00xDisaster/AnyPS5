@@ -132,6 +132,52 @@ def main():
                                         capture_output=True, text=True, timeout=20)
                 assert result.returncode == 2 and "Overlapping PT_LOAD memory ranges" in result.stderr, (name, options, result)
                 assert not output.exists(), (name, options)
+
+        congruent = fixture(b"\x90\xc3")
+        struct.pack_into("<Q", congruent, 176 + 32, 0x602)
+        struct.pack_into("<Q", congruent, 176 + 40, 0x602)
+        source = work / "congruent-overlap.elf"
+        source.write_bytes(congruent)
+        linux_output = work / "congruent-overlap.elf.out"
+        result = subprocess.run([str(relinker), "--skip-sce-module", "--skip-syscall-check",
+                                 str(source), str(linux_output)], capture_output=True, text=True, timeout=20)
+        assert result.returncode == 0 and linux_output.exists(), (result.stdout, result.stderr)
+        produced = linux_output.read_bytes()
+        phoff = struct.unpack_from("<Q", produced, 32)[0]
+        phnum = struct.unpack_from("<H", produced, 56)[0]
+        spans = []
+        for index in range(phnum):
+            kind, _, _, address, _, _, memory, _ = struct.unpack_from("<IIQQQQQQ", produced, phoff + index * 56)
+            if kind == 1 and memory:
+                spans.append((address, memory))
+        spans.sort()
+        assert all(a[0] + a[1] <= b[0] for a, b in zip(spans, spans[1:])), spans
+        for options in image_targets:
+            target_output = work / "congruent-overlap.out"
+            if target_output.exists():
+                target_output.unlink()
+            result = subprocess.run([str(relinker), "--skip-sce-module", "--skip-syscall-check",
+                                     *options, str(source), str(target_output)],
+                                    capture_output=True, text=True, timeout=20)
+            assert result.returncode == 0 and target_output.exists(), (options, result.stdout, result.stderr)
+
+        same_start = fixture(b"\x90\xc3")
+        struct.pack_into("<Q", same_start, 232 + 8, 0x200)
+        struct.pack_into("<Q", same_start, 232 + 16, 0x1200)
+        struct.pack_into("<Q", same_start, 232 + 24, 0x1200)
+        struct.pack_into("<Q", same_start, 232 + 32, 0x40)
+        struct.pack_into("<Q", same_start, 232 + 40, 0x40)
+        source = work / "same-start-overlap.elf"
+        source.write_bytes(same_start)
+        for options in image_targets:
+            output = work / "same-start-overlap.out"
+            if output.exists():
+                output.unlink()
+            result = subprocess.run([str(relinker), "--skip-sce-module", "--skip-syscall-check",
+                                     *options, str(source), str(output)],
+                                    capture_output=True, text=True, timeout=20)
+            assert result.returncode == 2 and "Overlapping PT_LOAD memory ranges" in result.stderr \
+                and not output.exists(), (options, result.stdout, result.stderr)
     print("Executable segment tests passed")
 
 
