@@ -1,6 +1,7 @@
 #ifndef CORE_LIBS_PRX_LIBSCENGS2_TESTS_NGS2TEST_HPP
 #define CORE_LIBS_PRX_LIBSCENGS2_TESTS_NGS2TEST_HPP
 
+#include "prx/libSceNgs2.native/include/Api.hpp"
 #include "prx/libSceNgs2.native/include/Ngs2Types.hpp"
 
 #include <cstdint>
@@ -10,7 +11,6 @@
 #include <vector>
 
 extern "C" {
-int APS5_VABI sceNgs2JobSchedulerResetOption(Ngs2JobSchedulerOption*);
 int APS5_VABI sceNgs2ParseWaveformData(const void*, size_t, Ngs2WaveformInfo*);
 int APS5_VABI sceNgs2ParseWaveformFile(const char*, uint32_t, Ngs2WaveformInfo*);
 int APS5_VABI sceNgs2CalcWaveformBlock(const Ngs2WaveformFormat*, uint32_t, uint32_t, Ngs2WaveformBlock*);

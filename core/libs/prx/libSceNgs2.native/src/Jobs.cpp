@@ -9,17 +9,7 @@
 
 #include "SceTypes.hpp"
 #include "Ngs2Internal.hpp"
-
-extern "C" {
-int APS5_VABI scePthreadAttrInit(PthreadAttr*);
-int APS5_VABI scePthreadAttrDestroy(PthreadAttr*);
-int APS5_VABI scePthreadAttrSetstacksize(PthreadAttr*, std::size_t);
-int APS5_VABI scePthreadAttrSetschedparam(PthreadAttr*, const KernelSchedParam*);
-int APS5_VABI scePthreadAttrSetinheritsched(PthreadAttr*, int);
-int APS5_VABI scePthreadAttrSetschedpolicy(PthreadAttr*, int);
-int APS5_VABI scePthreadCreate(Pthread*, const PthreadAttr*, PthreadEntry, void*, const char*);
-int APS5_VABI scePthreadJoin(Pthread, void**);
-}
+#include "prx/libkernel/include/Api.hpp"
 
 struct Ngs2HostJobPool {
     struct Job { Ngs2JobHandler handler; void* context; std::uint32_t index; std::uint64_t stage; };
