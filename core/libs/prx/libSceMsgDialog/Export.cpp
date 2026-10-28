@@ -1,5 +1,7 @@
 #include "prx/libSceMsgDialog/include/Api.hpp"
 #include "prx/libSceMsgDialog/include/MsgDialogParam.hpp"
+#include "prx/libSceMsgDialog/include/MsgDialogRequest.hpp"
+#include "prx/libSceIme/include/ModalDialog.hpp"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -34,6 +36,7 @@ int g_status = kStatusNone;
 int g_mode = kModeUserMsg;
 int g_buttonId = kButtonIdOk;
 int g_pollsLeft = 0;
+bool g_presented = false;
 std::chrono::steady_clock::time_point g_openedAt;
 
 void Inspect(const void* param) {
@@ -46,7 +49,12 @@ void Inspect(const void* param) {
 
 int Poll() {
     std::lock_guard g(g_lock);
-    if (g_status == kStatusRunning) {
+    if (g_status == kStatusRunning && g_presented) {
+        std::size_t chosen = 0;
+        const ModalDialogState state = ModalDialogPoll_nid_postfix(chosen);
+        if (state == ModalDialogState::Answered) g_buttonId = MsgDialog::ButtonIdOf(chosen);
+        if (state != ModalDialogState::Showing) g_status = kStatusFinished;
+    } else if (g_status == kStatusRunning) {
         bool done = false;
         if (g_mode == kModeProgressBar) {
             done = std::chrono::steady_clock::now() - g_openedAt > std::chrono::seconds(30);
