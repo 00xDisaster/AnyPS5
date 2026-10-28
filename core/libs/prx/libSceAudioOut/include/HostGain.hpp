@@ -38,6 +38,14 @@ public:
         }
     }
 
+    void Apply(float* samples, std::size_t frames, unsigned channels, std::uint32_t target) {
+        if (Bypass(target)) return;
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const float gain = static_cast<float>(advance(target)) / static_cast<float>(Unity);
+            for (unsigned channel = 0; channel < channels; ++channel) samples[frame * channels + channel] *= gain;
+        }
+    }
+
 private:
     std::uint32_t advance(std::uint32_t target) {
         if (current < target) current = target - current <= step ? target : current + step;
