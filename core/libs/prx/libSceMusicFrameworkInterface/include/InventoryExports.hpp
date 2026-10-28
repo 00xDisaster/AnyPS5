@@ -21,8 +21,8 @@ int APS5_VABI sceMusicFwSetMuted();
 int APS5_VABI sceMusicFwSetVolume2();
 int APS5_VABI sceMusicFwStop();
 int APS5_VABI libSceMusicFrameworkInterfaceUnknown_X9GN6gWabWM_nid_no_patch();
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_tTQ_plus_AFZiGS0_nid_no_patch();
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_uAMoi7RinCQ_nid_no_patch();
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_vmCGqN_minus_OFaY_nid_no_patch();
+int APS5_VABI sceMusicFwRegisterNotifyMessage();
+int APS5_VABI sceMusicFwUnregisterNotifyMessage();
+int APS5_VABI sceMusicFwAbortMessage();
 
 }

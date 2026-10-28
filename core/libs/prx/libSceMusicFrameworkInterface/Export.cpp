@@ -166,19 +166,16 @@ int APS5_VABI libSceMusicFrameworkInterfaceUnknown_X9GN6gWabWM_nid_no_patch() {
 }
 APS5_EXPORT("X9GN6gWabWM", libSceMusicFrameworkInterfaceUnknown_X9GN6gWabWM_nid_no_patch);
 
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_tTQ_plus_AFZiGS0_nid_no_patch() {
+int APS5_VABI sceMusicFwRegisterNotifyMessage() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("tTQ+AFZiGS0", libSceMusicFrameworkInterfaceUnknown_tTQ_plus_AFZiGS0_nid_no_patch);
 
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_uAMoi7RinCQ_nid_no_patch() {
+int APS5_VABI sceMusicFwUnregisterNotifyMessage() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("uAMoi7RinCQ", libSceMusicFrameworkInterfaceUnknown_uAMoi7RinCQ_nid_no_patch);
 
-int APS5_VABI libSceMusicFrameworkInterfaceUnknown_vmCGqN_minus_OFaY_nid_no_patch() {
+int APS5_VABI sceMusicFwAbortMessage() {
     NotImplemented_nid_no_patch(__func__);
 }
-APS5_EXPORT("vmCGqN-OFaY", libSceMusicFrameworkInterfaceUnknown_vmCGqN_minus_OFaY_nid_no_patch);
 
 }
