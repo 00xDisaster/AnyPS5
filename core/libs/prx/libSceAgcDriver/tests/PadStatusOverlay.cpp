@@ -1,9 +1,11 @@
 #include "prx/libSceAgcDriver/Execution/include/PadStatusOverlay.hpp"
+#include "prx/libSceAgcDriver/Execution/include/PerformanceOverlay.hpp"
 #include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -181,6 +183,78 @@ void providerTests() {
     std::printf("pad status: an injected provider drives the display without SDL\n");
 }
 
+void lineTests() {
+    using AgcDriver::FormatPadStatusLine;
+    require(FormatPadStatusLine(0, pad(PadKind::DualSense, PadPower::Wired)) == "P1 DUALSENSE  WIRED", "a wired DualSense line");
+    require(FormatPadStatusLine(1, pad(PadKind::Xbox, PadPower::Medium)) == "P2 XBOX  BATTERY MEDIUM", "a medium Xbox line");
+    require(FormatPadStatusLine(2, PadSlotStatus{}) == "P3 DISCONNECTED", "a disconnected slot line");
+    require(FormatPadStatusLine(3, pad(PadKind::Switch, PadPower::Low)) == "P4 SWITCH  BATTERY LOW", "a Switch line");
+    require(FormatPadStatusLine(0, pad(PadKind::DualShock3, PadPower::Empty)) == "P1 DUALSHOCK 3  BATTERY EMPTY", "a DualShock 3 line");
+    require(FormatPadStatusLine(0, pad(PadKind::Unknown, PadPower::Wired)) == "P1 PAD  WIRED", "an unknown controller without a name");
+    require(FormatPadStatusLine(1, pad(PadKind::Other, PadPower::Full, "")) == "P2 PAD  BATTERY FULL", "another controller without a name");
+    const std::pair<PadPower, const char*> powers[] = {
+        {PadPower::Unknown, "P1 DUALSHOCK 4  BATTERY UNKNOWN"},
+        {PadPower::Empty, "P1 DUALSHOCK 4  BATTERY EMPTY"},
+        {PadPower::Low, "P1 DUALSHOCK 4  BATTERY LOW"},
+        {PadPower::Medium, "P1 DUALSHOCK 4  BATTERY MEDIUM"},
+        {PadPower::Full, "P1 DUALSHOCK 4  BATTERY FULL"},
+        {PadPower::Wired, "P1 DUALSHOCK 4  WIRED"},
+    };
+    for (const auto& [power, expected] : powers) require(FormatPadStatusLine(0, pad(PadKind::DualShock4, power)) == expected, std::string("the line for ") + expected);
+    std::printf("pad status lines: every power level and kind formats as expected\n");
+}
+
+void nameTests() {
+    using AgcDriver::FormatPadStatusLine;
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Full, "8BitDo Ultimate 2C Wireless")) == "P1 8BITDO ULTI.  BATTERY FULL", "a long name is not cut to the kind column");
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Wired, "ABCDEFGHIJKL")) == "P1 ABCDEFGHIJKL  WIRED", "a name of exactly 12 characters is cut although it fits");
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Wired, "ABCDEFGHIJKLM")) == "P1 ABCDEFGHIJK.  WIRED", "a name of 13 characters is not cut with a dot");
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Wired, "  Pad (2) !  ")) == "P1 PAD  2  WIRED", "a name is not reduced to the glyphs the font has");
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Wired, "   ")) == "P1 PAD  WIRED", "a blank name is not shown as PAD");
+    require(FormatPadStatusLine(0, pad(PadKind::Other, PadPower::Wired, "\xc3\xa9\xc3\xa9")) == "P1 PAD  WIRED", "a name without a glyph is not shown as PAD");
+    require(FormatPadStatusLine(0, pad(PadKind::Xbox, PadPower::Wired, "A very long name that is not shown")) == "P1 XBOX  WIRED", "a known kind shows its own label, not the name");
+    const PadKind kinds[] = {PadKind::Unknown, PadKind::DualSense, PadKind::DualShock4, PadKind::DualShock3, PadKind::Xbox, PadKind::Switch, PadKind::Other};
+    const PadPower levels[] = {PadPower::Unknown, PadPower::Empty, PadPower::Low, PadPower::Medium, PadPower::Full, PadPower::Wired};
+    const std::string longName(80, 'w');
+    for (const auto kind : kinds) {
+        for (const auto power : levels) {
+            for (std::size_t slot = 0; slot < AgcDriver::PadStatusSlots; ++slot) {
+                const auto line = FormatPadStatusLine(slot, pad(kind, power, longName));
+                require(line.size() <= static_cast<std::size_t>(AgcDriver::PadStatusMetrics::Columns), "a line is wider than the panel: " + line);
+                require(AgcDriver::OverlayText(line) == line, "a line has a character the overlay font cannot draw: " + line);
+            }
+        }
+    }
+    bool refused = false;
+    try {
+        FormatPadStatusLine(AgcDriver::PadStatusSlots, PadSlotStatus{});
+    } catch (const std::exception&) {
+        refused = true;
+    }
+    require(refused, "a fifth slot is formatted");
+    std::printf("pad status lines: long names are cut, every line fits the panel\n");
+}
+
+void listTests() {
+    PadStatusDisplay display(PadStatusMode::Off);
+    require(display.Lines() == std::vector<std::string>{"NO CONTROLLER"}, "a display that saw nothing does not say so");
+    display.Observe(at(0), snapshot({}));
+    require(display.Lines() == std::vector<std::string>{"NO CONTROLLER"}, "a display that saw no controller does not say so");
+    display.Observe(at(1), snapshot({pad(PadKind::DualSense, PadPower::Wired), pad(PadKind::Xbox, PadPower::Medium)}));
+    require((display.Lines() == std::vector<std::string>{"P1 DUALSENSE  WIRED", "P2 XBOX  BATTERY MEDIUM"}), "two connected controllers are not listed");
+    display.Observe(at(2), snapshot({PadSlotStatus{}, pad(PadKind::Xbox, PadPower::Low)}));
+    require((display.Lines() == std::vector<std::string>{"P1 DISCONNECTED", "P2 XBOX  BATTERY LOW"}), "a slot that lost its controller is not listed as disconnected");
+    PadSlotStatus stale;
+    stale.kind = PadKind::DualSense;
+    stale.power = PadPower::Full;
+    display.Observe(at(3), snapshot({stale, pad(PadKind::Xbox, PadPower::Low), PadSlotStatus{}, pad(PadKind::Switch, PadPower::Full)}));
+    require((display.Lines() == std::vector<std::string>{"P1 DISCONNECTED", "P2 XBOX  BATTERY LOW", "P4 SWITCH  BATTERY FULL"}), "a slot that never had a controller is listed");
+    PadStatusDisplay first(PadStatusMode::Events);
+    first.Observe(at(0), snapshot({PadSlotStatus{}, PadSlotStatus{}, stale}));
+    require(first.Lines() == std::vector<std::string>{"NO CONTROLLER"}, "stale fields of an unconnected slot are listed");
+    std::printf("pad status lines: one line per slot that ever had a controller\n");
+}
+
 }
 
 int main() try {
@@ -193,6 +267,9 @@ int main() try {
     replacementTests();
     requestTests();
     providerTests();
+    lineTests();
+    nameTests();
+    listTests();
     std::printf("pad status overlay tests passed\n");
     return 0;
 } catch (const std::exception& error) {
