@@ -1,6 +1,8 @@
 #ifndef CORE_LIBS_PRX_LIBSCEVIDEOOUT_INCLUDE_HOSTVOLUMEINPUT_HPP
 #define CORE_LIBS_PRX_LIBSCEVIDEOOUT_INCLUDE_HOSTVOLUMEINPUT_HPP
 
+#include "SDL_events.h"
+
 #include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
 #include "prx/libScePad/include/KeyboardMouse.hpp"
 
@@ -19,6 +21,13 @@ inline bool ApplyHostVolumeRequests(const Pad::InputRequests& requests, HostVolu
         requested = true;
     }
     return requested;
+}
+
+inline bool ApplyHostFocusEvent(const SDL_Event& event, Uint32 windowId, HostVolume* after) {
+    if (event.type != SDL_WINDOWEVENT || event.window.windowID != windowId) return false;
+    if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) return HostVolumeFocus_nid_no_patch(false, after);
+    if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) return HostVolumeFocus_nid_no_patch(true, after);
+    return false;
 }
 
 #endif
