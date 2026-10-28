@@ -120,6 +120,8 @@ int APS5_VABI rtprio_thread_nid_postfix(int function, int lwpid, GuestRtPrio* pr
     };
     if (function != Lookup && function != Set) return fail(GuestEsrch);
     if (priority == nullptr) return fail(GuestEfault);
+    GuestRtPrio requested{};
+    if (function == Set && !GuestCopyIn_nid_no_patch(&requested, priority, sizeof(requested))) return fail(GuestEfault);
     auto* self = scePthreadSelf();
     int policy = self->schedPolicy.load(std::memory_order_relaxed);
     int schedPriority = self->priority.load(std::memory_order_relaxed);
@@ -127,13 +129,15 @@ int APS5_VABI rtprio_thread_nid_postfix(int function, int lwpid, GuestRtPrio* pr
     if (other && !GetLiveGuestThreadSched_nid_no_patch(lwpid, policy, schedPriority)) return fail(GuestEsrch);
     const bool realTime = policy == GuestSchedFifo || policy == GuestSchedRr;
     if (function == Lookup) {
-        priority->type = realTime ? (policy == GuestSchedFifo ? Fifo : Realtime) : Normal;
-        priority->prio = realTime ? static_cast<std::uint16_t>(schedPriority) : 0;
+        GuestRtPrio current{};
+        current.type = realTime ? (policy == GuestSchedFifo ? Fifo : Realtime) : Normal;
+        current.prio = realTime ? static_cast<std::uint16_t>(schedPriority) : 0;
+        if (!GuestCopyOut_nid_no_patch(priority, &current, sizeof(current))) return fail(GuestEfault);
         return 0;
     }
     if (other) NotImplemented_nid_no_patch("rtprio_thread: a thread other than the calling one");
     if (realTime) NotImplemented_nid_no_patch("rtprio_thread: a guest thread's real-time class");
-    if (priority->type == Normal && priority->prio == 0) return 0;
+    if (requested.type == Normal && requested.prio == 0) return 0;
     NotImplemented_nid_no_patch("rtprio_thread: a real-time priority change");
 }
 
