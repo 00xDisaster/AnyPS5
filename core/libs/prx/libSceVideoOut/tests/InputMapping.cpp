@@ -194,6 +194,21 @@ void volumeUpAction() {
     require(rejects("VolumeUp = F2\n"), "VolumeUp refuses a source without a type");
 }
 
+void volumeDownAction() {
+    useConfig("volumedown = KEY:F2\nVolumeDown = KEY:F3\n");
+    const auto keys = keysFor(Pad::InputControl::VolumeDown);
+    require(keys.size() == 2 && hasKey(keys, SDL_SCANCODE_F2) && hasKey(keys, SDL_SCANCODE_F3), "VolumeDown takes a first key and an alternate, case-insensitively");
+    useConfig("VolumeDown = KEY:F2\nVolumeDown = KEY:F2\n");
+    const auto duplicated = keysFor(Pad::InputControl::VolumeDown);
+    require(duplicated.size() == 1 && duplicated[0] == SDL_SCANCODE_F2, "a duplicate VolumeDown line is ignored");
+    require(rejects("VolumeDown = MOUSE:Left\n"), "VolumeDown refuses a mouse button");
+    require(rejects("VolumeDown = MOUSE:X1\n"), "VolumeDown refuses another mouse button");
+    require(rejects("VolumeDown = WHEEL:Up\n"), "VolumeDown refuses the mouse wheel");
+    require(rejects("VolumeDown = KEY:NoSuchKey\n"), "VolumeDown refuses an unknown key name");
+    require(rejects("VolumeDown =\n"), "VolumeDown refuses an empty source");
+    require(rejects("VolumeDown = F2\n"), "VolumeDown refuses a source without a type");
+}
+
 void mouseLookDefault() {
     useConfig("Cross = KEY:F\n");
     const auto settings = Pad::LoadInputMapping().settings;
@@ -359,6 +374,7 @@ int main() try {
     screenshotBinding();
     padStatusBinding();
     padStatusConflicts();
+    volumeDownAction();
     volumeUpAction();
     mouseLookDefault();
     mouseLookParse();
