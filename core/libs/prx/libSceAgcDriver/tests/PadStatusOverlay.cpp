@@ -1,6 +1,8 @@
 #include "prx/libSceAgcDriver/Execution/include/PadStatusOverlay.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceOverlay.hpp"
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
 #include <stdexcept>
@@ -255,9 +257,154 @@ void listTests() {
     std::printf("pad status lines: one line per slot that ever had a controller\n");
 }
 
+using AgcDriver::OverlayColor;
+using AgcDriver::OverlayCorner;
+using AgcDriver::OverlayLayout;
+using AgcDriver::OverlayRect;
+
+bool disjoint(const OverlayRect& a, const OverlayRect& b) {
+    return a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
 }
 
-int main() try {
+std::size_t glyphRuns(const std::string& line) {
+    std::size_t runs = 0;
+    for (const char character : line) {
+        for (const auto bits : AgcDriver::OverlayGlyph(character)) {
+            bool inside = false;
+            for (int x = 0; x < AgcDriver::OverlayMetrics::GlyphWidth; ++x) {
+                const bool set = (bits & (0x10u >> x)) != 0;
+                if (set && !inside) ++runs;
+                inside = set;
+            }
+        }
+    }
+    return runs;
+}
+
+void layoutTests() {
+    const std::vector<std::string> one{"P1 DUALSENSE  WIRED"};
+    const auto big = AgcDriver::LayOutPadStatus(one, {1920, 1080}, OverlayCorner::TopLeft);
+    require(big.scale == 2, "the panel is not drawn at scale 2 on 1080 lines");
+    require(big.bounds.x == 1518 && big.bounds.y == 8 && big.bounds.width == 394 && big.bounds.height == 26, "the one-line panel is not at the top right of 1920x1080");
+    const std::vector<std::string> four{"P1 DUALSENSE  WIRED", "P2 XBOX  BATTERY MEDIUM", "P3 DISCONNECTED", "P4 DUALSHOCK 4  BATTERY UNKNOWN"};
+    const auto small = AgcDriver::LayOutPadStatus(four, {1280, 720}, OverlayCorner::TopLeft);
+    require(small.scale == 2, "the panel is not drawn at scale 2 on 720 lines");
+    require(small.bounds.x == 1280 - 8 - 394 && small.bounds.y == 8 && small.bounds.width == 394 && small.bounds.height == 80, "the four-line panel is not at the top right of 1280x720");
+    const auto bottom = AgcDriver::LayOutPadStatus(four, {1280, 720}, OverlayCorner::TopRight);
+    require(bottom.bounds.x == 8 && bottom.bounds.y == 8, "the panel does not move to the top left when the overlay is at the top right");
+    const auto low = AgcDriver::LayOutPadStatus(four, {1280, 720}, OverlayCorner::BottomLeft);
+    require(low.bounds.x == 1280 - 8 - 394 && low.bounds.y == 720 - 8 - 80, "the panel does not follow the overlay to the bottom");
+    const auto lowRight = AgcDriver::LayOutPadStatus(four, {1280, 720}, OverlayCorner::BottomRight);
+    require(lowRight.bounds.x == 8 && lowRight.bounds.y == 720 - 8 - 80, "the panel is not at the bottom left when the overlay is at the bottom right");
+    const auto tiny = AgcDriver::LayOutPadStatus(one, {640, 360}, OverlayCorner::TopLeft);
+    require(tiny.scale == 1 && tiny.bounds.width == 197 && tiny.bounds.height == 13, "the panel is not drawn at scale 1 on 360 lines");
+    std::printf("pad status layout: panel size and corner on 1920x1080, 1280x720 and 640x360\n");
+}
+
+void paintTests() {
+    const std::vector<std::string> four{"P1 DUALSENSE  WIRED", "P2 XBOX  BATTERY MEDIUM", "P3 DISCONNECTED", "P4 DUALSHOCK 4  BATTERY UNKNOWN"};
+    const auto layout = AgcDriver::LayOutPadStatus(four, {1280, 720}, OverlayCorner::TopLeft);
+    std::size_t expected = 1;
+    for (const auto& line : four) expected += glyphRuns(line);
+    require(layout.rects.size() == expected, "the panel does not draw one rectangle per glyph run plus its background");
+    require(layout.rects.front().color == static_cast<std::uint32_t>(OverlayColor::Background) && layout.rects.front().x == layout.bounds.x, "the first rectangle is not the background");
+    for (std::size_t index = 1; index < layout.rects.size(); ++index) {
+        const auto& rect = layout.rects[index];
+        require(rect.color == static_cast<std::uint32_t>(OverlayColor::Text), "a glyph is not drawn in the text colour");
+        require(rect.x >= layout.bounds.x && rect.y >= layout.bounds.y && rect.x + rect.width <= layout.bounds.x + layout.bounds.width && rect.y + rect.height <= layout.bounds.y + layout.bounds.height, "a glyph lies outside the panel");
+    }
+    const auto widest = AgcDriver::LayOutPadStatus({std::string(AgcDriver::PadStatusMetrics::Columns, 'W')}, {1280, 720}, OverlayCorner::TopLeft);
+    std::int32_t right = 0;
+    for (const auto& rect : widest.rects) right = std::max(right, rect.x + rect.width);
+    require(right <= widest.bounds.x + widest.bounds.width, "a full-width line leaves the panel");
+    bool refused = false;
+    try {
+        AgcDriver::LayOutPadStatus({std::string(AgcDriver::PadStatusMetrics::Columns + 1, 'W')}, {1280, 720}, OverlayCorner::TopLeft);
+    } catch (const std::exception&) {
+        refused = true;
+    }
+    require(refused, "a line wider than the panel is laid out");
+    refused = false;
+    try {
+        AgcDriver::LayOutPadStatus({}, {1280, 720}, OverlayCorner::TopLeft);
+    } catch (const std::exception&) {
+        refused = true;
+    }
+    require(refused, "a panel without lines is laid out");
+    std::printf("pad status layout: one rectangle per glyph run, all inside the panel\n");
+}
+
+void cornerTests() {
+    require(AgcDriver::PadStatusCorner(OverlayCorner::TopLeft) == OverlayCorner::TopRight, "top left does not mirror to top right");
+    require(AgcDriver::PadStatusCorner(OverlayCorner::TopRight) == OverlayCorner::TopLeft, "top right does not mirror to top left");
+    require(AgcDriver::PadStatusCorner(OverlayCorner::BottomLeft) == OverlayCorner::BottomRight, "bottom left does not mirror to bottom right");
+    require(AgcDriver::PadStatusCorner(OverlayCorner::BottomRight) == OverlayCorner::BottomLeft, "bottom right does not mirror to bottom left");
+    const std::vector<std::string> four{"P1 DUALSENSE  WIRED", "P2 XBOX  BATTERY MEDIUM", "P3 DISCONNECTED", "P4 DUALSHOCK 4  BATTERY UNKNOWN"};
+    const AgcDriver::OverlayStatistics statistics;
+    const auto first = AgcDriver::ComposeOverlay(statistics, true, true);
+    const auto second = AgcDriver::ComposeOverlayDetails(AgcDriver::OverlayDetailSample{});
+    for (const VkExtent2D extent : {VkExtent2D{640, 360}, VkExtent2D{1280, 720}, VkExtent2D{1366, 768}, VkExtent2D{1920, 1080}, VkExtent2D{3840, 2160}}) {
+        for (const auto corner : {OverlayCorner::TopLeft, OverlayCorner::TopRight, OverlayCorner::BottomLeft, OverlayCorner::BottomRight}) {
+            const auto panel = AgcDriver::LayOutPadStatus(four, extent, corner);
+            for (const auto* page : {&first, &second}) {
+                const auto overlay = AgcDriver::LayOutOverlay(*page, extent, corner);
+                require(disjoint(panel.bounds, overlay.bounds), "the panel covers the performance overlay");
+            }
+        }
+    }
+    std::printf("pad status layout: never covers the performance overlay, in any corner or page\n");
+}
+
+void priorityTests() {
+    require(AgcDriver::PadStatusDrawn(true, false), "a visible panel is not drawn without the keyboard");
+    require(!AgcDriver::PadStatusDrawn(true, true), "the panel is drawn over the system keyboard");
+    require(!AgcDriver::PadStatusDrawn(false, false), "a hidden panel is drawn");
+    require(!AgcDriver::PadStatusDrawn(false, true), "a hidden panel is drawn with the keyboard");
+    PadStatusDisplay display(PadStatusMode::Events);
+    display.Observe(at(0), snapshot({pad(PadKind::Xbox, PadPower::Full)}));
+    require(AgcDriver::PadStatusDrawn(display.Visible(at(1000)), false), "the panel is not drawn before the keyboard opens");
+    require(!AgcDriver::PadStatusDrawn(display.Visible(at(2000)), true), "the panel is drawn while the keyboard is open");
+    require(AgcDriver::PadStatusDrawn(display.Visible(at(3000)), false), "the panel does not come back when the keyboard closes within its 4 seconds");
+    require(!AgcDriver::PadStatusDrawn(display.Visible(at(5000)), false), "the panel waited for the keyboard past its 4 seconds");
+    std::printf("pad status priority: the system keyboard wins, the panel's clock keeps running\n");
+}
+
+void sharedDisplayTests(bool events) {
+    require(!AgcDriver::PadStatusOverlayLines().has_value(), "the panel is shown before anything happened");
+    const auto connected = snapshot({pad(PadKind::DualSense, PadPower::Wired)});
+    AgcDriverPadStatusObserve_nid_postfix(&connected);
+    require(AgcDriver::PadStatusOverlayLines().has_value() == events, events ? "a connect does not show the panel with ANYPS5_PAD_STATUS=1" : "a connect shows the panel with ANYPS5_PAD_STATUS unset");
+    AgcDriverPadStatusShow_nid_postfix();
+    const auto lines = AgcDriver::PadStatusOverlayLines();
+    require(lines.has_value() && *lines == std::vector<std::string>{"P1 DUALSENSE  WIRED"}, "the shown panel does not list the controller");
+    std::printf("pad status: the shared display %s\n", events ? "shows on a connect and on a request" : "shows on a request only");
+}
+
+void invalidEnvironmentTests() {
+    const auto connected = snapshot({pad(PadKind::DualSense, PadPower::Wired)});
+    try {
+        AgcDriverPadStatusObserve_nid_postfix(&connected);
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("ANYPS5_PAD_STATUS") != std::string::npos, "the invalid value is refused without naming the variable");
+        std::printf("pad status: an invalid ANYPS5_PAD_STATUS stops the first use: %s\n", error.what());
+        return;
+    }
+    throw std::runtime_error("an invalid ANYPS5_PAD_STATUS was accepted at first use");
+}
+
+}
+
+int main(int argc, char** argv) try {
+    const std::string mode = argc > 1 ? argv[1] : "";
+    if (mode == "invalid") {
+        invalidEnvironmentTests();
+        return 0;
+    }
+    if (mode == "events" || mode == "default") {
+        sharedDisplayTests(mode == "events");
+        std::printf("pad status shared display tests passed\n");
+        return 0;
+    }
     modeTests();
     hiddenByDefaultTests();
     expiryTests();
@@ -270,6 +417,10 @@ int main() try {
     lineTests();
     nameTests();
     listTests();
+    layoutTests();
+    paintTests();
+    cornerTests();
+    priorityTests();
     std::printf("pad status overlay tests passed\n");
     return 0;
 } catch (const std::exception& error) {
