@@ -36,15 +36,30 @@ WindowsLoadImage::WindowsLoadImage(const std::vector<std::uint8_t>& source, cons
         const auto previousEnd = previous.MappedAddress + previous.MemorySize;
         if (segment.MappedAddress == previous.MappedAddress || previousEnd > segment.MappedAddress + segment.MemorySize)
             throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", segment.MappedAddress);
-        for (auto address = segment.MappedAddress; address < previousEnd; ++address) {
-            const auto fromPrevious = address - previous.MappedAddress < previous.FileSize
-                ? source[static_cast<std::size_t>(previous.Offset + (address - previous.MappedAddress))]
-                : std::uint8_t{0};
-            const auto fromCurrent = address - segment.MappedAddress < segment.FileSize
-                ? source[static_cast<std::size_t>(segment.Offset + (address - segment.MappedAddress))]
-                : std::uint8_t{0};
-            if (fromPrevious != fromCurrent)
+        if (((previous.Flags | segment.Flags) & 3u) == 3u && segment.MappedAddress % SectionAlignment != 0)
+            throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", segment.MappedAddress);
+        const auto previousFileEnd = previous.MappedAddress + previous.FileSize;
+        const auto segmentFileEnd = segment.MappedAddress + segment.FileSize;
+        const auto compareEnd = std::min(previousEnd, std::max(previousFileEnd, segmentFileEnd));
+        for (auto address = segment.MappedAddress; address < compareEnd;) {
+            const bool previousBacked = address < previousFileEnd;
+            const bool segmentBacked = address < segmentFileEnd;
+            auto runEnd = compareEnd;
+            if (previousBacked)
+                runEnd = std::min(runEnd, previousFileEnd);
+            if (segmentBacked)
+                runEnd = std::min(runEnd, segmentFileEnd);
+            const auto length = static_cast<std::size_t>(runEnd - address);
+            const auto previousAt = static_cast<std::size_t>(previous.Offset + (address - previous.MappedAddress));
+            const auto segmentAt = static_cast<std::size_t>(segment.Offset + (address - segment.MappedAddress));
+            const bool congruent = previousBacked && segmentBacked
+                ? std::equal(source.begin() + previousAt, source.begin() + previousAt + length, source.begin() + segmentAt)
+                : previousBacked
+                    ? std::all_of(source.begin() + previousAt, source.begin() + previousAt + length, [](const std::uint8_t byte) { return byte == 0; })
+                    : std::all_of(source.begin() + segmentAt, source.begin() + segmentAt + length, [](const std::uint8_t byte) { return byte == 0; });
+            if (!congruent)
                 throw Domain::RelinkerException("Overlapping PT_LOAD memory ranges", segment.MappedAddress);
+            address = runEnd;
         }
         previous.MemorySize = segment.MappedAddress - previous.MappedAddress;
         if (previous.FileSize > previous.MemorySize)
