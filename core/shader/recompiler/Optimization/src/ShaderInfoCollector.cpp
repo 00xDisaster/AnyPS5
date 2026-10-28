@@ -425,6 +425,7 @@ void CollectBuiltinInputs(const IrProgram& program, ShaderInfo& info) {
                     break;
                 case StageInputKind::BaryCoordSmooth:
                     AddInput(info, StageInputKind::BaryCoordSmooth, 0, 3, "gl_BaryCoordKHR");
+                    if (program.Metadata().barycentricBuiltinsUnnormalized) AddInput(info, StageInputKind::FragCoord, 0, 4, "gl_FragCoord");
                     break;
                 case StageInputKind::BaryCoordSmoothCenter:
                 case StageInputKind::BaryCoordSmoothSample:
@@ -623,7 +624,7 @@ void ShaderInfoCollector::Collect(IrProgram& program, const ShaderStageInputInfo
             return SharedAccessOf(inst->Opcode()) == SharedAccess::Atomic && inst->Type() == IrType::U64;
         });
     });
-    next.usesFaultBuffer = next.usesFaultBuffer || (next.sharedMemoryBytes != 0u && ldsAtomic64);
+    next.usesFaultBuffer = next.usesFaultBuffer || ldsAtomic64;
     switch (program.Resources().stage) {
         case IrShaderStage::Vertex:
         case IrShaderStage::Local:
