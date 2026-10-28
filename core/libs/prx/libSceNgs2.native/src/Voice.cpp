@@ -237,6 +237,11 @@ void Ngs2Voice::ResetSetup() {
     callback = nullptr;
     callbackData = 0;
     callbackFlags = 0;
+    peakMeterHistory.clear();
+    peakMeterMode = 0;
+    peakMeterCount = 0;
+    peakMeterCursor = 0;
+    peakHeight = 0.0f;
 }
 
 const std::uint8_t* Ngs2Voice::WaveformData() const {
@@ -641,10 +646,22 @@ void Ngs2PublishSamplerState(Ngs2Voice& voice) {
     state.voice_state.state_flags = voice.stateFlags;
     if (voice.state == Ngs2PlayState::Empty) return;
     state.envelope_height = 1.0f;
+    state.peak_height = voice.peakHeight;
     state.num_decoded_samples = voice.decodedSamples;
     state.decoded_data_size = voice.decodedBytes;
     state.user_data = voice.waveformUserData;
     state.waveform_data = voice.WaveformData();
+}
+
+static void SetPeakMeter(Ngs2Voice& voice, std::uint32_t detectType) {
+    if (detectType > 2) throw Ngs2ReturnCode{SCE_NGS2_ERROR_INVALID_PEAK_METER_MODE};
+    if (voice.peakMeterMode != detectType) {
+        voice.peakMeterHistory.clear();
+        voice.peakMeterCount = 0;
+        voice.peakMeterCursor = 0;
+        voice.peakHeight = 0.0f;
+    }
+    voice.peakMeterMode = detectType;
 }
 
 static void ApplySamplerParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
@@ -673,6 +690,7 @@ static void ApplySamplerParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& para
             break;
         }
         case SCE_NGS2_SAMPLER_VOICE_PARAM_FILTER: Ngs2SetFilter(voice, ParamAs<Ngs2SamplerVoiceFilterParam>(param)); break;
+        case SCE_NGS2_SAMPLER_VOICE_PARAM_PEAK_METER: SetPeakMeter(voice, ParamAs<Ngs2VoicePeakMeterParam>(param).detect_type); break;
         default: throw std::runtime_error("NGS2: sampler voice param " + Ngs2Hex(param.id) + " is not implemented");
     }
 }
@@ -698,6 +716,10 @@ static void ApplyParam(Ngs2Voice& voice, const Ngs2VoiceParamHeader& param) {
         case SCE_NGS2_RACK_ID_SAMPLER:
         case SCE_NGS2_RACK_ID_CUSTOM_SAMPLER: ApplySamplerParam(voice, param); return;
         case SCE_NGS2_RACK_ID_SUBMIXER:
+            if (param.id == SCE_NGS2_SUBMIXER_VOICE_PARAM_PEAK_METER) {
+                SetPeakMeter(voice, ParamAs<Ngs2VoicePeakMeterParam>(param).detect_type);
+                return;
+            }
             if (param.id == SCE_NGS2_SUBMIXER_VOICE_PARAM_USER_FX) {
                 const auto& fx = ParamAs<Ngs2SubmixerVoiceUserFxParam>(param);
                 voice.userFxHandler = fx.handler;
@@ -876,6 +898,7 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
             sampler.voice_state.state_flags = voice.stateFlags;
             if (voice.state == Ngs2PlayState::Empty) return SCE_NGS2_OK;
             sampler.envelope_height = 1.0f;
+            sampler.peak_height = voice.peakHeight;
             sampler.num_decoded_samples = voice.decodedSamples;
             sampler.decoded_data_size = voice.decodedBytes;
             sampler.user_data = voice.waveformUserData;
@@ -893,6 +916,7 @@ int APS5_VABI sceNgs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state
             auto& submixer = *reinterpret_cast<Ngs2SubmixerVoiceState*>(state);
             submixer = {};
             submixer.voice_state.state_flags = voice.stateFlags;
+            submixer.peak_height = voice.peakHeight;
             return SCE_NGS2_OK;
         }
         case SCE_NGS2_RACK_ID_CUSTOM_SAMPLER: {
