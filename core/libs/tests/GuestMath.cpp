@@ -125,6 +125,22 @@ static void CheckNearbyint() {
     Require(nearbyint_nid_postfix(INFINITY) == INFINITY && nearbyint_nid_postfix(-INFINITY) == -INFINITY);
     Require(std::isnan(nearbyint_nid_postfix(NAN)));
     Require(std::fetestexcept(FE_INEXACT) == 0);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    std::uint16_t savedControl;
+    asm volatile("fnstcw %0" : "=m"(savedControl));
+    const unsigned savedMxcsr = _mm_getcsr();
+    Require(std::fesetround(FE_UPWARD) == 0);
+    _mm_setcsr((_mm_getcsr() & ~0x6000u) | 0x0000u);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    Require(nearbyintf_nid_postfix(2.5f) == 2.0f);
+    Require(std::fetestexcept(FE_INEXACT) != 0);
+    Require(std::fesetround(FE_TONEAREST) == 0);
+    _mm_setcsr((_mm_getcsr() & ~0x6000u) | 0x4000u);
+    std::feclearexcept(FE_ALL_EXCEPT);
+    Require(nearbyintf_nid_postfix(2.5f) == 3.0f);
+    Require(std::fetestexcept(FE_INEXACT) != 0);
+    asm volatile("fldcw %0" :: "m"(savedControl));
+    _mm_setcsr(savedMxcsr);
 }
 
 static std::uint16_t X87ControlWord() {
