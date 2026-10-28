@@ -1,6 +1,7 @@
 #include "prx/libSceAgcDriver/Execution/include/HostReport.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -130,6 +131,28 @@ void PathsAndAddressesAreRedacted() {
     Check(AgcDriver::RedactHostText("a\nfake: line\r\tx") == "a fake: line  x", "control characters were kept");
 }
 
+bool Refused(const char* value, std::string& message) {
+    try {
+        static_cast<void>(AgcDriver::ParseHostReportSetting(value));
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+        return true;
+    }
+    return false;
+}
+
+void SettingIsParsed() {
+    Check(!AgcDriver::ParseHostReportSetting(nullptr), "an unset variable turned the report on");
+    Check(!AgcDriver::ParseHostReportSetting(""), "an empty value turned the report on");
+    Check(!AgcDriver::ParseHostReportSetting("0"), "0 turned the report on");
+    Check(AgcDriver::ParseHostReportSetting("1"), "1 did not turn the report on");
+    for (const char* bad : {"2", "true", "yes", " 1", "1 ", "01", "-1", "on", "00"}) {
+        std::string message;
+        Check(Refused(bad, message), bad);
+        Check(message.find("ANYPS5_HOST_REPORT") != std::string::npos && message.find(std::string("'") + bad + "'") != std::string::npos, "the refusal does not name the variable and the value");
+    }
+}
+
 void NamedValuesAreRedacted() {
     const std::vector<std::string> names{"alice", "al", "workstation-7", ""};
     Check(AgcDriver::RedactHostText("user alice on workstation-7", names) == "user <redacted> on <redacted>", "a listed name was kept");
@@ -173,6 +196,7 @@ int main() {
     MissingFactsAreNamed();
     PathsAndAddressesAreRedacted();
     NamedValuesAreRedacted();
+    SettingIsParsed();
     FormattedReportHasNoSensitiveText();
     return failures == 0 ? 0 : 1;
 }
