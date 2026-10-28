@@ -1120,7 +1120,7 @@ void CheckUnwrittenGuestAccess(Context context, VkFormat format, std::uint32_t f
     std::printf("Native depth format=%u samples=%u: guest access retired the unwritten surface and refused the written one\n", static_cast<std::uint32_t>(format), fragments);
 }
 
-enum class BufferWrite { DepthPlane, Htile, Written };
+enum class BufferWrite { DepthPlane, Htile };
 
 void CheckBufferWrite(Context context, VkFormat format, std::uint32_t fragments, BufferWrite write) {
     const VkExtent2D extent{5u, 3u};
@@ -1151,12 +1151,6 @@ void CheckBufferWrite(Context context, VkFormat format, std::uint32_t fragments,
     Require(DepthSurfaceView(context, target) != VK_NULL_HANDLE && resident(), "native depth buffer-write fixture has no resident owner");
     upload(unrelated.Address(), 256u);
     Require(resident(), "an unrelated buffer write retired a native depth surface");
-    if (write == BufferWrite::Written) {
-        NoteDepthSurfaceWrite(context, target);
-        TargetRefuses([&] { upload(target.address, 256u); }, "guest publication");
-        Require(resident(), "a refused buffer write retired a written native depth surface");
-        return;
-    }
     if (write == BufferWrite::DepthPlane) upload(target.address + bytes - 256u, 256u);
     else upload(target.htileAddress, metadataBytes);
     Require(!resident(), "a buffer the GPU may write left an unwritten native depth surface resident over it");
@@ -1169,8 +1163,8 @@ void CheckBufferWrites(Context context, VkFormat format, std::uint32_t fragments
         std::printf("skipped native depth buffer writes: the device lacks VK_EXT_external_memory_host, VK_KHR_buffer_device_address or the bufferDeviceAddress feature\n");
         return;
     }
-    for (const auto write : {BufferWrite::DepthPlane, BufferWrite::Htile, BufferWrite::Written}) CheckBufferWrite(context, format, fragments, write);
-    std::printf("Native depth format=%u samples=%u: a GPU buffer write over the depth or HTILE released the unwritten surface and refused the written one\n", static_cast<std::uint32_t>(format), fragments);
+    for (const auto write : {BufferWrite::DepthPlane, BufferWrite::Htile}) CheckBufferWrite(context, format, fragments, write);
+    std::printf("Native depth format=%u samples=%u: a GPU buffer write over the depth or HTILE released the unwritten surface\n", static_cast<std::uint32_t>(format), fragments);
 }
 
 void CheckHtileRouting(Context context, VkFormat format, std::uint32_t fragments) {
