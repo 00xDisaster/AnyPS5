@@ -322,8 +322,10 @@ struct Request::State {
         }
     }
 
+    bool Inflating() const { return settings.inflateGzip && contentEncoding == "gzip"; }
+
     void InflateGzip() {
-        if (inflatedGzip || !settings.inflateGzip || contentEncoding != "gzip" || body.empty()) return;
+        if (inflatedGzip || !Inflating() || body.empty()) return;
         inflatedGzip = true;
         const std::uint8_t* data = body.data();
         const std::size_t size = body.size();
@@ -342,6 +344,10 @@ struct Request::State {
         if (flags & 2) skip(2);
         z_stream inflater{};
         Require(inflateInit2(&inflater, -15) == Z_OK, "sceHttp2: gzip inflate initialization failed");
+        struct End {
+            z_stream* stream;
+            ~End() { inflateEnd(stream); }
+        } end{&inflater};
         inflater.next_in = const_cast<std::uint8_t*>(data + offset);
         inflater.avail_in = static_cast<uInt>(size - offset - 8);
         std::vector<std::uint8_t> output;
@@ -357,7 +363,6 @@ struct Request::State {
             Require(output.size() <= 64 * 1024 * 1024, "sceHttp2: inflated response exceeds the host limit");
         }
         Require(inflater.avail_in == 0, "sceHttp2: concatenated gzip members are not implemented");
-        inflateEnd(&inflater);
         const auto readLe32 = [&](std::size_t position) {
             return static_cast<std::uint32_t>(data[position]) | (static_cast<std::uint32_t>(data[position + 1]) << 8) |
                 (static_cast<std::uint32_t>(data[position + 2]) << 16) | (static_cast<std::uint32_t>(data[position + 3]) << 24);
@@ -653,7 +658,7 @@ int Request::Read(void* data, std::size_t size) {
     try {
         const auto deadline = state->Deadline(state->settings.recvTimeout);
         state->Check(deadline);
-        while (state->bodyOffset == state->body.size() && !state->ended) state->Pump(deadline);
+        while (!state->ended && (state->bodyOffset == state->body.size() || state->Inflating())) state->Pump(deadline);
         const auto count = std::min({size, state->body.size() - state->bodyOffset, static_cast<std::size_t>(std::numeric_limits<int>::max())});
         state->Check(deadline);
         if (count) std::memcpy(data, state->body.data() + state->bodyOffset, count);
@@ -677,6 +682,12 @@ int Request::ContentLength(int* kind, std::uint64_t* length) {
     auto lock = state->Lock();
     if (state->networkResult) return state->networkResult;
     Require(kind && length && state->ready, "sceHttp2GetResponseContentLength: null output or response unavailable");
+    if (state->Inflating()) {
+        try {
+            const auto deadline = state->Deadline(state->settings.recvTimeout);
+            while (!state->ended) state->Pump(deadline);
+        } catch (...) { state->Fail(); throw; }
+    }
     *kind = state->hasLength ? 0 : 1;
     *length = state->hasLength ? state->contentLength : 0;
     return 0;
