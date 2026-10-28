@@ -84,6 +84,36 @@ void CancelAndFallbacks() {
     Require(sceMsgDialogTerminate() == 0);
 }
 
+void CloseAndTerminate() {
+    MsgDialogResult result{};
+    UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
+    UserParam param(MsgDialog::ModeUserMsg, &yesNo);
+    ModalDialogSetPresenter_nid_postfix(true);
+    Require(sceMsgDialogInitialize() == 0);
+    Require(sceMsgDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    Require(sceMsgDialogClose() == 0);
+    Require(Session() == ModalDialogState::Closed);
+    Require(sceMsgDialogGetStatus() == kStatusFinished);
+    Require(sceMsgDialogClose() == kErrNotRunning);
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdOk);
+
+    Require(sceMsgDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    UserMessage okOnly{MsgDialog::ButtonTypeOk, 0, "Saved"};
+    UserParam okParam(MsgDialog::ModeUserMsg, &okOnly);
+    Require(sceMsgDialogOpen(&okParam) == 0 && Session() == ModalDialogState::Showing);
+    ModalDialogView view;
+    Require(ModalDialogReadView_nid_postfix(view) && view.message == u"Saved" && view.buttons.size() == 1);
+    Require(sceMsgDialogGetStatus() == kStatusRunning);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(sceMsgDialogGetStatus() == kStatusFinished);
+
+    Require(sceMsgDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    Require(sceMsgDialogTerminate() == 0);
+    Require(Session() == ModalDialogState::Idle);
+    Require(!ModalDialogCapturesInput_nid_postfix());
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 void ShownDialog() {
     UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
     UserParam param(MsgDialog::ModeUserMsg, &yesNo);
@@ -170,4 +200,5 @@ int main() {
 
     ShownDialog();
     CancelAndFallbacks();
+    CloseAndTerminate();
 }
