@@ -81,6 +81,7 @@ int main() {
             Check(AddFive.data(), AddOne.data(), wave32, 5u, "a user-data callee copied before a forward branch");
             Check(AddOne.data(), AddFive.data(), wave32, 1u, "the callee replaced");
         }
+        AgcDriverShutdown_nid_postfix();
         std::puts("user-data call after branch tests passed");
         return 0;
     } catch (const std::exception& error) {
