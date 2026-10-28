@@ -201,6 +201,11 @@ void FailingSourcesAreRecorded() {
     for (const auto& item : unavailable) Check(std::find(facts.unavailable.begin(), facts.unavailable.end(), item) != facts.unavailable.end(), item.c_str());
     const auto text = AgcDriver::FormatHostReport(facts);
     Check(text.find("os: unavailable\n") != std::string::npos && text.find("memory_mib: unavailable\n") != std::string::npos, "a failed source is not shown as unavailable");
+    Check(text.find("[unavailable]\ncpu: cpuid\nmemory: no source\nos: uname failed\n") != std::string::npos, "the unavailable section is missing or unsorted");
+    Check(AgcDriver::FormatHostReport(AgcDriver::CollectHostFacts(FakeSources())).find("[unavailable]") == std::string::npos, "a report with every fact printed an unavailable section");
+    auto leaking = facts;
+    leaking.unavailable.push_back("environment: cannot read /home/alice/.config");
+    Check(AgcDriver::FormatHostReport(leaking).find("alice") == std::string::npos, "a failure message leaked a path");
     AgcDriver::HostSources none;
     const auto empty = AgcDriver::CollectHostFacts(none);
     Check(empty.unavailable.size() == 10 && !empty.os && empty.environment.empty() && empty.redactions.empty(), "an empty source set did not report every source");
