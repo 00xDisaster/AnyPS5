@@ -55,7 +55,7 @@ int APS5_VABI sceMsgDialogGetResult(MsgDialogResult* result) {
     if (status != COMMON_DIALOG_STATUS_FINISHED) return COMMON_DIALOG_ERROR_NOT_FINISHED;
     *result = MsgDialogResult{};
     result->result = COMMON_DIALOG_RESULT_OK;
-    result->button_id = BUTTON_ID_OK;
+    result->button_id = g_buttonId.load();
     return 0;
 }
 
