@@ -79,6 +79,8 @@ int APS5_VABI sceMsgDialogTerminate(void) {
  std::lock_guard g(g_lock);
  const bool was = g_status != kStatusNone;
  g_status = kStatusNone;
+ g_presented = false;
+ ModalDialogReset_nid_postfix();
  return was ? kErrOk : kErrNotInitialized;
 }
 int APS5_VABI sceMsgDialogOpen(const void* param) {
@@ -100,6 +102,7 @@ int APS5_VABI sceMsgDialogUpdateStatus(void) {
 int APS5_VABI sceMsgDialogClose(void) {
  std::lock_guard g(g_lock);
  if (g_status != kStatusRunning) return kErrNotRunning;
+ if (g_presented) ModalDialogClose_nid_postfix();
  g_status = kStatusFinished;
  return kErrOk;
 }
