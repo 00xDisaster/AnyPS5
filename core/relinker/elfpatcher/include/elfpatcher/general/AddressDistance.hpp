@@ -14,9 +14,7 @@ namespace Elfpatcher {
     const std::uint64_t high = to < kSignBoundary ? from : to;
     const std::uint64_t low = to < kSignBoundary ? to : from;
     const std::uint64_t magnitude = high - low;
-    if (magnitude > kInt64MinMagnitude)
-        return false;
-    if (magnitude == kInt64MinMagnitude && high == to)
+    if (magnitude >= kInt64MinMagnitude)
         return false;
     out = high == to ? static_cast<std::int64_t>(magnitude) : -static_cast<std::int64_t>(magnitude);
     return true;
