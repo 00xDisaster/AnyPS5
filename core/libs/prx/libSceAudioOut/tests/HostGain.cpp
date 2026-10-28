@@ -190,6 +190,40 @@ void f32DoesNotClamp() {
     require(samples[0] == 1.5f && samples[1] == 2.25f, "float samples above one are left for the device to clip");
 }
 
+void filterPassesTheTitleBufferAtUnity() {
+    std::vector<std::int16_t> title = constantS16(64, 2, 4321);
+    std::vector<std::uint8_t> scratch;
+    HostGainRamp ramp;
+    const void* out = HostGainFilter(ramp, HostGainRamp::Unity, title.data(), false, 64, 2, scratch);
+    require(out == title.data(), "at unity the filter returns the title's own pointer");
+    require(scratch.empty(), "at unity the filter copies nothing");
+    std::vector<float> titleFloat = constantF32(64, 8, 0.25f);
+    out = HostGainFilter(ramp, HostGainRamp::Unity, titleFloat.data(), true, 64, 8, scratch);
+    require(out == titleFloat.data() && scratch.empty(), "the same holds for float");
+}
+
+void filterLeavesTheTitleBufferUntouched() {
+    std::vector<std::int16_t> title = constantS16(64, 2, 4321);
+    const auto before = title;
+    std::vector<std::uint8_t> scratch;
+    HostGainRamp ramp(1);
+    const void* out = HostGainFilter(ramp, 0, title.data(), false, 64, 2, scratch);
+    require(out == scratch.data(), "a changed gain returns the scratch copy");
+    require(title == before, "the title's buffer is never written");
+    const auto* result = static_cast<const std::int16_t*>(out);
+    for (std::size_t index = 0; index < title.size(); ++index) require(result[index] == 0, "the copy is silent");
+}
+
+void filterWorksInPlaceOnTheScratchBuffer() {
+    std::vector<std::uint8_t> scratch(64 * 2 * sizeof(float));
+    auto* floats = reinterpret_cast<float*>(scratch.data());
+    for (std::size_t index = 0; index < 128; ++index) floats[index] = 1.0f;
+    HostGainRamp ramp(1);
+    const void* out = HostGainFilter(ramp, 0, scratch.data(), true, 64, 2, scratch);
+    require(out == scratch.data(), "in place keeps the scratch pointer");
+    for (std::size_t index = 0; index < 128; ++index) require(floats[index] == 0.0f, "in place applies the gain");
+}
+
 }
 
 int main() try {
@@ -207,6 +241,9 @@ int main() try {
     f32RampHasNoDiscontinuity();
     f32RampContinuesAcrossBuffers();
     f32DoesNotClamp();
+    filterPassesTheTitleBufferAtUnity();
+    filterLeavesTheTitleBufferUntouched();
+    filterWorksInPlaceOnTheScratchBuffer();
     std::puts("host gain tests passed");
     return 0;
 } catch (const std::exception& error) {
