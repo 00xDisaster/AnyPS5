@@ -2,6 +2,7 @@
 #include "prx/libkernel/include/Api.hpp"
 #include "prx/libc/include/Api.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cstdint>
 #include <cstddef>
@@ -78,6 +79,7 @@ constexpr int GuestExdev = 18;
 constexpr int GuestEdeadlk = 11;
 constexpr int GuestEopnotsupp = 45;
 constexpr int GuestEagain = 35;
+std::atomic<int> g_gameCpumode{1};
 constexpr int GuestEloop = 62;
 constexpr int GuestEnametoolong = 63;
 constexpr int GuestEnotempty = 66;
@@ -377,6 +379,19 @@ std::uint16_t APS5_VABI umask_nid_postfix(std::uint16_t mask) {
 int APS5_VABI sceKernelGetOpenPsIdForSystem(void* id) {
     if (id == nullptr) return GuestEinval;
     return sceKernelGetOpenPsId(id);
+}
+
+int APS5_VABI sceKernelGetCpumodeGame(int* mode) {
+    if (mode == nullptr) throw std::runtime_error("sceKernelGetCpumodeGame: a null output faults on the console");
+    *mode = g_gameCpumode.load(std::memory_order_relaxed);
+    return 0;
+}
+
+int APS5_VABI sceKernelSetCpumodeGame(int mode) {
+    if (mode < 0 || mode > 7) NotImplemented_nid_no_patch("sceKernelSetCpumodeGame with a mode outside 0 to 7");
+    if (mode > 1) return SCE_KERNEL_ERROR_EINVAL;
+    g_gameCpumode.store(mode, std::memory_order_relaxed);
+    return 0;
 }
 
 int APS5_VABI sceKernelIsCEX(void) {
