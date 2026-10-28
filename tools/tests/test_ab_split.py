@@ -155,6 +155,7 @@ class AbSplitTests(unittest.TestCase):
         huge = "9" * 400
         for kind, line in (("present", f"[present] 1 presents ({huge} dropped GPU busy 1 ms idle gaps 1 ms"),
                            ("gputime", f"[gputime] 1 ms of GPU time; 1 presents; by program: 0x1 x1 {huge}ms; by class:"),
+                           ("gputime", f"[gputime] 1 ms of GPU time; 1 presents; by program: 0x1 x1 1ms; by class: color x1 {huge}ms 1MiB (per present"),
                            ("draw", f"[draw] pipelined: 1 commits at 1 us each; 1 enqueued behind waiting 1 us per draw for room; drains: a 1 ({huge} ms)"),
                            ("syncwait", f"[syncwait] (x): a 1/{huge}ms")):
             with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "non-finite"):
@@ -176,9 +177,18 @@ class AbSplitTests(unittest.TestCase):
 
 
     def test_finite_input_weights_cannot_overflow_into_a_zero_metric(self):
-        rows = [{"weight": 9e307, "value": 1.0}] * 3
+        for value in (1.0, 1e-300):
+            rows = [{"weight": 9e307, "value": value}] * 3
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "non-finite"):
+                ab_split.weighted(rows, "value", "weight")
+
+    def test_overflowing_change_percentage_fails(self):
+        lines = []
+        for k, i, busy in (("A", 0, "0." + "0" * 300 + "1"), ("B", 1, "1" + "0" * 300)):
+            lines += [f"[ab] phase {k} {i} begins at present 0 (t 0 s)", f"[ab] phase {k} {i} settled at present 1 (t 1 s)",
+                      "[present] warmup", f"[present] 1 presents (0 dropped GPU busy {busy} ms idle gaps 1 ms"]
         with self.assertRaisesRegex(ValueError, "non-finite"):
-            ab_split.weighted(rows, "value", "weight")
+            ab_split.split(lines)
 
 
 if __name__ == "__main__":
