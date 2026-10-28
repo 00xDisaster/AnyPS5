@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <exception>
 #include <stdexcept>
 #include <string_view>
 
@@ -136,6 +137,71 @@ std::optional<std::string> text(const std::optional<std::uint64_t>& value) {
     return std::to_string(*value);
 }
 
+}
+
+namespace {
+
+template <typename TValue>
+std::optional<TValue> gather(const std::function<TValue()>& source, const char* name, std::vector<std::string>& unavailable) {
+    if (!source) {
+        unavailable.push_back(std::string(name) + ": no source");
+        return std::nullopt;
+    }
+    try {
+        return source();
+    } catch (const std::exception& error) {
+        unavailable.push_back(std::string(name) + ": " + error.what());
+    }
+    return std::nullopt;
+}
+
+}
+
+HostFacts CollectHostFacts(const HostSources& sources) {
+    HostFacts facts;
+    facts.commit = sources.commit;
+    facts.redactions = gather(sources.redactions, "redactions", facts.unavailable).value_or(std::vector<std::string>{});
+    facts.os = gather(sources.os, "os", facts.unavailable);
+    facts.cpuModel = gather(sources.cpuModel, "cpu", facts.unavailable);
+    facts.cpuThreads = gather(sources.cpuThreads, "cpu_threads", facts.unavailable);
+    facts.memoryMiB = gather(sources.memoryMiB, "memory", facts.unavailable);
+    facts.cpuMissing = gather(sources.cpuMissing, "cpu_gate", facts.unavailable);
+    facts.sdlLinked = gather(sources.sdlLinked, "sdl_linked", facts.unavailable);
+    facts.sdlCompiled = gather(sources.sdlCompiled, "sdl_compiled", facts.unavailable);
+    facts.shaderCache = gather(sources.shaderCache, "shader_cache", facts.unavailable);
+    facts.environment = FilterHostEnvironment(gather(sources.environment, "environment", facts.unavailable).value_or(std::vector<std::string>{}));
+    return facts;
+}
+
+std::vector<std::pair<std::string, std::string>> FilterHostEnvironment(const std::vector<std::string>& entries) {
+    std::vector<std::pair<std::string, std::string>> result;
+    for (const auto& entry : entries) {
+        const auto equals = entry.find('=');
+        if (equals == std::string::npos || equals == 0) continue;
+        const auto name = entry.substr(0, equals);
+        for (const char* prefix : {"APS5_", "ANYPS5_", "VK_", "SDL_"}) {
+            if (name.rfind(prefix, 0) == 0) {
+                result.emplace_back(name, entry.substr(equals + 1));
+                break;
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+std::vector<std::string> HostRedactionNames(const std::string& user, const std::string& hostName, const std::string& homeDirectory) {
+    std::vector<std::string> names;
+    const auto add = [&](const std::string& name) {
+        if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+    };
+    add(user);
+    add(hostName);
+    auto home = homeDirectory;
+    while (!home.empty() && (home.back() == '/' || home.back() == '\\')) home.pop_back();
+    const auto separator = home.find_last_of("/\\");
+    add(separator == std::string::npos ? home : home.substr(separator + 1));
+    return names;
 }
 
 std::vector<HostRequirement> MissingRequirements(const HostGpuFacts& gpu) {

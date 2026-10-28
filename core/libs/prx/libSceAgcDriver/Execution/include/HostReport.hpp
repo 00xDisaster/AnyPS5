@@ -2,6 +2,7 @@
 #define CORE_LIBS_PRX_LIBSCEAGCDRIVER_EXECUTION_INCLUDE_HOSTREPORT_HPP
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -55,6 +56,23 @@ struct HostFacts {
     std::vector<std::string> unavailable;
 };
 
+struct HostSources {
+    std::string commit;
+    std::function<std::string()> os;
+    std::function<std::string()> cpuModel;
+    std::function<std::uint64_t()> cpuThreads;
+    std::function<std::uint64_t()> memoryMiB;
+    std::function<std::vector<std::string>()> cpuMissing;
+    std::function<std::string()> sdlLinked;
+    std::function<std::string()> sdlCompiled;
+    std::function<HostShaderCacheFacts()> shaderCache;
+    std::function<std::vector<std::string>()> environment;
+    std::function<std::vector<std::string>()> redactions;
+};
+
+HostFacts CollectHostFacts(const HostSources& sources);
+std::vector<std::pair<std::string, std::string>> FilterHostEnvironment(const std::vector<std::string>& entries);
+std::vector<std::string> HostRedactionNames(const std::string& user, const std::string& hostName, const std::string& homeDirectory);
 std::vector<HostRequirement> MissingRequirements(const HostGpuFacts& gpu);
 std::string DescribeMissingRequirements(const HostGpuFacts& gpu, const std::vector<std::string>& redactions = {});
 bool ParseHostReportSetting(const char* value);
