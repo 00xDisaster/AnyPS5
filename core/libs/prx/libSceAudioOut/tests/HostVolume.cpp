@@ -1,8 +1,10 @@
 #include "prx/libSceAudioOut/include/HostVolume.hpp"
+#include "prx/libSceAudioOut/include/HostVolumeSettings.hpp"
 
 #include <cstdio>
 #include <exception>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -197,6 +199,41 @@ void gainIsZeroWhenSilent() {
     require(state.Gain() == HostVolume::UnityGain, "gaining focus restores the gain");
 }
 
+bool refusedWith(void (*parse)(), const char* name) {
+    try {
+        parse();
+    } catch (const std::runtime_error& error) {
+        return std::string(error.what()).find(name) != std::string::npos;
+    }
+    return false;
+}
+
+void flagParsing() {
+    require(!ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "0"), "0 turns the flag off");
+    require(ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "1"), "1 turns the flag on");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", ""); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "an empty flag is refused and named");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "yes"); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "yes is refused and named");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "true"); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "true is refused and named");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "2"); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "2 is refused and named");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", " 1"); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "a padded 1 is refused and named");
+    require(refusedWith([] { ParseHostVolumeFlag("ANYPS5_MUTE_ON_FOCUS_LOSS", "01"); }, "ANYPS5_MUTE_ON_FOCUS_LOSS"), "01 is refused and named");
+}
+
+void levelParsing() {
+    require(ParseHostVolumeLevel("ANYPS5_VOLUME", "0") == 0, "0 is a level");
+    require(ParseHostVolumeLevel("ANYPS5_VOLUME", "100") == 100, "100 is a level");
+    require(ParseHostVolumeLevel("ANYPS5_VOLUME", "37") == 37, "any whole number in range is a level");
+    for (const char* bad : {"", "-1", "101", "50.5", "5 0", "abc", "+50", " 50", "50 ", "1e1", "99999999999999999999"}) {
+        bool refused = false;
+        try {
+            ParseHostVolumeLevel("ANYPS5_VOLUME", bad);
+        } catch (const std::runtime_error& error) {
+            refused = std::string(error.what()).find("ANYPS5_VOLUME") != std::string::npos;
+        }
+        require(refused, "a level outside 0 to 100 or not a whole number is refused and named");
+    }
+}
+
 }
 
 int main() try {
@@ -218,6 +255,8 @@ int main() try {
     gainAtDefaultIsUnity();
     gainFollowsVolume();
     gainIsZeroWhenSilent();
+    flagParsing();
+    levelParsing();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
