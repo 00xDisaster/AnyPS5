@@ -94,6 +94,7 @@ int APS5_VABI sceErrorDialogGetStatus(void) {
 int APS5_VABI sceErrorDialogClose(void) {
  std::lock_guard g(g_lock);
  if (g_status != kStatusRunning) return kErrInvalidState;
+ if (g_presented) ModalDialogClose_nid_postfix();
  g_status = kStatusFinished;
  return kErrOk;
 }
@@ -102,6 +103,8 @@ int APS5_VABI sceErrorDialogTerminate(void) {
  std::lock_guard g(g_lock);
  if (g_status == kStatusNone) return kErrNotInitialized;
  g_status = kStatusNone;
+ g_presented = false;
+ ModalDialogReset_nid_postfix();
  return kErrOk;
 }
 
