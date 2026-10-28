@@ -835,7 +835,9 @@ def attach_names(records, names):
 def write_json(path, result):
     if path.is_dir():
         raise AuditError(f"{path}: JSON output is a directory")
-    destination = path.resolve()
+    destination = Path(os.path.realpath(path))
+    if destination.is_symlink():
+        raise AuditError(f"{path}: JSON output is a symbolic link loop")
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix=destination.name + ".", suffix=".tmp") as directory:
         temporary = Path(directory) / destination.name
         try:
@@ -974,8 +976,8 @@ def main(argv=None):
             inputs += [file for directory in args.modules for file in directory_files(directory, "*")]
             inputs += list(Path(args.source).rglob("*.cpp"))
             inputs += [file for file in Path(args.source).glob("*/CMakeLists.txt") if file.is_file()]
-            output = args.json.resolve()
-            if any(output == path.resolve() or (args.json.exists() and args.json.samefile(path)) for path in inputs):
+            output = Path(os.path.realpath(args.json))
+            if any(output == Path(os.path.realpath(path)) or (args.json.exists() and args.json.samefile(path)) for path in inputs):
                 raise AuditError(f"{args.json}: JSON output would overwrite an input file")
         registries = [(registry, read_registry(registry)) for registry in args.registries]
         imports = [entry for _, entries in registries for entry in entries]
