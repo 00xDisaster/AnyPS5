@@ -5,7 +5,9 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstdint>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
+#include <thread>
 
 extern "C" {
 extern int SceMsgDialogNativeModuleLoaded_nid_no_patch;
@@ -114,6 +116,33 @@ void CloseAndTerminate() {
     ModalDialogSetPresenter_nid_postfix(false);
 }
 
+void WithoutFlips() {
+    MsgDialogResult result{};
+    UserMessage focusNo{MsgDialog::ButtonTypeYesNoFocusNo, 0, "Delete?"};
+    UserParam param(MsgDialog::ModeUserMsg, &focusNo);
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogSetShowTimeout_nid_postfix(40);
+    Require(sceMsgDialogInitialize() == 0);
+    Require(sceMsgDialogOpen(&param) == 0);
+    Require(sceMsgDialogGetStatus() == kStatusRunning);
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceMsgDialogGetStatus() == kStatusFinished);
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdOk);
+    Require(!ModalDialogCapturesInput_nid_postfix() && Session() == ModalDialogState::Unshown);
+
+    Require(sceMsgDialogOpen(&param) == 0 && sceMsgDialogGetStatus() == kStatusRunning);
+    ModalDialogView view;
+    Require(ModalDialogReadView_nid_postfix(view));
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceMsgDialogUpdateStatus() == kStatusRunning);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(sceMsgDialogUpdateStatus() == kStatusFinished);
+    Require(sceMsgDialogGetResult(&result) == 0 && result.button_id == kButtonIdNo);
+    Require(sceMsgDialogTerminate() == 0);
+    ModalDialogSetShowTimeout_nid_postfix(ModalDialogShowTimeoutMilliseconds);
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 void ShownDialog() {
     UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
     UserParam param(MsgDialog::ModeUserMsg, &yesNo);
@@ -201,4 +230,5 @@ int main() {
     ShownDialog();
     CancelAndFallbacks();
     CloseAndTerminate();
+    WithoutFlips();
 }
