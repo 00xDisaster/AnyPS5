@@ -28,6 +28,7 @@ void CheckConsoleKind() {
     Require(sceKernelIsTestKit() == 0, "the console must not be reported as a test kit");
     Require(sceKernelIsProspero() == 1, "the architecture must be reported as Prospero");
     Require(sceKernelIsKratos() == 0, "the architecture must not be reported as Kratos");
+    Require(sceKernelIsPs4Process() == 0, "the process must not be reported as a PS4 process");
 }
 
 void CheckAuthInfo() {

@@ -426,6 +426,10 @@ int APS5_VABI sceKernelIsKratos(void) {
     return 0;
 }
 
+int APS5_VABI sceKernelIsPs4Process(void) {
+    return 0;
+}
+
 int APS5_VABI get_authinfo_nid_postfix(int pid, KernelAuthInfo* info) {
     if (info == nullptr) return static_cast<int>(Fail(GuestEperm));
     if (pid != 0 && pid != getpid_nid_postfix()) return static_cast<int>(Fail(GuestEsrch));
