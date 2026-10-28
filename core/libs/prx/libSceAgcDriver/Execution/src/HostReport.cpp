@@ -138,6 +138,37 @@ std::optional<std::string> text(const std::optional<std::uint64_t>& value) {
 
 }
 
+std::vector<HostRequirement> MissingRequirements(const HostGpuFacts& gpu) {
+    std::vector<HostRequirement> missing;
+    for (const auto& requirement : gpu.requirements)
+        if (requirement.required && !requirement.present) missing.push_back(requirement);
+    std::sort(missing.begin(), missing.end(), [](const auto& left, const auto& right) {
+        if (left.kind != right.kind) return left.kind < right.kind;
+        return left.name < right.name;
+    });
+    return missing;
+}
+
+std::string DescribeMissingRequirements(const HostGpuFacts& gpu, const std::vector<std::string>& redactions) {
+    const auto missing = MissingRequirements(gpu);
+    if (missing.empty()) return {};
+    std::string lacks;
+    for (const auto& requirement : missing) {
+        if (!lacks.empty()) lacks += ", ";
+        lacks += requirement.name + " (" + requirement.kind + ")";
+    }
+    std::string driver = gpu.driverName.empty() ? std::string("unknown driver") : gpu.driverName;
+    if (!gpu.driverInfo.empty()) driver += " " + gpu.driverInfo;
+    std::string text = "Vulkan: " + gpu.name + " (" + driver + ", Vulkan " + vulkanVersion(gpu.apiVersion) + ") lacks " + std::to_string(missing.size()) +
+        (missing.size() == 1 ? " item" : " items") + " AnyPS5 needs: " + lacks + ". Update the graphics driver; an older GPU or driver may not offer them.";
+    std::vector<std::string> others;
+    for (const auto& candidate : gpu.candidates)
+        if (candidate != gpu.name) others.push_back(candidate);
+    if (!others.empty()) text += " Other Vulkan devices on this machine: " + join(others) + "; set ANYPS5_GPU to a part of one name to run on it.";
+    text += " Start again with ANYPS5_HOST_REPORT=1 and attach the report to the issue.";
+    return RedactHostText(text, redactions);
+}
+
 bool ParseHostReportSetting(const char* value) {
     const std::string_view text = value != nullptr ? value : "";
     if (text.empty() || text == "0") return false;

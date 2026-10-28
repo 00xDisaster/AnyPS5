@@ -55,6 +55,8 @@ struct HostFacts {
     std::vector<std::string> unavailable;
 };
 
+std::vector<HostRequirement> MissingRequirements(const HostGpuFacts& gpu);
+std::string DescribeMissingRequirements(const HostGpuFacts& gpu, const std::vector<std::string>& redactions = {});
 bool ParseHostReportSetting(const char* value);
 std::string RedactHostText(const std::string& text, const std::vector<std::string>& names = {});
 std::string FormatHostReport(const HostFacts& facts);
