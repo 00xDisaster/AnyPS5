@@ -65,6 +65,7 @@
 #include <future>
 #include <fstream>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <mutex>
@@ -146,20 +147,33 @@ void require(bool condition, const char* reason) {
     if (!condition) throw std::runtime_error(std::string("Vulkan presentation: ") + reason);
 }
 
-void checkHostRequirements(const HostGpuQuery& query) {
+void checkHostRequirements(const HostGpuQuery& query, bool printReport) {
     HostGpuFacts gpu;
     try {
         gpu = CollectHostGpuFacts(query);
-    } catch (const std::exception&) {
+    } catch (const std::exception& error) {
+        if (printReport) std::fprintf(stderr, "AnyPS5 host report: the GPU could not be queried: %s\n", error.what());
         return;
     }
-    if (MissingRequirements(gpu).empty()) return;
-    std::vector<std::string> names;
-    try {
-        names = SystemHostSources().redactions();
-    } catch (const std::exception&) {
+    const bool lacking = !MissingRequirements(gpu).empty();
+    if (!printReport && !lacking) return;
+    auto facts = printReport ? CollectHostFacts(SystemHostSources()) : HostFacts{};
+    if (!printReport) {
+        try {
+            facts.redactions = SystemHostSources().redactions();
+        } catch (const std::exception&) {
+        }
     }
-    throw std::runtime_error(DescribeMissingRequirements(gpu, names));
+    if (printReport) {
+        static std::atomic<bool> printed{false};
+        if (!printed.exchange(true)) {
+            facts.gpu = gpu;
+            const auto text = FormatHostReport(facts);
+            std::fputs(text.c_str(), stderr);
+            std::fflush(stderr);
+        }
+    }
+    if (lacking) throw std::runtime_error(DescribeMissingRequirements(gpu, facts.redactions));
 }
 
 bool CoreVulkanCapability(std::uint32_t capability) {
@@ -1149,6 +1163,7 @@ VulkanDevice::VulkanDevice(CompileOnly) : VulkanDevice(nullptr, true) {}
 
 VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) : state(std::make_unique<State>()), serial([] { static std::atomic<std::uint64_t> serials{0}; return serials.fetch_add(1, std::memory_order_relaxed) + 1; }()) {
     state->compileOnly = compileOnly;
+    const bool hostReport = !compileOnly && ParseHostReportSetting(std::getenv("ANYPS5_HOST_REPORT"));
     APS5_LOG_OUT("VulkanDevice constructor window=%p", static_cast<const void*>(window));
 #ifdef _WIN32
     state->library = SDL_LoadObject("vulkan-1.dll");
@@ -1342,7 +1357,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         hostQuery.extensions = availableExtensions;
         hostQuery.candidates = candidateList;
         hostQuery.requestedPresentMode = std::getenv("ANYPS5_PRESENT_MODE");
-        checkHostRequirements(hostQuery);
+        checkHostRequirements(hostQuery, hostReport);
     }
     if (driverId == VK_DRIVER_ID_NVIDIA_PROPRIETARY && hasExtension(VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME)) {
         VkPhysicalDeviceShaderSMBuiltinsPropertiesNV smBuiltins{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV};
