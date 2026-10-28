@@ -115,7 +115,7 @@ int APS5_VABI kldfirstmod_nid_postfix(int fileid);
 int APS5_VABI kldload_nid_postfix(void);
 int APS5_VABI kldnext_nid_postfix(int fileid);
 int APS5_VABI kldstat_nid_postfix(void);
-int APS5_VABI kldsym_nid_postfix(void);
+int APS5_VABI kldsym_nid_postfix(int fileid, int cmd, void* data);
 int APS5_VABI kldunload_nid_postfix(int fileid);
 int APS5_VABI kmq_notify_nid_postfix(void);
 int APS5_VABI kmq_open_nid_postfix(void);
