@@ -157,5 +157,28 @@ int main() {
     Require(Chosen(ModalDialogState::Answered) == 0, "a drawn dialog could not be answered after the timeout");
     ModalDialogReset_nid_postfix();
     ModalDialogSetShowTimeout_nid_postfix(ModalDialogShowTimeoutMilliseconds);
+
+    ModalDialogRequest owned = YesNo(0, 1);
+    owned.owner = ModalDialogOwnerMsgDialog;
+    Require(ModalDialogOpen_nid_postfix(owned), "an owned dialog was refused");
+    std::size_t other = 7;
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerErrorDialog) == ModalDialogState::Idle && other == ModalDialogNoButton, "another library sees the dialog");
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Showing, "the owner does not see its dialog");
+    ModalDialogReset_nid_postfix(ModalDialogOwnerErrorDialog);
+    ModalDialogClose_nid_postfix(ModalDialogOwnerErrorDialog);
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Showing && ModalDialogCapturesInput_nid_postfix(), "another library reset or closed the dialog");
+    Require(ModalDialogReadView_nid_postfix(view), "the dialog is gone after another library's reset");
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Next);
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Answered && other == 1, "the owner's answer was lost");
+    ModalDialogReset_nid_postfix(ModalDialogOwnerErrorDialog);
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Answered, "another library erased the answer");
+    ModalDialogReset_nid_postfix(ModalDialogOwnerMsgDialog);
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Idle, "the owner could not reset its dialog");
+
+    Require(ModalDialogOpen_nid_postfix(owned), "the dialog did not open again");
+    ModalDialogClose_nid_postfix(ModalDialogOwnerMsgDialog);
+    Require(ModalDialogPoll_nid_postfix(other, ModalDialogOwnerMsgDialog) == ModalDialogState::Closed, "the owner could not close its dialog");
+    ModalDialogReset_nid_postfix();
     ModalDialogSetPresenter_nid_postfix(false);
 }
