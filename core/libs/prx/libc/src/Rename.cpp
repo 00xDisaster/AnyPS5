@@ -56,10 +56,15 @@ static std::filesystem::file_status LinkStatus(const std::filesystem::path& path
     const auto status = std::filesystem::symlink_status(path, error);
 #ifdef _WIN32
     if (status.type() == std::filesystem::file_type::not_found) {
-        const DWORD attributes = GetFileAttributesW(path.c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-            error.clear();
-            return std::filesystem::file_status(std::filesystem::file_type::symlink);
+        // Only a symbolic link reparse tag is a link; junctions and other reparse points keep the result above.
+        WIN32_FIND_DATAW entry{};
+        const HANDLE find = FindFirstFileW(path.c_str(), &entry);
+        if (find != INVALID_HANDLE_VALUE) {
+            FindClose(find);
+            if ((entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 && entry.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
+                error.clear();
+                return std::filesystem::file_status(std::filesystem::file_type::symlink);
+            }
         }
     }
 #endif
