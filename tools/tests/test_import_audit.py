@@ -2561,6 +2561,15 @@ class ImportAuditTests(unittest.TestCase):
                      + STUB_SOURCE.format(name="sceUnreferencedPending"))
         self.assertEqual(self.work.run(registry, "--strict-stubs")[0], 0)
 
+    def test_conditional_stubs_reads_utf8_source_with_non_ascii_characters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lib_dir = Path(directory)
+            cpp_file = lib_dir / "Export.cpp"
+            cpp_file.write_bytes(b"// Non-ASCII \xe2\x80\x94\nint stub_func() { return 0; }\n")
+            stubs = import_audit.conditional_stubs(lib_dir)
+            self.assertIsInstance(stubs, set)
+
+
 
 
 class StrictProviderTests(unittest.TestCase):
