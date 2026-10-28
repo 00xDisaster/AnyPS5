@@ -266,6 +266,7 @@ Pad::InputRequests Pad::KeyboardMouse::HandleEvent(const SDL_Event& event, Clock
         if (binding.control == InputControl::Screenshot && keyboard && down && !pressed[index]) requests.screenshot = true;
         if (binding.control == InputControl::ShowPadStatus && keyboard && down && !pressed[index]) requests.showPadStatus = true;
         if (binding.control == InputControl::VolumeUp && keyboard && down && !pressed[index]) requests.volumeUp = true;
+        if (binding.control == InputControl::VolumeDown && keyboard && down && !pressed[index]) requests.volumeDown = true;
         if (binding.control == InputControl::ToggleMouse && down && !pressed[index]) requests.toggleMouse = true;
         pressed[index] = down;
     }
