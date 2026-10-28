@@ -142,6 +142,39 @@ class EnvReferenceTests(unittest.TestCase):
                 found = env_reference.reads([root / "core"])
                 self.assertEqual(found["APS5_VALUE"], [(source.as_posix(), 1, kind, default)])
 
+    def test_multiple_reads_in_one_statement_keep_independent_kinds_and_defaults(self):
+        cases = (
+            ('consume(std::getenv("APS5_STRING"),\n\n\n\n'
+             'std::getenv("APS5_PRESENT") != nullptr);',
+             {"APS5_STRING": ("string", ""), "APS5_PRESENT": ("presence", "")}),
+            ('consume(std::getenv("APS5_FIRST_PRESENT") != nullptr,\n\n\n\n'
+             'std::getenv("APS5_LAST_STRING"));',
+             {"APS5_FIRST_PRESENT": ("presence", ""), "APS5_LAST_STRING": ("string", "")}),
+            ('consume(atoi(std::getenv("APS5_COUNT")),\n\n\n\n'
+             'std::getenv("APS5_OTHER_STRING"));',
+             {"APS5_COUNT": ("integer", ""), "APS5_OTHER_STRING": ("string", "")}),
+            ('consume(std::getenv("APS5_FALLBACK") ? 1 : 42,\n\n\n\n'
+             'std::getenv("APS5_NO_DEFAULT"));',
+             {"APS5_FALLBACK": ("string", "42"), "APS5_NO_DEFAULT": ("string", "")}),
+            ('consume(atoi((std::puts(R"tag(;,{})tag"), std::getenv("APS5_NESTED_COUNT"))),\n'
+             'std::getenv("APS5_NEXT_STRING"));',
+             {"APS5_NESTED_COUNT": ("integer", ""), "APS5_NEXT_STRING": ("string", "")}),
+        )
+        root = self.fixture()
+        source = root / "core" / "Sample.cpp"
+        for text, expected in cases:
+            with self.subTest(source=text):
+                source.write_text(text + "\n", encoding="utf-8")
+                found = env_reference.reads([root / "core"])
+                self.assertEqual(set(found), set(expected))
+                for name, classification in expected.items():
+                    self.assertEqual(found[name][0][2:], classification)
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(env_reference.main(["--root", str(root / "core"), "--table"]), 0)
+                for name, (kind, default) in expected.items():
+                    self.assertIn(f"| `{name}` | {kind} |", output.getvalue())
+                    self.assertIn(f"| {default} |", output.getvalue())
+
     def test_whitespace_before_parentheses_preserves_names_kinds_and_defaults(self):
         root = self.fixture()
         source = root / "core" / "Sample.cpp"

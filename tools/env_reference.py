@@ -79,6 +79,37 @@ def default_of(match, window):
     return found.group(1) if found else ""
 
 
+def expression_window(text, code, matches, match, start, end):
+    peers = sorted((other.start() for _, other in matches if start <= other.start() < end))
+    if len(peers) < 2:
+        return text[start:end]
+    peer_set = set(peers)
+    depths = {}
+    commas = []
+    depth = 0
+    for pos in range(start, end):
+        if pos in peer_set:
+            depths[pos] = depth
+        token = code[pos]
+        if token in "([":
+            depth += 1
+        elif token in ")]":
+            depth -= 1
+        elif token == ",":
+            commas.append((pos, depth))
+    for pos, comma_depth in commas:
+        left = bisect.bisect_left(peers, pos)
+        if not left or left == len(peers):
+            continue
+        if comma_depth > min(depths[peers[left - 1]], depths[peers[left]]):
+            continue
+        if pos < match.start():
+            start = max(start, pos + 1)
+        elif pos >= match.end():
+            end = min(end, pos)
+    return text[start:end]
+
+
 def source_files(root):
     root = Path(root)
     if not root.is_dir():
@@ -106,7 +137,8 @@ def reads(roots, prefixes=PREFIXES):
                 number = bisect.bisect_right(starts, match.start())
                 start = max(code.rfind(token, 0, match.start()) for token in ";{}") + 1
                 end = code.find(";", match.end())
-                window = text[start:end + 1] if end >= 0 else text[start:]
+                end = end + 1 if end >= 0 else len(text)
+                window = expression_window(text, code, matches, match, start, end)
                 found.setdefault(match.group("name"), []).append(
                     (path.as_posix(), number, kind_of(reader, window), default_of(match, window)))
     for sites in found.values():
