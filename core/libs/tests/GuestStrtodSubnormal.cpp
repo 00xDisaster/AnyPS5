@@ -71,6 +71,29 @@ static void CheckHexadecimal() {
     CheckBoth("0x1p+1100", 0x7ff0000000000000ull, ERANGE, "hexadecimal overflow");
 }
 
+static void CheckHexadecimalExponentSaturation() {
+    CheckBoth("0x1p-4611686018427387904", 0, ERANGE, "hexadecimal exponent at the saturation limit");
+    CheckBoth("0x1p-9223372036854775808", 0, ERANGE, "hexadecimal exponent past the 64-bit range");
+    CheckBoth("0x1p+9223372036854775808", 0x7ff0000000000000ull, ERANGE, "hexadecimal positive exponent past the 64-bit range");
+    CheckBoth("0x10000p-99999999999999999999", 0, ERANGE, "saturated exponent with integer digits");
+    CheckBoth("0x0.00001p+99999999999999999999", 0x7ff0000000000000ull, ERANGE, "saturated exponent with fraction digits");
+}
+
+static void CheckLongHexadecimalDigitRuns() {
+    constexpr long long count = 1 << 20;
+    const std::string zeros(count, '0');
+    const std::string integer = "0x1" + zeros + "p";
+    const std::string fraction = "0x0." + zeros + "1p";
+    CheckBoth(integer + std::to_string(-(4 * count + 1074)), 1, 7, "long integer digit run at the smallest subnormal");
+    CheckBoth(integer + std::to_string(-(4 * count + 1075)), 0, ERANGE, "long integer digit run below the smallest subnormal");
+    CheckBoth(integer + "-99999999999999999999", 0, ERANGE, "long integer digit run with a saturated exponent");
+    CheckBoth(fraction + "+" + std::to_string(4 * count + 4 - 1074), 1, 7, "long fraction digit run at the smallest subnormal");
+    CheckBoth(fraction + "+" + std::to_string(4 * count + 4 - 1075), 0, ERANGE, "long fraction digit run below the smallest subnormal");
+    CheckBoth(fraction + "+" + std::to_string(4 * count + 4 + 1023), 0x7fe0000000000000ull, 7, "long fraction digit run at the largest power of two");
+    CheckBoth(fraction + "+" + std::to_string(4 * count + 4 + 1024), 0x7ff0000000000000ull, ERANGE, "long fraction digit run overflow");
+    CheckBoth(fraction + "+99999999999999999999", 0x7ff0000000000000ull, ERANGE, "long fraction digit run with a saturated exponent");
+}
+
 int main() {
     const std::string exact = ExactSmallestSubnormalDecimal();
     Check("1e-310", std::bit_cast<std::uint64_t>(1e-310), ERANGE, "inexact decimal subnormal errno");
@@ -81,4 +104,6 @@ int main() {
     Check("0x1p-1074", 1, 7, "hexadecimal subnormal errno preservation");
     Check("1e-330", 0, ERANGE, "decimal underflow-to-zero errno");
     CheckHexadecimal();
+    CheckHexadecimalExponentSaturation();
+    CheckLongHexadecimalDigitRuns();
 }

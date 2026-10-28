@@ -189,6 +189,8 @@ struct HexadecimalSubject {
     long long exponent;
 };
 
+constexpr long long HexadecimalExponentLimit = 1ll << 62;
+
 HexadecimalSubject ReadHexadecimalSubject(const char* digits, const char* parsedEnd) {
     std::uint64_t significand = 0;
     long long exponent = 0;
@@ -215,7 +217,8 @@ HexadecimalSubject ReadHexadecimalSubject(const char* digits, const char* parsed
         if (*cursor == '+' || *cursor == '-') ++cursor;
         long long scale = 0;
         for (; cursor < parsedEnd; ++cursor) {
-            if (scale < 1000000000) scale = scale * 10 + (*cursor - '0');
+            const int digit = *cursor - '0';
+            scale = scale > (HexadecimalExponentLimit - digit) / 10 ? HexadecimalExponentLimit : scale * 10 + digit;
         }
         exponent += negative ? -scale : scale;
     }
