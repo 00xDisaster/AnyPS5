@@ -1,5 +1,6 @@
 #include "prx/libSceVideoOut/include/MouseInput.hpp"
 #include "prx/libSceMouse/include/MouseState.hpp"
+#include "prx/libSceIme/include/ModalDialog.hpp"
 
 #include "SDL_mouse.h"
 #include "SDL_video.h"
@@ -10,7 +11,7 @@ void MouseInput::HandleEvent(const SDL_Event& event, unsigned windowId) {
     MouseInputEvent input{};
     switch (event.type) {
         case SDL_MOUSEMOTION:
-            if (event.motion.windowID != windowId || !focused) return;
+            if (event.motion.windowID != windowId || !focused || ModalDialogCapturesInput_nid_postfix()) return;
             input.x = scaled(event.motion.xrel, scaleX, remainderX);
             input.y = scaled(event.motion.yrel, scaleY, remainderY);
             break;
@@ -26,7 +27,7 @@ void MouseInput::HandleEvent(const SDL_Event& event, unsigned windowId) {
             input.pressed = event.type == SDL_MOUSEBUTTONDOWN;
             break;
         case SDL_MOUSEWHEEL:
-            if (event.wheel.windowID != windowId || !focused) return;
+            if (event.wheel.windowID != windowId || !focused || ModalDialogCapturesInput_nid_postfix()) return;
             input.wheel = event.wheel.y;
             input.tilt = event.wheel.x;
             if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
