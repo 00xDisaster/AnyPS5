@@ -72,33 +72,37 @@ void CheckUnscaledHexadecimal(TFloat (APS5_VABI *parse)(const char*, char**, std
     std::feclearexcept(FE_ALL_EXCEPT);
     std::feraiseexcept(FE_DIVBYZERO);
     const unsigned control = _mm_getcsr() & ~0x3fu;
-    const int rounding = std::fegetround();
+    unsigned short rounding;
+    asm volatile("fnstcw %0" : "=m"(rounding));
     int error = 123;
     char* end = nullptr;
     const auto value = parse(text, &end, 0, &error);
     const int flags = std::fetestexcept(FloatingExceptions);
+    unsigned short after;
+    asm volatile("fnstcw %0" : "=m"(after));
     constexpr std::size_t Bytes = std::numeric_limits<TFloat>::digits == 64 ? 10 : sizeof(TFloat);
     Require(std::memcmp(&value, &expected, Bytes) == 0, "unscaled hexadecimal value bits");
     Require(end == text + std::strlen(text) - 4 && error == 0 && *__error_nid_postfix() == 7, "unscaled hexadecimal end and errors");
     Require(flags == (FE_DIVBYZERO | expectedFlags), "unscaled hexadecimal floating flags");
-    Require((_mm_getcsr() & ~0x3fu) == control && std::fegetround() == rounding, "unscaled hexadecimal preserves floating controls");
+    Require((_mm_getcsr() & ~0x3fu) == control && after == rounding, "unscaled hexadecimal preserves floating controls");
 }
 
 void TestUnscaledHexadecimal() {
-    std::fenv_t saved;
-    Require(std::fegetenv(&saved) == 0, "save unscaled hexadecimal test environment");
+    GuestFloatingPointEnvironment saved;
+    Require(fegetenv_nid_postfix(&saved) == 0, "save unscaled hexadecimal test environment");
     for (const unsigned flushing : {0u, 0x40u, 0x8000u, 0x8040u}) {
-        for (const int rounding : {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO}) {
+        for (unsigned rounding = 0; rounding < 4u; ++rounding) {
             for (unsigned sse = 0; sse < 4u; ++sse) {
-                Require(std::fesetenv(FE_DFL_ENV) == 0 && std::fesetround(rounding) == 0, "set unscaled hexadecimal rounding");
-                _mm_setcsr((_mm_getcsr() & ~0x6000u) | (sse << 13u) | flushing);
+                const auto x87 = static_cast<unsigned short>(0x37fu | (rounding << 10u));
+                asm volatile("fnclex\n\tfldcw %0" : : "m"(x87));
+                _mm_setcsr(0x1f80u | (sse << 13u) | flushing);
                 CheckUnscaledHexadecimal(_Stofx_nid_postfix, "0x1.0000011p0tail", sse == 2u ? 0x1.000002p0f : 1.0f, FE_INEXACT);
                 CheckUnscaledHexadecimal(_Stofx_nid_postfix, "0x1.0000018p0tail", 0x1.000002p0f, 0);
                 CheckUnscaledHexadecimal(_Stodx_nid_postfix, "0x1.00000000000008p0tail", 0x1.0000000000001p0, 0);
                 CheckUnscaledHexadecimal(_Stodx_nid_postfix, "0x1.00000000000007p0tail", 1.0, 0);
-                CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.00000000000000011p0tail", rounding == FE_UPWARD || rounding == FE_TONEAREST ? 0x1.0000000000000002p0L : 1.0L, FE_INEXACT);
-                CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.000000000000000100001p0tail", rounding == FE_UPWARD ? 0x1.0000000000000002p0L : 1.0L, FE_INEXACT);
-                const bool up = rounding == FE_UPWARD;
+                CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.00000000000000011p0tail", rounding == 2u || rounding == 0u ? 0x1.0000000000000002p0L : 1.0L, FE_INEXACT);
+                CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "0x1.000000000000000100001p0tail", rounding == 2u ? 0x1.0000000000000002p0L : 1.0L, FE_INEXACT);
+                const bool up = rounding == 2u;
                 CheckUnscaledHexadecimal(_Stofx_nid_postfix, "-0x1p-150tail", up ? -std::numeric_limits<float>::denorm_min() : -0.0f, 0);
                 CheckUnscaledHexadecimal(_Stodx_nid_postfix, "-0x1p-1075tail", up ? -std::numeric_limits<double>::denorm_min() : -0.0, 0);
                 CheckUnscaledHexadecimal(_Stoldx_nid_postfix, "-0x1p-16446tail", up ? -std::numeric_limits<long double>::denorm_min() : -0.0L, 0);
@@ -111,7 +115,8 @@ void TestUnscaledHexadecimal() {
             }
         }
     }
-    Require(std::fesetenv(&saved) == 0, "restore unscaled hexadecimal test environment");
+    asm volatile("fldenv %0" : : "m"(saved) : "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)");
+    _mm_setcsr(saved.mxcsr);
 }
 
 void CheckExp(double x, double y, short offset, double expected, short expectedKind, int expectedErrno, int expectedFlags, const char* message) {

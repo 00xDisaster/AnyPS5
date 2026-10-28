@@ -1,16 +1,17 @@
 #include "prx/libc/include/Api.hpp"
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cerrno>
 #include <cfenv>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <xmmintrin.h>
 
 #include "prx/libc/include/General.hpp"
 
@@ -31,6 +32,57 @@ int HexadecimalDigit(char value) {
     if (value >= 'a' && value <= 'f') return value - 'a' + 10;
     if (value >= 'A' && value <= 'F') return value - 'A' + 10;
     return -1;
+}
+
+template<typename TFloat>
+TFloat ScaleHexadecimal(TFloat value, std::int64_t power) {
+    constexpr unsigned Precision = std::numeric_limits<TFloat>::digits;
+    static_assert(Precision == 24 || Precision == 53 || Precision == 64);
+    constexpr auto Hidden = std::uint64_t{1} << (Precision - 1);
+    constexpr int MaximumExponent = 2 * std::numeric_limits<TFloat>::max_exponent - 1;
+    std::uint64_t mantissa;
+    int exponent;
+    if constexpr (sizeof(TFloat) == 4) {
+        const auto bits = std::bit_cast<std::uint32_t>(value);
+        mantissa = (bits & (Hidden - 1)) | Hidden;
+        exponent = (bits >> (Precision - 1)) & MaximumExponent;
+    } else if constexpr (sizeof(TFloat) == 8) {
+        const auto bits = std::bit_cast<std::uint64_t>(value);
+        mantissa = (bits & (Hidden - 1)) | Hidden;
+        exponent = (bits >> (Precision - 1)) & MaximumExponent;
+    } else {
+        static_assert(Precision == 64 && sizeof(TFloat) >= 10 && std::endian::native == std::endian::little);
+        std::uint16_t encoded;
+        std::memcpy(&mantissa, &value, sizeof(mantissa));
+        std::memcpy(&encoded, reinterpret_cast<const unsigned char*>(&value) + 8, sizeof(encoded));
+        exponent = encoded & MaximumExponent;
+    }
+    auto adjusted = exponent + power;
+    if (adjusted >= MaximumExponent) return std::numeric_limits<TFloat>::infinity();
+    if (adjusted <= 0) {
+        const auto shift = 1 - adjusted;
+        if (shift > Precision) return static_cast<TFloat>(0);
+        const auto remainder = shift == 64 ? mantissa : mantissa & ((std::uint64_t{1} << shift) - 1);
+        mantissa = shift == 64 ? 0 : mantissa >> shift;
+        if (remainder != 0) {
+            GuestFloatingPointEnvironment environment;
+            if (fegetenv_nid_postfix(&environment) != 0) throw std::runtime_error("cannot read hexadecimal binary rounding");
+            const auto rounding = (environment.control >> 10u) & 3u;
+            const auto half = std::uint64_t{1} << (shift - 1);
+            if (rounding == 2u || (rounding == 0u && (remainder > half || (remainder == half && (mantissa & 1u) != 0)))) ++mantissa;
+        }
+        adjusted = (mantissa & Hidden) != 0 ? 1 : 0;
+    }
+    if constexpr (sizeof(TFloat) == 4) {
+        return std::bit_cast<TFloat>(static_cast<std::uint32_t>((static_cast<std::uint64_t>(adjusted) << (Precision - 1)) | (mantissa & (Hidden - 1))));
+    } else if constexpr (sizeof(TFloat) == 8) {
+        return std::bit_cast<TFloat>((static_cast<std::uint64_t>(adjusted) << (Precision - 1)) | (mantissa & (Hidden - 1)));
+    } else {
+        const auto encoded = static_cast<std::uint16_t>(adjusted);
+        std::memcpy(&value, &mantissa, sizeof(mantissa));
+        std::memcpy(reinterpret_cast<unsigned char*>(&value) + 8, &encoded, sizeof(encoded));
+        return value;
+    }
 }
 
 template<typename TFloat>
@@ -109,26 +161,7 @@ std::optional<TFloat> UnscaledHexadecimal(const char* text, char** end) {
     TFloat value;
     if constexpr (std::numeric_limits<TFloat>::digits <= 53) value = static_cast<TFloat>(low);
     else value = std::ldexp(static_cast<TFloat>(high), 64) + static_cast<TFloat>(low);
-    if (exponent != 0) {
-        const int rounding = std::fegetround();
-        const int savedErrno = errno;
-        std::fenv_t saved;
-        if (std::feholdexcept(&saved) != 0) throw std::runtime_error("cannot hold hexadecimal floating environment");
-        if (std::fesetround(rounding) != 0) {
-            std::fesetenv(&saved);
-            errno = savedErrno;
-            throw std::runtime_error("cannot select hexadecimal binary rounding");
-        }
-        _mm_setcsr(_mm_getcsr() & ~0x8040u);
-        int binary = 0;
-        std::frexp(value, &binary);
-        const auto combined = exponent + binary;
-        if (combined > std::numeric_limits<TFloat>::max_exponent) value = std::numeric_limits<TFloat>::infinity();
-        else if (combined < std::numeric_limits<TFloat>::min_exponent - std::numeric_limits<TFloat>::digits) value = 0;
-        else value = std::scalbn(value, static_cast<int>(exponent));
-        if (std::fesetenv(&saved) != 0) throw std::runtime_error("cannot restore hexadecimal floating environment");
-        errno = savedErrno;
-    }
+    if (exponent != 0) value = ScaleHexadecimal(value, exponent);
     return std::copysign(value, negative ? static_cast<TFloat>(-1) : static_cast<TFloat>(1));
 }
 
