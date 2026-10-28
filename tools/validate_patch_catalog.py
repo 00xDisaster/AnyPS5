@@ -8,7 +8,10 @@ import suggest_patches
 
 
 def validate(directory):
-    entries = suggest_patches.read_catalog(directory)
+    try:
+        entries = suggest_patches.read_catalog(directory)
+    except RecursionError as error:
+        raise ValueError("index.json is nested too deeply") from error
     seen_ids = {}
     errors = 0
     for number, entry in enumerate(entries, 1):
@@ -49,7 +52,11 @@ def main(argv=None):
     parser.add_argument("--catalog", required=True, type=Path, help="directory containing index.json and patch files")
     args = parser.parse_args(argv)
     try:
-        return validate(args.catalog.resolve())
+        try:
+            catalog = args.catalog.resolve()
+        except RuntimeError as error:
+            raise ValueError(f"catalog path cannot be resolved: {error}") from error
+        return validate(catalog)
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
         print(f"Catalog validation: {error}", file=sys.stderr)
         return 2

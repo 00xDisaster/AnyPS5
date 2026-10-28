@@ -2,6 +2,7 @@ import contextlib
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -118,6 +119,30 @@ class CatalogValidatorTests(unittest.TestCase):
             result = validate_patch_catalog.main(["--catalog", str(self.catalog)])
         self.assertEqual(result, 2)
         self.assertIn("catalog must have format 1", errors.getvalue())
+
+    def test_deeply_nested_index_is_reported_without_traceback(self):
+        index = self.catalog / "index.json"
+        content = '{"format": 1, "entries": ' + "[" * 200000 + "]" * 200000 + "}"
+        index.write_text(content)
+        result = subprocess.run([sys.executable, str(Path(validate_patch_catalog.__file__)),
+                                 "--catalog", str(self.catalog)], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Catalog validation: index.json is nested too deeply", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(index.read_text(), content)
+
+    def test_catalog_symlink_loop_is_reported_without_traceback(self):
+        loop = self.root / "loop"
+        try:
+            loop.symlink_to(loop)
+        except OSError as error:
+            self.skipTest(f"symlinks unavailable: {error}")
+        result = subprocess.run([sys.executable, str(Path(validate_patch_catalog.__file__)),
+                                 "--catalog", str(loop)], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Catalog validation:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertTrue(loop.is_symlink())
 
 
 if __name__ == "__main__":
