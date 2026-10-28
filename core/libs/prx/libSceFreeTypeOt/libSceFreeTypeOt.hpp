@@ -1,3 +1,4 @@
 #pragma once
 
+#include "prx/libSceFreeTypeOt/include/Stream.hpp"
 #include "prx/libSceFreeType/include/Api.hpp"
