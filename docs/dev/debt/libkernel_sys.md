@@ -386,11 +386,11 @@
 
 #### Inventory identity evidence
 
-The NID set is from the PS5 firmware 13.60 `libkernel_sys` function-export table (defined `STT_FUNC` entries), not the older 3.20 inventory. The table supplies hashed export identities, not C prototypes or plaintext function names. Named declarations are candidate spellings whose repository-computed NID exactly matches an observed function NID.
+The NID set is from the inspected `libkernel_sys` ELF function-export table (defined `STT_FUNC` entries), not the older 3.20 inventory. The module-parameter words at `0x10` and `0x14` are `0x13590001` and `0x13600007`; the earlier 13.60 label refers to SDK-formatted metadata, not independently authenticated retail firmware or an introduction date. The [reproducible static audit](https://github.com/boykopovar/AnyPS5/pull/12367#issuecomment-6470603298) finds 1551 unique function NIDs with set digest `5f1668cc9c69e2950722a83151f31cf7aa94fb1552ab883e5067f43c94d63b16` and confirms all 328 proposed entries. The digest hashes sorted unique ASCII NIDs, each followed by LF. Named declarations are candidate spellings whose repository-computed NID exactly matches an observed function NID; the hashed table establishes neither plaintext spelling nor C ABI.
 
 The 35 formerly literal aliases are named by the [repository-pinned aerolib table](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv). There are now 168 named declarations and 160 unresolved NID aliases; every one of the 328 entries remains a throwing placeholder.
 
-The following eight candidate spellings are absent from that aerolib revision. Their name/NID pairs occur in the [public ps5rs identity database at commit `2304be5131221bae0dac24b9767cabffda33f747`](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv) and independently recompute to the function NIDs in the 13.60 table. This database supports candidate spelling only; it does not establish firmware membership, introduction version or ABI.
+The following eight candidate spellings are absent from that aerolib revision. Their name/NID pairs occur in the [public ps5rs identity database at commit `2304be5131221bae0dac24b9767cabffda33f747`](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv) and independently recompute to the function NIDs in the inspected table. This database supports candidate spelling only; it does not establish firmware membership, introduction version or ABI.
 
 | Candidate spelling | NID |
 | --- | --- |
