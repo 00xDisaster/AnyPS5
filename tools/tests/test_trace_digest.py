@@ -1032,4 +1032,4 @@ class IntervalDigestTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(defaultTest=os.environ.get("TRACE_DIGEST_TEST"))
