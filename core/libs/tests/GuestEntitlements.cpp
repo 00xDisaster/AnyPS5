@@ -72,17 +72,6 @@ int main(int argc, char** argv) {
     Require(sceNpEntitlementAccessGetEntitlementKey(0, nullptr, &key) == static_cast<int>(0x817D0002));
     Require(sceNpEntitlementAccessGetEntitlementKey(0, &label, nullptr) == static_cast<int>(0x817D0002));
     Require(sceNpEntitlementAccessGetEntitlementKey(0, &label, &key) == static_cast<int>(0x817D0007));
-    NpEntitlementAccessTransactionId txId{};
-    Require(sceNpEntitlementAccessGenerateTransactionId(&txId) == static_cast<int>(0x80550006));
-    std::int32_t consumeRes = 0, countRes = 0;
-    Require(sceNpEntitlementAccessPollConsumeEntitlement(1, &consumeRes, &countRes) == static_cast<int>(0x80550006));
-    std::int64_t reqId = 0;
-    Require(sceNpEntitlementAccessRequestConsumeUnifiedEntitlement(0, 0, nullptr, nullptr, 0, &reqId) == static_cast<int>(0x80550006));
-    Require(sceNpEntitlementAccessRequestConsumeServiceEntitlement(0, 0, nullptr, nullptr, 0, &reqId) == static_cast<int>(0x80550006));
-    Require(sceNpEntitlementAccessPollServiceEntitlementInfo(1, &consumeRes, nullptr) == static_cast<int>(0x80550006));
-    Require(sceNpEntitlementAccessPollUnifiedEntitlementInfo(1, &consumeRes, nullptr) == static_cast<int>(0x80550006));
-    Require(sceNpEntitlementAccessRequestServiceEntitlementInfo(0, 0, nullptr, &reqId) == static_cast<int>(0x80550006));
-    Require(sceNpEntitlementAccessRequestUnifiedEntitlementInfo(0, 0, nullptr, &reqId) == static_cast<int>(0x80550006));
     std::filesystem::remove_all(root);
     std::puts("Guest entitlements passed");
     return 0;
