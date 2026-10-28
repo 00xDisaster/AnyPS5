@@ -333,6 +333,10 @@ void PadInput::HandleEvent(const SDL_Event& event, DisplayWindow& window) {
         AgcDriverPadStatusShow_nid_postfix();
         reportStatus();
     }
+    if (window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) {
+        HostVolume volume;
+        if (ApplyHostVolumeRequests(requests, &volume)) APS5_LOG_ERR("%s", HostVolumeMessage(volume).c_str());
+    }
     if (requests.toggleMouse) setMouseMode(!keyboardMouse.MouseMode());
     if (event.type != SDL_MOUSEMOTION) publish(window.FrameNumber(), 0);
 }
