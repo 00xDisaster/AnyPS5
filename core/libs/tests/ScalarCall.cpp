@@ -147,6 +147,12 @@ static void CheckUserDataCalls() {
     auto skippedWrite = branchedCopy;
     skippedWrite[3] = 0xbe8e0380u;
     Require(UserDataCalls(skippedWrite).empty());
+    const std::vector<std::uint32_t> loopedCall{0xbe8e0300u, 0xbe8f0301u, 0xbe8e210eu, 0xbf85fffeu, 0xbf810000u};
+    Require(UserDataCalls(loopedCall).empty());
+    auto separateLink = loopedCall;
+    separateLink[2] = 0xbe90210eu;
+    const auto keptPointer = UserDataCalls(separateLink);
+    Require(keptPointer.size() == 1u && keptPointer[0].programCounter == 0x8u && keptPointer[0].linkRegister == 16u && keptPointer[0].userDataRegister == 0u);
 
     const std::vector<std::uint32_t> addFive{0x4a020285u, 0xbe80200eu};
     const std::vector<std::uint32_t> addSixtyFour{0x4a0202c0u, 0xbe80200eu};
