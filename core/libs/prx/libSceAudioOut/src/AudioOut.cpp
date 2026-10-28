@@ -299,6 +299,7 @@ static void queueAudio(Port& port, const void* data, std::unique_lock<std::mutex
         queueData = padFrames.data();
     } else {
         queueData = prepareBuffer(port, data, prepareBuf);
+        queueData = HostGainFilter(port.hostGain, HostVolumeGain_nid_no_patch(), queueData, formatIsFloat(port.format), port.samplesNum, static_cast<unsigned>(port.channels), prepareBuf);
         queueSize = checkedBufferSize(port.samplesNum, static_cast<std::uint32_t>(port.channels), bytesPerSample(port.format));
     }
 
