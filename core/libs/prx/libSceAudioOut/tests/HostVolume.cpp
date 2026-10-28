@@ -163,6 +163,40 @@ void focusOptionTogglesWhileUnfocused() {
     require(!state.FocusMuted(), "the focus mute is gone with the option off");
 }
 
+void gainAtDefaultIsUnity() {
+    HostVolume state;
+    require(state.Gain() == HostVolume::UnityGain, "the default gain is exactly unity");
+    require(HostVolume::UnityGain == 65536, "unity is 1.0 in 16.16 fixed point");
+}
+
+void gainFollowsVolume() {
+    HostVolume state;
+    state.SetVolume(50);
+    require(state.Gain() == 16384, "50 percent is a quarter of the amplitude");
+    state.SetVolume(0);
+    require(state.Gain() == 0, "0 is silence");
+    std::uint32_t previous = 0;
+    for (int volume = 1; volume <= 100; ++volume) {
+        state.SetVolume(volume);
+        require(state.Gain() > previous, "the gain grows with every volume");
+        require(state.Gain() <= HostVolume::UnityGain, "the gain never exceeds unity");
+        previous = state.Gain();
+    }
+}
+
+void gainIsZeroWhenSilent() {
+    HostVolume state;
+    state.ToggleMute();
+    require(state.Gain() == 0 && state.Silent(), "a muted state has no gain");
+    state.ToggleMute();
+    require(state.Gain() == HostVolume::UnityGain && !state.Silent(), "unmuting restores the gain");
+    state.SetMuteOnFocusLoss(true);
+    state.FocusChanged(false);
+    require(state.Gain() == 0 && state.Silent(), "a focus muted state has no gain");
+    state.FocusChanged(true);
+    require(state.Gain() == HostVolume::UnityGain, "gaining focus restores the gain");
+}
+
 }
 
 int main() try {
@@ -181,6 +215,9 @@ int main() try {
     focusLossMutesAndGainRestores();
     focusMuteKeepsUserState();
     focusOptionTogglesWhileUnfocused();
+    gainAtDefaultIsUnity();
+    gainFollowsVolume();
+    gainIsZeroWhenSilent();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
