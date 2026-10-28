@@ -137,8 +137,8 @@ class ProgressSnapshotTests(unittest.TestCase):
         for section in ("libraries", "shaders"):
             with self.subTest(section=section):
                 snapshot = self.snapshot()
-                snapshot[section]["groups"] = [{"name": "repeated"}, {"name": "other"}, {"name": "repeated"}]
-                self.assert_rejected(snapshot, section + ".groups[2].name duplicates 'repeated'")
+                snapshot[section]["groups"] = [{"name": "Repeated"}, {"name": "other"}, {"name": "Repeated"}]
+                self.assert_rejected(snapshot, section + ".groups[2].name duplicates 'Repeated'")
 
     def test_group_names_are_case_sensitive_and_local_to_each_section(self):
         snapshot = self.snapshot()
