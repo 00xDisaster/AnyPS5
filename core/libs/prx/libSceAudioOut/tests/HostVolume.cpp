@@ -94,6 +94,33 @@ void stepsAtLimitsStillEndMute() {
     require(!bottom.Muted() && bottom.Volume() == 0, "a step down at 0 while muted only unmutes");
 }
 
+void setVolumeDirectly() {
+    HostVolume state;
+    require(state.SetVolume(35), "a new volume reports a change");
+    require(state.Volume() == 35, "the volume takes the value set");
+    require(!state.SetVolume(35), "the same volume reports no change");
+    require(state.SetVolume(0) && state.Volume() == 0, "0 is accepted");
+    require(state.SetVolume(100) && state.Volume() == 100, "100 is accepted");
+    state.ToggleMute();
+    state.SetVolume(40);
+    require(state.Muted(), "setting the volume leaves the mute alone");
+}
+
+void setVolumeRefusesOutOfRange() {
+    HostVolume state;
+    state.SetVolume(60);
+    for (const int value : {-1, 101, 1000, -100}) {
+        bool refused = false;
+        try {
+            state.SetVolume(value);
+        } catch (const std::invalid_argument&) {
+            refused = true;
+        }
+        require(refused, "a volume outside 0 to 100 is refused");
+        require(state.Volume() == 60, "a refused volume leaves the state as it was");
+    }
+}
+
 }
 
 int main() try {
@@ -106,6 +133,8 @@ int main() try {
     muteAtZeroAndMaximum();
     stepsEndMute();
     stepsAtLimitsStillEndMute();
+    setVolumeDirectly();
+    setVolumeRefusesOutOfRange();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
