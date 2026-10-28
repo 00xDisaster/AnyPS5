@@ -116,6 +116,32 @@ void CloseAndTerminate() {
     ModalDialogSetPresenter_nid_postfix(false);
 }
 
+void OtherLibraryDialog() {
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogRequest other;
+    other.owner = ModalDialogOwnerErrorDialog;
+    other.message = u"Error";
+    other.buttons = {u"OK"};
+    Require(ModalDialogOpen_nid_postfix(other));
+    Require(sceMsgDialogInitialize() == 0);
+    Require(sceMsgDialogTerminate() == 0);
+    std::size_t chosen = 0;
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerErrorDialog) == ModalDialogState::Showing && ModalDialogCapturesInput_nid_postfix());
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(ModalDialogPoll_nid_postfix(chosen, ModalDialogOwnerErrorDialog) == ModalDialogState::Answered && chosen == 0);
+
+    UserMessage yesNo{MsgDialog::ButtonTypeYesNo, 0, "Continue?"};
+    UserParam param(MsgDialog::ModeUserMsg, &yesNo);
+    ModalDialogReset_nid_postfix();
+    Require(sceMsgDialogInitialize() == 0);
+    Require(sceMsgDialogOpen(&param) == 0 && Session() == ModalDialogState::Showing);
+    ModalDialogReset_nid_postfix(ModalDialogOwnerErrorDialog);
+    Require(Session() == ModalDialogState::Showing && sceMsgDialogGetStatus() == kStatusRunning);
+    Require(sceMsgDialogTerminate() == 0);
+    Require(Session() == ModalDialogState::Idle);
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 void WithoutFlips() {
     MsgDialogResult result{};
     UserMessage focusNo{MsgDialog::ButtonTypeYesNoFocusNo, 0, "Delete?"};
@@ -231,4 +257,5 @@ int main() {
     CancelAndFallbacks();
     CloseAndTerminate();
     WithoutFlips();
+    OtherLibraryDialog();
 }
