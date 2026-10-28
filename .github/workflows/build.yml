@@ -519,24 +519,7 @@ jobs:
           echo "CCACHE_PREFIX=$GITHUB_WORKSPACE/tools/compile_slot.sh" >> "$GITHUB_ENV"
           echo "ANYPS5_COMPILE_SLOT_DIR=$slot_dir" >> "$GITHUB_ENV"
           echo "ANYPS5_COMPILE_SLOTS=$slots" >> "$GITHUB_ENV"
-      - name: Prepare a private Latin-1 locale for the HTTP regression
-        shell: bash
-        run: |
-          private_root=$(mktemp -d "$RUNNER_TEMP/http-locale.XXXXXX")
-          i18n=/usr/share/i18n
-          if [ ! -f "$i18n/locales/en_US" ] || [ ! -f "$i18n/charmaps/ISO-8859-1.gz" ]; then
-            (
-              cd "$private_root"
-              apt-get download locales
-              dpkg-deb --extract locales_*.deb data
-            )
-            i18n=$private_root/data/usr/share/i18n
-          fi
-          gzip -dc "$i18n/charmaps/ISO-8859-1.gz" > "$private_root/ISO-8859-1"
-          mkdir -p "$private_root/compiled"
-          I18NPATH="$i18n" localedef --no-archive -i en_US -f "$private_root/ISO-8859-1" "$private_root/compiled/en_US.ISO8859-1"
-          echo "HTTP_TEST_LOCALE_DIR=$private_root/compiled" >> "$GITHUB_ENV"
-      - run: cmake -S . -B build $CONFIGURE -DANYPS5_ENABLE_SPIRV_TOOLS=ON "-DCMAKE_EXE_LINKER_FLAGS=$LINKER_FLAGS" "-DCMAKE_SHARED_LINKER_FLAGS=$LINKER_FLAGS" "-DCMAKE_MODULE_LINKER_FLAGS=$LINKER_FLAGS" "-DANYPS5_HTTP_TEST_LOCALE_DIR=$HTTP_TEST_LOCALE_DIR"
+      - run: cmake -S . -B build $CONFIGURE -DANYPS5_ENABLE_SPIRV_TOOLS=ON "-DCMAKE_EXE_LINKER_FLAGS=$LINKER_FLAGS" "-DCMAKE_SHARED_LINKER_FLAGS=$LINKER_FLAGS" "-DCMAKE_MODULE_LINKER_FLAGS=$LINKER_FLAGS"
       - name: Check that every test executable is registered with ctest
         run: python3 tools/check_test_registration.py build
       - if: ${{ inputs.select }}

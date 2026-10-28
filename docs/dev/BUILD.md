@@ -141,7 +141,7 @@ With `ANYPS5_USE_SYSTEM_DEPS=ON` those libraries come from the system (on Debian
 
 ## HTTP locale tests
 
-The Linux HTTP URI locale regression needs an ISO-8859-1 locale. CI builds a private `en_US.ISO8859-1` with `localedef`, using installed locale sources or an extracted `locales` package without installing it or changing system locales. `-DANYPS5_HTTP_TEST_LOCALE_DIR=<directory>` gives only `guest_http_uri_locale` that directory through `LOCPATH`. Without an effective Latin-1 locale the test explicitly skips; the CI skip audit rejects that loss of coverage. Windows requires `.1252`.
+The Linux HTTP URI locale regression needs an ISO-8859-1 locale. With tests enabled, CMake uses host `localedef` and installed locale sources to generate a private `en_US.ISO8859-1` under the HTTP build directory. This runs from the checked-out PR tree, including when CI dispatches the workflow from `main`, and changes no system locales. `-DANYPS5_HTTP_TEST_LOCALE_DIR=<directory>` overrides generation. Only `guest_http_uri_locale` receives the private directory through `LOCPATH`. If `localedef` or its source data is unavailable, configuration reports it and leaves the test to probe installed locales. Without an effective Latin-1 locale the test explicitly skips; the CI skip audit rejects that loss of coverage. Windows requires `.1252`.
 
 ## ThreadSanitizer
 
