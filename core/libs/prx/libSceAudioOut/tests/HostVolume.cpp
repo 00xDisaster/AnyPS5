@@ -70,6 +70,30 @@ void muteAtZeroAndMaximum() {
     require(!state.Muted() && state.Volume() == 0, "unmuting at 0 leaves 0");
 }
 
+void stepsEndMute() {
+    HostVolume state;
+    state.VolumeDown();
+    state.ToggleMute();
+    require(state.VolumeUp(), "a step up while muted changes the state");
+    require(!state.Muted() && state.Volume() == 100, "a step up while muted unmutes and moves the volume");
+    state.ToggleMute();
+    require(state.VolumeDown(), "a step down while muted changes the state");
+    require(!state.Muted() && state.Volume() == 95, "a step down while muted unmutes and moves the volume");
+}
+
+void stepsAtLimitsStillEndMute() {
+    HostVolume top;
+    top.ToggleMute();
+    require(top.VolumeUp(), "a step up at 100 while muted reports the unmute");
+    require(!top.Muted() && top.Volume() == 100, "a step up at 100 while muted only unmutes");
+    require(!top.VolumeUp(), "a second step up at 100 reports no change");
+    HostVolume bottom;
+    for (int step = 0; step < 20; ++step) bottom.VolumeDown();
+    bottom.ToggleMute();
+    require(bottom.VolumeDown(), "a step down at 0 while muted reports the unmute");
+    require(!bottom.Muted() && bottom.Volume() == 0, "a step down at 0 while muted only unmutes");
+}
+
 }
 
 int main() try {
@@ -80,6 +104,8 @@ int main() try {
     stepsStopAtMaximum();
     muteKeepsVolume();
     muteAtZeroAndMaximum();
+    stepsEndMute();
+    stepsAtLimitsStillEndMute();
     std::puts("host volume tests passed");
     return 0;
 } catch (const std::exception& error) {
