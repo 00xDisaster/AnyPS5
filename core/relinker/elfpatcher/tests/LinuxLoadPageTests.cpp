@@ -200,6 +200,32 @@ void TrampolineDisplacementAcrossInt64Max() {
     Require(Read<std::uint32_t>(output, bodyOff + site.ReturnBranchOffset + 1) == static_cast<std::uint32_t>(returnDisplacement), "the trampoline return displacement is wrong");
 }
 
+void TrampolineDisplacementBeyondInt64Range() {
+    using Codegen::Amd64OnlySubstitutionTable::kJmpRel32;
+    auto source = Fixture(0x3000);
+    const Bytes insertq = {0xF2, 0x0F, 0x79, 0xD1, 0x10, 0x20};
+    std::copy(insertq.begin(), insertq.end(), source.begin() + 0x500);
+    Write<std::uint64_t>(source, 24, 0xFFFFFFFFFFFFE100);
+    const std::vector<Domain::ProgramHeader> headers{
+        Load(0x400, 0x400, 0x1000, 0x1000, 5),
+        Load(0x2000, 0xFFFFFFFFFFFFE000, 0x800, 0x800, 5),
+    };
+    Codegen::TrampolineSite site;
+    site.Offset = 0x500;
+    site.Address = 0x500;
+    site.Length = insertq.size();
+    site.OriginalBytes = insertq;
+    site.Body = {0xE9, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0xC3};
+    site.ReturnBranchOffset = 0;
+    bool threw = false;
+    try {
+        (void)Patcher().Patch(source, headers, {}, 0, "$ORIGIN/libs", true, false, {site});
+    } catch (const Domain::RelinkerException& error) {
+        threw = std::string(error.what()).find("rel32") != std::string::npos;
+    }
+    Require(threw, "a trampoline whose site and body are more than 2^63 apart was accepted with a wrapped displacement");
+}
+
 }
 
 int main() {
@@ -208,6 +234,7 @@ int main() {
         DataAndZeroFillBelowTheNextSegment();
         ZeroFileBytesStayInPlace();
         TrampolineDisplacementAcrossInt64Max();
+        TrampolineDisplacementBeyondInt64Range();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
