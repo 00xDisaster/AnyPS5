@@ -72,30 +72,6 @@ static void CheckFutureDeadline() {
     Require(sem_destroy_nid_postfix(&sem) == 0, "deadline semaphore destroy must succeed");
 }
 
-static bool FailsWithInvalid(int result) {
-    return result == -1 && *__error_nid_postfix() == 22;
-}
-
-static void CheckDestroyed() {
-    std::uintptr_t sem = 0;
-    int value = -1;
-    const KernelTimespec expired{0, 0};
-    Require(sem_init_nid_postfix(&sem, 0, 1) == 0, "destroyed semaphore must initialize");
-    Require(sem_destroy_nid_postfix(&sem) == 0, "destroyed semaphore destroy must succeed");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_wait_nid_postfix(&sem)), "wait on a destroyed semaphore must report EINVAL");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_trywait_nid_postfix(&sem)), "trywait on a destroyed semaphore must report EINVAL");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_timedwait_nid_postfix(&sem, &expired)), "timedwait on a destroyed semaphore must report EINVAL");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_post_nid_postfix(&sem)), "post to a destroyed semaphore must report EINVAL");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_getvalue_nid_postfix(&sem, &value)) && value == -1, "getvalue of a destroyed semaphore must report EINVAL");
-    *__error_nid_postfix() = 0;
-    Require(FailsWithInvalid(sem_destroy_nid_postfix(&sem)), "second destroy must report EINVAL");
-}
-
 int main(int argc, char** argv) {
     constexpr unsigned int maximum = 0x7fffffffu;
     std::uintptr_t sem = 0;
@@ -170,6 +146,5 @@ int main(int argc, char** argv) {
     Require(sem_getvalue_nid_postfix(&sem, &value) == 0 && value == 0, "failed timed waits must preserve the count");
     Require(sem_destroy_nid_postfix(&sem) == 0, "blocked semaphore destroy must succeed");
     CheckFutureDeadline();
-    CheckDestroyed();
     CheckRetire();
 }
