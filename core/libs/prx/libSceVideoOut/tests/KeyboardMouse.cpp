@@ -501,6 +501,21 @@ void testShowPadStatus() {
     Pad::KeyboardMouse conflicting(shared);
     const auto both = conflicting.HandleEvent(KeyEvent(SDL_SCANCODE_F10, true), now);
     check(both.showPadStatus && both.togglePerformanceOverlay, "a key shared with the overlay does not do both");
+void testVolumeUpRequest() {
+    auto configuration = defaults();
+    configuration.bindings.push_back(Pad::InputBinding{SDL_SCANCODE_F5, Pad::MouseButton::None, Pad::InputControl::VolumeUp});
+    Pad::KeyboardMouse keyboardMouse(configuration);
+    const auto now = Pad::KeyboardMouse::Clock::now();
+    const auto down = keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, true), now);
+    check(down.volumeUp && !down.toggleFullscreen && !down.togglePerformanceOverlay && !down.screenshot, "a bound key asks for volume up");
+    auto repeated = KeyEvent(SDL_SCANCODE_F5, true);
+    repeated.key.repeat = 1;
+    check(!keyboardMouse.HandleEvent(repeated, now).volumeUp, "a repeated key asks for nothing");
+    check(!keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, false), now).volumeUp, "releasing the key asks for nothing");
+    check(keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, true), now).volumeUp, "pressing it again asks again");
+    keyboardMouse.HandleEvent(KeyEvent(SDL_SCANCODE_F5, false), now);
+    const auto state = keyboardMouse.Compose(PadInputState{});
+    check(state.buttons == PadInputState{}.buttons && state.sticks == PadInputState{}.sticks, "the key never reaches the title's pad state");
 }
 
 void testDefaultL2() {
@@ -591,6 +606,7 @@ int main() {
             {"shake", testShake},
             {"toggle requests", testToggleRequests},
             {"show pad status", testShowPadStatus},
+            {"volume up request", testVolumeUpRequest},
             {"default L2", testDefaultL2},
             {"title reads the mouse", testTitleReadsMouse},
         };
