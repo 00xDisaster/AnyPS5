@@ -690,6 +690,22 @@ static void TestPeakMeterHistory() {
         for (std::uint32_t i = 0; i < Grain; i++) pcm.push_back(static_cast<std::int16_t>(16384 >> gain));
     }
 
+    std::vector<float> delayed(3, 0.0f);
+    for (int gain = 0; gain < 3; gain++) {
+        for (std::uint32_t i = 0; i < Grain; i++) delayed.push_back(0.5f / static_cast<float>(1 << gain));
+    }
+    delayed.resize(4 * Grain, 0.0f);
+    const auto energy = [&delayed](std::uint32_t grainIndex) {
+        float sum = 0.0f;
+        for (std::uint32_t i = 0; i < Grain; i++) sum += delayed[grainIndex * Grain + i] * delayed[grainIndex * Grain + i];
+        return sum;
+    };
+    const auto largest = [&delayed](std::uint32_t grainIndex) {
+        float peak = 0.0f;
+        for (std::uint32_t i = 0; i < Grain; i++) peak = std::max(peak, delayed[grainIndex * Grain + i]);
+        return peak;
+    };
+
     {
         const auto system = CreateSystem();
         const auto master = Mastering(system, 1);
@@ -703,11 +719,11 @@ static void TestPeakMeterHistory() {
             return state.peak_height;
         };
         RenderI16(system);
-        Require(Near(height(), 0.5f));
+        Require(Near(height(), std::sqrt(energy(0) / Grain)));
         RenderI16(system);
-        Require(Near(height(), std::sqrt(2.5f / 16.0f)));
+        Require(Near(height(), std::sqrt((energy(0) + energy(1)) / (2 * Grain))));
         RenderI16(system);
-        Require(Near(height(), std::sqrt(0.625f / 16.0f)));
+        Require(Near(height(), std::sqrt((energy(1) + energy(2)) / (2 * Grain))));
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     }
 
@@ -724,11 +740,13 @@ static void TestPeakMeterHistory() {
             return state.peak_height;
         };
         RenderI16(system);
-        Require(height() == 0.5f);
+        Require(height() == largest(0));
         RenderI16(system);
-        Require(height() == 0.5f);
+        Require(height() == std::max(largest(0), largest(1)));
         RenderI16(system);
-        Require(height() == 0.25f);
+        Require(height() == std::max(largest(1), largest(2)));
+        RenderI16(system);
+        Require(height() == std::max(largest(2), largest(3)));
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     }
 
