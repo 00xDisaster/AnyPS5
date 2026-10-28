@@ -18,6 +18,7 @@ constexpr std::uint32_t StickLeft = 0x80000000;
 constexpr std::uint32_t StickRight = 0x40000000;
 
 struct Session {
+    std::uint32_t owner = ModalDialogAnyOwner;
     ModalDialogState state = ModalDialogState::Idle;
     ModalDialogRequest request;
     std::size_t focus = 0;
@@ -35,6 +36,10 @@ std::atomic<std::uint32_t> g_showTimeout{ModalDialogShowTimeoutMilliseconds};
 
 bool InputOwnedByIme() {
     return ImeCapturesKeyboard_nid_postfix() || ImeCapturesPad_nid_postfix();
+}
+
+bool OwnedBy(const Session& session, std::uint32_t owner) {
+    return owner == ModalDialogAnyOwner || session.owner == owner;
 }
 
 void Expire(Session& session) {
@@ -87,6 +92,7 @@ bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request) {
     std::lock_guard lock(g_mutex);
     if (g_session.state == ModalDialogState::Showing) return false;
     g_session = Session{};
+    g_session.owner = request.owner;
     g_session.request = request;
     g_session.focus = request.focus;
     g_session.state = ModalDialogState::Showing;
@@ -94,21 +100,25 @@ bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request) {
     return true;
 }
 
-ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen) {
+ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen, std::uint32_t owner) {
     std::lock_guard lock(g_mutex);
     Expire(g_session);
+    if (!OwnedBy(g_session, owner)) {
+        chosen = ModalDialogNoButton;
+        return ModalDialogState::Idle;
+    }
     chosen = g_session.chosen;
     return g_session.state;
 }
 
-void ModalDialogClose_nid_postfix() {
+void ModalDialogClose_nid_postfix(std::uint32_t owner) {
     std::lock_guard lock(g_mutex);
-    if (g_session.state == ModalDialogState::Showing) g_session.state = ModalDialogState::Closed;
+    if (g_session.state == ModalDialogState::Showing && OwnedBy(g_session, owner)) g_session.state = ModalDialogState::Closed;
 }
 
-void ModalDialogReset_nid_postfix() {
+void ModalDialogReset_nid_postfix(std::uint32_t owner) {
     std::lock_guard lock(g_mutex);
-    g_session = Session{};
+    if (OwnedBy(g_session, owner)) g_session = Session{};
 }
 
 bool ModalDialogReadView_nid_postfix(ModalDialogView& view) {

@@ -11,7 +11,12 @@
 inline constexpr std::size_t ModalDialogNoButton = static_cast<std::size_t>(-1);
 inline constexpr std::size_t ModalDialogMaxButtons = 3;
 
+inline constexpr std::uint32_t ModalDialogAnyOwner = 0;
+inline constexpr std::uint32_t ModalDialogOwnerMsgDialog = 1;
+inline constexpr std::uint32_t ModalDialogOwnerErrorDialog = 2;
+
 struct ModalDialogRequest {
+    std::uint32_t owner = ModalDialogAnyOwner;
     std::u16string message;
     std::vector<std::u16string> buttons;
     std::size_t focus = 0;
@@ -38,9 +43,9 @@ extern "C" void ModalDialogSetPresenter_nid_postfix(bool present);
 extern "C" bool ModalDialogHasPresenter_nid_postfix();
 extern "C" void ModalDialogSetShowTimeout_nid_postfix(std::uint32_t milliseconds);
 extern "C" bool ModalDialogOpen_nid_postfix(const ModalDialogRequest& request);
-extern "C" ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen);
-extern "C" void ModalDialogClose_nid_postfix();
-extern "C" void ModalDialogReset_nid_postfix();
+extern "C" ModalDialogState ModalDialogPoll_nid_postfix(std::size_t& chosen, std::uint32_t owner = ModalDialogAnyOwner);
+extern "C" void ModalDialogClose_nid_postfix(std::uint32_t owner = ModalDialogAnyOwner);
+extern "C" void ModalDialogReset_nid_postfix(std::uint32_t owner = ModalDialogAnyOwner);
 extern "C" bool ModalDialogReadView_nid_postfix(ModalDialogView& view);
 extern "C" bool ModalDialogCapturesInput_nid_postfix();
 extern "C" void ModalDialogPublishInput_nid_postfix(ModalDialogInputKind kind);
