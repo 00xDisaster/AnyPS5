@@ -306,6 +306,9 @@ PadInputState Pad::KeyboardMouse::Compose(const PadInputState& controller) const
             case InputControl::TogglePerformanceOverlay: break;
             case InputControl::Screenshot: break;
             case InputControl::ShowPadStatus: break;
+            case InputControl::VolumeUp: break;
+            case InputControl::VolumeDown: break;
+            case InputControl::ToggleMute: break;
         }
     }
     const auto input = stickInput();
