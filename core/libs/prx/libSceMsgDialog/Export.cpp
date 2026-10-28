@@ -39,12 +39,15 @@ int g_pollsLeft = 0;
 bool g_presented = false;
 std::chrono::steady_clock::time_point g_openedAt;
 
-void Inspect(const void* param) {
-    const MsgDialog::ParsedParam parsed = MsgDialog::ParseParam(param);
+void Inspect(const MsgDialog::ParsedParam& parsed) {
     g_mode = parsed.mode;
     g_buttonId = kButtonIdOk;
     if (parsed.hasUserMessage && parsed.buttonType == MsgDialog::ButtonTypeYesNoFocusNo) g_buttonId = kButtonIdNo;
-    if (parsed.hasText) APS5_HIT("MSGDIALOG", "open: buttons=%d text=\"%s\" -> auto answer", parsed.buttonType, MsgDialog::LogText(parsed.text).c_str());
+}
+
+bool Present(const MsgDialog::ParsedParam& parsed) {
+    ModalDialogRequest request;
+    return MsgDialog::BuildRequest(parsed, request) && ModalDialogOpen_nid_postfix(request);
 }
 
 int Poll() {
@@ -87,7 +90,10 @@ int APS5_VABI sceMsgDialogOpen(const void* param) {
  if (param == nullptr) return kErrArgNull;
  std::lock_guard g(g_lock);
  if (g_status == kStatusRunning) return kErrBusy;
- Inspect(param);
+ const MsgDialog::ParsedParam parsed = MsgDialog::ParseParam(param);
+ Inspect(parsed);
+ g_presented = Present(parsed);
+ if (parsed.hasText) APS5_HIT("MSGDIALOG", "open: buttons=%d text=\"%s\" -> %s", parsed.buttonType, MsgDialog::LogText(parsed.text).c_str(), g_presented ? "shown" : "auto answer");
  g_pollsLeft = 2;
  g_openedAt = std::chrono::steady_clock::now();
  g_status = kStatusRunning;
