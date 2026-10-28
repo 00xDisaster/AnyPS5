@@ -40,6 +40,24 @@ class TimelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pad_timeline.compile_timeline(self.document, 1)
 
+    def test_duplicate_buttons_are_rejected(self):
+        document = {
+            "version": 1,
+            "events": [
+                {"at_ms": 0, "hold_ms": 100, "buttons": ["cross", "cross"]}
+            ],
+        }
+
+        for buttons in (
+            ["cross", "cross"],
+            ["l1", "r1", "l1"],
+            ["release", "release"],
+        ):
+            with self.subTest(buttons=buttons):
+                document["events"][0]["buttons"] = buttons
+                with self.assertRaisesRegex(ValueError, "duplicate button names"):
+                    pad_timeline.compile_timeline(document, sequence=1)
+
     def test_unknown_buttons(self):
         for buttons in [["typo"], "cross", [True]]:
             with self.subTest(buttons=buttons):

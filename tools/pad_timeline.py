@@ -38,6 +38,8 @@ def compile_timeline(document, sequence, repeat=1, gap_ms=200):
         names = event["buttons"]
         if not isinstance(names, list) or not all(isinstance(name, str) and name in BUTTONS for name in names):
             raise ValueError(f"{prefix}.buttons must be a list of known button names")
+        if len(set(names)) != len(names):
+            raise ValueError(f"{prefix}.buttons must not contain duplicate button names")
         if "release" in names and len(names) != 1:
             raise ValueError(f"{prefix}: release cannot be combined with another button")
         buttons = 0
