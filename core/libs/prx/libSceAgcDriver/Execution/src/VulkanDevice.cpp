@@ -15,6 +15,8 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
 #include "prx/libSceAgcDriver/Execution/include/BdaFeatures.hpp"
+#include "prx/libSceAgcDriver/Execution/include/HostReportSources.hpp"
+#include "prx/libSceAgcDriver/Execution/include/HostReportVulkan.hpp"
 #include "prx/libSceAgcDriver/Execution/include/DeviceFault.hpp"
 #include "prx/libSceAgcDriver/Execution/include/FragmentBarycentric.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Float32FlushControl.hpp"
@@ -142,6 +144,22 @@ void check(VkResult result, const char* operation) {
 
 void require(bool condition, const char* reason) {
     if (!condition) throw std::runtime_error(std::string("Vulkan presentation: ") + reason);
+}
+
+void checkHostRequirements(const HostGpuQuery& query) {
+    HostGpuFacts gpu;
+    try {
+        gpu = CollectHostGpuFacts(query);
+    } catch (const std::exception&) {
+        return;
+    }
+    if (MissingRequirements(gpu).empty()) return;
+    std::vector<std::string> names;
+    try {
+        names = SystemHostSources().redactions();
+    } catch (const std::exception&) {
+    }
+    throw std::runtime_error(DescribeMissingRequirements(gpu, names));
 }
 
 bool CoreVulkanCapability(std::uint32_t capability) {
@@ -1212,6 +1230,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         return false;
     };
     std::string candidateNames;
+    std::vector<std::string> candidateList;
     const auto rankDeviceType = [](VkPhysicalDeviceType type) {
         switch (type) {
             case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return 3;
@@ -1227,6 +1246,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         APS5_LOG_OUT("Physical device candidate=%p name=%s api=0x%x type=%d", reinterpret_cast<void*>(physical), properties.deviceName, properties.apiVersion, static_cast<int>(properties.deviceType));
         if (!candidateNames.empty()) candidateNames += ", ";
         candidateNames += properties.deviceName;
+        candidateList.emplace_back(properties.deviceName);
         if (properties.apiVersion < VK_API_VERSION_1_1) {
             continue;
         }
@@ -1310,6 +1330,19 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         state->subgroupControlBarriers = SubgroupControlBarrierUsable(driver.driverID);
         state->workgroupScopeFences = WorkgroupScopeFenceUsable(driver.driverID);
         state->ldsLockFences = LdsLockFencesRequired(driver.driverID);
+    }
+    {
+        HostGpuQuery hostQuery;
+        hostQuery.instanceProc = state->instanceProc;
+        hostQuery.instance = state->instance;
+        hostQuery.physical = selected;
+        hostQuery.surface = state->surface;
+        hostQuery.presentation = window != nullptr;
+        hostQuery.subgroupSize = state->subgroup.subgroupSize;
+        hostQuery.extensions = availableExtensions;
+        hostQuery.candidates = candidateList;
+        hostQuery.requestedPresentMode = std::getenv("ANYPS5_PRESENT_MODE");
+        checkHostRequirements(hostQuery);
     }
     if (driverId == VK_DRIVER_ID_NVIDIA_PROPRIETARY && hasExtension(VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME)) {
         VkPhysicalDeviceShaderSMBuiltinsPropertiesNV smBuiltins{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV};
