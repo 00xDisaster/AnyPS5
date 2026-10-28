@@ -286,6 +286,18 @@ void* emptyInPlace(GuestAllocations::Mutation& mutation, void* pointer, bool gpu
     return pointer;
 }
 
+std::size_t ownedBytes(const void* pointer) {
+    const auto raw = reinterpret_cast<std::uintptr_t>(reinterpret_cast<void* const*>(pointer)[-2]);
+    const auto blockBytes = reinterpret_cast<const std::size_t*>(pointer)[-1];
+    return raw + blockBytes - reinterpret_cast<std::uintptr_t>(pointer);
+}
+
+void* resizeInPlace(GuestAllocations::Mutation& mutation, void* pointer, std::size_t bytes, bool gpu) {
+    mutation.Remove(pointer);
+    mutation.Add(pointer, bytes, true, true, gpu);
+    return pointer;
+}
+
 void free(GuestAllocations::Mutation& mutation, void* pointer) {
     mutation.Remove(pointer);
     const auto blockBytes = reinterpret_cast<std::size_t*>(pointer)[-1];
@@ -314,6 +326,7 @@ void* GuestHeapReallocate_nid_postfix(void* pointer, std::size_t bytes) {
     const auto range = mutation.Find(pointer);
     mutation.RequireUnpinned(pointer, range.bytes);
     if (bytes == 0) return emptyInPlace(mutation, pointer, range.gpu);
+    if (bytes <= ownedBytes(pointer)) return resizeInPlace(mutation, pointer, bytes, range.gpu);
     void* result = allocate(mutation, MinimumAlignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
     free(mutation, pointer);
@@ -331,6 +344,8 @@ void* GuestHeapRealign_nid_postfix(void* pointer, std::size_t bytes, std::size_t
             throw std::invalid_argument("reallocalign to 0 bytes with an alignment the block does not have is not measured on the console");
         return emptyInPlace(mutation, pointer, range.gpu);
     }
+    if (alignment != 0 && (alignment & (alignment - 1)) == 0 && reinterpret_cast<std::uintptr_t>(pointer) % alignment == 0 && bytes <= ownedBytes(pointer))
+        return resizeInPlace(mutation, pointer, bytes, range.gpu);
     void* result = allocate(mutation, alignment, bytes, range.gpu);
     std::memcpy(result, pointer, std::min(bytes, range.bytes));
     free(mutation, pointer);
