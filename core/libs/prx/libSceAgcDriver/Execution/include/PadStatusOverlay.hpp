@@ -3,6 +3,7 @@
 
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
+#include "prx/libSceAgcDriver/Execution/include/PadStatus.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceOverlay.hpp"
 #include <array>
 #include <chrono>
@@ -15,30 +16,7 @@
 
 namespace AgcDriver {
 
-inline constexpr std::size_t PadStatusSlots = 4;
-
 enum class PadStatusMode : std::uint8_t { Off, Events };
-
-enum class PadKind : std::uint8_t { Unknown, DualSense, DualShock4, DualShock3, Xbox, Switch, Other };
-
-enum class PadPower : std::uint8_t { Unknown, Empty, Low, Medium, Full, Wired };
-
-struct PadSlotStatus {
-    bool connected = false;
-    PadKind kind = PadKind::Unknown;
-    std::string name;
-    PadPower power = PadPower::Unknown;
-
-    bool operator==(const PadSlotStatus&) const = default;
-};
-
-struct PadStatusSnapshot {
-    std::array<PadSlotStatus, PadStatusSlots> slots;
-};
-
-struct PadStatusProvider {
-    std::function<PadStatusSnapshot()> read;
-};
 
 struct PadStatusMetrics {
     static constexpr std::int32_t Columns = 32;
