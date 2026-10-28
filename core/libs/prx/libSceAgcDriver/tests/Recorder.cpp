@@ -5925,7 +5925,7 @@ bool smallTiledShadowLabelTests(const Device& device, Recorder& recorder) {
         }
     } unregister{base, block, address};
     if (HostImportFor(base, address, bytes) == nullptr || !Watched(address, bytes)) {
-        std::cout << "skipped, the block is not imported and watched\n";
+        std::cout << "skipped, host imports are unavailable: the test block is not imported and watched\n";
         return false;
     }
     CollectWritesUncached(address, bytes);
