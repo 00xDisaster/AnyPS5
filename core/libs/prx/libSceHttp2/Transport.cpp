@@ -8,6 +8,8 @@
 #endif
 
 #include "Transport.hpp"
+
+#include "zlib.h"
 #include "prx/libSceNet/include/Net.hpp"
 #include "prx/libSceSsl/include/Ssl.hpp"
 #include "prx/libc/include/General.hpp"
@@ -254,6 +256,8 @@ struct Request::State {
     bool ready = false;
     bool ended = false;
     int status = 0;
+    std::string contentEncoding;
+    bool inflatedGzip = false;
     int blockStatus = 0;
     int networkResult = 0;
     int socket = -1;
@@ -316,6 +320,55 @@ struct Request::State {
             Require(result >= 0, "sceHttp2: host poll failed");
             if (result > 0) { Check(deadline); return; }
         }
+    }
+
+    void InflateGzip() {
+        if (inflatedGzip || !settings.inflateGzip || contentEncoding != "gzip" || body.empty()) return;
+        inflatedGzip = true;
+        const std::uint8_t* data = body.data();
+        const std::size_t size = body.size();
+        Require(size >= 18 && data[0] == 0x1f && data[1] == 0x8b && data[2] == 8, "sceHttp2: malformed gzip header");
+        const std::uint8_t flags = data[3];
+        Require((flags & 0xe0) == 0, "sceHttp2: unknown gzip header flags");
+        std::size_t offset = 10;
+        const auto skip = [&](std::size_t count) { Require(offset + count <= size - 8, "sceHttp2: truncated gzip header"); offset += count; };
+        if (flags & 4) {
+            Require(offset + 2 <= size - 8, "sceHttp2: truncated gzip extra field");
+            const std::size_t extra = static_cast<std::size_t>(data[offset]) | (static_cast<std::size_t>(data[offset + 1]) << 8);
+            skip(2 + extra);
+        }
+        if (flags & 8) while (skip(1), data[offset - 1] != 0) {}
+        if (flags & 16) while (skip(1), data[offset - 1] != 0) {}
+        if (flags & 2) skip(2);
+        z_stream inflater{};
+        Require(inflateInit2(&inflater, -15) == Z_OK, "sceHttp2: gzip inflate initialization failed");
+        inflater.next_in = const_cast<std::uint8_t*>(data + offset);
+        inflater.avail_in = static_cast<uInt>(size - offset - 8);
+        std::vector<std::uint8_t> output;
+        std::uint8_t chunk[16384];
+        int result = Z_OK;
+        while (result != Z_STREAM_END) {
+            inflater.next_out = chunk;
+            inflater.avail_out = sizeof(chunk);
+            result = inflate(&inflater, Z_NO_FLUSH);
+            Require(result == Z_OK || result == Z_STREAM_END, "sceHttp2: gzip inflate failed");
+            output.insert(output.end(), chunk, chunk + (sizeof(chunk) - inflater.avail_out));
+            Require(result == Z_STREAM_END || inflater.avail_in != 0 || inflater.avail_out == 0, "sceHttp2: truncated gzip stream");
+            Require(output.size() <= 64 * 1024 * 1024, "sceHttp2: inflated response exceeds the host limit");
+        }
+        Require(inflater.avail_in == 0, "sceHttp2: concatenated gzip members are not implemented");
+        inflateEnd(&inflater);
+        const auto readLe32 = [&](std::size_t position) {
+            return static_cast<std::uint32_t>(data[position]) | (static_cast<std::uint32_t>(data[position + 1]) << 8) |
+                (static_cast<std::uint32_t>(data[position + 2]) << 16) | (static_cast<std::uint32_t>(data[position + 3]) << 24);
+        };
+        Require(crc32(0, output.data(), static_cast<uInt>(output.size())) == readLe32(size - 8), "sceHttp2: gzip checksum mismatch");
+        Require(static_cast<std::uint32_t>(output.size()) == readLe32(size - 4), "sceHttp2: gzip size mismatch");
+        body = std::move(output);
+        bodyOffset = 0;
+        contentLength = body.size();
+        hasLength = true;
+        contentEncoding.clear();
     }
 
     int Connect() {
@@ -412,6 +465,7 @@ struct Request::State {
                 state.contentLength = Number(text);
                 state.hasLength = true;
             }
+            if (key == "content-encoding") state.contentEncoding = Lower(std::string(text));
         });
     }
 
@@ -433,6 +487,7 @@ struct Request::State {
                 (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)) {
                 Require(state.ready, "sceHttp2: response ended without final headers");
                 state.ended = true;
+                state.InflateGzip();
             }
         });
     }

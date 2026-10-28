@@ -52,7 +52,7 @@ bool Throws(TCall call) {
     return false;
 }
 
-enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload, EarlyFinal, EarlyReset, EarlyEmpty, EarlyLarge, EarlyResetIncomplete };
+enum class Mode { Normal, Large, NoLength, Head, NotFound, Redirect, Auth, Reset, Truncate, Gzip, StallHandshake, StallHeaders, StallBody, NoAlpn, Informational, StallUpload, EarlyFinal, EarlyReset, EarlyEmpty, EarlyLarge, EarlyResetIncomplete };
 const char* Protocols[] = {"h2", nullptr};
 
 class Server {
@@ -194,6 +194,14 @@ private:
         auto length = std::to_string(body.size());
         if (mode == Mode::Head) body.clear();
         if (mode == Mode::Truncate) body = "short";
+        if (mode == Mode::Gzip) {
+            static const unsigned char compressed[] = {
+                0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x2b, 0x4a, 0x2d, 0x2e, 0xc8, 0xcf,
+                0x2b, 0x4e, 0x55, 0x48, 0xca, 0x4f, 0xa9, 0x04, 0x00, 0x36, 0x76, 0x8b, 0x0c, 0x0d, 0x00, 0x00, 0x00,
+            };
+            body.assign(reinterpret_cast<const char*>(compressed), sizeof(compressed));
+            length = std::to_string(body.size());
+        }
         if (mode == Mode::Informational) {
             nghttp2_nv early{reinterpret_cast<std::uint8_t*>(const_cast<char*>(":status")), reinterpret_cast<std::uint8_t*>(const_cast<char*>("103")), 7, 3, 0};
             Require(nghttp2_submit_headers(session, 0, stream, nullptr, &early, 1, nullptr) == 0, "server informational response");
@@ -201,6 +209,7 @@ private:
         std::vector<std::pair<std::string, std::string>> fields{{":status", status}, {"x-loopback", "yes"}};
         if (mode != Mode::NoLength) fields.emplace_back("content-length", length);
         if (mode == Mode::Redirect) fields.emplace_back("location", "/another");
+        if (mode == Mode::Gzip) fields.emplace_back("content-encoding", "gzip");
         std::vector<nghttp2_nv> response;
         for (auto& [name, value] : fields) response.push_back({reinterpret_cast<std::uint8_t*>(name.data()), reinterpret_cast<std::uint8_t*>(value.data()), name.size(), value.size(), 0});
         nghttp2_data_provider2 provider{};
@@ -353,6 +362,29 @@ void Success(int ssl, Mode mode, bool disableCa = false) {
     Require(Throws([&] { sceHttp2GetAllResponseHeaders(client.request, &rawHeaders, &rawSize); }) &&
         rawHeaders == reinterpret_cast<char*>(std::uintptr_t{1}) && rawSize == 987, "unknown header serialization leaves outputs untouched");
     Require(Throws([&] { sceHttp2SendRequest(client.request, nullptr, 0); }), "unsupported reuse throws");
+}
+
+void Gzip(int ssl) {
+    std::fprintf(stderr, "HTTP2 gzip scenario\n");
+    for (const int enabled : {1, 0}) {
+        Server server(Mode::Gzip);
+        Client client(ssl);
+        Require(sceHttp2SetInflateGZIPEnabled(client.tmpl, enabled) == 0, "gzip option");
+        client.Create(server.Url());
+        Require(sceHttp2SendRequest(client.request, nullptr, 0) == 0, "gzip send");
+        int kind = -1;
+        std::uint64_t length = 0;
+        Require(sceHttp2GetResponseContentLength(client.request, &kind, &length) == 0, "gzip length");
+        std::array<char, 64> buffer{};
+        const int count = sceHttp2ReadData(client.request, buffer.data(), buffer.size());
+        if (enabled) {
+            Require(kind == 0 && length == 13 && count == 13 && std::string(buffer.data(), 13) == "response body", "gzip inflated body");
+        } else {
+            Require(kind == 0 && length == 33 && count == 33 && static_cast<unsigned char>(buffer[0]) == 0x1f &&
+                static_cast<unsigned char>(buffer[1]) == 0x8b, "gzip passthrough body");
+        }
+        server.Join();
+    }
 }
 
 void Failure(int ssl, Mode mode, bool verifyName = false) {
@@ -586,6 +618,7 @@ int main(int argc, char** argv) {
     } else {
         Require(argc == 1, "test arguments");
         for (const auto mode : {Mode::Normal, Mode::Large, Mode::NoLength, Mode::Head, Mode::NotFound, Mode::Redirect, Mode::Auth, Mode::Informational}) Success(ssl, mode);
+        Gzip(ssl);
         for (const auto mode : {Mode::NoAlpn, Mode::Reset, Mode::Truncate, Mode::Redirect, Mode::Auth}) Failure(ssl, mode);
         Failure(ssl, Mode::Normal, true);
         for (const auto mode : {Mode::StallHandshake, Mode::StallHeaders, Mode::StallBody, Mode::StallUpload}) {
