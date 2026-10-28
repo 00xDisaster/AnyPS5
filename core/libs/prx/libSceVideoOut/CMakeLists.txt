@@ -10,6 +10,7 @@ add_library(libSceVideoOut SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/src/MouseInput.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardInput.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ImeTextInput.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/DialogInput.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/InputMapping.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardMouse.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/HostHdrProbe.cpp
