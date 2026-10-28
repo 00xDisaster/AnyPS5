@@ -10,6 +10,20 @@ public:
 
     int Volume() const { return volume; }
     bool Muted() const { return muted; }
+    bool MuteOnFocusLoss() const { return muteOnFocusLoss; }
+    bool FocusMuted() const { return muteOnFocusLoss && !focused; }
+
+    bool SetMuteOnFocusLoss(bool enabled) {
+        const bool before = FocusMuted();
+        muteOnFocusLoss = enabled;
+        return before != FocusMuted();
+    }
+
+    bool FocusChanged(bool hasFocus) {
+        const bool before = FocusMuted();
+        focused = hasFocus;
+        return before != FocusMuted();
+    }
 
     bool SetVolume(int value) {
         if (value < 0 || value > MaxVolume) throw std::invalid_argument("HostVolume: volume out of range");
@@ -42,6 +56,8 @@ public:
 private:
     int volume = MaxVolume;
     bool muted = false;
+    bool focused = true;
+    bool muteOnFocusLoss = false;
 };
 
 #endif
