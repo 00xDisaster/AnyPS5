@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -138,6 +139,38 @@ int main() {
     Require(sceRudpPollWait(cancelPoll, events.data(), eventCount, 1000) == 0);
     Require(sceRudpPollDestroy(cancelPoll) == 0);
     Require(sceRudpPollCancel(cancelPoll) == invalidPoll);
+
+    const int latePoll = sceRudpPollCreate(1);
+    Require(latePoll > 0);
+    for (int round = 0; round < 40; ++round) {
+        std::array<RudpPollEvent, 4> earlyEvents{};
+        std::array<RudpPollEvent, 4> lateEvents{};
+        std::atomic<int> earlyResult{1};
+        std::atomic<int> lateResult{1};
+        std::atomic<bool> cancelReturned{false};
+        std::thread earlyWaiter([&] { earlyResult = sceRudpPollWait(latePoll, earlyEvents.data(), eventCount, forever); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::thread canceller([&] {
+            Require(sceRudpPollCancel(latePoll) == 0);
+            cancelReturned = true;
+        });
+        std::thread lateWaiter([&] { lateResult = sceRudpPollWait(latePoll, lateEvents.data(), eventCount, forever); });
+        const auto cancelledAt = std::chrono::steady_clock::now();
+        while (!cancelReturned && std::chrono::steady_clock::now() - cancelledAt < std::chrono::seconds(2))
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        Require(cancelReturned);
+        canceller.join();
+        while (earlyResult == 1 || lateResult == 1) {
+            Require(sceRudpPollCancel(latePoll) == 0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        earlyWaiter.join();
+        lateWaiter.join();
+        Require(earlyResult == cancelled && lateResult == cancelled);
+        sceRudpPollWait(latePoll, events.data(), eventCount, 0);
+        Require(sceRudpPollWait(latePoll, events.data(), eventCount, 0) == 0);
+    }
+    Require(sceRudpPollDestroy(latePoll) == 0);
 
     const int finitePoll = sceRudpPollCreate(1);
     Require(finitePoll > 0);

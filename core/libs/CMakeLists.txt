@@ -812,6 +812,14 @@ if(BUILD_TESTING)
         set_tests_properties(guest_rudp_poll PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceRudp>")
     endif()
+    if(WIN32)
+        add_test_executable(rudp_poll_wait_exception_tests tests/RudpPollWaitException.cpp
+            prx/libSceRudp/Export.cpp prx/libkernel/Time/TimedWait.cpp)
+        target_include_directories(rudp_poll_wait_exception_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        configure_windows_unwind(rudp_poll_wait_exception_tests)
+        add_test(NAME rudp_poll_wait_exception COMMAND rudp_poll_wait_exception_tests)
+        set_tests_properties(rudp_poll_wait_exception PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endif()
 
     add_test_executable(guest_memory_pool_stats_tests tests/GuestMemoryPoolStats.cpp)
     target_include_directories(guest_memory_pool_stats_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

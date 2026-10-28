@@ -92,6 +92,7 @@ struct RudpPoll {
     std::size_t capacity;
     std::map<int, uint16_t> entries;
     int waiters = 0;
+    int draining = 0;
     uint64_t cancels = 0;
     bool cancelPending = false;
 };
@@ -99,6 +100,28 @@ struct RudpPoll {
 int g_next_poll = 1;
 std::map<int, RudpPoll> g_polls;
 TimedWait::Condition g_polls_changed;
+
+struct RudpPollWaitRegistration {
+    int pollId;
+    uint64_t cancels;
+    std::unique_lock<std::mutex>& lock;
+
+    ~RudpPollWaitRegistration() {
+        if (!lock.owns_lock()) {
+            lock.lock();
+        }
+        const auto poll = g_polls.find(pollId);
+        if (poll == g_polls.end()) {
+            return;
+        }
+        if (poll->second.cancels == cancels) {
+            --poll->second.waiters;
+        } else {
+            --poll->second.draining;
+        }
+        g_polls_changed.NotifyAll();
+    }
+};
 
 bool valid_ctx(int ctx) {
     return g_ctx.count(ctx) != 0;
@@ -458,6 +481,7 @@ int APS5_VABI sceRudpPollWait(int pollId, RudpPollEvent* events, std::size_t eve
     }
     const uint64_t cancels = poll->second.cancels;
     ++poll->second.waiters;
+    const RudpPollWaitRegistration registration{pollId, cancels, lk};
     const auto woken = [pollId, cancels] {
         if (!g_inited) {
             return true;
@@ -478,8 +502,6 @@ int APS5_VABI sceRudpPollWait(int pollId, RudpPollEvent* events, std::size_t eve
     if (current == g_polls.end()) {
         return RUDP_ERROR_INVALID_POLL_ID;
     }
-    --current->second.waiters;
-    g_polls_changed.NotifyAll();
     return signalled ? RUDP_ERROR_CANCELLED : 0;
 }
 
@@ -535,13 +557,15 @@ int APS5_VABI sceRudpPollCancel(int pollId) {
         return 0;
     }
     ++poll->second.cancels;
+    poll->second.draining += poll->second.waiters;
+    poll->second.waiters = 0;
     g_polls_changed.NotifyAll();
     g_polls_changed.Wait(lk, [pollId] {
         if (!g_inited) {
             return true;
         }
         const auto current = g_polls.find(pollId);
-        return current == g_polls.end() || current->second.waiters == 0;
+        return current == g_polls.end() || current->second.draining == 0;
     });
     return 0;
 }
