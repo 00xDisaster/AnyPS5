@@ -49,3 +49,29 @@
 - [sceHidControlSetPswCommand](../../../core/libs/prx/libSceHidControl/Export.cpp) (libSceHidControl) - unknown signature
 - [sceHidControlGetPswCommand](../../../core/libs/prx/libSceHidControl/Export.cpp) (libSceHidControl) - unknown signature
 - [sceHidControlGetPswDeviceIdFromIdxAdd](../../../core/libs/prx/libSceHidControl/Export.cpp) (libSceHidControl) - unknown signature
+
+### Additional callable export inventory
+
+- [Additional callable exports](../../../core/libs/prx/libSceHidControl/Export.cpp) - 19 entries have import-resolution declarations only. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime support, implemented-function increase or title unblock is claimed.
+
+| Name | NID |
+| --- | --- |
+| `sceHidControlGetControllerSerialNumberInformation` | `0Jn+BBzGKH4` |
+| `sceHidControlGetPswNearbyDeviceInfo` | `XmwsppH3YDI` |
+| `sceHidControlPswUpdateInit` | `05Zuhe4dnWA` |
+| `sceHidControlPswUpdateTerm` | `H6ctF1YKmCU` |
+| `sceHidControlSetPswControllerCommunicationMethod` | `ieH2et01RXU` |
+| `Unknown` | `00qes5NswlQ` |
+| `Unknown` | `8fIm7UR4VDc` |
+| `Unknown` | `AjBZjowWaFI` |
+| `Unknown` | `C05jP9w4PCc` |
+| `Unknown` | `DUGI7AXFtV0` |
+| `Unknown` | `HZJRMD3BeKk` |
+| `Unknown` | `OFyJjudLKlA` |
+| `Unknown` | `TKax3WNHtEg` |
+| `Unknown` | `WikCB91EU0w` |
+| `Unknown` | `i5ALHbvjRi8` |
+| `Unknown` | `iVF5VrBHJzk` |
+| `Unknown` | `tcDE01gUoN0` |
+| `Unknown` | `w2MEBm2Tvm8` |
+| `Unknown` | `yJJq5Arw8EI` |
