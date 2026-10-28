@@ -875,6 +875,13 @@ if(BUILD_TESTING)
     if(WIN32)
         set_tests_properties(savedata_memory_growth savedata_memory_growth_read_failure PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceSaveData.native>")
+        add_test_executable(savedata_memory_host_write_tests tests/SaveDataMemoryHostWrite.cpp)
+        target_include_directories(savedata_memory_host_write_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_link_libraries(savedata_memory_host_write_tests PRIVATE libSceSaveData.native libkernel libc)
+        configure_windows_unwind(savedata_memory_host_write_tests)
+        add_test(NAME savedata_memory_host_write COMMAND savedata_memory_host_write_tests)
+        set_tests_properties(savedata_memory_host_write PROPERTIES TIMEOUT 20
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceSaveData.native>")
     endif()
     add_test_executable(savedata_memory_journal_tests tests/SaveDataMemoryJournal.cpp)
     target_include_directories(savedata_memory_journal_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
