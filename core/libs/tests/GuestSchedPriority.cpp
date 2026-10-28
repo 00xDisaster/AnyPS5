@@ -56,6 +56,8 @@ int main() {
     Require(sched_rr_get_interval_nid_postfix(0, nullptr) == -1 && *__error_nid_postfix() == 14);
     *__error_nid_postfix() = 0;
     Require(sched_rr_get_interval_nid_postfix(0, reinterpret_cast<KernelTimespec*>(std::uintptr_t{0x10})) == -1 && *__error_nid_postfix() == 14);
+    *__error_nid_postfix() = 0;
+    Require(sched_rr_get_interval_nid_postfix(-1, reinterpret_cast<KernelTimespec*>(std::uintptr_t{0x10})) == -1 && *__error_nid_postfix() == 3);
     void* page = nullptr;
     Require(sceKernelMapFlexibleMemory(&page, 0x4000, 3, 0) == 0 && page != nullptr);
     Require(sceKernelMprotect(page, 0x4000, 1) == 0);

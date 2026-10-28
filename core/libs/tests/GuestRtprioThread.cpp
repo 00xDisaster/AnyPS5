@@ -95,6 +95,7 @@ int main() {
     auto* unmapped = reinterpret_cast<GuestRtPrio*>(std::uintptr_t{0x10});
     Require(LookupError(RTP_LOOKUP, 0, unmapped) == GUEST_EFAULT);
     Require(LookupError(RTP_SET, 0, unmapped) == GUEST_EFAULT);
+    Require(LookupError(RTP_SET, 999999, unmapped) == GUEST_ESRCH);
     void* page = nullptr;
     Require(sceKernelMapFlexibleMemory(&page, 0x4000, 3, 0) == 0 && page != nullptr);
     auto* readOnly = static_cast<GuestRtPrio*>(page);

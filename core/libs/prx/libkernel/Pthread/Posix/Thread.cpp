@@ -120,13 +120,13 @@ int APS5_VABI rtprio_thread_nid_postfix(int function, int lwpid, GuestRtPrio* pr
     };
     if (function != Lookup && function != Set) return fail(GuestEsrch);
     if (priority == nullptr) return fail(GuestEfault);
-    GuestRtPrio requested{};
-    if (function == Set && !GuestCopyIn_nid_no_patch(&requested, priority, sizeof(requested))) return fail(GuestEfault);
     auto* self = scePthreadSelf();
     int policy = self->schedPolicy.load(std::memory_order_relaxed);
     int schedPriority = self->priority.load(std::memory_order_relaxed);
     const bool other = lwpid != 0 && static_cast<std::int64_t>(lwpid) != static_cast<std::int64_t>(self->tid);
     if (other && !GetLiveGuestThreadSched_nid_no_patch(lwpid, policy, schedPriority)) return fail(GuestEsrch);
+    GuestRtPrio requested{};
+    if (function == Set && !GuestCopyIn_nid_no_patch(&requested, priority, sizeof(requested))) return fail(GuestEfault);
     const bool realTime = policy == GuestSchedFifo || policy == GuestSchedRr;
     if (function == Lookup) {
         GuestRtPrio current{};
