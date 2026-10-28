@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
+#include <thread>
 
 namespace {
 
@@ -101,11 +103,34 @@ void NotPresented() {
     ModalDialogReset_nid_postfix();
 }
 
+void WithoutFlips() {
+    ModalDialogSetPresenter_nid_postfix(true);
+    ModalDialogSetShowTimeout_nid_postfix(40);
+    UserMessage user{MsgDialog::ButtonTypeYesNoFocusNo, 0, "Continue?"};
+    Param param(MsgDialog::ModeUserMsg, &user);
+    Require(sceMsgDialogOpen(&param) == 0, "open without flips");
+    Require(sceMsgDialogGetStatus() == StatusRunning, "the dialog finished before the bound");
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceMsgDialogGetStatus() == StatusFinished, "a dialog that was never drawn kept the title waiting");
+    Require(!ModalDialogCapturesInput_nid_postfix() && Session() == ModalDialogState::Unshown, "an undrawn dialog still holds the session");
+    Require(sceMsgDialogOpen(&param) == 0 && sceMsgDialogUpdateStatus() == StatusRunning, "a new dialog was refused after the bound");
+    ModalDialogView view;
+    Require(ModalDialogReadView_nid_postfix(view), "the new dialog was not drawn");
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    Require(sceMsgDialogGetStatus() == StatusRunning, "a drawn dialog finished without an answer");
+    ModalDialogPublishInput_nid_postfix(ModalDialogInputKind::Confirm);
+    Require(sceMsgDialogGetStatus() == StatusFinished, "a drawn dialog could not be answered after the bound");
+    Require(sceMsgDialogTerminate() == 0, "terminate");
+    ModalDialogSetShowTimeout_nid_postfix(ModalDialogShowTimeoutMilliseconds);
+    ModalDialogSetPresenter_nid_postfix(false);
+}
+
 }
 
 int main() {
     Headless();
     Shown();
     NotPresented();
+    WithoutFlips();
     ModalDialogSetPresenter_nid_postfix(false);
 }
