@@ -31,6 +31,7 @@
 #include "prx/libSceAgcDriver/Execution/include/HostHdr.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Presentation.hpp"
 #include "prx/libSceIme/include/ImeKeyboardView.hpp"
+#include "prx/libSceIme/include/ModalDialog.hpp"
 #include "prx/libSceAgcDriver/Execution/include/PerformanceTimer.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libc/include/PreciseWait.hpp"
@@ -698,6 +699,9 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
         return;
     }
     started.set_value();
+    struct DialogPresenter {
+        ~DialogPresenter() { ModalDialogSetPresenter_nid_postfix(false); }
+    } dialogPresenter;
     std::shared_ptr<FlipRequest> current;
     std::optional<PadInput> padInput;
     std::optional<MouseInput> mouseInput;
@@ -747,6 +751,7 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 LibcRequestExit_nid_postfix(0);
                 throw ProcessShutdown{};
             }
+            ModalDialogSetPresenter_nid_postfix(window.Handle() != nullptr);
             pollHostHdr();
             OnMainThread([&] { mouseInput->UpdateCapture(!padInput->MouseModeEnabled()); });
             if (current) {
@@ -756,6 +761,9 @@ void VideoOutDriver::presentLoop(std::stop_token token, std::promise<void>& star
                 ImeKeyboardView keyboardView;
                 const bool keyboardShown = ImeReadKeyboardView_nid_postfix(keyboardView);
                 AgcDriverSetSystemOverlay_nid_postfix(keyboardShown ? &keyboardView : nullptr);
+                ModalDialogView dialogView;
+                const bool dialogShown = !keyboardShown && ModalDialogReadView_nid_postfix(dialogView);
+                AgcDriverSetSystemDialog_nid_postfix(dialogShown ? &dialogView : nullptr);
                 processFlip(*current);
                 int windowWidth = 0;
                 int windowHeight = 0;
