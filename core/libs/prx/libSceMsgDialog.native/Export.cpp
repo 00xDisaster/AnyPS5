@@ -71,7 +71,11 @@ int APS5_VABI sceMsgDialogOpen(const void* param) {
     const int status = g_status.load();
     if (status == 0) return COMMON_DIALOG_ERROR_NOT_INITIALIZED;
     if (param == nullptr) return COMMON_DIALOG_ERROR_ARG_NULL;
-    g_status = COMMON_DIALOG_STATUS_FINISHED;
+    ModalDialogRequest request;
+    const bool presented = MsgDialog::BuildRequest(MsgDialog::ParseParam(param), request) && ModalDialogOpen_nid_postfix(request);
+    g_buttonId = BUTTON_ID_OK;
+    g_presented = presented;
+    g_status = presented ? COMMON_DIALOG_STATUS_RUNNING : COMMON_DIALOG_STATUS_FINISHED;
     return 0;
 }
 
