@@ -56,7 +56,6 @@ static std::filesystem::file_status LinkStatus(const std::filesystem::path& path
     const auto status = std::filesystem::symlink_status(path, error);
 #ifdef _WIN32
     if (status.type() == std::filesystem::file_type::not_found) {
-        // Only a symbolic link reparse tag is a link; junctions and other reparse points keep the result above.
         WIN32_FIND_DATAW entry{};
         const HANDLE find = FindFirstFileW(path.c_str(), &entry);
         if (find != INVALID_HANDLE_VALUE) {
