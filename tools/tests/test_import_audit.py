@@ -242,6 +242,18 @@ class ImportAuditTests(unittest.TestCase):
         self.assertEqual(result.stdout, b"")
 
 
+    def test_deeply_nested_registries_are_audit_errors(self):
+        registry = self.work.root / "game.registry.json"
+        registry.write_text("[" * 200000, encoding="utf-8")
+        code, out, err = self.work.run(registry)
+        self.assertEqual(code, 2, err)
+        self.assertIn("cannot read registry", err)
+        registry.write_text("[]", encoding="utf-8")
+        registry.with_name("game.needed.json").write_text("[" * 200000, encoding="utf-8")
+        code, out, err = self.work.run(registry)
+        self.assertEqual(code, 2, err)
+        self.assertIn("cannot read needed libraries", err)
+
     def test_windows_guest_dependencies_use_host_prx_suffixes(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(build_pe(["AAAAAAAAAAA"]))
