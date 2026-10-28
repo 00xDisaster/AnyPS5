@@ -95,7 +95,14 @@ std::uint32_t TranslationContext::f32DenormalFlushFor(const RdnaInstruction& ins
     case RdnaOpcode::VMadmkF32:
     case RdnaOpcode::VMadakF32:
     case RdnaOpcode::VFmaF32:
-        flush = roundsProductSeparately(inst) ? 0u : 3u;
+        if (roundsProductSeparately(inst)) break;
+        if (floatMode.has_value() && (floatMode->floatMode & 3u) == 0u && ((floatMode->floatMode >> 4u) & 3u) == 2u) {
+            if (!float32DenormPreserve || float32FlushToZero) {
+                throw std::runtime_error("f32 denormal mode 2 at pc " + std::to_string(inst.programCounter) + " needs DenormPreserve 32, which the device does not offer for this shader");
+            }
+            return 1u;
+        }
+        flush = 3u;
         break;
     case RdnaOpcode::VCmpEqF32:
     case RdnaOpcode::VCmpGeF32:
