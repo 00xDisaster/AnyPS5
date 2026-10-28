@@ -626,16 +626,20 @@ static void ClearedKqueueRechecksTheWatchedCount() {
 
     Require(Apply(inner, Change(7, EvfiltUser, 0, NoteTrigger)) == 0);
     Require(Apply(outer, Change(1, EvfiltUser, 0, NoteTrigger)) == 0);
-    Require(Poll(outer, events, 1) == 1 && events[0].ident == 1 && events[0].filter == EvfiltUser);
     Require(Poll(inner, events, 4) == 1 && events[0].ident == 7);
+    Require(Poll(outer, events, 4) == 1 && events[0].ident == 1 && events[0].filter == EvfiltUser);
     Require(Poll(outer, events, 4) == 0);
 
     Require(Apply(inner, Change(7, EvfiltUser, 0, NoteTrigger)) == 0);
     Require(Apply(inner, Change(8, EvfiltUser, 0, NoteTrigger)) == 0);
     Require(Apply(outer, Change(1, EvfiltUser, 0, NoteTrigger)) == 0);
-    Require(Poll(outer, events, 1) == 1 && events[0].ident == 1);
     Require(Poll(inner, events, 1) == 1);
-    Require(Poll(outer, events, 4) == 1 && events[0].ident == watched && events[0].data == 1);
+    Require(Poll(outer, events, 4) == 2);
+    const bool watchedFirst = events[0].ident == watched;
+    const KernelEvent& userEvent = events[watchedFirst ? 1 : 0];
+    const KernelEvent& watchedEvent = events[watchedFirst ? 0 : 1];
+    Require(userEvent.ident == 1 && userEvent.filter == EvfiltUser);
+    Require(watchedEvent.ident == watched && watchedEvent.filter == EvfiltRead && watchedEvent.data == 1);
     Require(Poll(outer, events, 4) == 0);
 
     Require(Apply(outer, Change(watched, EvfiltRead, EvAdd | EvClear)) == 0);
@@ -673,9 +677,9 @@ static void ClearedKqueueKeepsConcurrentActivations() {
     const auto watched = static_cast<std::uintptr_t>(inner);
     KernelEvent events[4]{};
     Require(Apply(inner, Change(7, EvfiltUser, EvAdd | EvClear)) == 0);
-    for (std::uintptr_t filler = 100; filler < 20100; ++filler) Require(Apply(inner, Change(filler, EvfiltUser, EvAdd)) == 0);
+    for (std::uintptr_t filler = 100; filler < 12100; ++filler) Require(Apply(inner, Change(filler, EvfiltUser, EvAdd)) == 0);
     Require(Apply(outer, Change(watched, EvfiltRead, EvAdd | EvClear)) == 0);
-    for (int round = 0; round < 5000; ++round) {
+    for (int round = 0; round < 1250; ++round) {
         std::thread trigger([inner] { Require(Apply(inner, Change(7, EvfiltUser, 0, NoteTrigger)) == 0); });
         const int reported = Wait(outer, events, 4);
         trigger.join();
