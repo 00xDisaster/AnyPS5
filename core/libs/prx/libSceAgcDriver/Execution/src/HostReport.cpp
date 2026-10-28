@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <stdexcept>
+#include <string_view>
 
 namespace AgcDriver {
 
@@ -134,6 +136,13 @@ std::optional<std::string> text(const std::optional<std::uint64_t>& value) {
     return std::to_string(*value);
 }
 
+}
+
+bool ParseHostReportSetting(const char* value) {
+    const std::string_view text = value != nullptr ? value : "";
+    if (text.empty() || text == "0") return false;
+    if (text == "1") return true;
+    throw std::runtime_error("ANYPS5_HOST_REPORT must be 0 or 1, not '" + std::string(text) + "'");
 }
 
 std::string RedactHostText(const std::string& text, const std::vector<std::string>& names) {
