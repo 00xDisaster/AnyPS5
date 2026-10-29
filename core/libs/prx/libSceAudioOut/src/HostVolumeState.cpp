@@ -1,10 +1,10 @@
-#include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
+#include "prx/libScePad/include/HostVolumeControl.hpp"
 
 #include <atomic>
 #include <cstdlib>
 #include <mutex>
 
-#include "prx/libSceAudioOut/include/HostVolumeSettings.hpp"
+#include "prx/libScePad/include/HostVolumeSettings.hpp"
 
 namespace {
 

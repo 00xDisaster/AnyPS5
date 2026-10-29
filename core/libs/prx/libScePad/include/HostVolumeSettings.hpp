@@ -1,12 +1,12 @@
-#ifndef CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUMESETTINGS_HPP
-#define CORE_LIBS_PRX_LIBSCEAUDIOOUT_INCLUDE_HOSTVOLUMESETTINGS_HPP
+#ifndef CORE_LIBS_PRX_LIBSCEPAD_INCLUDE_HOSTVOLUMESETTINGS_HPP
+#define CORE_LIBS_PRX_LIBSCEPAD_INCLUDE_HOSTVOLUMESETTINGS_HPP
 
 #include <charconv>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
-#include "prx/libSceAudioOut/include/HostVolume.hpp"
+#include "prx/libScePad/include/HostVolume.hpp"
 
 inline bool ParseHostVolumeFlag(std::string_view name, std::string_view value) {
     if (value == "0") return false;

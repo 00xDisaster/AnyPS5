@@ -24,7 +24,7 @@
 #include "prx/libSceIme/include/ImeInput.hpp"
 #include "prx/libSceIme/include/ModalDialog.hpp"
 #include "prx/libSceVideoOut/include/HostVolumeInput.hpp"
-#include "prx/libSceAudioOut/include/HostVolumeSettings.hpp"
+#include "prx/libScePad/include/HostVolumeSettings.hpp"
 
 PadInput::PadInput() : PadInput(Pad::LoadInputMapping()) {
     HostVolumeConfigureFromEnvironment_nid_no_patch();

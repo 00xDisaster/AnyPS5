@@ -18,7 +18,7 @@
 #include "prx/libkernel/Time/include/Time.hpp"
 #include "prx/libSceAudioOut/include/AudioOutSdl.hpp"
 #include "prx/libSceAudioOut/include/HostGain.hpp"
-#include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
+#include "prx/libScePad/include/HostVolumeControl.hpp"
 #include "AudioOutShutdown.hpp"
 #include "AudioOut2PadMix.hpp"
 #include "prx/libScePad/include/PadState.hpp"

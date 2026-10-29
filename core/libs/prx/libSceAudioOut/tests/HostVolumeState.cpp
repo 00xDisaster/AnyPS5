@@ -1,4 +1,4 @@
-#include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
+#include "prx/libScePad/include/HostVolumeControl.hpp"
 
 #include <atomic>
 #include <cstdio>

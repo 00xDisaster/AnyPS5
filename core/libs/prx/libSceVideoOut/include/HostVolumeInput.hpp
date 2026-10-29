@@ -3,7 +3,7 @@
 
 #include "SDL_events.h"
 
-#include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
+#include "prx/libScePad/include/HostVolumeControl.hpp"
 #include "prx/libScePad/include/KeyboardMouse.hpp"
 
 inline bool ApplyHostVolumeRequests(const Pad::InputRequests& requests, HostVolume* after) {

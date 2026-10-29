@@ -1,5 +1,5 @@
-#include "prx/libSceAudioOut/include/HostVolume.hpp"
-#include "prx/libSceAudioOut/include/HostVolumeSettings.hpp"
+#include "prx/libScePad/include/HostVolume.hpp"
+#include "prx/libScePad/include/HostVolumeSettings.hpp"
 
 #include <cstdio>
 #include <exception>

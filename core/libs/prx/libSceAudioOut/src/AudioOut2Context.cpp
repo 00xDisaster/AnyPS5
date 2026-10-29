@@ -17,7 +17,7 @@
 #include "prx/libc/include/PreciseWait.hpp"
 #include "prx/libc/include/Shutdown.hpp"
 #include "AudioOut2Internal.hpp"
-#include "prx/libSceAudioOut/include/HostVolumeControl.hpp"
+#include "prx/libScePad/include/HostVolumeControl.hpp"
 #include "AudioOutShutdown.hpp"
 #include "prx/libSceAudioOut/include/AudioOutSdl.hpp"
 #include "prx/libScePad/include/PadState.hpp"
