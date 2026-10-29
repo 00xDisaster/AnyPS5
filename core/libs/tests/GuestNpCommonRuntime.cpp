@@ -155,6 +155,60 @@ void TestHeaps() {
     Require(sceNpIpc2ClientTerm() == 0 && sceNpIpc2ClientInit() == 0 && sceNpIpc2ClientTerm() == 0, "the ipc client restarts");
 }
 
+struct AllocatorRecord {
+    std::array<std::uint8_t, 256> block {};
+    std::size_t size = 0;
+    void* released = nullptr;
+    bool fail = false;
+};
+
+void* APS5_VABI RecordAllocate(std::size_t size, void* context) {
+    auto* record = static_cast<AllocatorRecord*>(context);
+    record->size = size;
+    return record->fail ? nullptr : record->block.data();
+}
+
+void APS5_VABI RecordRelease(void* pointer, void* context) {
+    static_cast<AllocatorRecord*>(context)->released = pointer;
+}
+
+void TestObjects() {
+    AllocatorRecord record {};
+    NpAllocator allocator {RecordAllocate, nullptr, RecordRelease, &record};
+    void* object = _ZN3sce2np6ObjectnwEmR14SceNpAllocator(40, &allocator);
+    NpAllocator* stored = nullptr;
+    std::memcpy(&stored, record.block.data(), sizeof(stored));
+
+    Require(object == record.block.data() + 16 && record.size == 56 && stored == &allocator,
+        "an object is allocated behind a 16-byte header that keeps its allocator");
+    AllocatorRecord other {};
+    NpAllocator otherAllocator {RecordAllocate, nullptr, RecordRelease, &other};
+    _ZN3sce2np6ObjectdlEPvR14SceNpAllocator(object, &otherAllocator);
+
+    Require(record.released == record.block.data() && other.released == nullptr, "an object is freed through the allocator it was allocated with");
+    record.released = nullptr;
+    _ZN3sce2np6ObjectdaEPv(_ZN3sce2np6ObjectnaEmR14SceNpAllocator(0, &allocator));
+
+    Require(record.size == 16 && record.released == record.block.data(), "an array is allocated and freed the same way");
+    NpAllocatorEx allocatorEx {allocator, 0x1234};
+    record.released = nullptr;
+    object = _ZN3sce2np6ObjectnwEmR16SceNpAllocatorEx(8, &allocatorEx);
+    std::memcpy(&stored, record.block.data(), sizeof(stored));
+
+    Require(object == record.block.data() + 16 && stored == &allocatorEx.allocator, "an extended allocator keeps its own address in the header");
+    _ZN3sce2np6ObjectdaEPvR16SceNpAllocatorEx(object, &allocatorEx);
+    Require(record.released == record.block.data(), "an object from an extended allocator is freed through it");
+    record.released = nullptr;
+    _ZN3sce2np6ObjectdlEPv(_ZN3sce2np6ObjectnaEmR16SceNpAllocatorEx(8, &allocatorEx));
+    _ZN3sce2np6ObjectdlEPvR16SceNpAllocatorEx(nullptr, &allocatorEx);
+    _ZN3sce2np6ObjectdaEPvR14SceNpAllocator(nullptr, &allocator);
+
+    Require(record.released == record.block.data(), "freeing a null object does nothing");
+    record.fail = true;
+    Require(_ZN3sce2np6ObjectnwEmR14SceNpAllocator(8, &allocator) == nullptr && _ZN3sce2np6ObjectnwEmR16SceNpAllocatorEx(8, &allocatorEx) == nullptr,
+        "a failed allocation returns null");
+}
+
 struct CalloutRecord {
     std::atomic<int> order {0};
     std::atomic<int> first {0};
@@ -434,6 +488,7 @@ int main() {
     TestSharedEventFlags();
     TestThreads();
     TestHeaps();
+    TestObjects();
     TestBase64();
     TestNumbers();
     TestHexAndCopies();
