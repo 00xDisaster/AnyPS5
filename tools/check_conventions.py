@@ -178,7 +178,7 @@ class Check:
         for path, lines in self.files(lambda p: p.suffix in CPP):
             core = path.startswith("core/") and "tests" not in PurePosixPath(path).parts
             source = self.show(path).split("\n")
-            expanded = cpp_text("\n".join(source)).split("\n")
+            expanded = expand_abi_aliases(cpp_text("\n".join(source))).split("\n")
             masked = cpp_text("\n".join(source), preserve_comments=True).split("\n")
             assembly = asm_exports("\n".join(source)) if core and path.startswith("core/libs/prx/") else {}
             constants, starts = None, None
@@ -234,7 +234,7 @@ class Check:
             text = self.show(path)
             if "APS5_VABI" not in text and "ASM_FUNCTION" not in text:
                 continue
-            source = cpp_text(text).split("\n")
+            source = expand_abi_aliases(cpp_text(text)).split("\n")
             assembly = asm_exports(text)
             for number, line in enumerate(source):
                 names = [match.group(1) for match in EXPORT.finditer(line)
@@ -653,8 +653,7 @@ def cpp_text(text, preserve_comments=False):
         blank = re.sub(r"[^\n]", " ", match.group())
         return blank if match.group("comment") is not None else '""' + blank[2:]
 
-    masked = CPP_TOKEN.sub(mask, text)
-    return masked if preserve_comments else expand_abi_aliases(masked)
+    return CPP_TOKEN.sub(mask, text)
 
 
 def expand_abi_aliases(text):

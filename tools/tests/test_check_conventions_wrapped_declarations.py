@@ -92,8 +92,12 @@ class WrappedDeclarationTests(unittest.TestCase):
                  'const char* example = R"(\n#define ABI APS5_VABI\n)";\n')
         for prefix in cases:
             with self.subTest(prefix=prefix):
-                source = check_conventions.cpp_text(prefix + DEFINITION.replace("APS5_VABI", "ABI"))
+                source = check_conventions.expand_abi_aliases(check_conventions.cpp_text(prefix + DEFINITION.replace("APS5_VABI", "ABI")))
                 self.assertNotRegex(source, r"\bAPS5_VABI\s+sceFooBar\s*\(")
+
+    def test_cpp_text_does_not_expand_abi_aliases(self):
+        source = "#define ABI APS5_VABI\nint ABI sceFooBar() { return 1; }\n"
+        self.assertIn("int ABI sceFooBar", check_conventions.cpp_text(source))
 
     def test_aliased_import_declaration_is_not_a_duplicate(self):
         source = "#define ABI APS5_VABI\nint ABI sceFooBar(int a, int b);\n"
