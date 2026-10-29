@@ -899,8 +899,8 @@ int APS5_VABI sceAmprAmmGetVirtualAddressRanges(std::uint64_t* start, std::uint6
     return 0;
 }
 
-int APS5_VABI sceAmprAmmSetPageTablePoolOccupancyNotificationThreshold(void) {
-    NotImplemented_nid_no_patch(__func__);
+int APS5_VABI sceAmprAmmSetPageTablePoolOccupancyNotificationThreshold(int threshold) {
+    (void)threshold;
     return 0;
 }
 
