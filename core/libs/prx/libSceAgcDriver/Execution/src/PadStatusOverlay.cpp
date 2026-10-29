@@ -5,6 +5,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 
 namespace AgcDriver {
 namespace {
@@ -132,6 +133,21 @@ bool PadStatusDisplay::Visible(Clock::time_point now) const {
     return shownUntil.has_value() && now < *shownUntil;
 }
 
+bool PadStatusDisplay::Wants(Clock::time_point now) const {
+    return mode == PadStatusMode::Events || Visible(now);
+}
+
+bool PadStatusDisplay::Poll(Clock::time_point now, const PadStatusProvider& provider) {
+    if (!Wants(now)) {
+        polled.reset();
+        return false;
+    }
+    auto snapshot = provider.read();
+    if (!polled.has_value() || *polled != snapshot) Observe(now, snapshot);
+    polled = std::move(snapshot);
+    return true;
+}
+
 std::vector<std::string> PadStatusDisplay::Lines() const {
     std::vector<std::string> lines;
     for (std::size_t slot = 0; slot < PadStatusSlots; ++slot) {
@@ -164,6 +180,11 @@ std::optional<std::vector<std::string>> PadStatusOverlayLines() {
 extern "C" void AgcDriverPadStatusObserve_nid_postfix(const AgcDriver::PadStatusSnapshot* snapshot) {
     std::lock_guard lock(AgcDriver::displayMutex);
     AgcDriver::display().Observe(AgcDriver::PadStatusDisplay::Clock::now(), *snapshot);
+}
+
+extern "C" void AgcDriverPadStatusPoll_nid_postfix(const AgcDriver::PadStatusProvider* provider) {
+    std::lock_guard lock(AgcDriver::displayMutex);
+    AgcDriver::display().Poll(AgcDriver::PadStatusDisplay::Clock::now(), *provider);
 }
 
 extern "C" void AgcDriverPadStatusShow_nid_postfix() {

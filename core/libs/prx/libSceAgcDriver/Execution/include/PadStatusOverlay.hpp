@@ -41,6 +41,8 @@ public:
     bool Observe(Clock::time_point now, const PadStatusSnapshot& snapshot);
     void Request(Clock::time_point now);
     bool Visible(Clock::time_point now) const;
+    bool Wants(Clock::time_point now) const;
+    bool Poll(Clock::time_point now, const PadStatusProvider& provider);
     std::vector<std::string> Lines() const;
 
 private:
@@ -48,11 +50,13 @@ private:
     std::optional<PadStatusSnapshot> previous;
     std::array<bool, PadStatusSlots> seen{};
     std::optional<Clock::time_point> shownUntil;
+    std::optional<PadStatusSnapshot> polled;
 };
 
 }
 
 extern "C" void AgcDriverPadStatusObserve_nid_postfix(const AgcDriver::PadStatusSnapshot* snapshot);
+extern "C" void AgcDriverPadStatusPoll_nid_postfix(const AgcDriver::PadStatusProvider* provider);
 extern "C" void AgcDriverPadStatusShow_nid_postfix();
 
 #endif
