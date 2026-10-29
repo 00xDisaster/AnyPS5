@@ -52,7 +52,7 @@ std::uint64_t physicalMemoryMiB() {
 }
 
 std::string cpuModel() {
-    auto model = HostCpuModel();
+    const std::string model = HostCpuModel_nid_no_patch().value;
     const auto first = model.find_first_not_of(' ');
     if (first == std::string::npos) throw std::runtime_error("the CPU reports no brand string");
     const auto last = model.find_last_not_of(' ');
@@ -61,7 +61,16 @@ std::string cpuModel() {
 
 std::vector<std::string> cpuMissing() {
 #if (defined(__x86_64__) || defined(__i386__)) && !defined(__APPLE__)
-    return MissingHostCpuFeatures(ReadHostCpuRegisters());
+    const auto registers = ReadHostCpuRegisters_nid_no_patch();
+    const std::string joined = MissingHostCpuFeatures_nid_no_patch(&registers).value;
+    std::vector<std::string> missing;
+    for (std::size_t start = 0; start < joined.size();) {
+        auto end = joined.find(", ", start);
+        if (end == std::string::npos) end = joined.size();
+        missing.push_back(joined.substr(start, end - start));
+        start = end + 2;
+    }
+    return missing;
 #else
     throw std::runtime_error("the CPU gate runs on x86 Linux and Windows hosts only");
 #endif
