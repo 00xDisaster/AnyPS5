@@ -79,6 +79,10 @@ int main() {
         Reject([&]{Relinker::GuestImageReader().Read("generic.prx",oobBucket,true);},"Invalid SysV hash bucket index");
         auto tableOob=Fixture();Io::WriteU32(tableOob,0x2604,0x1000);
         Reject([&]{Relinker::GuestImageReader().Read("generic.prx",tableOob,true);},"Unmapped ELF address");
+        auto lastBucket=Fixture();Io::WriteU32(lastBucket,0x2600,2);Io::WriteU32(lastBucket,0x2608,1);Io::WriteU32(lastBucket,0x260c,4);
+        Reject([&]{Relinker::GuestImageReader().Read("generic.prx",lastBucket,true);},"Invalid SysV hash bucket index");
+        auto chainPastSegment=Fixture();Io::WriteU32(chainPastSegment,0x2600,0x27d);
+        Reject([&]{Relinker::GuestImageReader().Read("generic.prx",chainPastSegment,true);},"Unmapped ELF address");
         auto multiBucket=Fixture();
         Io::WriteU32(multiBucket,0x2600,2);Io::WriteU32(multiBucket,0x2604,4);Io::WriteU32(multiBucket,0x2608,1);Io::WriteU32(multiBucket,0x260c,2);
         auto goodMulti=Relinker::GuestImageReader().Read("generic.prx",multiBucket,true);

@@ -464,7 +464,18 @@ void sysvHashBoundsInCodeInstructionCollector() {
     {
         auto tableOob = baseImage;
         Io::WriteU32(tableOob, 0x2684, 0x2000);
-        checkRejection(tableOob, "Address outside mapped sections");
+        checkRejection(tableOob, "unmapped address");
+    }
+    {
+        auto lastBucket = baseImage;
+        Io::WriteU32(lastBucket, 0x2680, 2);
+        Io::WriteU32(lastBucket, 0x268c, 1);
+        checkRejection(lastBucket, "invalid SysV hash bucket index");
+    }
+    {
+        auto chainPastSegment = baseImage;
+        Io::WriteU32(chainPastSegment, 0x2680, 0x25e);
+        checkRejection(chainPastSegment, "unmapped address");
     }
 }
 
