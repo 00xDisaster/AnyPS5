@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -60,6 +61,8 @@ struct Rig {
     Handle file = NoHandle;
     std::filesystem::path path;
     std::unique_ptr<Tee> tee;
+    std::mutex outputWrites;
+    std::mutex errorWrites;
 
     explicit Rig(const std::string& name, bool terminals = true, bool start = true) {
         path = g_directory / name;
@@ -72,6 +75,7 @@ struct Rig {
     }
 
     void Write(int standard, const std::string& text) {
+        const std::lock_guard<std::mutex> hold(standard == StandardOutput ? outputWrites : errorWrites);
         Require(WriteAll(standard == StandardOutput ? output.write : errors.write, text.data(), text.size()), "source write");
     }
 
