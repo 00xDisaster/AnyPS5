@@ -201,6 +201,33 @@ void TestLevelWithoutADeviceUsesThePlaybackClock() {
     Require(level == 0 && available == queueDepth);
 }
 
+// Without an SDL device (here the disk driver cannot open a directory) a blocking push returns only once
+// the queue has room again, so a feeder thread that wakes its renderer after every push keeps playback
+// fed. The push that fills the queue waits for the oldest grain's playback to end.
+void TestBlockingPushWaitsForRoomWithoutADevice() {
+    SetEnvironment("SDL_DISKAUDIOFILE", std::filesystem::temp_directory_path().string());
+    constexpr std::uint32_t paced = 1024;
+    AudioOut2ContextParam params{};
+    Require(sceAudioOut2ContextResetParam(&params) == 0);
+    params.num_grains = paced;
+    params.queue_depth = queueDepth;
+    AudioOut2ContextHandle handle = 0;
+    Require(sceAudioOut2ContextCreate(&params, nullptr, 0, &handle) == 0);
+    Require(reinterpret_cast<AudioOut2Context*>(handle)->device == 0);
+    const auto grainTime = std::chrono::duration<double>(static_cast<double>(paced) / frequency);
+    std::uint32_t level = 99;
+    std::uint32_t available = 99;
+    for (std::uint32_t round = 0; round < 4; round++) {
+        const auto start = std::chrono::steady_clock::now();
+        Require(sceAudioOut2ContextPush(handle, 1) == 0);
+        const auto took = std::chrono::steady_clock::now() - start;
+        Require(sceAudioOut2ContextGetQueueLevel(handle, &level, &available) == 0);
+        Require(level < queueDepth && available > 0);
+        if (round + 1 >= queueDepth) Require(took >= grainTime / 2);
+    }
+    Require(sceAudioOut2ContextDestroy(handle) == 0);
+}
+
 void TestPrimingAfterRunningDry() {
     Session session("anyps5_audio_out2_priming.raw");
     session.Fill(0.5f);
@@ -359,6 +386,7 @@ int main() {
     TestDeviceLevelDoesNotWaitForTheContext(false);
     TestDeviceLevelDoesNotWaitForTheContext(true);
     TestLevelWithoutADeviceUsesThePlaybackClock();
+    TestBlockingPushWaitsForRoomWithoutADevice();
     TestPrimingAfterRunningDry();
     TestLowLatencyCallsRejectBadArguments();
     TestLowLatencyReadsAtNextPush();
