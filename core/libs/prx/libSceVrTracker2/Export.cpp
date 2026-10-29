@@ -657,16 +657,6 @@ std::int32_t APS5_VABI sceVrTracker2GetRawCameraMeshSize(VrTracker2MeshRequireme
     return 0;
 }
 
-std::int32_t APS5_VABI sceVrTracker2GetControllerImage() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-std::int32_t APS5_VABI sceVrTracker2IrGetDebugRawImage() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 APS5_EXPORT("9R6W33Au4B4", VrTracker2Unknown03);
 std::int32_t APS5_VABI VrTracker2Unknown03(std::uint32_t mode, void* output, std::size_t capacity, std::size_t* writtenSize) {
     NotImplemented_nid_no_patch("9R6W33Au4B4");

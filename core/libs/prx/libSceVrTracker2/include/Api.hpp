@@ -216,8 +216,6 @@ struct VrTracker2ImagePoseResult;
 struct VrTracker2ImageFrame;
 
 extern "C" {
-std::int32_t APS5_VABI sceVrTracker2GetControllerImage();
-std::int32_t APS5_VABI sceVrTracker2IrGetDebugRawImage();
 
 std::int32_t APS5_VABI sceVrTracker2Finalize();
 std::int32_t APS5_VABI sceVrTracker2GetCoordinateSystem(std::uint32_t* coordinateSystem);
