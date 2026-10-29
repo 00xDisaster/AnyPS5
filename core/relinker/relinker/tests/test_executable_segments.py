@@ -179,6 +179,7 @@ def main():
         for name, image in (("overlap-differing-bytes", overlap_image(0x602, 0x602, offset=0x810)),
                             ("overlap-past-later-end", overlap_image(0x700, 0x700)),
                             ("overlap-nonzero-over-bss", overlap_image(0x602, 0x602, filesz=0, memsz=2)),
+                            ("overlap-bss-over-nonzero-file", overlap_image(0x20, 0x602)),
                             ("overlap-same-start", overlap_image(0x20, 0x20, address=0x1200, paddr=0x1200, offset=0x200, filesz=0x40, memsz=0x40)),
                             ("overlap-write-execute-unaligned", overlap_image(0x602, 0x602, flags=6))):
             for options in image_targets:
