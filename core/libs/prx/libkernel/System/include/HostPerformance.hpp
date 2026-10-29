@@ -2,6 +2,7 @@
 #define CORE_LIBS_PRX_LIBKERNEL_SYSTEM_INCLUDE_HOSTPERFORMANCE_HPP
 
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -44,6 +45,10 @@ private:
     mutable std::mutex mutex;
     State state = State::Idle;
 };
+
+std::unique_ptr<IBackend> CreateHostBackend();
+Session* StartProcessSession(Mode mode, std::unique_ptr<IBackend> backend);
+void StartFromEnvironment();
 
 }
 

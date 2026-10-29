@@ -70,6 +70,8 @@ add_library(libkernel SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/Process.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/Sandbox.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/HostCpu.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/System/src/HostPerformance.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/System/src/HostPerformanceProcess.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/MimallocMacOs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/SystemConfiguration.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/System/src/Login.cpp
@@ -91,6 +93,9 @@ add_library(libkernel SHARED EXCLUDE_FROM_ALL
 )
 if(APPLE)
     target_link_libraries(libkernel PRIVATE "-framework CoreFoundation")
+    target_sources(libkernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/System/src/MacActivity.cpp)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(libkernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/System/src/GameModeClient.cpp)
 endif()
 
 target_include_directories(libkernel PRIVATE ${LIBS_INCLUDE_DIR})
