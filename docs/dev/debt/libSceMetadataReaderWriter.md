@@ -14,3 +14,16 @@
 - [_ZN23sceMetadataReaderWriter13writeMetadataERKSsRKNS_8MetadataEjPS2_, _ZN23sceMetadataReaderWriter16extractThumbnailERKSsjRNS_9ThumbnailE, _ZN23sceMetadataReaderWriter16getNumOfMimeTypeERKSsPi, _ZN23sceMetadataReaderWriter17getParserInfoListERSt6vectorINS_10ParserInfoESaIS1_EE, _ZN23sceMetadataReaderWriter18registerParserInfoERKSt6vectorINS_10ParserInfoESaIS1_EE](../../../core/libs/prx/libSceMetadataReaderWriter/Export.cpp) - not exported by any firmware 13.42 module, so on 13.42 an import of these NIDs resolves to nothing in the firmware; the 3.20 declarations remain for titles built against older firmware. Measured as a payload process on a device: `dlsym` on the `dlopen` handle of `libSceMetadataReaderWriter.sprx` returns null for each of these names, while the other 22 names in Export.cpp resolve.
 - [_ZN23sceMetadataReaderWriter8Metadata11deleteFieldERKSs, _ZN23sceMetadataReaderWriter8Metadata15iterateAllFieldEPFiRKSsRKNS_5ValueEbE, _ZN23sceMetadataReaderWriter8Metadata8getFieldEiRSsRNS_5ValueERb, _ZN23sceMetadataReaderWriter8Metadata8setFieldERKSs, _ZN23sceMetadataReaderWriter8Metadata8setFieldERKSsRKNS_5ValueE](../../../core/libs/prx/libSceMetadataReaderWriter/Export.cpp) - not exported by any firmware 13.42 module, so on 13.42 an import of these NIDs resolves to nothing in the firmware; the 3.20 declarations remain for titles built against older firmware. Measured as a payload process on a device: `dlsym` on the `dlopen` handle of `libSceMetadataReaderWriter.sprx` returns null for each of these names, while the other 22 names in Export.cpp resolve.
 - [_ZNK23sceMetadataReaderWriter8Metadata8getFieldEiRSsRNS_5ValueE, _ZNK23sceMetadataReaderWriter8Metadata8getValueERKSsRNS_5ValueE](../../../core/libs/prx/libSceMetadataReaderWriter/Export.cpp) - not exported by any firmware 13.42 module, so on 13.42 an import of these NIDs resolves to nothing in the firmware; the 3.20 declarations remain for titles built against older firmware. Measured as a payload process on a device: `dlsym` on the `dlopen` handle of `libSceMetadataReaderWriter.sprx` returns null for each of these names, while the other 22 names in Export.cpp resolve.
+
+### Additional callable exports
+
+- [Additional callable exports](../../../core/libs/prx/libSceMetadataReaderWriter/Export.cpp) - 6 entries present in both version-labelled images are import-resolution declarations only. Neither label independently authenticates retail firmware provenance. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+
+| Name | NID |
+| --- | --- |
+| `Unknown` | `2oFr2hbrkRs` |
+| `Unknown` | `ElB1bNKymPg` |
+| `Unknown` | `GCOzTsybYr0` |
+| `Unknown` | `Ly4V1dsyKCA` |
+| `Unknown` | `YeIbFGmyUVM` |
+| `Unknown` | `ckVz4iaNj4E` |
