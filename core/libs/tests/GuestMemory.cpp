@@ -3885,6 +3885,9 @@ int main(int argc, char** argv) {
     Require(posix_madvise_nid_postfix(reinterpret_cast<void*>(0x800000000000), 1, 10) == 0);
     Require(posix_madvise_nid_postfix(memory, std::numeric_limits<std::size_t>::max(), 10) == 0);
     Require(posix_madvise_nid_postfix(memory + 1, 0, 4) == 0);
+    Require(posix_madvise_nid_postfix(nullptr, 1, 0) == 22 && *__error_nid_postfix() == 77);
+    Require(posix_madvise_nid_postfix(reinterpret_cast<void*>(0x1000), 1, 0) == 22 && *__error_nid_postfix() == 77);
+    Require(posix_madvise_nid_postfix(reinterpret_cast<void*>(page - 1), 1, 4) == 22 && *__error_nid_postfix() == 77);
     Require(posix_madvise_nid_postfix(memory, page, 11) == 22 && *__error_nid_postfix() == 77);
     Require(posix_madvise_nid_postfix(memory, page, -1) == 22 && *__error_nid_postfix() == 77);
     Require(posix_madvise_nid_postfix(memory, 0, 11) == 22 && *__error_nid_postfix() == 77);
