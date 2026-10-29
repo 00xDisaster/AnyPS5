@@ -300,6 +300,9 @@ int main() {
     Require(priorityWords[0] == 0x310 && priorityWords[1] == 0x10 && priorityWords[2] == 0xCCCCCCCCCCCCCCCCull);
     commandBatch = {commands, sizeof(commands) - 7, sizeof(commands)};
     Require(sceAcmBatchJobPriority(&commandBatch, 1) == static_cast<int>(0x81940009) && commandBatch.offset == sizeof(commands) - 7);
+    Require(sceAcmBatchJobPriority(&commandBatch, 4) == BadPointer && commandBatch.offset == sizeof(commands) - 7);
+    commandBatch = {commands, sizeof(commands) + 8, sizeof(commands)};
+    Require(sceAcmBatchJobPriority(&commandBatch, 1) == static_cast<int>(0x81940009) && commandBatch.offset == sizeof(commands) + 8);
     commandBatch = {commands, sizeof(commands) - 8, sizeof(commands)};
     Require(sceAcmBatchJobPriority(&commandBatch, 1) == 0 && commandBatch.offset == sizeof(commands));
     std::memcpy(priorityWords, commands + sizeof(commands) - 8, sizeof(std::uint64_t));
