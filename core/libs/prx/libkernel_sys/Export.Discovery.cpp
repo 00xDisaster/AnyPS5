@@ -115,11 +115,6 @@ int APS5_VABI kldload_nid_postfix(void) {
     return 0;
 }
 
-int APS5_VABI kldstat_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
 int APS5_VABI kmq_notify_nid_postfix(void) {
     NotImplemented_nid_no_patch(__func__);
     return 0;
