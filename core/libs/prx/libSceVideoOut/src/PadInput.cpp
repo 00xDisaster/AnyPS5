@@ -136,10 +136,7 @@ AgcDriver::PadStatusSnapshot PadInput::statusSnapshot() const {
 }
 
 void PadInput::reportStatus() {
-    auto snapshot = statusProvider.read();
-    if (reportedStatus.has_value() && *reportedStatus == snapshot) return;
-    AgcDriverPadStatusObserve_nid_postfix(&snapshot);
-    reportedStatus = std::move(snapshot);
+    AgcDriverPadStatusPoll_nid_postfix(&statusProvider);
 }
 
 void PadInput::applyOutput() {
@@ -329,7 +326,10 @@ void PadInput::HandleEvent(const SDL_Event& event, DisplayWindow& window) {
     if (requests.toggleFullscreen && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) window.ToggleFullscreen();
     if (requests.togglePerformanceOverlay && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverTogglePerformanceOverlay_nid_postfix();
     if (requests.screenshot && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverRequestScreenshot_nid_postfix();
-    if (requests.showPadStatus && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) AgcDriverPadStatusShow_nid_postfix();
+    if (requests.showPadStatus && window.Handle() != nullptr && event.key.windowID == SDL_GetWindowID(window.Handle())) {
+        AgcDriverPadStatusShow_nid_postfix();
+        reportStatus();
+    }
     if (requests.toggleMouse) setMouseMode(!keyboardMouse.MouseMode());
     if (event.type != SDL_MOUSEMOTION) publish(window.FrameNumber(), 0);
 }

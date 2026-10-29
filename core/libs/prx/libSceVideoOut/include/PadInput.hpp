@@ -10,7 +10,6 @@
 #include "prx/libSceAgcDriver/Execution/include/PadStatus.hpp"
 #include <array>
 #include <chrono>
-#include <optional>
 #include <string>
 #include "prx/libSceVideoOut/include/Telemetry.hpp"
 
@@ -63,7 +62,6 @@ private:
     std::array<ControllerSlot, PAD_MAX_CONTROLLERS> slots{};
     VideoOutTelemetry::PadChangeFilter telemetryFilter;
     AgcDriver::PadStatusProvider statusProvider;
-    std::optional<AgcDriver::PadStatusSnapshot> reportedStatus;
 };
 
 #endif
