@@ -312,3 +312,32 @@
 
 - [Draw finisher](../../../core/libs/prx/libSceAgcDriver/Execution/src/Driver/Draw/DrawPipeline.cpp) (`APS5_DRAW_PIPELINE`) - opt-in. The Linux main-image page table it adds matches what Windows already does by default.
 - [Multi-submit count overflow and buffer validation](../../../core/libs/prx/libSceAgcDriver/Submit/src/Dcb.cpp) (libSceAgcDriver) - whether the console driver imposes an architectural submission packet limit or allows null buffer pointers with non-zero sizes in multi-submit arrays is unmeasured; AgcDriver::SubmitMany validates count against 32-bit pointer array bounds overflow and rejects null addresses for non-empty command buffers with a runtime exception.
+
+### Additional callable exports
+
+- [Additional callable exports](../../../core/libs/prx/libSceAgcDriver/Export.cpp) - 22 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are import-resolution declarations only. The later inventory label does not authenticate a retail firmware version. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+
+| Name | NID |
+| --- | --- |
+| `sceAgcDriverDeregisterCaptureInterface` | `qR+S4WqJvUM` |
+| `sceAgcDriverIsCoredumpValid` | `+NIAY3DWpOw` |
+| `sceAgcDriverIsSuspendPointInFlightDirect` | `I6elAJxk6Jo` |
+| `sceAgcDriverRegisterCaptureInterface` | `oz3Yd--lAEE` |
+| `sceAgcDriverReleaseRazorACQ` | `TEOAw-eLjNo` |
+| `sceAgcDriverSetTFRingDirect` | `16IjQxB-Heo` |
+| `Unknown` | `6WO4CscVnfM` |
+| `Unknown` | `6v-D6CQHA4Y` |
+| `Unknown` | `8CXPPlNmvIc` |
+| `Unknown` | `Cia3HgY0WiY` |
+| `Unknown` | `DGN+IaHNR8o` |
+| `Unknown` | `EqwPDQyh+Ec` |
+| `Unknown` | `IGYqP+WKCgc` |
+| `Unknown` | `LgctzJSGy7s` |
+| `Unknown` | `NmE3PfE211o` |
+| `Unknown` | `O144kUYDSBo` |
+| `Unknown` | `gpF0LZ3+19c` |
+| `Unknown` | `mxyUaQfPgb8` |
+| `Unknown` | `oFb2hMcoJa4` |
+| `Unknown` | `sW7yp7NVlrk` |
+| `Unknown` | `tD2ECNSuTQQ` |
+| `Unknown` | `wxdcyVqXJEY` |
