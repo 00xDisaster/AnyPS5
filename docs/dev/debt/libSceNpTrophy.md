@@ -20,3 +20,23 @@
 - [sceNpTrophyGetGameInfo](../../../core/libs/prx/libSceNpTrophy/Export.cpp) (libSceNpTrophy) - the trophy configuration `TROPCONF.ESFM` is encrypted and not read, so the game details report the trophy count taken from the `TROPnnn.PNG` icons and the group count taken from the `GRnnn.PNG` icons of the trophy package; the per-grade counts are 0, the title and description are empty, and the progress percentage is unlocked trophies over all trophies instead of the console's grade-weighted points
 - [sceNpTrophyGetGroupInfo](../../../core/libs/prx/libSceNpTrophy/Export.cpp) (libSceNpTrophy) - only the base game group (id -1) is answered, with the same counts as the game; an id past the `GRnnn.PNG` icons returns `INVALID_GROUP_ID`, and an existing group throws because the trophies of a group are listed only in the encrypted configuration
 - [sceNpTrophyGetTrophyInfo](../../../core/libs/prx/libSceNpTrophy/Export.cpp) (libSceNpTrophy) - the grade is reported as unknown, the trophy is never hidden, the name and description are empty and the unlock timestamp is 0; a package with groups throws, since a trophy's group is listed only in the encrypted configuration
+
+### Additional callable exports
+
+- [Additional callable exports](../../../core/libs/prx/libSceNpTrophy/Export.cpp) - 13 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are import-resolution declarations only. The later inventory label does not authenticate a retail firmware version. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime functionality is implemented. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+
+| Name | NID |
+| --- | --- |
+| `sceNpTrophySystemWrapGetGroupDataArray` | `X0CI9frfKAY` |
+| `sceNpTrophySystemWrapGetGroupData` | `nk-wfZiF0uU` |
+| `sceNpTrophySystemWrapGetGroupDetailsArray` | `GNyrYd90+E4` |
+| `sceNpTrophySystemWrapGetTitleData` | `Ib4UL-Ert9s` |
+| `sceNpTrophySystemWrapGetTrophyDataArray` | `1Pq8X9IH-AQ` |
+| `sceNpTrophySystemWrapGetTrophyData` | `Sh572s2+hE0` |
+| `sceNpTrophySystemWrapGetTrophyDetails` | `pzUWJ+JW9bI` |
+| `Unknown` | `+O9vU1CpGZA` |
+| `Unknown` | `+not13BEdVI` |
+| `Unknown` | `FJZW2oHUHFk` |
+| `Unknown` | `bGnKq23jqek` |
+| `Unknown` | `lX611WLCvX0` |
+| `Unknown` | `n4AHGHb-pfY` |
