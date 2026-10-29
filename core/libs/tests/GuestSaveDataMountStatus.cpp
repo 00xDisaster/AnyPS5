@@ -19,6 +19,7 @@ constexpr std::uint32_t MountReadWrite = 2;
 constexpr std::uint32_t MountCreate = 4;
 constexpr std::uint32_t MountCreate2 = 32;
 constexpr int SaveDataErrorParameter = -2137063424;
+constexpr int SaveDataErrorNotInitialized = -2137063423;
 constexpr int SaveDataErrorNotMounted = -2137063420;
 constexpr int SaveDataErrorBusy = -2137063421;
 constexpr int SaveDataErrorNotFound = -2137063416;
@@ -236,6 +237,48 @@ void CheckInvalidNamesAreRejected() {
     MountAndCheck("after", MountReadWrite | MountCreate2, 1u, "CREATE2 after the rejected names");
 }
 
+void CheckMountedCountAndLifecycle() {
+    Check(sceSaveDataGetMountedSaveDataCount() == 0, "getMountedSaveDataCount initially 0");
+    Check(sceSaveDataAbort() == 0, "abort after init succeeds");
+    Check(sceSaveDataClearProgress() == 0, "clearProgress after init succeeds");
+
+    SceSaveDataDirName dirA{};
+    std::memcpy(dirA.data, "count-a", sizeof("count-a"));
+    SaveDataMount3 mountA{};
+    mountA.dir_name = &dirA;
+    mountA.mount_mode = MountReadWrite | MountCreate2;
+    SaveDataMountResult resultA{};
+    Check(sceSaveDataMount3(&mountA, &resultA) == 0, "mountA succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 1, "count is 1 after first mount");
+
+    SceSaveDataDirName dirB{};
+    std::memcpy(dirB.data, "count-b", sizeof("count-b"));
+    SaveDataMount3 mountB{};
+    mountB.dir_name = &dirB;
+    mountB.mount_mode = MountReadWrite | MountCreate2;
+    SaveDataMountResult resultB{};
+    Check(sceSaveDataMount3(&mountB, &resultB) == 0, "mountB succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 2, "count is 2 after second mount");
+
+    SceSaveDataDirName dirC{};
+    std::memcpy(dirC.data, "count-c", sizeof("count-c"));
+    SaveDataMount3 mountC{};
+    mountC.dir_name = &dirC;
+    mountC.mount_mode = MountReadWrite | MountCreate2;
+    SaveDataMountResult resultC{};
+    Check(sceSaveDataMount3(&mountC, &resultC) == 0, "mountC succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 3, "count is 3 after third mount");
+
+    Check(sceSaveDataUmount2(0, &resultB.mount_point) == 0, "unmountB succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 2, "count decrements to 2 after middle unmount");
+
+    Check(sceSaveDataUmount2(0, &resultA.mount_point) == 0, "unmountA succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 1, "count decrements to 1");
+
+    Check(sceSaveDataUmount2(0, &resultC.mount_point) == 0, "unmountC succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 0, "count decrements back to 0");
+}
+
 }
 
 int main() {
@@ -243,9 +286,13 @@ int main() {
     std::filesystem::create_directories(root);
     const auto previous = std::filesystem::current_path();
     std::filesystem::current_path(root);
+    Check(sceSaveDataGetMountedSaveDataCount() == SaveDataErrorNotInitialized, "getMountedSaveDataCount pre-init is NOT_INITIALIZED");
+    Check(sceSaveDataAbort() == SaveDataErrorNotInitialized, "abort pre-init is NOT_INITIALIZED");
+    Check(sceSaveDataClearProgress() == SaveDataErrorNotInitialized, "clearProgress pre-init is NOT_INITIALIZED");
     CheckUnmountedCalls();
     Check(sceSaveDataSyncSaveDataMemory(nullptr) == static_cast<int>(0x809F0000), "null param rejected in memory sync");
     Check(sceSaveDataInitialize3(nullptr) == 0, "SaveData initializes");
+    CheckMountedCountAndLifecycle();
     MountAndCheck("fresh", MountReadWrite | MountCreate2, 1u, "CREATE2 of a missing save");
     MountAndCheck("fresh", MountReadWrite | MountCreate2, 0u, "CREATE2 of an existing save");
     MountAndCheck("made", MountReadWrite | MountCreate, 1u, "CREATE of a missing save");
@@ -253,6 +300,10 @@ int main() {
     CheckFailedMountKeepsResult();
     CheckEquivalentMounts();
     CheckInvalidNamesAreRejected();
+    Check(sceSaveDataTerminate() == 0, "SaveData terminates");
+    Check(sceSaveDataGetMountedSaveDataCount() == SaveDataErrorNotInitialized, "getMountedSaveDataCount post-terminate returns NOT_INITIALIZED");
+    Check(sceSaveDataAbort() == SaveDataErrorNotInitialized, "abort post-terminate returns NOT_INITIALIZED");
+    Check(sceSaveDataClearProgress() == SaveDataErrorNotInitialized, "clearProgress post-terminate returns NOT_INITIALIZED");
     std::filesystem::current_path(previous);
     std::error_code error;
     std::filesystem::remove_all(root, error);

@@ -1041,8 +1041,10 @@ int APS5_VABI sceSaveDataDebugTarget() {
 }
 
 int APS5_VABI sceSaveDataAbort() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    if (g_initializations == 0) {
+        return SAVE_DATA_ERROR_NOT_INITIALIZED;
+    }
+    return SAVE_DATA_OK;
 }
 
 int APS5_VABI sceSaveDataBindPsnAccount(void) {
@@ -1106,8 +1108,10 @@ int APS5_VABI sceSaveDataCheckSaveDataVersionLatest(void) {
 }
 
 int APS5_VABI sceSaveDataClearProgress() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    if (g_initializations == 0) {
+        return SAVE_DATA_ERROR_NOT_INITIALIZED;
+    }
+    return SAVE_DATA_OK;
 }
 
 int APS5_VABI sceSaveDataCreateUploadData(void) {
@@ -1206,8 +1210,17 @@ int APS5_VABI sceSaveDataGetEventInfo() {
 }
 
 int APS5_VABI sceSaveDataGetMountedSaveDataCount() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    if (g_initializations == 0) {
+        return SAVE_DATA_ERROR_NOT_INITIALIZED;
+    }
+    std::lock_guard lock(g_slots_mutex);
+    int count = 0;
+    for (const auto& slot : g_slots) {
+        if (slot.used) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 int APS5_VABI sceSaveDataGetProgress() {
