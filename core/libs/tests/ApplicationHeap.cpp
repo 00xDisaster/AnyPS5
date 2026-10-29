@@ -369,8 +369,8 @@ int main(int argc, char** argv) {
         for (unsigned i = 40; i < 60; ++i) require(pointer[i] == 0);
         auto* shrunken = static_cast<unsigned char*>(recallocarray_nid_postfix(pointer, 6, 5, 10));
         require(shrunken == pointer);
-        for (unsigned i = 0; i < 50; ++i) require(shrunken[i] == 0x5a);
-        for (unsigned i = 50; i < 60; ++i) require(shrunken[i] == 0);
+        for (unsigned i = 0; i < 40; ++i) require(shrunken[i] == 0x5a);
+        for (unsigned i = 40; i < 60; ++i) require(shrunken[i] == 0);
         pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(shrunken, 5, 2, 10));
         require(pointer != nullptr);
         for (unsigned i = 0; i < 20; ++i) require(pointer[i] == 0x5a);
