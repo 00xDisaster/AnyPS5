@@ -2,6 +2,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/GuestArena.hpp"
 #include "prx/libc/include/GuestWriteWatch.hpp"
@@ -50,7 +51,7 @@ constexpr std::uint32_t TileDepth64KB = 0x18;
 constexpr std::uint32_t Type2D = 9;
 constexpr std::uint32_t Type2DArray = 13;
 constexpr std::size_t PlaneBytes = 65536;
-constexpr std::size_t BlockBytes = 9 * PlaneBytes;
+constexpr std::size_t BlockBytes = 11 * PlaneBytes;
 constexpr std::uint32_t RowPasses = 15;
 
 alignas(256) constexpr std::array<std::uint32_t, 9> StoreRowCode{
@@ -195,6 +196,51 @@ void PendingChainCase(AgcDriver::VulkanDevice& device, const DepthFastClearHarne
     Require(!AgcDriver::Graphics::DepthSurfaceAt(Address(plane)), "a pending storage write over the depth plane, then a two-level view: the depth surface stayed live");
 }
 
+struct ChainAfterRetire {
+    std::vector<std::uint8_t> level0;
+    std::vector<std::uint8_t> level1;
+    bool disjoint = false;
+};
+
+ChainAfterRetire RetireOverPendingChain(AgcDriver::VulkanDevice& device, const DepthFastClearHarness::Shaders& shaders, std::uint8_t* plane, bool depthWrite) {
+    Fill(plane, VK_FORMAT_D32_SFLOAT);
+    StoreRow(device, plane, VK_FORMAT_D32_SFLOAT, 1, 1);
+    AgcDriver::Graphics::StorageTexture::FlushPending(Address(plane), PlaneBytes, nullptr, "test");
+    device.WaitIdle();
+    static_cast<void>(DepthFastClearHarness::Draw(device, shaders, Plane(plane, VK_FORMAT_D32_SFLOAT), {.depthTest = true, .depthWrite = depthWrite, .depthCompare = VK_COMPARE_OP_ALWAYS}));
+    Require(AgcDriver::Graphics::DepthSurfaceAt(Address(plane)), "the drawn depth surface of the retire case is not live");
+    StoreRow(device, plane, VK_FORMAT_D32_SFLOAT, 1, 1);
+    const auto words = StorageView(Address(plane), Format32Float, 1, 0, 1);
+    const auto resource = AgcDriver::Graphics::DecodeTextureResource(words);
+    const auto texture = AgcDriver::Graphics::DepthSurfaceTexture(AgcDriver::VulkanDeviceTestAccess::ContextOf(device), words, resource, {});
+    Require(texture == nullptr && !AgcDriver::Graphics::DepthSurfaceAt(Address(plane)), "a two-level view over a drawn depth plane under a pending storage write did not retire the surface");
+    AgcDriver::Graphics::StorageTexture::FlushPending(Address(plane), PlaneBytes, nullptr, "test");
+    device.WaitIdle();
+    AgcDriver::GuestMemory::FlushGpuWrites(Address(plane), PlaneBytes);
+    const auto geometry = AgcDriver::Graphics::DescribeSurface(resource);
+    const auto& first = geometry.mips.at(0);
+    const auto& second = geometry.mips.at(1);
+    ChainAfterRetire result;
+    result.level0.assign(plane + first.tiledOffset, plane + first.tiledOffset + first.tiledSize);
+    result.level1.assign(plane + second.tiledOffset, plane + second.tiledOffset + second.tiledSize);
+    result.disjoint = first.tiledOffset + first.tiledSize <= second.tiledOffset || second.tiledOffset + second.tiledSize <= first.tiledOffset;
+    return result;
+}
+
+void RetireStoresDepthCase(AgcDriver::VulkanDevice& device, const DepthFastClearHarness::Shaders& shaders, std::uint8_t* control, std::uint8_t* drawn) {
+    const auto kept = RetireOverPendingChain(device, shaders, control, false);
+    const auto stored = RetireOverPendingChain(device, shaders, drawn, true);
+    Require(stored.level1 == kept.level1, "a retire that stored depth drawn only on the GPU changed level 1 of the chain a pending storage write produced");
+    if (!stored.disjoint) return;
+    std::size_t half = 0;
+    for (std::size_t offset = 0; offset + sizeof(float) <= stored.level0.size(); offset += sizeof(float)) {
+        float value = 0.0f;
+        std::memcpy(&value, stored.level0.data() + offset, sizeof(value));
+        half += value == 0.5f;
+    }
+    Require(half == stored.level0.size() / sizeof(float), "the retire left " + std::to_string(stored.level0.size() / sizeof(float) - half) + " of the drawn depth plane's texels without the depth drawn on the GPU");
+}
+
 }
 
 int main() {
@@ -223,6 +269,7 @@ int main() {
         RequireCount(DepthFastClearHarness::Draw(*device, shaders, depthStencil, {}), RowPasses, "a new D32S8 depth surface over a pending R32F storage write");
         RequireCount(DepthFastClearHarness::Draw(*device, shaders, depthStencil, {.depthTest = false, .stencilTest = true, .stencil = equalZero}), Covered, "the stencil plane of a new D32S8 depth surface that took a storage write, tested EQUAL to its clear value 0");
         PendingChainCase(*device, shaders, block.Plane(8));
+        RetireStoresDepthCase(*device, shaders, block.Plane(9), block.Plane(10));
 
         if (!failures.empty()) {
             std::string text;
