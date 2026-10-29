@@ -485,6 +485,28 @@ static void CheckFloatUnderflowErrno() {
     errno = 0;
 }
 
+static void CheckLdexpfErrno() {
+    constexpr struct {
+        std::uint32_t input;
+        int exponent;
+        std::uint32_t expected;
+    } cases[] = {
+        {0x3f800000u, 200, 0x7f800000u},
+        {0x101e8e30u, 1262, 0x7f800000u},
+        {0xbf800000u, 128, 0xff800000u},
+        {0x3f800000u, -200, 0x00000000u},
+        {0x3f800000u, -2000, 0x00000000u},
+        {0x3f800000u, -149, 0x00000001u},
+        {0x3fc00000u, -149, 0x00000002u},
+        {0x00000200u, 5, 0x00004000u},
+    };
+    for (const auto& item : cases) {
+        errno = 1234;
+        Require(std::bit_cast<std::uint32_t>(ldexpf_nid_postfix(std::bit_cast<float>(item.input), item.exponent)) == item.expected);
+        Require(errno == 1234);
+    }
+}
+
 static void CheckAtanfConsoleBits() {
     constexpr std::uint32_t cases[][2] = {
         {0x3e80000bu, 0x3e7adbc5u}, {0x3e0007c9u, 0x3dfebd2au}, {0xbdccce4cu, 0xbdcc2090u},
@@ -2584,6 +2606,7 @@ int main() {
     CheckAtanfConsoleBits();
     CheckAtan2fConsoleBits();
     CheckFloatUnderflowErrno();
+    CheckLdexpfErrno();
     CheckFmodErrno();
     CheckFmodfErrno();
     CheckDoubleClassification();
