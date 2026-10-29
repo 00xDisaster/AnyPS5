@@ -11,4 +11,4 @@
 
 - [`sceAcmBatchJobNotification`](../../../core/libs/prx/libSceAcm/Export.cpp) is a parameterless pending declaration for import resolution. Its signature and behavior are unverified; it throws through `NotImplemented_nid_no_patch`.
 
-- [`sceAcm_ConvReverb_SharedInput`](../../../core/libs/prx/libSceAcm/Export.cpp) encodes the PS5 13.40 reverb jobs, except with 128-sample blocks, where it throws: its input stage needs a 256-point `sceAcm_FFT` job, which `sceAcm_FFT` does not encode. The meaning of the reverb descriptor's block metadata for the DSP is unverified.
+- [`sceAcm_ConvReverb_SharedInput`](../../../core/libs/prx/libSceAcm/Export.cpp) encodes the reverb jobs as `libSceAcm.sprx` does on firmware 13.40 (read from the module's code and compared with that code run on x86-64, not measured on a console). PPSA01317 calls it during boot with 512-sample blocks. With 128-sample blocks it throws: its input stage needs a 256-point `sceAcm_FFT` job, which `sceAcm_FFT` does not encode. The meaning of the reverb descriptor's block metadata for the DSP is unverified.
