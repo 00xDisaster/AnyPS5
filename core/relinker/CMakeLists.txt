@@ -423,6 +423,21 @@ if(BUILD_TESTING)
         set_tests_properties(windows_file_writer_binary windows_file_writer_text PROPERTIES TIMEOUT 20)
     endif()
 
+    if(UNIX)
+        add_test_executable(symlink_file_writer_tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/tests/SymlinkFileWriterTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/src/FileWriter.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/src/NativePath.cpp
+        )
+        target_include_directories(symlink_file_writer_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/io/include
+        )
+        add_test(NAME symlink_file_writer_binary COMMAND symlink_file_writer_tests binary)
+        add_test(NAME symlink_file_writer_text COMMAND symlink_file_writer_tests text)
+        set_tests_properties(symlink_file_writer_binary symlink_file_writer_text PROPERTIES TIMEOUT 20)
+    endif()
+
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test_executable(file_writer_tests
             ${CMAKE_CURRENT_SOURCE_DIR}/io/tests/FileWriterTests.cpp
