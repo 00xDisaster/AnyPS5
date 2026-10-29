@@ -417,14 +417,14 @@ class UnwrapTest(unittest.TestCase):
     def test_new_output_inherits_the_destination_directory_acl(self):
         directory = Path(self.directory)
         grant = subprocess.run(["icacls.exe", str(directory), "/grant", "*S-1-1-0:(OI)(CI)(RX)"],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, encoding="oem", errors="replace", timeout=30)
         self.assertEqual(grant.returncode, 0, grant.stdout + grant.stderr)
         container = build_container(default_segments(), default_records(), default_payloads())
         result, output = self.convert(container)
         self.assertEqual(result.returncode, 0, result.stderr)
         permissions = directory / "output-acl.txt"
         saved = subprocess.run(["icacls.exe", str(output), "/save", str(permissions)],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, encoding="oem", errors="replace", timeout=30)
         self.assertEqual(saved.returncode, 0, saved.stdout + saved.stderr)
         self.assertIn(";;;WD)", permissions.read_text(encoding="utf-16-le"))
         self.assertTrue(output.read_bytes().startswith(b"\x7fELF"))
