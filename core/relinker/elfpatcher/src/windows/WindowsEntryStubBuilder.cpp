@@ -183,9 +183,10 @@ WindowsEntryStub WindowsEntryStubBuilder::Build(const std::uint32_t dataRva, con
         const bool hostModule = !import.Library.empty() &&
             std::any_of(order.begin(), order.end(), [&](auto index) { return index >= guestModules.size(); });
         if (hostModule) {
-            if (library == "libkernel_sys.prx" || library == "libkernel_web.prx") {
+            if (library == "libkernel.prx" || library == "libkernel_sys.prx" || library == "libkernel_web.prx") {
                 for (std::size_t index = guestModules.size(); index < libraries.size(); ++index) {
-                    if (libraries[index] == "libkernel.prx") order.push_back(CheckedRva(index));
+                    if ((libraries[index] == "libkernel.prx" || libraries[index] == "libkernel_sys.prx" || libraries[index] == "libkernel_web.prx") && libraries[index] != library)
+                        order.push_back(CheckedRva(index));
                 }
             }
             for (std::size_t index = guestModules.size(); index < libraries.size(); ++index) {
