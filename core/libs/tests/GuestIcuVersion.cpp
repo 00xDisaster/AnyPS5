@@ -98,12 +98,22 @@ void AuStrcpy() {
     Require(chars[0] == 0 && chars[1] == 'X', "empty copy writes only terminator");
 
     chars.fill('X');
-    Require(u_austrcpy_nid_postfix(chars.data(), u"Ab_9") == chars.data(), "invariant copy returns destination");
-    Require(std::memcmp(chars.data(), "Ab_9\0XXX", chars.size()) == 0, "invariant characters and terminator copy");
+    Require(u_austrcpy_nid_postfix(chars.data(), u"Ab_9") == chars.data(), "ASCII copy returns destination");
+    Require(std::memcmp(chars.data(), "Ab_9\0XXX", chars.size()) == 0, "ASCII characters and terminator copy");
 
     chars.fill('X');
-    u_austrcpy_nid_postfix(chars.data(), u"A$B\u00e9C");
-    Require(std::memcmp(chars.data(), "A\0B\0C\0XX", chars.size()) == 0, "non-invariant units become zero before the terminator");
+    u_austrcpy_nid_postfix(chars.data(), u"A!#$@B");
+    Require(std::memcmp(chars.data(), "A!#$@B\0X", chars.size()) == 0, "punctuation outside the invariant set copies unchanged");
+
+    std::array<char16_t, 128> asciiUnits;
+    for (std::size_t index = 0; index < 127; ++index) asciiUnits[index] = static_cast<char16_t>(index + 1);
+    asciiUnits[127] = 0;
+    std::array<char, 129> asciiChars;
+    asciiChars.fill('X');
+    Require(u_austrcpy_nid_postfix(asciiChars.data(), asciiUnits.data()) == asciiChars.data(), "full ASCII copy returns destination");
+    for (std::size_t index = 0; index < 127; ++index)
+        Require(asciiChars[index] == static_cast<char>(index + 1), "every unit in 0x01-0x7f copies unchanged");
+    Require(asciiChars[127] == 0 && asciiChars[128] == 'X', "full ASCII copy writes terminator without overrun");
 
     Require(Rejects([&] { u_austrcpy_nid_postfix(nullptr, u"a"); }), "null destination rejected");
     Require(Rejects([&] { u_austrcpy_nid_postfix(chars.data(), nullptr); }), "null source rejected");
@@ -124,13 +134,23 @@ void AuStrncpy() {
     Require(std::memcmp(chars.data(), "Abc\0XXXX", chars.size()) == 0, "longer bound writes one terminator without padding");
 
     chars.fill('X');
-    u_austrncpy_nid_postfix(chars.data(), u"A!B\u0100", 5);
-    Require(std::memcmp(chars.data(), "A\0B\0\0XXX", chars.size()) == 0, "non-invariant units narrow to zero within bound");
+    u_austrncpy_nid_postfix(chars.data(), u"A!#$@", 7);
+    Require(std::memcmp(chars.data(), "A!#$@\0XX", chars.size()) == 0, "non-invariant ASCII units copy unchanged within bound");
 
-    const std::array<char16_t, 3> unterminated{u'Q', u'R', u'S'};
+    std::array<char16_t, 128> asciiUnits;
+    for (std::size_t index = 0; index < 127; ++index) asciiUnits[index] = static_cast<char16_t>(index + 1);
+    asciiUnits[127] = 0;
+    std::array<char, 129> asciiChars;
+    asciiChars.fill('X');
+    Require(u_austrncpy_nid_postfix(asciiChars.data(), asciiUnits.data(), 128) == asciiChars.data(), "bounded full ASCII copy returns destination");
+    for (std::size_t index = 0; index < 127; ++index)
+        Require(asciiChars[index] == static_cast<char>(index + 1), "every unit in 0x01-0x7f copies unchanged in bounded copy");
+    Require(asciiChars[127] == 0 && asciiChars[128] == 'X', "bounded full ASCII copy writes terminator without overrun");
+
+    const std::array<char16_t, 3> unterminated{u'!', u'$', u'@'};
     chars.fill('X');
     u_austrncpy_nid_postfix(chars.data(), unterminated.data(), 3);
-    Require(std::memcmp(chars.data(), "QRSXXXXX", chars.size()) == 0, "bounded copy stops at count without reading past it");
+    Require(std::memcmp(chars.data(), "!$@XXXXX", chars.size()) == 0, "bounded copy stops at count without reading past it");
 
     chars.fill('X');
     Require(u_austrncpy_nid_postfix(chars.data(), u"Abc", 0) == chars.data(), "zero count returns destination");
