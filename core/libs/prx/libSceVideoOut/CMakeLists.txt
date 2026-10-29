@@ -191,7 +191,7 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
-    add_test_executable(pad_host_volume_tests tests/HostVolumeInput.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../libSceAudioOut/src/HostVolumeState.cpp)
+    add_test_executable(pad_host_volume_tests tests/HostVolumeInput.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../libScePad/src/HostVolumeState.cpp)
     target_include_directories(pad_host_volume_tests PRIVATE ${LIBS_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/3rdparty/SDL2/include)
     target_link_libraries(pad_host_volume_tests PRIVATE SDL2-static)
     if(MINGW)
