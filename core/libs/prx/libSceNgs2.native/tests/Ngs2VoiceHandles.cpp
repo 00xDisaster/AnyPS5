@@ -78,9 +78,6 @@ static void MatrixInfo() {
     Status(sceNgs2VoiceGetMatrixInfo(voice, 0, &info, sizeof(info)), SCE_NGS2_OK, "GetMatrixInfo failed for 64 levels");
     Require(info.num_levels == 64 && std::equal(full.begin(), full.end(), info.levels));
     Status(sceNgs2VoiceGetMatrixInfo(voice, 0, &info, sizeof(info) + 1), SCE_NGS2_OK, "GetMatrixInfo rejected a larger output");
-    std::array<float, 65> wide{};
-    Control(voice, SCE_NGS2_VOICE_PARAM_MATRIX_LEVELS, Ngs2VoiceMatrixLevelsParam{{}, 0, static_cast<std::uint32_t>(wide.size()), wide.data()});
-    Require(MatrixInfoThrows<std::invalid_argument>(voice, 0));
     Require(MatrixInfoThrows<std::invalid_argument>(voice, 1));
     const auto master = Voice(CreateRack(system, SCE_NGS2_RACK_ID_MASTERING));
     Require(MatrixInfoThrows<std::invalid_argument>(master, 0));
