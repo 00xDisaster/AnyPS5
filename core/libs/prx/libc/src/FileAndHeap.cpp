@@ -677,11 +677,32 @@ void* APS5_VABI reallocarray_nid_postfix(void* ptr, size_t nmemb, size_t size) {
     return realloc_nid_postfix(ptr, nmemb * size);
 }
 
+/*
+ * Copyright (c) 2008, 2017 Otto Moerbeek <otto@drijf.net>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+/* Adapted from OpenBSD lib/libc/stdlib/recallocarray.c:
+https://github.com/openbsd/src/blob/master/lib/libc/stdlib/recallocarray.c */
 void* APS5_VABI recallocarray_nid_postfix(void* ptr, size_t oldnmemb, size_t nmemb, size_t size) {
-    if (ptr == nullptr) return calloc_nid_postfix(nmemb, size);
     if (size != 0 && nmemb > std::numeric_limits<size_t>::max() / size) {
         errno = 12;
         return nullptr;
+    }
+    if (ptr == nullptr) {
+        void* result = calloc_nid_postfix(nmemb, size);
+        if (result == nullptr && nmemb != 0 && size != 0) errno = 12;
+        return result;
     }
     if (size != 0 && oldnmemb > std::numeric_limits<size_t>::max() / size) {
         errno = 22;
@@ -698,7 +719,10 @@ void* APS5_VABI recallocarray_nid_postfix(void* ptr, size_t oldnmemb, size_t nme
         }
     }
     void* newptr = malloc_nid_postfix(newsize);
-    if (newptr == nullptr) return nullptr;
+    if (newptr == nullptr) {
+        errno = 12;
+        return nullptr;
+    }
     if (newsize > oldsize) {
         std::memcpy(newptr, ptr, oldsize);
         std::memset(static_cast<char*>(newptr) + oldsize, 0, newsize - oldsize);

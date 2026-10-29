@@ -378,6 +378,8 @@ int main(int argc, char** argv) {
         require(recallocarray_nid_postfix(pointer, 2, 2, SIZE_MAX) == nullptr && *__error_nid_postfix() == 12);
         *__error_nid_postfix() = 0;
         require(recallocarray_nid_postfix(pointer, SIZE_MAX, 2, 2) == nullptr && *__error_nid_postfix() == 22);
+        *__error_nid_postfix() = 0;
+        require(recallocarray_nid_postfix(nullptr, 0, SIZE_MAX, 2) == nullptr && *__error_nid_postfix() == 12);
         ApplicationHeapFree_nid_no_patch(pointer);
         pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(nullptr, 0, 20, 1000));
         require(pointer != nullptr && ApplicationHeapUsableSize_nid_no_patch(pointer) == 20000);
@@ -532,6 +534,14 @@ int main(int argc, char** argv) {
     require(strndup_nid_postfix(text, 5) == nullptr && *__error_nid_postfix() == 12);
     *__error_nid_postfix() = 0;
     require(getcwd_nid_postfix(nullptr, 0) == nullptr && *__error_nid_postfix() == 12);
+    *__error_nid_postfix() = 0;
+    require(recallocarray_nid_postfix(nullptr, 0, 4, 10) == nullptr && *__error_nid_postfix() == 12);
+    *__error_nid_postfix() = 0;
+    require(recallocarray_nid_postfix(nullptr, 0, SIZE_MAX, 2) == nullptr && *__error_nid_postfix() == 12);
+    std::memset(storage.data(), 0x7b, 32);
+    *__error_nid_postfix() = 0;
+    require(recallocarray_nid_postfix(storage.data(), 4, 8, 10) == nullptr && *__error_nid_postfix() == 12);
+    for (unsigned i = 0; i < 32; ++i) require(reinterpret_cast<unsigned char*>(storage.data())[i] == 0x7b);
     fail = false;
     const auto beforeScripting = frees;
     const auto sizeBeforeScripting = lastSize;
