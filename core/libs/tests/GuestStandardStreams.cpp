@@ -323,6 +323,19 @@ static void CheckSupplementaryWideCharacters() {
     }
 }
 
+static void CheckUngetcEndOfFile() {
+    FileStream stream(std::tmpfile());
+    Require(fwrite_nid_postfix("ab", 1, 2, &stream) == 2);
+    rewind_nid_postfix(&stream);
+    Require(ungetc_nid_postfix(EOF, &stream) == EOF);
+    Require(ftello_nid_postfix(&stream) == 0 && fgetc_nid_postfix(&stream) == 'a');
+    Require(fgetc_nid_postfix(&stream) == 'b' && fgetc_nid_postfix(&stream) == EOF && feof_nid_postfix(&stream) != 0);
+    Require(ungetc_nid_postfix(EOF, &stream) == EOF && feof_nid_postfix(&stream) != 0);
+    Require(ungetc_nid_postfix('z', &stream) == 'z' && feof_nid_postfix(&stream) == 0);
+    Require(fgetc_nid_postfix(&stream) == 'z' && fgetc_nid_postfix(&stream) == EOF && feof_nid_postfix(&stream) != 0);
+    stream.Close();
+}
+
 static void CheckRewind() {
     FileStream stream(std::tmpfile());
     Require(fwrite_nid_postfix("ab", 1, 2, &stream) == 2);
@@ -1063,6 +1076,7 @@ int main(int argc, char** argv) {
     Require(fgetc_nid_postfix(&locked) == 'A' && fgetc_nid_postfix(&locked) == 'B');
     locked.Close();
     CheckRewind();
+    CheckUngetcEndOfFile();
     CheckFgetsSize();
     CheckSupplementaryWideCharacters();
     CheckUnlockedStreams();
