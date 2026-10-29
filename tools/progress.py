@@ -589,7 +589,7 @@ def main(argv=None):
             for path in args.compare:
                 try:
                     snapshots.append(json.loads(path.read_text(encoding="utf-8-sig")))
-                except (OSError, ValueError) as error:
+                except (OSError, ValueError, RecursionError) as error:
                     parser.error(f"{path}: {error}")
             for path, snapshot in zip(args.compare, snapshots):
                 try:
