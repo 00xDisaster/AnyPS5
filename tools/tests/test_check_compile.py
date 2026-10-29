@@ -1010,6 +1010,13 @@ class CheckCompileLauncherTests(unittest.TestCase):
                     Path.cwd(), source),
                     [*prefix, "ccache", "g++", "-fsyntax-only", "-DNAME=1", "-include", "pch.hxx", str(source)])
 
+    def test_env_delimiter_preserves_a_command_path_containing_equals(self):
+        source = Path.cwd() / "unit.cpp"
+        prefix = ["cmake", "-E", "env", "--"]
+        command = "compiler=tools/g++"
+        self.assertEqual(check_compile.syntax_arguments([*prefix, command, "-c", str(source)], Path.cwd(), source),
+                         [*prefix, command, "-fsyntax-only", str(source)])
+
     def test_only_cmake_starts_an_env_prefix(self):
         source = Path.cwd() / "unit.cpp"
         self.assertEqual(check_compile.syntax_arguments(["g++", "-E", "env", "-c", str(source)], Path.cwd(), source),
