@@ -3228,7 +3228,7 @@ if(BUILD_TESTING)
         set_tests_properties(${agcGuestMemoryLifetimeTests} PROPERTIES ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND Python3_Interpreter_FOUND)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND Python3_Interpreter_FOUND AND ANYPS5_RELINKER_CLI)
         add_library(agc_guest_memory_lifetime_fixture SHARED tests/GuestMemoryLifetimeFixture.cpp)
         target_include_directories(agc_guest_memory_lifetime_fixture PRIVATE
                 ${LIBS_INCLUDE_DIR}
