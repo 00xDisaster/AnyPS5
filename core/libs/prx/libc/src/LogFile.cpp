@@ -87,7 +87,8 @@ void Tee::pump(Stream& stream) {
         while (whole > 0 && chunk[whole - 1] != '\n') --whole;
         if (whole == 0) {
             if (stream.carried + length > CarryBytes) {
-                flushCarry(stream);
+                toFile(stream.carry.get(), stream.carried);
+                stream.carried = 0;
                 toFile(chunk, length);
             } else {
                 std::memcpy(stream.carry.get() + stream.carried, chunk, length);
