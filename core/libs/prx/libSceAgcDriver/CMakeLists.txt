@@ -994,6 +994,11 @@ if(BUILD_TESTING)
     set_target_properties(agc_host_report_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
     add_test(NAME agc_host_report COMMAND agc_host_report_tests)
     set_tests_properties(agc_host_report PROPERTIES TIMEOUT 20)
+    if(MINGW)
+        target_link_libraries(agc_host_report_tests PRIVATE libc)
+        set_tests_properties(agc_host_report PROPERTIES ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
 endif()
 
 add_test_executable(agc_host_report_vulkan_tests EXCLUDE_FROM_ALL
@@ -1008,6 +1013,11 @@ if(BUILD_TESTING)
     set_target_properties(agc_host_report_vulkan_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
     add_test(NAME agc_host_report_vulkan COMMAND agc_host_report_vulkan_tests)
     set_tests_properties(agc_host_report_vulkan PROPERTIES TIMEOUT 20)
+    if(MINGW)
+        target_link_libraries(agc_host_report_vulkan_tests PRIVATE libc)
+        set_tests_properties(agc_host_report_vulkan PROPERTIES ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+    endif()
 endif()
 
 add_test_executable(agc_tessellation_factor_ring_tests EXCLUDE_FROM_ALL
