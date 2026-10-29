@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import errno
 import os
 import re
 import stat
@@ -196,13 +197,18 @@ def case_insensitive_directory(directory):
 
 
 def resolved_path(path):
-    path = Path(path)
+    original = path = Path(path)
     for _ in range(40):
         if not path.is_symlink():
             break
         target = Path(link_target(os.readlink(path)))
         path = target if target.is_absolute() else path.parent / target
-    return path.resolve()
+    if path.is_symlink():
+        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(original))
+    try:
+        return path.resolve()
+    except RuntimeError as error:
+        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(original)) from error
 
 
 def link_target(text):
