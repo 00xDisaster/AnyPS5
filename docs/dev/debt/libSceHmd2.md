@@ -1,5 +1,23 @@
 # libSceHmd2 technical debt
 
+### Additional callable exports
+
+- [Additional callable exports](../../../core/libs/prx/libSceHmd2/InventoryExports.cpp) - 11 entries present in both version-labelled images are import-resolution declarations only. Neither label independently authenticates retail firmware provenance. These NIDs are absent from the pinned public 3.20 catalogue. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+
+| Name | NID |
+| --- | --- |
+| `Unknown` | `7Qwh+itD9r4` |
+| `Unknown` | `Ec6R1zHrEmA` |
+| `Unknown` | `FBUEhH9tQ1A` |
+| `Unknown` | `GLtAhJ6E2io` |
+| `Unknown` | `Ijl+flgyR7Q` |
+| `Unknown` | `PcdNgERzCos` |
+| `Unknown` | `UbHtTtGRplE` |
+| `Unknown` | `dvGkONYMdJg` |
+| `Unknown` | `fY41qRGCvTM` |
+| `Unknown` | `n9wYmNVt6S4` |
+| `Unknown` | `wDDAIxOeaqg` |
+
 ### Silent stubs
 
 - [libSceHmd2](../../../core/libs/prx/libSceHmd2/Export.cpp) has no PS VR2 runtime: Initialize returns unsupported-feature, so normal calls never reach initialized device behavior. Reprojection and gaze operations retain their throwing bodies. Four size/alignment queries return measured constants; QueryBufferSizeAlign still throws. Device setup, headset tracking and rendering are not implemented.
