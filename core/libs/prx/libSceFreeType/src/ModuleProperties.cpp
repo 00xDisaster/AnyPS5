@@ -3,7 +3,9 @@
 #include "prx/libc/include/General.hpp"
 
 #include FT_MODULE_H
+#include FT_DRIVER_H
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -16,7 +18,7 @@ static_assert(sizeof(FT_Bool) == sizeof(std::uint8_t));
 
 namespace {
 
-enum class PropertyType { Unsigned, Signed, Boolean, Darkening, Unsupported };
+enum class PropertyType { Unsigned, Signed, Boolean, Darkening, GlyphToScriptMap, Unsupported };
 using DarkeningParameters = FT_Int[8];
 
 PropertyType TypeOf(const char* moduleName, const char* propertyName) {
@@ -32,11 +34,27 @@ PropertyType TypeOf(const char* moduleName, const char* propertyName) {
         if (std::strcmp(propertyName, "no-stem-darkening") == 0) return PropertyType::Boolean;
         if (std::strcmp(propertyName, "darkening-parameters") == 0) return PropertyType::Darkening;
     }
+    if (autoHinter && std::strcmp(propertyName, "glyph-to-script-map") == 0) return PropertyType::GlyphToScriptMap;
     if (autoHinter && (std::strcmp(propertyName, "fallback-script") == 0 ||
         std::strcmp(propertyName, "default-script") == 0)) {
         return PropertyType::Unsigned;
     }
     return PropertyType::Unsupported;
+}
+
+struct GuestGlyphToScriptMap {
+    GuestFaceRec* face;
+    std::uint16_t* map;
+};
+
+int ReadGlyphToScriptMap(FT_Library library, const char* moduleName, const char* propertyName, void* output) {
+    GuestFaceRec* face = nullptr;
+    std::memcpy(&face, output, sizeof(face));
+    const GuestFace* owner = FaceOf(face);
+    FT_Prop_GlyphToScriptMap property{owner ? owner->host : nullptr, nullptr};
+    const int error = FT_Property_Get(library, moduleName, propertyName, &property);
+    if (!error) std::memcpy(static_cast<char*>(output) + offsetof(GuestGlyphToScriptMap, map), &property.map, sizeof(property.map));
+    return error;
 }
 
 template <typename TValue>
@@ -65,6 +83,7 @@ extern "C" int APS5_VABI FT_Property_Get_nid_postfix(GuestLibrary* library, cons
         case PropertyType::Signed: return Read<FT_Int32>(host, moduleName, propertyName, value);
         case PropertyType::Boolean: return Read<FT_Bool>(host, moduleName, propertyName, value);
         case PropertyType::Darkening: return Read<DarkeningParameters>(host, moduleName, propertyName, value);
+        case PropertyType::GlyphToScriptMap: return ReadGlyphToScriptMap(host, moduleName, propertyName, value);
         default: NotImplemented_nid_no_patch(__func__);
     }
 }
@@ -78,6 +97,10 @@ extern "C" int APS5_VABI FT_Property_Set_nid_postfix(GuestLibrary* library, cons
         case PropertyType::Signed: return Write<FT_Int32>(host, moduleName, propertyName, value);
         case PropertyType::Boolean: return Write<FT_Bool>(host, moduleName, propertyName, value);
         case PropertyType::Darkening: return Write<DarkeningParameters>(host, moduleName, propertyName, value);
+        case PropertyType::GlyphToScriptMap: {
+            FT_Prop_GlyphToScriptMap property{};
+            return FT_Property_Set(host, moduleName, propertyName, &property);
+        }
         default: NotImplemented_nid_no_patch(__func__);
     }
 }
