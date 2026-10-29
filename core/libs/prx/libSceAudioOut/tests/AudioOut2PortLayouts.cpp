@@ -383,6 +383,7 @@ void TestMeasuredMainPortFormats() {
 }
 
 int main() {
+    UnsetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV);
     TestUserAttributes();
     SetEnvironment("SDL_AUDIODRIVER", "disk");
     for (const Layout* layout : {&mono, &stereo, &surround71, &surround714}) {

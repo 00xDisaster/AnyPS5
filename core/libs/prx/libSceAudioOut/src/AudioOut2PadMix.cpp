@@ -31,13 +31,14 @@ static bool IsMutedText(const char* text) {
 
 float AudioPadSpeakerFallbackGainFrom(const char* dbText) {
     if (dbText == nullptr) return DEFAULT_PAD_SPEAKER_FALLBACK_GAIN;
+    const char* const text = dbText;
     while (std::isspace(static_cast<unsigned char>(*dbText))) dbText++;
     if (IsMutedText(dbText)) return 0.0f;
     char* end = nullptr;
     const float db = std::strtof(dbText, &end);
     while (std::isspace(static_cast<unsigned char>(*end))) end++;
     if (end == dbText || !std::isfinite(db) || *end != '\0' || db < PAD_SPEAKER_FALLBACK_MIN_DB || db > PAD_SPEAKER_FALLBACK_MAX_DB) {
-        throw std::runtime_error(std::string(AUDIO_PAD_SPEAKER_FALLBACK_ENV) + '=' + dbText + ": expected mute, off, -inf or a number of dB from -60 to 0");
+        throw std::runtime_error(std::string(AUDIO_PAD_SPEAKER_FALLBACK_ENV) + '=' + text + ": expected mute, off, -inf or a number of dB from -60 to 0");
     }
     return std::pow(10.0f, db / 20.0f);
 }

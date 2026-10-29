@@ -36,18 +36,20 @@ static void RequireRejected(const char* text, const char* message) {
         AudioPadSpeakerFallbackGainFrom(text);
     } catch (const std::exception& error) {
         const std::string what(error.what());
-        Require(what.find(AUDIO_PAD_SPEAKER_FALLBACK_ENV) != std::string::npos && what.find("expected") != std::string::npos, message);
+        Require(what.find(std::string(AUDIO_PAD_SPEAKER_FALLBACK_ENV) + '=' + text) != std::string::npos && what.find("expected") != std::string::npos, message);
         return;
     }
     Require(false, message);
 }
 
-template<typename TAction>
+template<typename TException, typename TAction>
 static bool Throws(TAction action) {
     try {
         action();
-    } catch (const std::exception&) {
+    } catch (const TException&) {
         return true;
+    } catch (...) {
+        return false;
     }
     return false;
 }
@@ -131,8 +133,8 @@ int main() {
     {
         auto out = Silence<1>();
         const float data[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-        Require(Throws([&] { AudioOut2AccumulatePadFrame(AudioOut2Route::Main, data, 2, unity, out.data()); }), "a main-mix port is refused");
-        Require(Throws([&] { AudioOut2AccumulatePadFrame(AudioOut2Route::PadVibration, data, 8, unity, out.data()); }), "an 8-channel pad port is refused");
+        Require(Throws<std::invalid_argument>([&] { AudioOut2AccumulatePadFrame(AudioOut2Route::Main, data, 2, unity, out.data()); }), "a main-mix port is refused");
+        Require(Throws<std::invalid_argument>([&] { AudioOut2AccumulatePadFrame(AudioOut2Route::PadVibration, data, 8, unity, out.data()); }), "an 8-channel pad port is refused");
         for (float sample : out) Require(sample == 0.0f, "a refused port mixes nothing");
     }
 
@@ -152,6 +154,7 @@ int main() {
     RequireRejected("5", "a value above the range is rejected");
     RequireRejected("garbage", "invalid input is rejected");
     RequireRejected("-15x", "trailing text is rejected");
+    RequireRejected("  -15x", "leading whitespace is reported verbatim");
 
     UnsetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV);
     Require(std::fabs(AudioPadSpeakerFallbackGain() - 1.0f) <= 1e-6f, "unset environment keeps unity");
@@ -160,7 +163,7 @@ int main() {
     SetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV, "mute");
     Require(AudioPadSpeakerFallbackGain() == 0.0f, "muted environment");
     SetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV, "garbage");
-    Require(Throws([] { AudioPadSpeakerFallbackGain(); }), "an invalid environment stops the title");
+    Require(Throws<std::runtime_error>([] { AudioPadSpeakerFallbackGain(); }), "an invalid environment stops the title");
     UnsetEnvironment(AUDIO_PAD_SPEAKER_FALLBACK_ENV);
 
     {
