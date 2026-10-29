@@ -251,7 +251,7 @@ void gcnTilingTests() {
                                 for (std::uint32_t bit = 0; bit < 16u; ++bit) inBlock |= static_cast<std::uint32_t>(std::popcount((x & geometry.equation[bit] & 0xfffu) ^ ((y << 12u) & geometry.equation[bit] & 0xfff000u)) & 1) << bit;
                                 for (std::uint32_t bit = 0; bit < 4u; ++bit) split |= static_cast<std::uint32_t>(std::popcount((x & geometry.splitMasks[bit] & 0xfffu) ^ ((y << 12u) & geometry.splitMasks[bit] & 0xfff000u)) & 1) << bit;
                                 const auto block = static_cast<std::uint64_t>(y / geometry.blockHeight) * mip.blocksPerRow + x / geometry.blockWidth;
-                                const auto address = surface.GuestOffset(layer, mip) + block * geometry.blockBytes + inBlock + static_cast<std::uint64_t>(split) * mip.gcnSplitStride;
+                                const auto address = surface.GuestOffset(layer, mip) + block * geometry.blockBytes + (inBlock ^ GcnLayerBankXor(geometry, layer)) + static_cast<std::uint64_t>(split) * mip.gcnSplitStride;
                                 const auto expected = surface.GuestOffset(layer, mip) + referenceGcnAddress(mode, bytes, width, height, x, y, layer);
                                 if (address != expected) Require(false, what + ": element " + std::to_string(x) + "," + std::to_string(y) + " of level " + std::to_string(level) + ", array layer " + std::to_string(layer) + " is at " + std::to_string(address) + ", addrlib places it at " + std::to_string(expected));
                             }
