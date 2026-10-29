@@ -2,7 +2,7 @@
 
 ### Silent stubs
 
-- [libSceAcm](../../../core/libs/prx/libSceAcm/Export.cpp) batches execute as silent no-ops, and do not execute encoded panner, FFT and reverb commands.
+- [libSceAcm](../../../core/libs/prx/libSceAcm/Export.cpp) batches execute as silent no-ops, and do not execute encoded panner, FFT, reverb and priority commands.
 
 ### Unknown function info
 
