@@ -3725,8 +3725,9 @@ void ClearHostImports(VkDevice device) {
     }
     if (state.device != device) return;
     std::vector<std::pair<std::uint64_t, std::uint64_t>> unwatched;
+    GuestAllocations::Lease lease;
     if (std::any_of(state.imports.begin(), state.imports.end(), [](const auto& import) { return import.second.unwatched; })) {
-        const auto lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
+        lease = GuestAllocations::GuestAllocationsAcquire_nid_postfix();
         for (const auto& [address, entry] : state.imports) noteRetiredUnwatched(unwatched, entry, lease);
     }
     for (const auto& [address, entry] : state.imports) {
