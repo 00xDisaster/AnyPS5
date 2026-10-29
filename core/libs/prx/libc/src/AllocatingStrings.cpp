@@ -2,6 +2,7 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 #include "SceTypes.hpp"
+#include <atomic>
 #include <cerrno>
 #include <cstdarg>
 #include <cstring>
@@ -14,7 +15,19 @@ extern "C" _invalid_parameter_handler _set_thread_local_invalid_parameter_handle
 #include <unistd.h>
 #endif
 
+namespace {
+std::atomic<GuestWriteHook_nid_no_patch> g_guestWriteHook{nullptr};
+}
+
 extern "C" {
+
+void LibcSetGuestWriteHook_nid_no_patch(GuestWriteHook_nid_no_patch hook) {
+    g_guestWriteHook.store(hook, std::memory_order_release);
+}
+
+GuestWriteHook_nid_no_patch LibcGetGuestWriteHook_nid_no_patch() {
+    return g_guestWriteHook.load(std::memory_order_acquire);
+}
 
 char* APS5_VABI strndup_nid_postfix(const char* source, std::size_t limit) {
     if (!source) { errno = 22; return nullptr; }
@@ -61,16 +74,36 @@ int APS5_VABI vdprintf_nid_postfix(int descriptor, const char* format, VaList* a
     char* text = nullptr;
     const int count = vasprintf_nid_postfix(&text, format, args);
     if (count < 0) return -1;
+    std::size_t remaining = static_cast<std::size_t>(count);
+    const char* ptr = text;
+    int writeError = 0;
+    while (remaining > 0) {
+        std::int64_t written = 0;
+        if (const auto hook = g_guestWriteHook.load(std::memory_order_acquire)) {
+            written = hook(descriptor, ptr, remaining);
+        } else {
 #ifdef _WIN32
-    const auto ignore = +[](const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {};
-    const auto previous = _set_thread_local_invalid_parameter_handler(ignore);
-    const int written = ::_write(descriptor, text, static_cast<unsigned int>(count));
-    _set_thread_local_invalid_parameter_handler(previous);
+            const auto ignore = +[](const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {};
+            const auto previous = _set_thread_local_invalid_parameter_handler(ignore);
+            written = ::_write(descriptor, ptr, static_cast<unsigned int>(remaining));
+            _set_thread_local_invalid_parameter_handler(previous);
 #else
-    const int written = static_cast<int>(::write(descriptor, text, static_cast<std::size_t>(count)));
+            written = ::write(descriptor, ptr, remaining);
 #endif
+        }
+        if (written <= 0) {
+            writeError = errno;
+            break;
+        }
+        ptr += written;
+        remaining -= static_cast<std::size_t>(written);
+    }
     ApplicationHeapFree_nid_no_patch(text);
-    return written;
+    if (remaining > 0) {
+        if (writeError != 0) errno = writeError;
+        return -1;
+    }
+    return count;
 }
 
 int APS5_VABI dprintf_nid_postfix(int descriptor, const char* format, ...) {
