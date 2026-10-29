@@ -3811,10 +3811,8 @@ void RunAddressCopyCapMirrorTests(const Context& context, const BdaTestAccess& a
         std::size_t bytes = 0;
     };
     std::array<Piece, 2> pieces{};
-    const std::array<std::size_t, 2> sizes{unwatchedBytes, mirroredBytes};
-    for (std::size_t index = 0; index < pieces.size(); ++index) {
-        auto& piece = pieces[index];
-        piece.allocated = sizes[index] + block;
+    for (auto& piece : pieces) {
+        piece.allocated = unwatchedBytes + block;
 #ifdef _WIN32
         piece.pointer = GuestArena::GuestArenaAllocate_nid_postfix(piece.allocated, block);
         Require(piece.pointer != nullptr, "cannot allocate the yielding import ranges in the guest arena");
