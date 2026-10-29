@@ -37,8 +37,11 @@ void _appendU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value) {
 std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, const std::size_t length) {
     using namespace X64OpcodeConstants;
     std::size_t pos = 0;
-    while (pos < length && _legacyPrefixAllowed(data[pos]))
+    bool addressSize32 = false;
+    while (pos < length && _legacyPrefixAllowed(data[pos])) {
+        addressSize32 = addressSize32 || data[pos] == PrefixAddressSize;
         ++pos;
+    }
     const auto vex = pos;
     if (vex + 2 > length)
         return std::nullopt;
@@ -110,7 +113,7 @@ std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, co
             highDisplacementSize = highMod == ModRmModDisp8 ? Disp8Size : Disp32Size;
         }
     }
-    if (!ripRelative && highDisplacement > std::numeric_limits<std::int32_t>::max())
+    if (!ripRelative && !addressSize32 && highDisplacement > std::numeric_limits<std::int32_t>::max())
         throw CodegenException("256-bit store displacement leaves no room for its upper half");
     high.push_back(static_cast<std::uint8_t>((highMod << ModRmModShift) | reg | rm));
     if (sib)
@@ -121,7 +124,7 @@ std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, co
     else if (ripRelative)
         _appendU32(high, 0);
     else if (highDisplacementSize == Disp32Size)
-        _appendU32(high, static_cast<std::uint32_t>(static_cast<std::int32_t>(highDisplacement)));
+        _appendU32(high, static_cast<std::uint32_t>(highDisplacement));
     high.push_back(kUpperHalf);
     if (ripRelative) {
         operands.High.RipDisplacementOffset = highDisplacementOffset;
