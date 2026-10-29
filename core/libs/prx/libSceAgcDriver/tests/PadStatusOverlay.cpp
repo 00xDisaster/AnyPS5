@@ -392,6 +392,57 @@ void invalidEnvironmentTests() {
     throw std::runtime_error("an invalid ANYPS5_PAD_STATUS was accepted at first use");
 }
 
+struct CountingProvider {
+    std::vector<PadStatusSnapshot> script;
+    std::size_t reads = 0;
+    std::size_t at = 0;
+    AgcDriver::PadStatusProvider provider() {
+        return {[this] {
+            ++reads;
+            return script[std::min(at, script.size() - 1)];
+        }};
+    }
+};
+
+void pollTests() {
+    CountingProvider off;
+    off.script = {snapshot({pad(PadKind::DualSense, PadPower::Wired)})};
+    PadStatusDisplay hidden(PadStatusMode::Off);
+    const auto offProvider = off.provider();
+    for (int step = 0; step < 500; ++step) require(!hidden.Poll(at(step * 16), offProvider) && !hidden.Visible(at(step * 16)), "the mode 0 display read a snapshot or showed the panel");
+    require(off.reads == 0, "the provider was called with the mode off and no request");
+    hidden.Request(at(10000));
+    require(hidden.Poll(at(10000), offProvider) && off.reads == 1, "a request does not make the display read the provider");
+    require(hidden.Visible(at(13999)) && !hidden.Visible(at(14000)), "the requested panel does not last 4 seconds");
+    require((hidden.Lines() == std::vector<std::string>{"P1 DUALSENSE  WIRED"}), "the requested panel does not list the controller");
+    off.script = {snapshot({pad(PadKind::DualSense, PadPower::Wired)}), snapshot({pad(PadKind::DualSense, PadPower::Low)})};
+    off.at = 1;
+    require(hidden.Poll(at(12000), offProvider) && off.reads == 2, "a shown panel stops following the controller");
+    require((hidden.Lines() == std::vector<std::string>{"P1 DUALSENSE  BATTERY LOW"}), "a shown panel does not follow a battery change");
+    require(!hidden.Poll(at(14000), offProvider) && off.reads == 2, "an expired panel still reads the provider");
+    off.at = 0;
+    hidden.Request(at(20000));
+    require(hidden.Poll(at(20000), offProvider) && off.reads == 3 && hidden.Visible(at(23999)) && !hidden.Visible(at(24000)), "a second request does not behave like the first");
+    require((hidden.Lines() == std::vector<std::string>{"P1 DUALSENSE  WIRED"}), "a second request shows a stale snapshot");
+
+    CountingProvider on;
+    on.script = {snapshot({}), snapshot({pad(PadKind::Xbox, PadPower::Full)}), snapshot({pad(PadKind::Xbox, PadPower::Full)}), snapshot({})};
+    PadStatusDisplay events(PadStatusMode::Events);
+    PadStatusDisplay direct(PadStatusMode::Events);
+    const auto onProvider = on.provider();
+    for (std::size_t step = 0; step < on.script.size(); ++step) {
+        on.at = step;
+        const int time = static_cast<int>(step) * 1000;
+        require(events.Poll(at(time), onProvider), "the events mode did not read the provider");
+        direct.Observe(at(time), on.script[step]);
+        for (const int offset : {0, 1, 999, 3999, 4000, 4001})
+            require(events.Visible(at(time + offset)) == direct.Visible(at(time + offset)), "polling shows the panel at other times than observing");
+    }
+    require(on.reads == 4, "the events mode did not read the provider on every poll");
+    require(events.Lines() == direct.Lines(), "polling lists other lines than observing");
+    std::printf("pad status: the snapshot is read only in the events mode or while a request keeps the panel shown\n");
+}
+
 }
 
 int main(int argc, char** argv) try {
@@ -421,6 +472,7 @@ int main(int argc, char** argv) try {
     paintTests();
     cornerTests();
     priorityTests();
+    pollTests();
     std::printf("pad status overlay tests passed\n");
     return 0;
 } catch (const std::exception& error) {
