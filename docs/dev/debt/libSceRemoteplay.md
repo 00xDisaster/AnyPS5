@@ -1,8 +1,8 @@
 # libSceRemoteplay technical debt
 
-### Silent stubs
+### Initialization state
 
-- [sceRemoteplayGetConnectionStatus, sceRemoteplayInitialize, sceRemoteplayTerminate](../../../core/libs/prx/libSceRemoteplay/Export.cpp) (libSceRemoteplay) - `sceRemoteplayGetConnectionStatus` reports `REMOTEPLAY_CONNECTION_STATUS_DISCONNECT` (0) for any user ID; `sceRemoteplayInitialize` and `sceRemoteplayTerminate` perform no remote play session setup or teardown
+- [sceRemoteplayInitialize, sceRemoteplayTerminate, sceRemoteplayGetConnectionStatus](../../../core/libs/prx/libSceRemoteplay/Export.cpp) (libSceRemoteplay) - the exported state machine follows the firmware 11.00 module. `sceRemoteplayInitialize` (`0x13a0`), `sceRemoteplayTerminate` (`0x13d0`) and `sceRemoteplayGetConnectionStatus` (`0x1520`) are thin wrappers over one singleton. An absent heap is accepted and the module allocates and aligns a 0x1800-byte heap itself, whose allocation failure is `0x80fc0002`; a present heap must be at least 0x1800 (`0x80fc0001`), and a call while the state is initialized returns `0x80fc0003`. The status query and terminate return `0x80fc0004` unless the module is initialized; the query checks the state before the output pointer and answers `0x80fc0001` for a null output. Terminate leaves a terminated state that a later initialize accepts, so the state is not a boolean. The connection status is reported as disconnect: on the console the value comes from the session service, and the wrapper retries once through another internal query when that answers `0x80020003`; this tree has no session, so the value and the retry path are unmodelled, as are the 0x1800 heap contents (the session object), the 5,000,000-unit timeout and the two virtual calls that initialize performs
 
 ### Unknown function info
 
