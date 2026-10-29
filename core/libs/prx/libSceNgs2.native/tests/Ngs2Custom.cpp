@@ -229,8 +229,8 @@ static void TestWideCustomSubmixer() {
         0, 1, 0, 0, 0, 0, 0, 0,
     };
     Control(custom, SCE_NGS2_VOICE_PARAM_MATRIX_LEVELS, Ngs2VoiceMatrixLevelsParam{{}, 0, static_cast<std::uint32_t>(toMaster.size()), toMaster.data()});
-    Control(custom, SCE_NGS2_VOICE_PARAM_PORT_MATRIX, Ngs2VoicePortMatrixParam{{}, 0, 0});
     Patch(custom, master);
+    Control(custom, SCE_NGS2_VOICE_PARAM_PORT_MATRIX, Ngs2VoicePortMatrixParam{{}, 0, 0});
     Event(custom, SCE_NGS2_VOICE_EVENT_PLAY);
 
     std::vector<std::int16_t> pcm(Grain * 2 * 8, 16384);
@@ -246,8 +246,8 @@ static void TestWideCustomSubmixer() {
         0, 0,
     };
     Control(sampler, SCE_NGS2_VOICE_PARAM_MATRIX_LEVELS, Ngs2VoiceMatrixLevelsParam{{}, 0, static_cast<std::uint32_t>(toCustom.size()), toCustom.data()});
-    Control(sampler, SCE_NGS2_VOICE_PARAM_PORT_MATRIX, Ngs2VoicePortMatrixParam{{}, 0, 0});
     Patch(sampler, custom);
+    Control(sampler, SCE_NGS2_VOICE_PARAM_PORT_MATRIX, Ngs2VoicePortMatrixParam{{}, 0, 0});
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
 
     auto out = Render(system);
