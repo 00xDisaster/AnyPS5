@@ -261,6 +261,16 @@ add_custom_target(libs DEPENDS ${PATCHED_OUTPUTS})
 include(prx/libSceLibreSsl/ProtocolSelection.cmake)
 
 if(BUILD_TESTING)
+    add_test_executable(guest_beisobmf_boxes_tests tests/GuestBeisobmfBoxes.cpp)
+    target_include_directories(guest_beisobmf_boxes_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(guest_beisobmf_boxes_tests PRIVATE libSceBeisobmf libc)
+    configure_windows_unwind(guest_beisobmf_boxes_tests)
+    add_test(NAME guest_beisobmf_boxes COMMAND guest_beisobmf_boxes_tests)
+    if(WIN32)
+        set_tests_properties(guest_beisobmf_boxes PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceBeisobmf>")
+    endif()
+
     add_test_executable(guest_posix_scalar_io_tests tests/GuestPosixScalarIo.cpp)
     target_include_directories(guest_posix_scalar_io_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(guest_posix_scalar_io_tests PRIVATE libkernel libc)
