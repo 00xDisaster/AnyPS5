@@ -892,7 +892,7 @@ static void TestPortVolumeClampedLikePs5() {
         std::vector<float> out(Grain, -1.0f);
         const Ngs2RenderBufferInfo info{out.data(), out.size() * sizeof(float), SCE_NGS2_WAVEFORM_TYPE_PCM_F32L, 1};
         Require(sceNgs2SystemRender(system, &info, 1) == SCE_NGS2_OK);
-        for (const float sample : out) Require(std::isnan(stored) ? std::isnan(sample) : sample == 0.5f * stored && !std::signbit(sample));
+        for (std::size_t i = 0; i < out.size(); ++i) Require(std::isnan(stored) ? std::isnan(out[i]) : out[i] == (i < 3 ? 0.0f : 0.5f * stored) && !std::signbit(out[i]));
         Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
     };
     for (const bool command : {false, true}) {
