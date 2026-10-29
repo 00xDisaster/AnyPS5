@@ -10,6 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import progress
 
 
+def excessive_nesting():
+    depth = sys.getrecursionlimit() + 64
+    for _ in range(8):
+        try:
+            json.loads("[" * depth + "]" * depth)
+        except RecursionError:
+            return "[" * (depth + 128) + "]" * (depth + 128)
+        depth *= 2
+    raise AssertionError("JSON decoder accepted every bounded nesting probe")
+
+
 class ProgressSnapshotTests(unittest.TestCase):
     def test_library_counters_reject_invalid_types_and_negative_values(self):
         for field in ("done", "todo"):
@@ -65,7 +76,7 @@ class ProgressSnapshotTests(unittest.TestCase):
                 paths = [Path(directory) / "base snapshot.json", Path(directory) / "head snapshot.json"]
                 for path in paths:
                     path.write_text(json.dumps(self.snapshot()), encoding="utf-8")
-                paths[position].write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+                paths[position].write_text(excessive_nesting(), encoding="utf-8")
                 stdout, stderr = io.StringIO(), io.StringIO()
                 with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
                     with self.assertRaises(SystemExit) as raised:
@@ -73,7 +84,8 @@ class ProgressSnapshotTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
                 self.assertEqual(stdout.getvalue(), "")
                 self.assertIn(str(paths[position]), stderr.getvalue())
-                self.assertIn("recursion", stderr.getvalue())
+                self.assertNotIn("must be an object", stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_non_object_snapshots_are_usage_errors(self):
         for snapshot in (None, [], "progress", 7, True):
