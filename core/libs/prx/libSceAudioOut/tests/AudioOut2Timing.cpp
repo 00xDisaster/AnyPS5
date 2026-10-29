@@ -201,9 +201,6 @@ void TestLevelWithoutADeviceUsesThePlaybackClock() {
     Require(level == 0 && available == queueDepth);
 }
 
-// Without an SDL device (here the disk driver cannot open a directory) a blocking push returns only once
-// the queue has room again, so a feeder thread that wakes its renderer after every push keeps playback
-// fed. The push that fills the queue waits for the oldest grain's playback to end.
 void TestBlockingPushWaitsForRoomWithoutADevice() {
     SetEnvironment("SDL_DISKAUDIOFILE", std::filesystem::temp_directory_path().string());
     constexpr std::uint32_t paced = 1024;
