@@ -423,7 +423,9 @@ class SymlinkLoopTests(unittest.TestCase):
                         self.assertRaises(SystemExit) as error:
                     stubgen.main(["--module", "libSceExample", *arguments])
                 self.assertEqual(error.exception.code, 2)
-                self.assertIn(str(first), errors.getvalue())
+                self.assertIn(repr(str(first))[1:-1], errors.getvalue())
+                if name != "parent":
+                    self.assertIn("Too many levels of symbolic links", errors.getvalue())
                 self.assertTrue(first.is_symlink())
                 self.assertTrue(second.is_symlink())
             self.assertFalse((root / "code.cpp").exists())

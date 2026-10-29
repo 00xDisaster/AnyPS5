@@ -196,6 +196,9 @@ def case_insensitive_directory(directory):
         os.unlink(name)
 
 
+LOOP_MESSAGE = "Too many levels of symbolic links"
+
+
 def resolved_path(path):
     original = path = Path(path)
     for _ in range(40):
@@ -204,11 +207,11 @@ def resolved_path(path):
         target = Path(link_target(os.readlink(path)))
         path = target if target.is_absolute() else path.parent / target
     if path.is_symlink():
-        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(original))
+        raise OSError(errno.ELOOP, LOOP_MESSAGE, str(original))
     try:
         return path.resolve()
     except RuntimeError as error:
-        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(original)) from error
+        raise OSError(errno.ELOOP, LOOP_MESSAGE, str(original)) from error
 
 
 def link_target(text):
