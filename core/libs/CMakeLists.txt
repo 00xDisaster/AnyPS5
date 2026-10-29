@@ -1134,3 +1134,4 @@ if(BUILD_TESTING)
 endif()
 
 include(prx/libSceFreeType/CurveBounds.cmake)
+include(prx/libSceBeisobmf/Tests.cmake)
