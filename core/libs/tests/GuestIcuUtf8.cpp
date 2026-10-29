@@ -82,6 +82,10 @@ void ErrorModes() {
                  strict == -2 ? 0xd800 : e0, strict == -2 ? 0 : 2, 2);
         Sequence({0xed, 0xa0}, strict, strict == -2 ? e1 : e0, strict == -2 ? 2 : 1, e0, 1, 1);
         Sequence({0x80, 0x80, 0x80, 0x80}, strict, e0, 1, e0, 3, 3);
+        Sequence({0xe0, 0xa0, 0x80}, strict, 0x800, 3, 0x800, 0, 0);
+        Sequence({0xe0, 0x9f, 0xbf}, strict, e0, 1, e0, 2, 2);
+        Sequence({0xef, 0xbf, 0xbe}, strict, strict > 0 ? e2 : 0xfffe, 3, strict > 0 ? e2 : 0xfffe, 0, 0);
+        Sequence({0xf0, 0x9f, 0xbf, 0xbe}, strict, strict > 0 ? e3 : 0x1fffe, 4, strict > 0 ? e3 : 0x1fffe, 0, 0);
     }
 }
 
