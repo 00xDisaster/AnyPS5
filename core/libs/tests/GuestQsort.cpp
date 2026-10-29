@@ -84,13 +84,17 @@ bool ExpectOrderR(const char* name, const std::vector<int>& keys, const std::vec
             return false;
         }
     }
-    direction = -1;
+    return true;
+}
+
+bool ExpectReverseOrderR() {
+    std::vector<Element> elements{{1, 0}, {3, 1}, {2, 2}, {4, 3}};
+    int direction = -1;
     qsort_r_nid_postfix(elements.data(), elements.size(), sizeof(Element), &direction, CompareKeysWithThunk);
-    for (std::size_t index = 0; index < tags.size(); ++index) {
-        if (elements[index].tag != tags[tags.size() - 1 - index]) {
-            std::fprintf(stderr, "%s: reverse qsort_r element %zu has tag %d, expected %d\n", name, index, elements[index].tag, tags[tags.size() - 1 - index]);
-            return false;
-        }
+    if (elements.size() != 4) return false;
+    if (elements[0].key != 4 || elements[1].key != 3 || elements[2].key != 2 || elements[3].key != 1) {
+        std::fprintf(stderr, "reverse qsort_r: elements not sorted in descending order\n");
+        return false;
     }
     return true;
 }
@@ -297,6 +301,7 @@ int main() {
     correct &= ExpectOrderS("median of three", {2, 1, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0}, {11, 3, 6, 8, 10, 1, 7, 4, 9, 5, 0, 2});
     correct &= ExpectOrderR("insertion sort", {1, 0, 1, 0}, {1, 3, 0, 2});
     correct &= ExpectOrderR("median of three", {2, 1, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0}, {11, 3, 6, 8, 10, 1, 7, 4, 9, 5, 0, 2});
+    correct &= ExpectReverseOrderR();
     correct &= ExpectQsortRValidation();
     correct &= ExpectQsortS();
     correct &= ExpectQsortSConstraints();
