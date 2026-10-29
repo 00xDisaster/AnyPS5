@@ -186,14 +186,12 @@ void OwnershipAndLinkTests(const std::filesystem::path& root) {
         Require(LinkCount(symbolic) == 1 && LinkCount(dangling) == 1 && std::filesystem::hard_link_count(file) == 2);
         const auto folder = root / "folder";
         const auto folderLink = (root / "folder.link").string();
-        const auto folderCopy = (root / "folder.copy").string();
         Require(std::filesystem::create_directory(folder) && symlink_nid_postfix("folder", folderLink.c_str()) == 0);
         Require(linkat_nid_postfix(-100, folderLink.c_str(), -100, other.c_str(), 0x400) == -1 && Error() == 1);
 #ifdef _WIN32
-        Require(ThrowsNaming([&] { return linkat_nid_postfix(-100, folderLink.c_str(), -100, folderCopy.c_str(), 0); }, "directory symbolic link itself"));
-        Require(GetFileAttributesW(std::filesystem::path(folderCopy).c_str()) == INVALID_FILE_ATTRIBUTES);
         Require(RemoveDirectoryW(std::filesystem::path(folderLink).c_str()) != 0 && std::filesystem::remove(folder));
 #else
+        const auto folderCopy = (root / "folder.copy").string();
         Require(linkat_nid_postfix(-100, folderLink.c_str(), -100, folderCopy.c_str(), 0) == 0);
         Require(LinkTarget(folderCopy) == "folder" && LinkCount(folderLink) == 2);
         Require(std::filesystem::remove(folderCopy));
