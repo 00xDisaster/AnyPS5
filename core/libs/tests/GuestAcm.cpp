@@ -256,6 +256,23 @@ int main() {
     Require(dword(descriptor0, 0xC8) == 3 * 2048 && dword(descriptor0, 0x148) == 4 * 2048 && dword(descriptor0, 0x178) == 2 && qword(descriptor1, 8) == address(memory + 0x9000) && qword(descriptor1, 0x200) == address(samplesA[1]));
     reverbInput.sampleFormat = 0;
 
+    reverbInput.blockSize = 128;
+    filterA.blockSize = 128;
+    outputA.blockSize = 128;
+    reverbInput.currentBlock = 0;
+    reverbInput.availableBlocks = 0;
+    reverbBatch = {reverbCommands, 0, sizeof(reverbCommands)};
+    Require(reverb(1, reverbFilters, reverbOutputs) == 0 && ringIs(3, 1) && reverbBatch.offset == 216 && reverbBatch.buffer_size == sizeof(reverbCommands) - 2 * 0x280);
+    Require(qword(reverbCommands, 0) == 0x700 && qword(reverbCommands, 8) == 0xD0A && qword(reverbCommands, 16) == 0x200000006 && qword(reverbCommands, 24) == address(inputChannels[0]));
+    Require(qword(reverbCommands, 32) == 0xA && qword(reverbCommands, 40) == 0xA0A && qword(reverbCommands, 48) == 0x80A && qword(reverbCommands, 56) == 0x400000008 && qword(reverbCommands, 64) == address(memory + 0xC00));
+    Require(qword(reverbCommands, 120) == address(memory + 0x4C00));
+    Require(qword(reverbCommands, 128) == ((std::uint64_t{3} << 45) | (std::uint64_t{1} << 40) | (std::uint64_t{1} << 34) | (std::uint64_t{1} << 23) | (std::uint64_t{1} << 21) | (std::uint64_t{1} << 19) | 0xB00));
+    Require(qword(reverbCommands, 136) == 0x028000000000000D && qword(reverbCommands, 144) == address(descriptor0) && qword(reverbCommands, 152) == 0x1030A);
+    Require(qword(descriptor0, 0) == address(memory) && dword(descriptor0, 0xC8) == 3 * 1024 && dword(descriptor0, 0x148) == 4 * 1024 && dword(descriptor0, 0x174) == 256);
+    reverbInput.blockSize = 512;
+    filterA.blockSize = 512;
+    outputA.blockSize = 512;
+
     reverbInput.currentBlock = 0;
     reverbInput.availableBlocks = 0;
     reverbBatch = {reverbCommands, 0, 0x280 + 175};

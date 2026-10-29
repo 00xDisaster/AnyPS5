@@ -253,7 +253,6 @@ int APS5_VABI sceAcm_ConvReverb_SharedInput(AcmBatchInfo* batch, std::uint32_t m
         sources[position] = input->inputChannels[channel];
         destinations[position] = static_cast<std::byte*>(history->samples) + current * slotBytes;
     }
-    if (blockSize == 128) NotImplemented_nid_no_patch(__func__);
     AcmBatchInfo work = *batch;
     if (const auto result = sceAcm_FFT(&work, static_cast<std::int32_t>(2 * blockSize), channelCount, 0, sources.data(), wideSamples ? 0 : 1, destinations.data(), 9)) return result;
     if (outputCount == 0 || !outputs) return SCE_ACM_ERROR_BAD_POINTER;
