@@ -677,6 +677,40 @@ void* APS5_VABI reallocarray_nid_postfix(void* ptr, size_t nmemb, size_t size) {
     return realloc_nid_postfix(ptr, nmemb * size);
 }
 
+void* APS5_VABI recallocarray_nid_postfix(void* ptr, size_t oldnmemb, size_t nmemb, size_t size) {
+    if (ptr == nullptr) return calloc_nid_postfix(nmemb, size);
+    if (size != 0 && nmemb > std::numeric_limits<size_t>::max() / size) {
+        errno = 12;
+        return nullptr;
+    }
+    if (size != 0 && oldnmemb > std::numeric_limits<size_t>::max() / size) {
+        errno = 22;
+        return nullptr;
+    }
+    const size_t newsize = nmemb * size;
+    const size_t oldsize = oldnmemb * size;
+    if (newsize <= oldsize) {
+        const size_t d = oldsize - newsize;
+        if (d < oldsize / 2 && d < 4096) {
+            auto* bytes = static_cast<volatile unsigned char*>(ptr);
+            for (size_t index = 0; index < d; ++index) bytes[newsize + index] = 0;
+            return ptr;
+        }
+    }
+    void* newptr = malloc_nid_postfix(newsize);
+    if (newptr == nullptr) return nullptr;
+    if (newsize > oldsize) {
+        std::memcpy(newptr, ptr, oldsize);
+        std::memset(static_cast<char*>(newptr) + oldsize, 0, newsize - oldsize);
+    } else {
+        std::memcpy(newptr, ptr, newsize);
+    }
+    auto* oldbytes = static_cast<volatile unsigned char*>(ptr);
+    for (size_t index = 0; index < oldsize; ++index) oldbytes[index] = 0;
+    free_nid_postfix(ptr);
+    return newptr;
+}
+
 void* APS5_VABI memalign_nid_postfix(size_t alignment, size_t size) {
     if (!ApplicationHeapDefault_nid_no_patch()) {
         if (!validAlignment(alignment)) {

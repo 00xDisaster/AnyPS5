@@ -359,6 +359,26 @@ int main(int argc, char** argv) {
         *__error_nid_postfix() = 0;
         require(reallocarray_nid_postfix(pointer, 2, SIZE_MAX) == nullptr && *__error_nid_postfix() == 12);
         ApplicationHeapFree_nid_no_patch(pointer);
+        pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(nullptr, 0, 4, 10));
+        require(pointer != nullptr && ApplicationHeapUsableSize_nid_no_patch(pointer) == 40);
+        for (unsigned i = 0; i < 40; ++i) require(pointer[i] == 0);
+        std::memset(pointer, 0x5a, 40);
+        pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(pointer, 4, 6, 10));
+        require(pointer != nullptr && ApplicationHeapUsableSize_nid_no_patch(pointer) == 60);
+        for (unsigned i = 0; i < 40; ++i) require(pointer[i] == 0x5a);
+        for (unsigned i = 40; i < 60; ++i) require(pointer[i] == 0);
+        auto* shrunken = static_cast<unsigned char*>(recallocarray_nid_postfix(pointer, 6, 5, 10));
+        require(shrunken == pointer);
+        for (unsigned i = 0; i < 50; ++i) require(shrunken[i] == 0x5a);
+        for (unsigned i = 50; i < 60; ++i) require(shrunken[i] == 0);
+        pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(shrunken, 5, 2, 10));
+        require(pointer != nullptr);
+        for (unsigned i = 0; i < 20; ++i) require(pointer[i] == 0x5a);
+        *__error_nid_postfix() = 0;
+        require(recallocarray_nid_postfix(pointer, 2, 2, SIZE_MAX) == nullptr && *__error_nid_postfix() == 12);
+        *__error_nid_postfix() = 0;
+        require(recallocarray_nid_postfix(pointer, SIZE_MAX, 2, 2) == nullptr && *__error_nid_postfix() == 22);
+        ApplicationHeapFree_nid_no_patch(pointer);
         for (std::size_t alignment : {16, 64, 4096}) {
             auto* aligned = ApplicationHeapAlign_nid_no_patch(alignment, 37);
             require(reinterpret_cast<std::uintptr_t>(aligned) % alignment == 0);
