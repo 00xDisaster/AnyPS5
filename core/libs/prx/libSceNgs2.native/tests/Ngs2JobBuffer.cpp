@@ -500,9 +500,11 @@ static void TestApplyFailureRecovers() {
         if (tick != 0) return;
         Require(AddBlocks(voice, pcm.data(), SCE_NGS2_WAVEFORM_BLOCKS_FLAG_APPEND | SCE_NGS2_WAVEFORM_BLOCKS_FLAG_CONTINUE, {32, 32, 0, 0, 0, 0, 0}) == SCE_NGS2_OK);
         Control(voice, SCE_NGS2_VOICE_PARAM_PORT_VOLUME, Ngs2VoicePortVolumeParam{{}, 0, 0.5f});
+        Event(voice, SCE_NGS2_VOICE_EVENT_PLAY);
     };
     RenderGrain(setup.system);
     RequireThrows<std::invalid_argument>([&] { RenderGrain(setup.system); });
+    Require(Flags(voice) == SCE_NGS2_VOICE_STATE_FLAG_INUSE);
     RenderGrain(setup.system);
     RenderGrain(setup.system);
     Ngs2VoicePortInfo info{};
@@ -548,20 +550,33 @@ static void TestPendingPatchDestroyedDest() {
     const auto setup = CreatePeerSystem(peer);
     const auto source = Voice(CreateRack(setup.system, SCE_NGS2_RACK_ID_SUBMIXER));
     Control(source, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
-    const auto destRack = CreateRack(setup.system, SCE_NGS2_RACK_ID_SUBMIXER);
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_SUBMIXER, nullptr, &query) == SCE_NGS2_OK);
+    const auto destBuffer = Buffer(query);
+    std::uintptr_t destRack = 0;
+    Require(TestRackCreate(setup.system, SCE_NGS2_RACK_ID_SUBMIXER, nullptr, &destBuffer, &destRack) == SCE_NGS2_OK);
     const auto dest = Voice(destRack);
     Control(dest, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
+    const auto rackSource = Voice(CreateRack(setup.system, SCE_NGS2_RACK_ID_SUBMIXER));
+    Control(rackSource, SCE_NGS2_SUBMIXER_VOICE_PARAM_SETUP, Ngs2SubmixerVoiceSetupParam{{}, 1, 0});
     peer.action = [&](unsigned tick) {
         if (tick != 0) return;
         Patch(source, dest);
+        Patch(rackSource, destRack);
         RequirePort(source, dest, 1.0f);
+        RequirePort(rackSource, dest, 1.0f);
     };
     RenderGrain(setup.system);
     RequirePort(source, dest, 1.0f);
     Require(sceNgs2RackDestroy(destRack, nullptr) == SCE_NGS2_OK);
     RequirePort(source, 0, 1.0f);
+    std::uintptr_t reused = 0;
+    Require(TestRackCreate(setup.system, SCE_NGS2_RACK_ID_SUBMIXER, nullptr, &destBuffer, &reused) == SCE_NGS2_OK && reused == destRack);
+    RequirePort(source, 0, 1.0f);
+    RequirePort(rackSource, 0, 1.0f);
     RenderGrain(setup.system);
     RequirePort(source, 0, 1.0f);
+    RequirePort(rackSource, 0, 1.0f);
     Require(sceNgs2SystemDestroy(setup.system, nullptr) == SCE_NGS2_OK);
     ResetBuffers(firstBuffer);
 }
