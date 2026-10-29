@@ -692,8 +692,6 @@ void* APS5_VABI reallocarray_nid_postfix(void* ptr, size_t nmemb, size_t size) {
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-/* Adapted from OpenBSD lib/libc/stdlib/recallocarray.c:
-https://github.com/openbsd/src/blob/master/lib/libc/stdlib/recallocarray.c */
 void* APS5_VABI recallocarray_nid_postfix(void* ptr, size_t oldnmemb, size_t nmemb, size_t size) {
     if (size != 0 && nmemb > std::numeric_limits<size_t>::max() / size) {
         errno = 12;
