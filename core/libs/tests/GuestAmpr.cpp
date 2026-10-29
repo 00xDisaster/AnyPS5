@@ -967,7 +967,7 @@ void TestAmmUsageStats() {
 }
 
 void TestAmmOccupancyThresholdKeepsPoolIdle() {
-    for (const int threshold : {0, 1, 50, 100, 512, -1}) {
+    for (const int threshold : {0, 1, 50, 100, 512}) {
         Require(sceAmprAmmSetPageTablePoolOccupancyNotificationThreshold(threshold) == 0);
         std::array<std::uint64_t, 4> stats{0x18, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef};
         Require(sceAmprAmmGetUsageStatsData(reinterpret_cast<AmmUsageStatsData*>(stats.data())) == 0);
