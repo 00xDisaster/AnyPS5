@@ -8,7 +8,7 @@
 #include <utility>
 #include <stdexcept>
 
-enum class Update { Play, Start, Pause, Kill, Volume, Matrix, Combined, Pitch, Gain, PlayStop, StopPlay, PauseResume, KillPlay, PlayKill, PlayPause, StopResume, LongPause, Mute, SelectMatrix, Shift, ExternalShift, UnchangedShift };
+enum class Update { Play, Start, Pause, Kill, Volume, Matrix, Combined, Pitch, Gain, PlayStop, StopPlay, PauseResume, KillPlay, PlayKill, PlayPause, StopResume, LongPause, Mute, SelectMatrix, Over, Shift, ExternalShift, UnchangedShift };
 struct BufferedState {
     std::uintptr_t voice;
     std::uintptr_t master;
@@ -72,6 +72,12 @@ static int APS5_VABI UpdatePeer(Ngs2UserFxProcessContext* context) {
                 const auto* unused = reinterpret_cast<const unsigned char*>(result.info.levels + 1);
                 const auto* end = reinterpret_cast<const unsigned char*>(&result.info) + sizeof(result.info);
                 Require(std::all_of(unused, end, [](auto byte) { return byte == 0xa5; }));
+                break;
+            }
+            case Update::Over: {
+                CommonControl(state, SCE_NGS2_VOICE_PARAM_PORT_VOLUME, 33.0f);
+                Ngs2VoicePortInfo info{};
+                Require(sceNgs2VoiceGetPortInfo(state.voice, 0, &info, sizeof(info)) == SCE_NGS2_OK && info.volume == 32.0f);
                 break;
             }
             case Update::Shift:
@@ -206,6 +212,10 @@ static void TestBuffer(Update update, bool custom, bool commands, unsigned order
         }
         if (captured) captured->insert(captured->end(), samples.begin(), samples.begin() + grainFrames);
         for (unsigned i = 0; !shift && i < grainFrames; ++i) {
+            if (update == Update::Over) {
+                if (grain != 1) Require(samples[i] == (grain == 0 && i < 3 ? 0.0f : 1000.0f / 32768.0f) * (grain == 0 ? 1.0f : 32.0f));
+                continue;
+            }
             float expected = 1000.0f / 32768.0f;
             const bool restarting = grain == 0 || (restart && grain == 1);
             if (restarting && i < 3) expected = 0;
@@ -683,6 +693,10 @@ int main(int argc, char** argv) {
         }
     }
     TestBuffer(Update::Combined, true, true, 2, 256);
+    for (bool custom : {false, true}) for (bool commands : {false, true}) for (unsigned order = 0; order < 3; ++order) {
+        TestBuffer(Update::Over, custom, commands, order, 64);
+        cases++;
+    }
     std::vector<float> worker, external, unchanged;
     TestBuffer(Update::Shift, true, false, 2, 256, &worker);
     TestBuffer(Update::ExternalShift, true, false, 2, 256, &external);
