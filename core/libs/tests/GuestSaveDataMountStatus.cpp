@@ -2,6 +2,7 @@
 #include "prx/libSceSaveData.native/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "SceTypes.hpp"
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -23,6 +24,7 @@ constexpr int SaveDataErrorNotInitialized = -2137063423;
 constexpr int SaveDataErrorNotMounted = -2137063420;
 constexpr int SaveDataErrorBusy = -2137063421;
 constexpr int SaveDataErrorNotFound = -2137063416;
+constexpr int SaveDataErrorMountFull = -2137063412;
 
 int failures = 0;
 
@@ -250,6 +252,9 @@ void CheckMountedCountAndLifecycle() {
     SaveDataMountResult resultA{};
     Check(sceSaveDataMount3(&mountA, &resultA) == 0, "mountA succeeds");
     Check(sceSaveDataGetMountedSaveDataCount() == 1, "count is 1 after first mount");
+    SaveDataMountResult duplicate{};
+    Check(sceSaveDataMount3(&mountA, &duplicate) == SaveDataErrorBusy, "duplicate mount is busy");
+    Check(sceSaveDataGetMountedSaveDataCount() == 1, "failed duplicate mount does not change count");
 
     SceSaveDataDirName dirB{};
     std::memcpy(dirB.data, "count-b", sizeof("count-b"));
@@ -277,6 +282,26 @@ void CheckMountedCountAndLifecycle() {
 
     Check(sceSaveDataUmount2(0, &resultC.mount_point) == 0, "unmountC succeeds");
     Check(sceSaveDataGetMountedSaveDataCount() == 0, "count decrements back to 0");
+
+    std::array<SceSaveDataDirName, 17> names{};
+    std::array<SaveDataMountResult, 16> mounted{};
+    for (std::size_t index = 0; index < mounted.size(); ++index) {
+        std::snprintf(names[index].data, sizeof(names[index].data), "capacity-%zu", index);
+        SaveDataMount3 request{};
+        request.dir_name = &names[index];
+        request.mount_mode = MountReadWrite | MountCreate2;
+        Check(sceSaveDataMount3(&request, &mounted[index]) == 0, "mount at capacity index " + std::to_string(index));
+        Check(sceSaveDataGetMountedSaveDataCount() == static_cast<int>(index + 1), "count tracks capacity mounts");
+    }
+    std::memcpy(names.back().data, "capacity-overflow", sizeof("capacity-overflow"));
+    SaveDataMount3 overflow{};
+    overflow.dir_name = &names.back();
+    overflow.mount_mode = MountReadWrite | MountCreate2;
+    SaveDataMountResult rejected{};
+    Check(sceSaveDataMount3(&overflow, &rejected) == SaveDataErrorMountFull, "mount beyond capacity is rejected");
+    Check(sceSaveDataGetMountedSaveDataCount() == static_cast<int>(mounted.size()), "rejected mount leaves count unchanged");
+    for (const auto& mount : mounted) Check(sceSaveDataUmount2(0, &mount.mount_point) == 0, "capacity unmount succeeds");
+    Check(sceSaveDataGetMountedSaveDataCount() == 0, "capacity mounts are all released");
 }
 
 }
