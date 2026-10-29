@@ -507,6 +507,14 @@ void eipRelativeStubRelocations() {
     rip.Move(ripLea, 3);
     auto ripBody = rip.Finish();
     requireFailure([&] { Codegen::ApplyStubRelocations(ripBody.Bytes, ripBody.Relocations, 0x100000000ull, 0x100000100ull, 0); }, "A displacement byte was mistaken for an address-size prefix");
+    Codegen::StubBodyBuilder ripRewritten;
+    ripRewritten.RipRelative(ripLea, 3, static_cast<std::int64_t>(ripLea.size()) - 0x80000000ll);
+    auto ripRewrittenBody = ripRewritten.Finish();
+    requireFailure([&] { Codegen::ApplyStubRelocations(ripRewrittenBody.Bytes, ripRewrittenBody.Relocations, 0x100000000ull, 0x100000100ull, 0); }, "A rewritten RIP-relative operand wrapped at 32 bits");
+    const Bytes ripSha = {0x65, 0x0F, 0x38, 0xCC, 0x15, 0x00, 0x00, 0x00, 0x80};
+    auto loweredRipSha = matcher->Match(ripSha.data(), ripSha.size());
+    require(loweredRipSha && loweredRipSha->Relocations.size() == 1, "RIP-relative SHA operand has no relocation");
+    requireFailure([&] { Codegen::ApplyStubRelocations(loweredRipSha->StubBody, loweredRipSha->Relocations, 0x100000000ull, 0x100000100ull, 0); }, "A reloaded RIP-relative SHA operand wrapped at 32 bits");
     const Bytes branch = {0x67, 0xE9, 0x00, 0x00, 0x00, 0x80};
     const Codegen::X64InstructionDecoder decoder;
     Codegen::StubBodyBuilder jumped;
