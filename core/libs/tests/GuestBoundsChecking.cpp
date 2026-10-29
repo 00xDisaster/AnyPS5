@@ -93,6 +93,12 @@ void CheckBsearch() {
         Require(constraintCalls == before && *__error_nid_postfix() == 97, "bsearch_s zero stride invoked a constraint or changed errno");
     }
     before = constraintCalls;
+    calls = 0;
+    Require(bsearch_s_nid_postfix(&key, values, tooLarge, 0, CompareInts, &calls) == nullptr && calls == 0, "bsearch_s searched an oversized count");
+    RequireViolation(before, "bsearch_s: bad argument", 22);
+    calls = 0;
+    Require(bsearch_s_nid_postfix(&values[0], values, 1, tooLarge - 1, CompareInts, &calls) == values && calls == 1, "bsearch_s rejected an RSIZE_MAX element size");
+    before = constraintCalls;
     Require(bsearch_s_nid_postfix(nullptr, values, 7, 0, CompareInts, &calls) == nullptr, "bsearch_s zero stride accepted a null key");
     RequireViolation(before, "bsearch_s: bad argument", 22);
 }
