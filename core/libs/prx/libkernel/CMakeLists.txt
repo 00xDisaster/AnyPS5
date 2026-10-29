@@ -2349,4 +2349,26 @@ if(BUILD_TESTING)
     configure_windows_unwind(host_performance_session_tests)
     add_test(NAME host_performance_session COMMAND host_performance_session_tests)
     set_tests_properties(host_performance_session PROPERTIES TIMEOUT 20)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_library(game_mode_fixture SHARED ${LIBS_INCLUDE_DIR}/tests/GameModeFixtureLibrary.cpp)
+        add_library(game_mode_fixture_no_end SHARED ${LIBS_INCLUDE_DIR}/tests/GameModeFixtureLibrary.cpp)
+        target_compile_definitions(game_mode_fixture_no_end PRIVATE FIXTURE_OMIT_END)
+        add_library(game_mode_fixture_no_error_string SHARED ${LIBS_INCLUDE_DIR}/tests/GameModeFixtureLibrary.cpp)
+        target_compile_definitions(game_mode_fixture_no_error_string PRIVATE FIXTURE_OMIT_ERROR_STRING)
+        set_target_properties(game_mode_fixture game_mode_fixture_no_end game_mode_fixture_no_error_string PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${ANYPS5_TEST_OUTPUT_DIRECTORY}")
+        add_test_executable(host_performance_game_mode_tests
+            ${LIBS_INCLUDE_DIR}/tests/HostPerformanceGameMode.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/System/src/HostPerformance.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/System/src/GameModeClient.cpp)
+        target_include_directories(host_performance_game_mode_tests PRIVATE ${LIBS_INCLUDE_DIR})
+        target_link_libraries(host_performance_game_mode_tests PRIVATE ${CMAKE_DL_LIBS})
+        set_target_properties(host_performance_game_mode_tests PROPERTIES CXX_EXTENSIONS OFF)
+        add_dependencies(host_performance_game_mode_tests game_mode_fixture game_mode_fixture_no_end game_mode_fixture_no_error_string)
+        add_test(NAME host_performance_game_mode COMMAND host_performance_game_mode_tests
+            $<TARGET_FILE:game_mode_fixture> $<TARGET_FILE:game_mode_fixture_no_end>
+            $<TARGET_FILE:game_mode_fixture_no_error_string>
+            ${CMAKE_CURRENT_BINARY_DIR}/no-such-libgamemode.so)
+        set_tests_properties(host_performance_game_mode PROPERTIES TIMEOUT 20)
+    endif()
 endif()
