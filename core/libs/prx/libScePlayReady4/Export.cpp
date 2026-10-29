@@ -1,3 +1,5 @@
+#include "prx/libc/include/general/ExportMacros.hpp"
+#include "prx/libScePlayReady4/include/InventoryExports.hpp"
 #include "prx/libScePlayReady4/include/Api.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -201,5 +203,54 @@ int APS5_VABI scePlayReadyCdmiGenerateRequest2() {
 int APS5_VABI scePlayReadyDomainJoinProcessResponse2() {
     NotImplemented_nid_no_patch(__func__);
 }
+
+}
+
+extern "C" {
+
+int APS5_VABI libScePlayReady4Unknown_2OZeMccOeho_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("2OZeMccOeho", libScePlayReady4Unknown_2OZeMccOeho_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_3fo8fAvHn9A_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("3fo8fAvHn9A", libScePlayReady4Unknown_3fo8fAvHn9A_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_HNB_minus_eWVwwng_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("HNB-eWVwwng", libScePlayReady4Unknown_HNB_minus_eWVwwng_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_LL9r9r4cCdQ_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("LL9r9r4cCdQ", libScePlayReady4Unknown_LL9r9r4cCdQ_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_OqSN3eUfHMY_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("OqSN3eUfHMY", libScePlayReady4Unknown_OqSN3eUfHMY_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_XawoudE54JE_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("XawoudE54JE", libScePlayReady4Unknown_XawoudE54JE_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_asAQ9li6_plus_mo_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("asAQ9li6+mo", libScePlayReady4Unknown_asAQ9li6_plus_mo_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_o2H2P7xoLec_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("o2H2P7xoLec", libScePlayReady4Unknown_o2H2P7xoLec_nid_no_patch);
+
+int APS5_VABI libScePlayReady4Unknown_sK0jAAnbbiI_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("sK0jAAnbbiI", libScePlayReady4Unknown_sK0jAAnbbiI_nid_no_patch);
 
 }
