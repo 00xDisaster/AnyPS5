@@ -71,10 +71,12 @@ def main():
                 assert 'unresolved ELF import shared' in result.stderr, (label, result.stderr)
             else:
                 assert result.returncode == expected, (variant, label, result.returncode, result.stderr)
+        sibling_expected = 11 if variant == 'libkernel_sys.prx' else 22
         for label, owner, variant_image, canonical_image, other_image, expected in (
             ('kernel-requests-variant', 'libkernel.prx', 'variant', 'empty', 'empty', 11),
             ('variant-requests-other', variant, 'empty', 'empty', 'guest', 44),
             ('kernel-prefers-declared', 'libkernel.prx', 'variant', 'canonical', 'guest', 22),
+            ('kernel-declared-siblings', 'libkernel.prx', 'variant', 'empty', 'canonical', sibling_expected),
         ):
             case = work / label
             libraries = case / 'libs'
