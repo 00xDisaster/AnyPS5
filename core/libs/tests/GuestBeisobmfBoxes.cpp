@@ -1,5 +1,6 @@
 #include "prx/libSceBeisobmf/include/Api.hpp"
 #include "prx/libc/include/GuestArena.hpp"
+#include "prx/libc/include/GuestHeap.hpp"
 
 #include <array>
 #include <cstddef>
@@ -28,7 +29,7 @@ void WriteField(void *object, std::size_t offset, TValue value) {
 }
 
 void *Allocate(std::size_t bytes) {
-    void *memory = GuestArena::GuestArenaAllocate_nid_postfix(bytes, 16);
+    void *memory = GuestHeap::GuestHeapAllocate_nid_postfix(bytes);
     Require(memory != nullptr, "guest fixture allocation failed");
     const std::array<std::byte, 0x100> zeros{};
     auto *destination = static_cast<std::byte *>(memory);
