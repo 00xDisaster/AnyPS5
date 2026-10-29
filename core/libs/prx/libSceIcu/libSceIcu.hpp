@@ -3,4 +3,5 @@
 #include "Utf8.hpp"
 #include "Version.hpp"
 #include "CString.hpp"
+#include "Space.hpp"
 #include "Unescape.hpp"
