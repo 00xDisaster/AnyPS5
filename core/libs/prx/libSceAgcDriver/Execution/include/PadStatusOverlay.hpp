@@ -55,7 +55,6 @@ private:
 
 }
 
-extern "C" void AgcDriverPadStatusObserve_nid_postfix(const AgcDriver::PadStatusSnapshot* snapshot);
 extern "C" void AgcDriverPadStatusPoll_nid_postfix(const AgcDriver::PadStatusProvider* provider);
 extern "C" void AgcDriverPadStatusShow_nid_postfix();
 

@@ -177,11 +177,6 @@ std::optional<std::vector<std::string>> PadStatusOverlayLines() {
 
 }
 
-extern "C" void AgcDriverPadStatusObserve_nid_postfix(const AgcDriver::PadStatusSnapshot* snapshot) {
-    std::lock_guard lock(AgcDriver::displayMutex);
-    AgcDriver::display().Observe(AgcDriver::PadStatusDisplay::Clock::now(), *snapshot);
-}
-
 extern "C" void AgcDriverPadStatusPoll_nid_postfix(const AgcDriver::PadStatusProvider* provider) {
     std::lock_guard lock(AgcDriver::displayMutex);
     AgcDriver::display().Poll(AgcDriver::PadStatusDisplay::Clock::now(), *provider);

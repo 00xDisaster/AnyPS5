@@ -371,19 +371,28 @@ void priorityTests() {
 
 void sharedDisplayTests(bool events) {
     require(!AgcDriver::PadStatusOverlayLines().has_value(), "the panel is shown before anything happened");
+    std::size_t reads = 0;
     const auto connected = snapshot({pad(PadKind::DualSense, PadPower::Wired)});
-    AgcDriverPadStatusObserve_nid_postfix(&connected);
+    const AgcDriver::PadStatusProvider provider{[&] {
+        ++reads;
+        return connected;
+    }};
+    AgcDriverPadStatusPoll_nid_postfix(&provider);
+    require((reads == 1) == events && (reads == 0) == !events, events ? "the events mode did not read the provider" : "the provider was read with ANYPS5_PAD_STATUS unset and no request");
     require(AgcDriver::PadStatusOverlayLines().has_value() == events, events ? "a connect does not show the panel with ANYPS5_PAD_STATUS=1" : "a connect shows the panel with ANYPS5_PAD_STATUS unset");
     AgcDriverPadStatusShow_nid_postfix();
+    AgcDriverPadStatusPoll_nid_postfix(&provider);
+    require(reads == (events ? 2u : 1u), "a request did not make the next poll read the provider once");
     const auto lines = AgcDriver::PadStatusOverlayLines();
     require(lines.has_value() && *lines == std::vector<std::string>{"P1 DUALSENSE  WIRED"}, "the shown panel does not list the controller");
-    std::printf("pad status: the shared display %s\n", events ? "shows on a connect and on a request" : "shows on a request only");
+    std::printf("pad status: the shared display %s\n", events ? "shows on a connect and on a request" : "reads and shows only after a request");
 }
 
 void invalidEnvironmentTests() {
     const auto connected = snapshot({pad(PadKind::DualSense, PadPower::Wired)});
+    const AgcDriver::PadStatusProvider provider{[&] { return connected; }};
     try {
-        AgcDriverPadStatusObserve_nid_postfix(&connected);
+        AgcDriverPadStatusPoll_nid_postfix(&provider);
     } catch (const std::runtime_error& error) {
         require(std::string(error.what()).find("ANYPS5_PAD_STATUS") != std::string::npos, "the invalid value is refused without naming the variable");
         std::printf("pad status: an invalid ANYPS5_PAD_STATUS stops the first use: %s\n", error.what());
