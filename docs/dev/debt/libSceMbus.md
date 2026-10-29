@@ -25,3 +25,21 @@
 - [sceMbusGetDeviceInfoByCondition_](../../../core/libs/prx/libSceMbus/PendingExports.cpp): its first parameter points to a 256-byte query condition; the second is a 32-bit scalar. Two optional 32-bit outputs and the sized 256-byte record array are confirmed, while condition fields and output meanings remain unresolved.
 
 - [sceMbusGetDeviceInfoByConditionForDeviceService](../../../core/libs/prx/libSceMbus/PendingExports.cpp): assembly and its DeviceService caller confirm five register arguments followed by a 256-byte condition passed by value on the stack. The condition keeps opaque storage because its service-side fields remain unresolved; byte 228 contains the 16-bit device class. Output records occupy 112 bytes. The two optional outputs are 32-bit values whose meanings remain unresolved.
+
+### Additional callable exports
+
+- [Additional callable exports](../../../core/libs/prx/libSceMbus/Export.cpp) - 11 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are import-resolution declarations only. The later inventory label does not authenticate a retail firmware version. Parameter lists, return types and behavior are unverified; parameterless `int` declarations are placeholders, not verified ABI contracts. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names use literal NID aliases. No runtime functionality is implemented. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+
+| Name | NID |
+| --- | --- |
+| `sceMbusDebugGetStringToShow` | `k6Ki9MjO9sI` |
+| `sceMbusGetSimulatedBusUsableStatusByBusType2` | `i9Q4sgvz7ck` |
+| `sceMbusSetChatBalance` | `aUj1wknIQd4` |
+| `sceMbusSetHmd2SocialScreenAudioMode` | `YUMuUP8AWV4` |
+| `sceMbusStartAudioOutScreenShare` | `-JTfkbiaBeY` |
+| `sceMbusStopAudioOutScreenShare` | `aDt9U2nsyts` |
+| `Unknown` | `0mRAu1IWNEA` |
+| `Unknown` | `2qdZlkIIFDU` |
+| `Unknown` | `H+PkGBdkvUQ` |
+| `Unknown` | `RGJ3Rebmm2w` |
+| `Unknown` | `edYHYROxzx4` |

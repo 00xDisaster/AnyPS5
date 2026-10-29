@@ -1,3 +1,5 @@
+#include "prx/libc/include/general/ExportMacros.hpp"
+#include "prx/libSceMbus/include/InventoryExports.hpp"
 #include "prx/libSceMbus/include/Api.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -65,5 +67,58 @@ std::int32_t APS5_VABI sceDeviceServiceQueryDeviceInfo_(std::int32_t deviceClass
 std::int32_t APS5_VABI sceDeviceServiceGetGeneration(void) {
     return 0;
 }
+
+}
+
+extern "C" {
+
+int APS5_VABI sceMbusDebugGetStringToShow() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI sceMbusGetSimulatedBusUsableStatusByBusType2() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI sceMbusSetChatBalance() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI sceMbusSetHmd2SocialScreenAudioMode() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI sceMbusStartAudioOutScreenShare() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI sceMbusStopAudioOutScreenShare() {
+    NotImplemented_nid_no_patch(__func__);
+}
+
+int APS5_VABI libSceMbusUnknown_0mRAu1IWNEA_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("0mRAu1IWNEA", libSceMbusUnknown_0mRAu1IWNEA_nid_no_patch);
+
+int APS5_VABI libSceMbusUnknown_2qdZlkIIFDU_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("2qdZlkIIFDU", libSceMbusUnknown_2qdZlkIIFDU_nid_no_patch);
+
+int APS5_VABI libSceMbusUnknown_H_plus_PkGBdkvUQ_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("H+PkGBdkvUQ", libSceMbusUnknown_H_plus_PkGBdkvUQ_nid_no_patch);
+
+int APS5_VABI libSceMbusUnknown_RGJ3Rebmm2w_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("RGJ3Rebmm2w", libSceMbusUnknown_RGJ3Rebmm2w_nid_no_patch);
+
+int APS5_VABI libSceMbusUnknown_edYHYROxzx4_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("edYHYROxzx4", libSceMbusUnknown_edYHYROxzx4_nid_no_patch);
 
 }
