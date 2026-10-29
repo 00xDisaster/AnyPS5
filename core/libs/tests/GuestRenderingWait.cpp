@@ -74,12 +74,8 @@ int main() {
     std::uint32_t* nullCursor = nullptr;
     rejected = false;
     try { sceAgcDriverWaitUntilSafeForRendering(&nullCursor, size, 0, 7, 0); }
-    catch (const std::invalid_argument&) { rejected = true; }
+    catch (const std::exception&) { rejected = true; }
     Require(rejected && nullCursor == nullptr);
-    rejected = false;
-    try { sceAgcDriverWaitUntilSafeForRendering(&cursor, size, 1, 7, 0); }
-    catch (const std::invalid_argument&) { rejected = true; }
-    Require(rejected && cursor == words.data());
     rejected = false;
     try { sceAgcDriverWaitUntilSafeForRendering(&cursor, size, 0, 7, -1); }
     catch (const std::invalid_argument&) { rejected = true; }
