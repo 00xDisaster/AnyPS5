@@ -184,7 +184,7 @@ void TestFloatErrors() {
 
 void TestScaledNan() {
     struct Case { const char* text; std::size_t consumed; };
-    const Case cases[] = {{"nan", 3}, {"  -NaNtail", 6}, {"-nan(0x123)", 11}, {"nan(a_b9)", 9}, {"nan()", 5}, {"nan(abc", 3}, {"nan(1.0)", 3}, {"nan(a b)", 3}, {"nan((a))", 3}};
+    const Case cases[] = {{"nan", 3}, {"  -NaNtail", 6}, {"-nan(0x123)", 11}, {"nan(a_b9)", 9}, {"nan()", 5}, {"nan(abc", 3}, {"nan(1.0)", 3}, {"nan(a b)", 3}, {"nan((a))", 3}, {"\t+NAN(Az_0)", 11}};
     std::fenv_t saved;
     Require(std::feholdexcept(&saved) == 0, "save scaled NaN environment");
     const auto check = [&]<typename TFloat>(auto parse, auto alias) {
