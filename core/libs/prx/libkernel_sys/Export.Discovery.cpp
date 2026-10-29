@@ -5,6 +5,7 @@
 #include "prx/libkernel/include/Api.hpp"
 #include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
 #include "prx/libc/include/Api.hpp"
+#include "prx/libc/include/GuestAllocations.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
@@ -94,8 +95,7 @@ int APS5_VABI get_self_auth_info_nid_postfix(void) {
 }
 
 int APS5_VABI get_vm_map_timestamp_nid_postfix(void) {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+    return static_cast<int>(static_cast<std::uint32_t>(GuestAllocations::GuestAllocationsGeneration_nid_postfix()));
 }
 
 int APS5_VABI getfsstat_nid_postfix(void) {
