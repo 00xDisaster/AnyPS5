@@ -77,12 +77,16 @@ def main():
             ('variant-requests-other', variant, 'empty', 'empty', 'guest', 44),
             ('kernel-prefers-declared', 'libkernel.prx', 'variant', 'canonical', 'guest', 22),
             ('kernel-declared-siblings', 'libkernel.prx', 'variant', 'empty', 'canonical', sibling_expected),
+            ('variant-missing-sibling', variant, 'variant', 'canonical', None, 11),
+            ('kernel-missing-sibling', 'libkernel.prx', 'variant', 'canonical', None, 22),
         ):
             case = work / label
             libraries = case / 'libs'
             libraries.mkdir(parents=True)
             (case / 'prx').mkdir()
             for name, image in ((variant, variant_image), ('libkernel.prx', canonical_image), (other, other_image), ('libc.prx', 'empty')):
+                if image is None:
+                    continue
                 (libraries / name).write_bytes(images[image])
             source = case / 'input.elf'
             source.write_bytes(executable(owner, 'shared#A#B'))
