@@ -178,6 +178,7 @@ class Check:
         for path, lines in self.files(lambda p: p.suffix in CPP):
             core = path.startswith("core/") and "tests" not in PurePosixPath(path).parts
             source = self.show(path).split("\n")
+            expanded = expand_abi_aliases(cpp_text("\n".join(source))).split("\n")
             masked = cpp_text("\n".join(source), preserve_comments=True).split("\n")
             assembly = asm_exports("\n".join(source)) if core and path.startswith("core/libs/prx/") else {}
             constants, starts = None, None
@@ -196,6 +197,7 @@ class Check:
                         self.report("alignment", path, number, alignment)
                 if core and TITLE.search(text):
                     self.report("title-specific", path, number, TITLE.search(text).group(0))
+                bare = expanded[number - 1]
                 if core and path.startswith("core/libs/prx/"):
                     unknowns.extend((nid, name, path, number) for nid, name in source_aliases(text) if "unknown" in name.lower())
                     symbols.extend((symbol, path, number) for symbol in nid_symbols(text))
@@ -232,7 +234,7 @@ class Check:
             text = self.show(path)
             if "APS5_VABI" not in text and "ASM_FUNCTION" not in text:
                 continue
-            source = cpp_text(text).split("\n")
+            source = expand_abi_aliases(cpp_text(text)).split("\n")
             assembly = asm_exports(text)
             for number, line in enumerate(source):
                 names = [match.group(1) for match in EXPORT.finditer(line)
@@ -652,6 +654,32 @@ def cpp_text(text, preserve_comments=False):
         return blank if match.group("comment") is not None else '""' + blank[2:]
 
     return CPP_TOKEN.sub(mask, text)
+
+
+def expand_abi_aliases(text):
+    aliases = {}
+
+    def expand(match):
+        name = match.group()
+        seen = set()
+        while name in aliases and name not in seen and name != "APS5_VABI":
+            seen.add(name)
+            name = aliases[name]
+        return "APS5_VABI" if name == "APS5_VABI" else match.group()
+
+    lines = []
+    for line in text.split("\n"):
+        directive = re.match(r"^[\s\ufeff]*#\s*(define|undef)\s+([A-Za-z_]\w*)(.*)$", line)
+        if directive:
+            action, name, value = directive.groups()
+            aliases.pop(name, None)
+            replacement = re.fullmatch(r"\s+([A-Za-z_]\w*)\s*", value)
+            if action == "define" and replacement:
+                aliases[name] = replacement.group(1)
+            lines.append(line)
+        else:
+            lines.append(IDENTIFIER.sub(expand, line) if aliases else line)
+    return "\n".join(lines)
 
 
 def integer_literal(text):
