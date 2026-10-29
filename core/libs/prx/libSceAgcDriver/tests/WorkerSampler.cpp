@@ -32,14 +32,22 @@ int main(int argc, char** argv) {
         std::uint64_t samples = 0;
         return (file >> marker >> samples) && marker == "#" && samples != 0;
     };
-    const bool passed = sampled(workerPath) == workerExpected && sampled(processPath) == process;
-    std::filesystem::remove(workerPath);
-    std::filesystem::remove(processPath);
     auto collapsed = stem;
     collapsed += "-worker.collapsed.txt";
+    auto temporary = collapsed;
+    temporary += ".tmp";
+    const auto published = [&] {
+        std::ifstream file(collapsed);
+        std::string header;
+        unsigned long long samples = 0;
+        return std::getline(file, header) && std::sscanf(header.c_str(), "# samples=%llu", &samples) == 1 && samples != 0 &&
+            !std::filesystem::exists(temporary);
+    };
+    const bool passed = sampled(workerPath) == workerExpected && sampled(processPath) == process && published() == workerExpected;
+    std::filesystem::remove(workerPath);
+    std::filesystem::remove(processPath);
     std::filesystem::remove(collapsed);
-    collapsed += ".tmp";
-    std::filesystem::remove(collapsed);
+    std::filesystem::remove(temporary);
     std::printf("worker sampler %s: %s\n", mode.c_str(), passed ? "passed" : "failed");
     return passed ? 0 : 1;
 }

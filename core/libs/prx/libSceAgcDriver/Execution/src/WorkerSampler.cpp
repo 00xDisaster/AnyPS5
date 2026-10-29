@@ -38,8 +38,12 @@ std::optional<std::string> ConfiguredPath(const wchar_t* value) {
     return std::string(reinterpret_cast<const char*>(text.data()), text.size());
 }
 
+std::filesystem::path NativePath(const std::string& path) {
+    return std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str()));
+}
+
 std::FILE* OpenForWriting(const std::string& path) {
-    return _wfopen(std::filesystem::path(reinterpret_cast<const char8_t*>(path.c_str())).c_str(), L"w");
+    return _wfopen(NativePath(path).c_str(), L"w");
 }
 
 // Debug aid: APS5_SAMPLE_WORKER=<file> samples the calling thread every millisecond and, every 20 s,
@@ -222,7 +226,7 @@ struct Sampler {
         const auto text = stacks.Format([&](std::uint64_t address) { return names.at(address); });
         const bool written = std::fwrite(text.data(), 1, text.size(), file) == text.size();
         if (std::fclose(file) != 0 || !written) return;
-        MoveFileExA(temporary.c_str(), collapsed.c_str(), MOVEFILE_REPLACE_EXISTING);
+        MoveFileExW(NativePath(temporary).c_str(), NativePath(collapsed).c_str(), MOVEFILE_REPLACE_EXISTING);
     }
 };
 
