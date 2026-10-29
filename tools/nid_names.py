@@ -239,6 +239,8 @@ def main(argv=None):
             names = [*(args.name or []), *(name for path in args.from_file for name in symbol_file(path))]
             nids = {nid.split("#", 1)[0] for nid in args.nid or []}
             nids.update(compute_nid(name) for name in names)
+            if not nids:
+                parser.error("--where requires at least one NID or symbol name")
             for nid in nids:
                 if re.fullmatch(r"[A-Za-z0-9+\-]{11}", nid) is None:
                     parser.error(f"invalid NID {nid!r}: expected 11 characters from A-Z, a-z, 0-9, + or -")

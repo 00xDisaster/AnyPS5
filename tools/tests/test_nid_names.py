@@ -669,7 +669,7 @@ class SourceLocationTests(unittest.TestCase):
             self.assertTrue(all(row["path"] == "core/libs/prx/libExample/Export.cpp" for row in locations))
 
     def test_where_requires_input_and_checks_nids(self):
-        for arguments in (["--where"], ["--where", "--nid", "invalid"]):
+        for arguments in (["--where"], ["--where", "--nid"], ["--where", "--nid", "invalid"]):
             with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     nid_names.main(arguments)
