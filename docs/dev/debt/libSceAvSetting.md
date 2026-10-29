@@ -48,4 +48,4 @@
 - [sceAvControlSetCheckoutputMode](../../../core/libs/prx/libSceAvSetting/Export.cpp) (libSceAvSetting) - unknown signature
 - [sceAvControlSetSystemVideoMode](../../../core/libs/prx/libSceAvSetting/Export.cpp) (libSceAvSetting) - unknown signature
 - [sceAvControlDebugAddCallbacks](../../../core/libs/prx/libSceAvSetting/Export.cpp) (libSceAvSetting) - unknown signature
-- [sceAvSettingSetDisplayBlackLevel, sceAvSettingTerm](../../../core/libs/prx/libSceAvSetting/Export.cpp) - on firmware 13.42 both return `0x802A00FF` and do nothing else, measured in an emulator twice with null, small and all-ones arguments; they return that code here. Signatures and behavior on other firmware are unverified.
+- [sceAvSettingSetDisplayBlackLevel, sceAvSettingTerm](../../../core/libs/prx/libSceAvSetting/Export.cpp) - on firmware 13.42 both return `0x802A00FF` and do nothing else, measured in an emulator twice with null, small and all-ones arguments ([BunnyFl on #9449](https://github.com/boykopovar/AnyPS5/pull/9449#issuecomment-6401358322)); they return that code here. Signatures and behavior on other firmware are unverified.
