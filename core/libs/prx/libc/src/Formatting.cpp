@@ -318,6 +318,28 @@ int ScanSource(TSource source, const char* format, bool secure, NextPointer next
             target = nextPointer();
             if (target == nullptr) return EOF;
         }
+        if constexpr (!TSource::Contiguous) if (conversion == 'c' && length != "l") {
+            const unsigned long wanted = width == 0 ? 1 : width;
+            if (secure && !suppress) {
+                const auto capacity = static_cast<unsigned long>(nextCapacity());
+                if (capacity == 0 || wanted > capacity) {
+                    if (capacity != 0) static_cast<char*>(target)[0] = '\0';
+                    return finish(assigned);
+                }
+            }
+            unsigned long taken = 0;
+            while (taken < wanted) {
+                const int next = source.Peek();
+                if (next == EOF) break;
+                if (!suppress) static_cast<char*>(target)[taken] = static_cast<char>(next);
+                source.Skip();
+                ++taken;
+            }
+            if (taken == 0) return finish(converted ? assigned : EOF);
+            converted = true;
+            if (!suppress) ++assigned;
+            continue;
+        }
         if (sized && !suppress) {
             const auto capacity = static_cast<unsigned long>(nextCapacity());
             const unsigned long limit = conversion == 'c' ? capacity : (capacity == 0 ? 0 : capacity - 1);
