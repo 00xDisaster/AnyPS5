@@ -4,6 +4,7 @@
 #include "SceTypes.hpp"
 #include <atomic>
 #include <cerrno>
+#include <climits>
 #include <cstdarg>
 #include <cstring>
 #include <new>
@@ -67,6 +68,10 @@ int APS5_VABI asprintf_nid_postfix(char** destination, const char* format, ...) 
 }
 
 int APS5_VABI vdprintf_nid_postfix(int descriptor, const char* format, VaList* args) {
+    if (descriptor > SHRT_MAX) {
+        errno = 24;
+        return -1;
+    }
     if (descriptor < 0) {
         errno = 9;
         return -1;

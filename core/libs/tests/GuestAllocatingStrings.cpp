@@ -199,6 +199,10 @@ int main() {
 
     *__error_nid_postfix() = 0;
     Require(dprintf_nid_postfix(99999, "invalid") == -1);
+    Require(*__error_nid_postfix() == 24);
+
+    *__error_nid_postfix() = 0;
+    Require(dprintf_nid_postfix(32767, "invalid") == -1);
     Require(*__error_nid_postfix() == 9);
 
     Require(dprintf_nid_postfix(1, "") == 0);
@@ -229,7 +233,7 @@ int main() {
     static int shortState = 0;
     const auto origHook = LibcGetGuestWriteHook_nid_no_patch();
 
-    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t count) -> std::int64_t {
+    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t count) APS5_VABI -> std::int64_t {
         if (shortState++ == 0 && count > 5) return 5;
         return static_cast<std::int64_t>(count);
     });
@@ -237,7 +241,7 @@ int main() {
     Require(dprintf_nid_postfix(1, "abcdefghijk") == 11);
     Require(shortState == 2);
 
-    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t count) -> std::int64_t {
+    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t count) APS5_VABI -> std::int64_t {
         if (shortState++ == 0 && count > 5) return 5;
         errno = 5;
         return -1;
@@ -247,7 +251,7 @@ int main() {
     Require(dprintf_nid_postfix(1, "abcdefghijk") == -1);
     Require(*__error_nid_postfix() == 5);
 
-    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t) -> std::int64_t {
+    LibcSetGuestWriteHook_nid_no_patch(+[](int, const void*, std::size_t) APS5_VABI -> std::int64_t {
         errno = 35;
         return -1;
     });
