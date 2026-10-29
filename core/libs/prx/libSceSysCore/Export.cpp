@@ -1,3 +1,5 @@
+#include "prx/libc/include/general/ExportMacros.hpp"
+#include "prx/libSceSysCore/include/InventoryExports.hpp"
 #include "prx/libSceSysCore/include/Api.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -297,4 +299,33 @@ int APS5_VABI sceSysCoreReceiveEvent() {
     NotImplemented_nid_no_patch(__func__);
     return 0;
 }
+}
+
+extern "C" {
+
+int APS5_VABI libSceSysCoreUnknown_F2qydFnZWfY_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("F2qydFnZWfY", libSceSysCoreUnknown_F2qydFnZWfY_nid_no_patch);
+
+int APS5_VABI libSceSysCoreUnknown_Q5nkKEHtW18_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("Q5nkKEHtW18", libSceSysCoreUnknown_Q5nkKEHtW18_nid_no_patch);
+
+int APS5_VABI libSceSysCoreUnknown_V7awqOXNG30_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("V7awqOXNG30", libSceSysCoreUnknown_V7awqOXNG30_nid_no_patch);
+
+int APS5_VABI libSceSysCoreUnknown_lGA8mxzKIhk_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("lGA8mxzKIhk", libSceSysCoreUnknown_lGA8mxzKIhk_nid_no_patch);
+
+int APS5_VABI libSceSysCoreUnknown_piCjhbSYauo_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("piCjhbSYauo", libSceSysCoreUnknown_piCjhbSYauo_nid_no_patch);
+
 }
