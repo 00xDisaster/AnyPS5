@@ -1,3 +1,5 @@
+#include "prx/libc/include/general/ExportMacros.hpp"
+#include "prx/libSceAbstractStorage/include/InventoryExports.hpp"
 #include <cstddef>
 #include <cstdint>
 #include "SceTypes.hpp"
@@ -555,5 +557,44 @@ int APS5_VABI sceAbstractStorageUnknown_1uryzAWFUuA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
 APS5_EXPORT("1uryzAWFUuA", sceAbstractStorageUnknown_1uryzAWFUuA_nid_no_patch);
+
+}
+
+extern "C" {
+
+int APS5_VABI libSceAbstractStorageUnknown__plus_bCU7y60g28_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("+bCU7y60g28", libSceAbstractStorageUnknown__plus_bCU7y60g28_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_JwplLmzUrs0_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("JwplLmzUrs0", libSceAbstractStorageUnknown_JwplLmzUrs0_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_Nrv7BRYovYk_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("Nrv7BRYovYk", libSceAbstractStorageUnknown_Nrv7BRYovYk_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_YBmeXvldPyg_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("YBmeXvldPyg", libSceAbstractStorageUnknown_YBmeXvldPyg_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_jsjQnoZHra8_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("jsjQnoZHra8", libSceAbstractStorageUnknown_jsjQnoZHra8_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_lMU9P5mJtNM_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("lMU9P5mJtNM", libSceAbstractStorageUnknown_lMU9P5mJtNM_nid_no_patch);
+
+int APS5_VABI libSceAbstractStorageUnknown_scAYh9JGyYI_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("scAYh9JGyYI", libSceAbstractStorageUnknown_scAYh9JGyYI_nid_no_patch);
 
 }
