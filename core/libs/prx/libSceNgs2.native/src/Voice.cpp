@@ -272,7 +272,7 @@ static void SetPortMatrix(Ngs2Voice& voice, std::uint32_t port, std::int32_t mat
 }
 
 static Ngs2MatrixControl CaptureMatrixControl(const Ngs2Voice& voice, std::uint32_t index, const float* levels, std::uint32_t count) {
-    if (index >= voice.matrices.size() || count == 0 || count > NGS2_MAX_CHANNELS * NGS2_MAX_CHANNELS || levels == nullptr) APS5_INVALID_ARG_EX;
+    if (index >= voice.matrices.size() || count == 0 || count > NGS2_MAX_RACK_CHANNELS * NGS2_MAX_RACK_CHANNELS || levels == nullptr) APS5_INVALID_ARG_EX;
     Ngs2MatrixControl result{index, {levels, levels + count}};
     for (auto& level : result.levels) level = std::clamp(level, -MAX_MATRIX_LEVEL, MAX_MATRIX_LEVEL);
     return result;
