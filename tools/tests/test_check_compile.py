@@ -1010,6 +1010,11 @@ class CheckCompileLauncherTests(unittest.TestCase):
                     Path.cwd(), source),
                     [*prefix, "ccache", "g++", "-fsyntax-only", "-DNAME=1", "-include", "pch.hxx", str(source)])
 
+    def test_only_cmake_starts_an_env_prefix(self):
+        source = Path.cwd() / "unit.cpp"
+        self.assertEqual(check_compile.syntax_arguments(["g++", "-E", "env", "-c", str(source)], Path.cwd(), source),
+                         ["g++", "-fsyntax-only", "env", str(source)])
+
     def test_an_env_prefix_without_a_command_or_with_an_unmodeled_option_is_rejected(self):
         source = Path.cwd() / "unit.cpp"
         for arguments, message in ((["cmake", "-E", "env", "A=1"], "no command"),
