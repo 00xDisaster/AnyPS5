@@ -9,6 +9,8 @@ namespace HostPerformance {
 
 enum class Mode { Off, On, Auto };
 
+Mode ParseMode(const char* text);
+
 enum class Outcome { Started, Unavailable, Refused };
 
 struct BeginResult {

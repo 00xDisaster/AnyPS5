@@ -1,8 +1,17 @@
 #include "prx/libkernel/System/include/HostPerformance.hpp"
+#include <cstring>
 #include <exception>
+#include <stdexcept>
 #include <utility>
 
 namespace HostPerformance {
+
+Mode ParseMode(const char* text) {
+    if (text == nullptr || *text == '\0' || std::strcmp(text, "off") == 0) return Mode::Off;
+    if (std::strcmp(text, "on") == 0) return Mode::On;
+    if (std::strcmp(text, "auto") == 0) return Mode::Auto;
+    throw std::invalid_argument(std::string("APS5_GAME_MODE=") + text + " is not off, on or auto");
+}
 
 Session::Session(Mode mode, IBackend& backend, Log log) : mode(mode), backend(backend), log(std::move(log)) {}
 
