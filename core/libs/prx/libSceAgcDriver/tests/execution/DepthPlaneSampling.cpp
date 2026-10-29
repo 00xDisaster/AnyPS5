@@ -344,6 +344,10 @@ void GuestDepthBitsCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std:
 
 void GuestWriteAfterDrawCase(AgcDriver::VulkanDevice& device, GuestBlock& block, std::span<std::uint32_t> output) {
     auto* base = block.At(ReloadOffset);
+    if (!AgcDriver::GuestMemory::WriteWatched() || !AgcDriver::GuestMemory::Watched(reinterpret_cast<std::uintptr_t>(base), SliceBytes)) {
+        std::puts("guest memory has no write watch: the guest write after a draw is not checked");
+        return;
+    }
     const Shape shape{Format32Float, 128, 128, Type2D, 0, Swizzle64KbZX};
     DrawDepth(device, reinterpret_cast<std::uintptr_t>(base), {128, 128}, VK_FORMAT_D32_SFLOAT, DrawnDepth, AgcDriver::Graphics::XorSwizzleMode(AgcDriver::Graphics::TextureTileMode::kZ64KBX));
     Load(device, base, shape, 0, output);
