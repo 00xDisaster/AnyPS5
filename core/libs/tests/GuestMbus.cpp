@@ -23,7 +23,7 @@ void Require(bool condition, const char* message) {
 
 int main() {
     static_assert(sizeof(MbusEventCallbacks) == 16);
-    std::array<std::uint8_t, 24> callbackBytes{};
+    alignas(MbusEventCallbacks) std::array<std::uint8_t, 24> callbackBytes{};
     callbackBytes.fill(0xa5);
     sceMbusEventCallbackFuncsInit_(reinterpret_cast<MbusEventCallbacks*>(callbackBytes.data()), 8);
     for (std::size_t i = 0; i < callbackBytes.size(); ++i) {
