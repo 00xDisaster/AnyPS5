@@ -691,7 +691,7 @@ void* APS5_VABI recallocarray_nid_postfix(void* ptr, size_t oldnmemb, size_t nme
     const size_t oldsize = oldnmemb * size;
     if (newsize <= oldsize) {
         const size_t d = oldsize - newsize;
-        if (d < oldsize / 2 && d < 4096) {
+        if (d < oldsize / 2 && d < 16384) {
             auto* bytes = static_cast<volatile unsigned char*>(ptr);
             for (size_t index = 0; index < d; ++index) bytes[newsize + index] = 0;
             return ptr;

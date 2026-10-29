@@ -379,6 +379,14 @@ int main(int argc, char** argv) {
         *__error_nid_postfix() = 0;
         require(recallocarray_nid_postfix(pointer, SIZE_MAX, 2, 2) == nullptr && *__error_nid_postfix() == 22);
         ApplicationHeapFree_nid_no_patch(pointer);
+        pointer = static_cast<unsigned char*>(recallocarray_nid_postfix(nullptr, 0, 20, 1000));
+        require(pointer != nullptr && ApplicationHeapUsableSize_nid_no_patch(pointer) == 20000);
+        std::memset(pointer, 0x33, 20000);
+        shrunken = static_cast<unsigned char*>(recallocarray_nid_postfix(pointer, 20, 14, 1000));
+        require(shrunken == pointer);
+        for (unsigned i = 0; i < 14000; ++i) require(shrunken[i] == 0x33);
+        for (unsigned i = 14000; i < 20000; ++i) require(shrunken[i] == 0);
+        ApplicationHeapFree_nid_no_patch(shrunken);
         for (std::size_t alignment : {16, 64, 4096}) {
             auto* aligned = ApplicationHeapAlign_nid_no_patch(alignment, 37);
             require(reinterpret_cast<std::uintptr_t>(aligned) % alignment == 0);
