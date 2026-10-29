@@ -43,6 +43,21 @@ struct Harness {
     }
 };
 
+void ParsingKeepsTheDefaultOff() {
+    for (const char* text : {static_cast<const char*>(nullptr), "", "off"}) Require(ParseMode(text) == Mode::Off, "APS5_GAME_MODE unset, empty or off must leave the host alone");
+    Require(ParseMode("on") == Mode::On, "APS5_GAME_MODE=on must request game mode");
+    Require(ParseMode("auto") == Mode::Auto, "APS5_GAME_MODE=auto must request game mode only when available");
+    for (const char* text : {"1", "0", "ON", "Auto", " on", "yes", "true", "off "}) {
+        bool threw = false;
+        try {
+            static_cast<void>(ParseMode(text));
+        } catch (const std::invalid_argument& error) {
+            threw = std::string(error.what()).find("APS5_GAME_MODE=") != std::string::npos;
+        }
+        Require(threw, std::string("APS5_GAME_MODE=") + text + " must be rejected with an error naming the variable");
+    }
+}
+
 void OffNeverTouchesTheBackend() {
     Harness harness;
     auto session = harness.Make(Mode::Off);
@@ -133,6 +148,7 @@ void ConcurrentStartsReachTheBackendOnce() {
 
 int main() {
     try {
+        ParsingKeepsTheDefaultOff();
         OffNeverTouchesTheBackend();
         StartedIsReleasedOnceAndStartedOnce();
         UnavailableIsQuietInAutoAndLoggedInOn();
