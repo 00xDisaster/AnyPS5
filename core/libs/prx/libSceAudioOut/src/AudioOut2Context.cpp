@@ -278,8 +278,6 @@ static void TraceSummary(AudioOut2Context& context, Clock::time_point now) {
     context.summaryPeak = 0.0f;
 }
 
-// Waits, with the lock released, until fewer grains than the queue depth wait to be played, or until
-// FULL_WAIT_TIMEOUT. The caller holds the context lock; returns the time the wait ended.
 static Clock::time_point WaitForRoom(AudioOut2Context& context, std::unique_lock<std::mutex>& lock) {
     auto now = Clock::now();
     const auto waitStart = now;
@@ -428,8 +426,6 @@ int APS5_VABI sceAudioOut2ContextPush(AudioOut2ContextHandle ctx, uint32_t block
             context->output.insert(context->output.end(), context->mix.begin(), context->mix.end());
         }
     }
-    // A blocking push also returns only once the queue has room again, so a title that pushes from a
-    // feeder thread and wakes its renderer after each push (Wwise in PRAGMATA) is paced by playback.
     if (blocking) now = WaitForRoom(*context, lock);
     context->pushes++;
     context->summaryPushes++;
