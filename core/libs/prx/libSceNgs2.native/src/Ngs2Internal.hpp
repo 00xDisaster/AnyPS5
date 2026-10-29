@@ -135,8 +135,14 @@ struct Ngs2UserFxControl {
     std::vector<std::uint8_t> param;
 };
 
+struct Ngs2ParamControl {
+    std::vector<std::uint8_t> param;
+    std::vector<Ngs2WaveformBlock> blocks;
+};
+
 using Ngs2PendingControl = std::variant<std::uint32_t, Ngs2VoicePortVolumeParam, Ngs2VoicePortMatrixParam,
-    Ngs2MatrixControl, Ngs2SamplerVoicePitchParam, Ngs2MasteringVoiceGainParam, Ngs2CustomVoicePitchShiftParam, Ngs2SubmixerVoiceUserFxParam, Ngs2CustomVoiceUserFxParam, Ngs2UserFxControl>;
+    Ngs2MatrixControl, Ngs2SamplerVoicePitchParam, Ngs2MasteringVoiceGainParam, Ngs2CustomVoicePitchShiftParam, Ngs2SubmixerVoiceUserFxParam, Ngs2CustomVoiceUserFxParam, Ngs2UserFxControl,
+    Ngs2ParamControl>;
 
 struct Ngs2Voice {
     Ngs2Rack* rack = nullptr;
