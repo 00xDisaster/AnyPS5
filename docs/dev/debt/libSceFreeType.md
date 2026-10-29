@@ -1,6 +1,8 @@
 # libSceFreeType technical debt
 
 ### Unknown function info
+- [autofitter glyph-to-script-map](../../../core/libs/prx/libSceFreeType/src/ModuleProperties.cpp) assumes the FreeType LP64 face/map carrier and translates the guest face to its host face. The returned 16-bit map borrows host face storage and is valid only while that face is alive; the setter returns the bundled FreeType error. This is an exception to the general unsupported-property note below. Console ABI, glyph classification and firmware behavior are unverified.
+
 - [FT_New_Size, FT_Activate_Size and FT_Done_Size](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console signatures, errors and generic-finalizer ordering are unverified; the LP64 guest adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftobjs.c). Private size fields are bridge-owned. Sizes created outside the bridge throw when selected.
 
 - [FT_Reference_Face](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console signature, reference-counter limits and finalizer behavior are unverified; the LP64 guest adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftobjs.c). Counter overflow and reentrant finalization have not been measured on the console.
@@ -67,5 +69,3 @@
 - [FT_Get_Gasp](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console FreeType version and query-result compatibility are unverified. The guest face adapter follows bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftgasp.c) and its existing LP64 face bridge.
 
 - [FT_Get_CID_Registry_Ordering_Supplement, FT_Get_CID_Is_Internally_CID_Keyed and FT_Get_CID_From_Glyph_Index](../../../core/libs/prx/libSceFreeType/Export.cpp) (libSceFreeType) - console ABI/version and CID metadata equivalence are unverified. The adapters follow bundled [FreeType 2.13.3](https://github.com/freetype/freetype/blob/42608f77f20749dd6ddc9e0536788eaad70ea4b5/src/base/ftcid.c) through the existing face bridge; returned registry/ordering strings have the native face's lifetime.
-
-- [autofitter glyph-to-script-map](../../../core/libs/prx/libSceFreeType/src/ModuleProperties.cpp) assumes the FreeType LP64 face/map carrier and translates the guest face to its host face. The returned 16-bit map borrows host face storage and is valid only while that face is alive; the setter returns the bundled FreeType error. This is an exception to the general unsupported-property note above. Console ABI, glyph classification and firmware behavior are unverified.
