@@ -156,6 +156,35 @@ void testReset() {
     check(!picture.isValid, "a reset decoder produced a picture");
 }
 
+constexpr std::uint8_t High10Picture[] = {
+    0x00, 0x00, 0x00, 0x01, 0x67, 0x6e, 0x10, 0x0a, 0xa6, 0xcb, 0x88, 0xf6, 0x02, 0x20, 0x00, 0x00,
+    0x03, 0x00, 0x20, 0x00, 0x00, 0x03, 0x00, 0x40, 0x80, 0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x0f,
+    0xc8, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x3a, 0x26, 0x28, 0x0c, 0x9c, 0x9c, 0x9d, 0x75, 0xd7,
+    0x5d, 0x75, 0xd7, 0x5e
+};
+
+void testDeepPicture() {
+    Session session;
+    const SceVideodec2::InputData input{sizeof(SceVideodec2::InputData), High10Picture, sizeof(High10Picture), 1000, 0, 0xa0};
+    bool refused = false;
+    std::size_t pictures = 0;
+    try {
+        auto target = session.MakeTarget();
+        PictureInfo picture{sizeof(PictureInfo)};
+        check(sceVideodecDecode(&session.ctrl, &input, &target, &picture) == 0, "decode of the 10-bit picture failed");
+        if (picture.isValid) ++pictures;
+        for (;;) {
+            check(sceVideodecFlush(&session.ctrl, &target, &picture) == 0, "flush of the 10-bit picture failed");
+            if (!picture.isValid) break;
+            ++pictures;
+        }
+    } catch (const std::runtime_error& error) {
+        if (std::string(error.what()).find("deeper than 8 bits") == std::string::npos) throw;
+        refused = true;
+    }
+    check(refused, "10-bit pictures copied as 8-bit pictures: " + std::to_string(pictures));
+}
+
 void testQueryResourceInfo(std::int32_t width, std::int32_t height, std::uint32_t profile, std::uint32_t level) {
     const ConfigInfo config{sizeof(ConfigInfo), 1, profile, level, width, height, 4, 0};
     ResourceInfo resource{sizeof(ResourceInfo)};
@@ -208,6 +237,7 @@ int main() {
         testDecodeCropped();
         testErrors();
         testReset();
+        testDeepPicture();
         testQueryResourceInfo();
         std::puts("Videodec tests passed");
         return 0;
