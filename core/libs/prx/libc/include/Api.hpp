@@ -111,6 +111,8 @@ void APS5_VABI libc___cxa_finalize(void* dsoHandle);
 char* APS5_VABI strndup_nid_postfix(const char* source, std::size_t limit);
 char* APS5_VABI strdup_nid_postfix(const char* source);
 int APS5_VABI asprintf_nid_postfix(char** destination, const char* format, ...);
+int APS5_VABI dprintf_nid_postfix(int descriptor, const char* format, ...);
+int APS5_VABI vdprintf_nid_postfix(int descriptor, const char* format, VaList* args);
 void* APS5_VABI scriptingGetMem_nid_postfix(std::size_t alignment, std::size_t bytes);
 void APS5_VABI scriptingFreeMem_nid_postfix(void* pointer);
 void APS5_VABI __atomic_load_nid_postfix(std::size_t, void*, void*, int);

@@ -8,6 +8,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -69,6 +76,23 @@ int CallVasprintf(char** destination, const char* format, ...) {
     return result;
 }
 
+int CallVdprintf(int descriptor, const char* format, ...) {
+#ifdef _WIN32
+    __builtin_sysv_va_list args;
+    __builtin_sysv_va_start(args, format);
+#else
+    std::va_list args;
+    va_start(args, format);
+#endif
+    const int result = vdprintf_nid_postfix(descriptor, format, reinterpret_cast<VaList*>(args));
+#ifdef _WIN32
+    __builtin_sysv_va_end(args);
+#else
+    va_end(args);
+#endif
+    return result;
+}
+
 }
 
 int main() {
@@ -118,12 +142,71 @@ int main() {
     Require(std::strcmp(allocated, "value=42 ok") == 0);
     free_nid_postfix(allocated);
 
+    *__error_nid_postfix() = 0;
+    Require(dprintf_nid_postfix(-1, "test") == -1);
+    Require(*__error_nid_postfix() == 9);
+
+    *__error_nid_postfix() = 0;
+    Require(CallVdprintf(-1, "test") == -1);
+    Require(*__error_nid_postfix() == 9);
+
+    *__error_nid_postfix() = 0;
+    Require(dprintf_nid_postfix(1, nullptr) == -1);
+    Require(*__error_nid_postfix() == 22);
+
+    *__error_nid_postfix() = 0;
+    Require(CallVdprintf(1, nullptr) == -1);
+    Require(*__error_nid_postfix() == 22);
+
+    const char tempFile[] = "guest_allocating_strings_dprintf.tmp";
+#ifdef _WIN32
+    const int fd = ::_open(tempFile, _O_CREAT | _O_TRUNC | _O_RDWR | _O_BINARY, 0600);
+#else
+    const int fd = ::open(tempFile, O_CREAT | O_TRUNC | O_RDWR, 0600);
+#endif
+    Require(fd >= 0);
+
+    Require(dprintf_nid_postfix(fd, "") == 0);
+
+    const int dwritten = dprintf_nid_postfix(fd, "hello %d %s\n", 123, "world");
+    Require(dwritten == 16);
+
+    const int vdwritten = CallVdprintf(fd, "pi=%.2f\n", 3.14159);
+    Require(vdwritten == 8);
+
+#ifdef _WIN32
+    Require(::_lseek(fd, 0, SEEK_SET) == 0);
+    char readBuffer[64]{};
+    const int readBytes = ::_read(fd, readBuffer, sizeof(readBuffer));
+    Require(readBytes == 24);
+    ::_close(fd);
+    ::_unlink(tempFile);
+#else
+    Require(::lseek(fd, 0, SEEK_SET) == 0);
+    char readBuffer[64]{};
+    const int readBytes = static_cast<int>(::read(fd, readBuffer, sizeof(readBuffer)));
+    Require(readBytes == 24);
+    ::close(fd);
+    ::unlink(tempFile);
+#endif
+    Require(std::memcmp(readBuffer, "hello 123 world\npi=3.14\n", 24) == 0);
+
+    *__error_nid_postfix() = 0;
+    Require(dprintf_nid_postfix(fd, "closed") == -1);
+    Require(*__error_nid_postfix() == 9);
+
     failAllocation = true;
     allocated = nullptr;
     *__error_nid_postfix() = 0;
     Require(asprintf_nid_postfix(&allocated, "value=%d", 1) == -1);
     Require(*__error_nid_postfix() == 12);
     Require(allocated == nullptr);
+    failAllocation = false;
+
+    failAllocation = true;
+    *__error_nid_postfix() = 0;
+    Require(dprintf_nid_postfix(1, "fail %d", 1) == -1);
+    Require(*__error_nid_postfix() == 12);
     failAllocation = false;
 
     return 0;
