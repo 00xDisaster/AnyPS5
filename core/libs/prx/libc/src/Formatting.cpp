@@ -129,7 +129,10 @@ int HostSscanf(const char* input, const char* format, ...) {
 #ifndef _WIN32
 int HostVfscanf(std::FILE* stream, const char* format, std::va_list args) {
 #if defined(__GLIBC__)
-    return __isoc99_vfscanf(stream, format, args);
+    const int savedError = errno;
+    const int result = __isoc99_vfscanf(stream, format, args);
+    if (result == EOF && errno == 0) errno = savedError;
+    return result;
 #else
     return std::vfscanf(stream, format, args);
 #endif
