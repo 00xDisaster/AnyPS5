@@ -88,6 +88,17 @@ static bool CheckFileBytes(const std::string& filename, const std::string& expec
     return false;
 }
 
+static void CheckGetcPutc() {
+    FileStream stream(std::tmpfile());
+    Require(putc_nid_postfix('A', &stream) == 'A');
+    Require(putc_nid_postfix(0x141, &stream) == 0x41);
+    Require(putc_nid_postfix(-1, &stream) == 0xff);
+    rewind_nid_postfix(&stream);
+    Require(getc_nid_postfix(&stream) == 'A' && getc_nid_postfix(&stream) == 0x41 && getc_nid_postfix(&stream) == 0xff);
+    Require(getc_nid_postfix(&stream) == EOF && feof_nid_postfix(&stream) != 0 && ferror_nid_postfix(&stream) == 0);
+    stream.Close();
+}
+
 static void CheckUnlockedStreams() {
     FileStream stream(std::tmpfile());
     auto& guest = stream.GuestState();
@@ -1066,6 +1077,7 @@ int main(int argc, char** argv) {
     CheckFgetsSize();
     CheckSupplementaryWideCharacters();
     CheckUnlockedStreams();
+    CheckGetcPutc();
     CheckUnlockedStreamLock(false);
     CheckUnlockedStreamLock(true);
     CheckUnlockedStreamLock(false, feof_unlocked_nid_postfix);
