@@ -3953,11 +3953,7 @@ void RunUnwatchedMirrorImportTests(const Context& context, const BdaTestAccess& 
     };
     build("before the write watch left");
     Require(!HostImportCovers(importing, leaving, rangeBytes) && HostImportCovers(importing, staying, rangeBytes), "the first build did not mirror the heap the budget refused beside the imported one");
-#ifdef _WIN32
     AgcDriver::GuestMemory::Unwatch(leaving, rangeBytes);
-#else
-    GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(pieces[0].pointer, rangeBytes);
-#endif
     Require(!AgcDriver::GuestMemory::Watched(leaving, rangeBytes), "the mirrored heap did not leave the write watch");
     build("after the write watch left");
     Require(HostImportCovers(importing, leaving, rangeBytes), "a heap whose mirror left the write watch was not imported in place of an import a mirror can replace");
