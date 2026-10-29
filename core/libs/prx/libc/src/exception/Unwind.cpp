@@ -1,5 +1,6 @@
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/exceptions/Unwind.hpp"
+#include "prx/libc/include/exceptions/CompactUnwind.hpp"
 #include "prx/libc/include/exceptions/Runtime.hpp"
 #include "prx/libc/include/specifics/linux/ElfTypes.hpp"
 #include "prx/libc/src/specifics/x86_64/RegisterContext.cpp"
@@ -169,12 +170,12 @@ _Unwind_Reason_Code CallPersonality(Word personality, _Unwind_Action actions, _U
     Dl_info info {};
     const char* name = nullptr;
     if (dladdr(reinterpret_cast<void*>(personality), &info)) name = info.dli_sname;
-    if (name && std::strstr(name, "gcc_personality_v0"))
-        return __gcc_personality_v0_nid_postfix(1, actions, exception->exception_class, exception, context);
-    if (name && std::strstr(name, "objc")) return _URC_CONTINUE_UNWIND;
-    if (!name || std::strstr(name, "personality"))
+    const auto kind = MatchCompactPersonality(name);
+    if (kind == CompactPersonality::Gxx)
         return __gxx_personality_v0_nid_postfix(1, actions, exception->exception_class, exception, context);
-    return _URC_CONTINUE_UNWIND;
+    if (kind == CompactPersonality::Gcc)
+        return __gcc_personality_v0_nid_postfix(1, actions, exception->exception_class, exception, context);
+    return (actions & _UA_SEARCH_PHASE) ? _URC_FATAL_PHASE1_ERROR : _URC_FATAL_PHASE2_ERROR;
 #endif
     return (actions & _UA_SEARCH_PHASE) ? _URC_FATAL_PHASE1_ERROR : _URC_FATAL_PHASE2_ERROR;
 }
@@ -398,11 +399,26 @@ bool AppleSectionsOf(Word pc, AppleSections& out) {
     return out.unwind != nullptr;
 }
 
-std::uint32_t Section32(const Byte* data, unsigned long size, unsigned long offset, bool& ok) {
-    std::uint32_t value = 0;
-    if (!ok || offset > size || size - offset < 4) { ok = false; return 0; }
-    std::memcpy(&value, data + offset, 4);
-    return value;
+struct CompactDwarfAttempt {
+    _Unwind_Context* context;
+    Frame* frame;
+    Lookup* query;
+    const Byte* eh;
+    Word base;
+};
+
+bool TryCompactDwarf(std::uint32_t ehOffset, void* user) {
+    auto* attempt = static_cast<CompactDwarfAttempt*>(user);
+    attempt->query->fde = attempt->eh + ehOffset;
+    attempt->query->text = attempt->base;
+    attempt->query->data = attempt->base;
+    Frame decoded {};
+    if (!DecodeCandidate(*attempt->context, decoded, *attempt->query)) {
+        attempt->query->fde = nullptr;
+        return false;
+    }
+    *attempt->frame = decoded;
+    return true;
 }
 
 bool AppleCompact(_Unwind_Context& context, Frame& frame, Lookup& query) {
@@ -410,272 +426,38 @@ bool AppleCompact(_Unwind_Context& context, Frame& frame, Lookup& query) {
     if (!AppleSectionsOf(query.pc, sections)) return false;
     const auto base = sections.base;
     if (query.pc < base) return false;
-    const auto* info = sections.unwind;
-    const auto infoSize = sections.unwindSize;
-    if (!info || infoSize < 28) return false;
-    bool ok = true;
-    if (Section32(info, infoSize, 0, ok) != 1 || !ok) return false;
-    const auto commonOffset = Section32(info, infoSize, 4, ok);
-    const auto commonCount = Section32(info, infoSize, 8, ok);
-    const auto personalityOffset = Section32(info, infoSize, 12, ok);
-    const auto personalityCount = Section32(info, infoSize, 16, ok);
-    const auto indexOffset = Section32(info, infoSize, 20, ok);
-    const auto indexCount = Section32(info, infoSize, 24, ok);
-    if (!ok || indexCount < 2) return false;
+    const std::span<const Byte> unwind{sections.unwind, static_cast<std::size_t>(sections.unwindSize)};
+    const std::span<const Byte> eh = sections.eh == nullptr ? std::span<const Byte>{} : std::span<const Byte>{sections.eh, static_cast<std::size_t>(sections.ehSize)};
+    CompactDwarfAttempt attempt {&context, &frame, &query, sections.eh, base};
+    CompactEntry entry {};
     const auto target = static_cast<std::uint32_t>(query.pc - base);
-    std::uint32_t low = 0, high = indexCount;
-    const auto last = indexCount - 1;
-    while (low < high) {
-        const auto mid = low + (high - low) / 2;
-        const auto start = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(mid) * 12u, ok);
-        if (!ok) return false;
-        if (start <= target) {
-            const auto follows = mid == last ? target : Section32(info, infoSize, indexOffset + static_cast<unsigned long>(mid + 1) * 12u, ok);
-            if (!ok) return false;
-            if (mid == last || follows > target) { low = mid; break; }
-            low = mid + 1;
-        } else high = mid;
-    }
-    if (!ok || low >= last) return false;
-    const auto pageFunction = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(low) * 12u, ok);
-    const auto nextFunction = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(low + 1) * 12u, ok);
-    const auto pageOffset = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(low) * 12u + 4u, ok);
-    const auto lsdaOffset = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(low) * 12u + 8u, ok);
-    const auto lsdaEnd = Section32(info, infoSize, indexOffset + static_cast<unsigned long>(low + 1) * 12u + 8u, ok);
-    if (!ok || pageOffset == 0) return false;
-    const auto pageKind = Section32(info, infoSize, pageOffset, ok);
-    const auto pagePacked = Section32(info, infoSize, pageOffset + 4u, ok);
-    if (!ok) return false;
-    const auto entryOffset = pagePacked & 0xffffu;
-    const auto entryCount = pagePacked >> 16;
-    if (entryCount == 0) return false;
-    std::uint32_t encoding = 0;
-    Word funcStart = 0, funcEnd = 0;
-    if (pageKind == 2) {
-        low = 0;
-        high = entryCount;
-        while (low < high) {
-            const auto mid = low + (high - low) / 2;
-            const auto start = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(mid) * 8u, ok);
-            if (!ok) return false;
-            if (start <= target) {
-                if (mid + 1 == entryCount) { low = mid; break; }
-                const auto follows = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(mid + 1) * 8u, ok);
-                if (!ok) return false;
-                if (follows > target) { low = mid; break; }
-                low = mid + 1;
-            } else high = mid;
-        }
-        if (low >= entryCount) return false;
-        const auto start = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(low) * 8u, ok);
-        encoding = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(low) * 8u + 4u, ok);
-        if (!ok) return false;
-        funcStart = base + start;
-        funcEnd = low + 1 < entryCount ? base + Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(low + 1) * 8u, ok) : base + nextFunction;
-    } else if (pageKind == 3) {
-        const auto encodingPacked = Section32(info, infoSize, pageOffset + 8u, ok);
-        if (!ok) return false;
-        const auto encodingsOffset = encodingPacked & 0xffffu;
-        const auto pageTarget = target - pageFunction;
-        const auto pageLast = entryCount - 1;
-        low = 0;
-        high = entryCount;
-        while (low < high) {
-            const auto mid = low + (high - low) / 2;
-            const auto entry = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(mid) * 4u, ok);
-            if (!ok) return false;
-            const auto start = entry & 0x00ffffffu;
-            if (start <= pageTarget) {
-                if (mid == pageLast) { low = mid; break; }
-                const auto follows = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(mid + 1) * 4u, ok) & 0x00ffffffu;
-                if (!ok) return false;
-                if (follows > pageTarget) { low = mid; break; }
-                low = mid + 1;
-            } else high = mid;
-        }
-        if (low >= entryCount) return false;
-        const auto entry = Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(low) * 4u, ok);
-        if (!ok) return false;
-        funcStart = base + pageFunction + (entry & 0x00ffffffu);
-        if (low < pageLast) funcEnd = base + pageFunction + (Section32(info, infoSize, pageOffset + entryOffset + static_cast<unsigned long>(low + 1) * 4u, ok) & 0x00ffffffu);
-        else funcEnd = base + nextFunction;
-        const auto encodingIndex = entry >> 24;
-        if (encodingIndex < commonCount) encoding = Section32(info, infoSize, commonOffset + static_cast<unsigned long>(encodingIndex) * 4u, ok);
-        else encoding = Section32(info, infoSize, pageOffset + encodingsOffset + static_cast<unsigned long>(encodingIndex - commonCount) * 4u, ok);
-    } else return false;
-    if (!ok || query.pc < funcStart || query.pc > funcEnd || funcEnd < funcStart) return false;
-    Word lsda = 0;
-    if (encoding & 0x40000000u) {
-        if (lsdaEnd < lsdaOffset) return false;
-        const auto count = (lsdaEnd - lsdaOffset) / 8u;
-        const auto funcOff = static_cast<std::uint32_t>(funcStart - base);
-        low = 0;
-        high = count;
-        while (low < high) {
-            const auto mid = low + (high - low) / 2;
-            const auto start = Section32(info, infoSize, lsdaOffset + static_cast<unsigned long>(mid) * 8u, ok);
-            if (!ok) return false;
-            if (start == funcOff) {
-                lsda = base + Section32(info, infoSize, lsdaOffset + static_cast<unsigned long>(mid) * 8u + 4u, ok);
-                break;
-            }
-            if (start < funcOff) low = mid + 1;
-            else high = mid;
-        }
-        if (!ok || lsda == 0) return false;
-    }
-    Word personality = 0;
-    const auto personalityIndex = (encoding >> 28) & 3u;
-    if (personalityIndex != 0) {
-        if (personalityIndex - 1 >= personalityCount) return false;
-        const auto delta = static_cast<std::int32_t>(Section32(info, infoSize, personalityOffset + static_cast<unsigned long>(personalityIndex - 1) * 4u, ok));
-        if (!ok) return false;
-        personality = static_cast<Word>(static_cast<std::intptr_t>(base) + delta);
-    }
-    if ((encoding & 0x0f000000u) == 0x04000000u) {
-        const auto ehOffset = encoding & 0x00ffffffu;
-        if (sections.eh && ehOffset < sections.ehSize) {
-            query.fde = sections.eh + ehOffset;
-            query.text = base;
-            query.data = base;
-            Frame decoded {};
-            if (DecodeCandidate(context, decoded, query)) {
-                frame = decoded;
-                return true;
-            }
-        }
-        query.fde = nullptr;
-        frame = {};
-        frame.useCompact = true;
-        frame.compactEncoding = 0x01000000u;
-        frame.functionStart = funcStart;
-        frame.personality = personality;
-        frame.lsda = lsda;
-        frame.returnRegister = 16;
-        context.region = funcStart;
-        context.lsda = lsda;
-        context.personality = personality;
-        context.textBase = base;
-        context.dataBase = base;
-        return true;
-    }
+    const auto status = ParseCompactUnwind(unwind, eh, target, TryCompactDwarf, &attempt, entry);
+    if (status != CompactParse::Found) return false;
+    if (entry.dwarf) return true;
     frame = {};
     frame.useCompact = true;
-    frame.compactEncoding = (encoding & 0x0f000000u) == 0 ? 0u : encoding;
-    frame.functionStart = funcStart;
-    frame.personality = personality;
-    frame.lsda = lsda;
+    frame.compactEncoding = entry.encoding;
+    frame.functionStart = base + entry.functionOffset;
+    frame.functionEnd = base + entry.functionEndOffset;
+    frame.personality = entry.hasPersonality ? static_cast<Word>(static_cast<std::intptr_t>(base) + entry.personalityDelta) : 0;
+    frame.lsda = entry.hasLsda ? base + entry.lsdaOffset : 0;
     frame.returnRegister = 16;
-    context.region = funcStart;
-    context.lsda = lsda;
-    context.personality = personality;
+    context.region = frame.functionStart;
+    context.lsda = frame.lsda;
+    context.personality = frame.personality;
     context.textBase = base;
     context.dataBase = base;
     return true;
 }
 
 bool CompactRules(Frame& frame, Rules& rules) {
-    const auto encoding = frame.compactEncoding;
-    const auto mode = encoding & 0x0f000000u;
-    rules = {};
     frame.returnRegister = 16;
-    auto save = [&](unsigned reg, std::intptr_t offset) {
-        if (reg < RuleCount) rules.registers[reg] = {1, offset};
-    };
-    save(16, -8);
-    if (mode == 0x01000000u) {
-        rules.cfaRegister = 6;
-        rules.cfaOffset = 16;
-        save(6, -16);
-        auto locations = encoding & 0x7fffu;
-        const auto slot = static_cast<std::intptr_t>((encoding >> 16) & 0xffu);
-        for (int index = 0; index < 5; ++index) {
-            unsigned reg = 0;
-            switch (locations & 7u) {
-            case 1: reg = 3; break;
-            case 2: reg = 12; break;
-            case 3: reg = 13; break;
-            case 4: reg = 14; break;
-            case 5: reg = 15; break;
-            case 0: break;
-            default: return false;
-            }
-            if (reg) save(reg, -16 - 8 * slot + 8 * index);
-            locations >>= 3;
-        }
-        return true;
-    }
-    if (mode == 0) {
-        rules.cfaRegister = 7;
-        rules.cfaOffset = 8;
-        return true;
-    }
-    if (mode != 0x02000000u && mode != 0x03000000u) return false;
-    const auto stackEncoded = (encoding >> 16) & 0xffu;
-    const auto stackAdjust = (encoding >> 13) & 7u;
-    const auto regCount = (encoding >> 10) & 7u;
-    auto permutation = encoding & 0x3ffu;
-    if (regCount > 6) return false;
-    std::uint32_t stackSize = stackEncoded * 8u;
-    if (mode == 0x03000000u) {
-        if (frame.functionStart == 0) return false;
-        std::uint32_t immediate = 0;
-        std::memcpy(&immediate, reinterpret_cast<const void*>(frame.functionStart + stackEncoded), 4);
-        stackSize = immediate + 8u * stackAdjust;
-    }
-    if (stackSize > 0x10000000u) return false;
-    rules.cfaRegister = 7;
-    rules.cfaOffset = static_cast<std::intptr_t>(stackSize);
-    unsigned permuted[6] = {};
-    switch (regCount) {
-    case 6:
-        permuted[0] = permutation / 120; permutation -= permuted[0] * 120;
-        permuted[1] = permutation / 24; permutation -= permuted[1] * 24;
-        permuted[2] = permutation / 6; permutation -= permuted[2] * 6;
-        permuted[3] = permutation / 2; permutation -= permuted[3] * 2;
-        permuted[4] = permutation; permuted[5] = 0;
-        break;
-    case 5:
-        permuted[0] = permutation / 120; permutation -= permuted[0] * 120;
-        permuted[1] = permutation / 24; permutation -= permuted[1] * 24;
-        permuted[2] = permutation / 6; permutation -= permuted[2] * 6;
-        permuted[3] = permutation / 2; permutation -= permuted[3] * 2;
-        permuted[4] = permutation;
-        break;
-    case 4:
-        permuted[0] = permutation / 60; permutation -= permuted[0] * 60;
-        permuted[1] = permutation / 12; permutation -= permuted[1] * 12;
-        permuted[2] = permutation / 3; permutation -= permuted[2] * 3;
-        permuted[3] = permutation;
-        break;
-    case 3:
-        permuted[0] = permutation / 20; permutation -= permuted[0] * 20;
-        permuted[1] = permutation / 4; permutation -= permuted[1] * 4;
-        permuted[2] = permutation;
-        break;
-    case 2:
-        permuted[0] = permutation / 5; permutation -= permuted[0] * 5;
-        permuted[1] = permutation;
-        break;
-    case 1: permuted[0] = permutation; break;
-    case 0: break;
-    default: return false;
-    }
-    bool used[7] = {};
-    static const unsigned dwarf[7] = {0, 3, 12, 13, 14, 15, 6};
-    for (unsigned index = 0; index < regCount; ++index) {
-        unsigned renumbered = 0;
-        unsigned reg = 0;
-        for (unsigned candidate = 1; candidate < 7; ++candidate) {
-            if (used[candidate]) continue;
-            if (renumbered == permuted[index]) { reg = dwarf[candidate]; used[candidate] = true; break; }
-            ++renumbered;
-        }
-        if (reg == 0) return false;
-        save(reg, -8 * static_cast<std::intptr_t>(regCount - index + 1));
-    }
-    return true;
+    std::span<const Byte> function;
+    if (frame.functionEnd > frame.functionStart)
+        function = {reinterpret_cast<const Byte*>(frame.functionStart), static_cast<std::size_t>(frame.functionEnd - frame.functionStart)};
+    return CompactUnwindRules(frame.compactEncoding, function, rules);
 }
+
 #endif
 
 bool DecodeFrame(_Unwind_Context& context, Frame& frame) {

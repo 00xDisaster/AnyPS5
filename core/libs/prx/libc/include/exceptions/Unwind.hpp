@@ -115,6 +115,7 @@ struct Frame {
     bool useCompact {};
     std::uint32_t compactEncoding {};
     Word functionStart {};
+    Word functionEnd {};
 #endif
 #ifdef _WIN32
     bool foreign {};
