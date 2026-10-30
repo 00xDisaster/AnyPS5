@@ -4,12 +4,6 @@
 
 extern "C" {
 
-int APS5_VABI sceAgcDriverDeregisterCaptureInterface();
-int APS5_VABI sceAgcDriverIsCoredumpValid();
-int APS5_VABI sceAgcDriverIsSuspendPointInFlightDirect();
-int APS5_VABI sceAgcDriverRegisterCaptureInterface();
-int APS5_VABI sceAgcDriverReleaseRazorACQ();
-int APS5_VABI sceAgcDriverSetTFRingDirect();
 int APS5_VABI libSceAgcDriverUnknown_6WO4CscVnfM_nid_no_patch();
 int APS5_VABI libSceAgcDriverUnknown_6v_minus_D6CQHA4Y_nid_no_patch();
 int APS5_VABI libSceAgcDriverUnknown_8CXPPlNmvIc_nid_no_patch();

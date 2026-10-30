@@ -152,30 +152,6 @@ int APS5_VABI sceAgcDriverUserDataWriteSetMarker(void) {
 
 extern "C" {
 
-int APS5_VABI sceAgcDriverDeregisterCaptureInterface() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceAgcDriverIsCoredumpValid() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceAgcDriverIsSuspendPointInFlightDirect() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceAgcDriverRegisterCaptureInterface() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceAgcDriverReleaseRazorACQ() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceAgcDriverSetTFRingDirect() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI libSceAgcDriverUnknown_6WO4CscVnfM_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
