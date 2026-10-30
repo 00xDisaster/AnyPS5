@@ -4,13 +4,15 @@
 
 extern "C" {
 
-int APS5_VABI sceUserServiceGetPartyChatTranscriptionVoiceType() {
+int APS5_VABI sceUserServiceGetPartyChatTranscriptionVoiceType_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
+APS5_EXPORT("Ebq9pcMYrko", sceUserServiceGetPartyChatTranscriptionVoiceType_nid_no_patch);
 
-int APS5_VABI sceUserServiceSetVoiceAgentEnableByButton() {
+int APS5_VABI sceUserServiceSetVoiceAgentEnableByButton_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
+APS5_EXPORT("Jz06XYyyqGE", sceUserServiceSetVoiceAgentEnableByButton_nid_no_patch);
 
 int APS5_VABI libSceUserServiceUnknown__minus_JCFmPNhxY8_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
