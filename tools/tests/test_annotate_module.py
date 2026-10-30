@@ -348,6 +348,8 @@ class AnnotateModuleTests(unittest.TestCase):
                     module = bytearray(build_module(extra_code=b""))
                     struct.pack_into("<Q", module, 64 + 3 * 56 + 16, address)
                     struct.pack_into("<Q", module, 64 + 3 * 56 + 40, memory_size)
+                    if address == 0:
+                        module[64:64 + 4 * 56] = module[64 + 3 * 56:64 + 4 * 56] + module[64:64 + 3 * 56]
                     summary = self.annotate(bytes(module))
                     self.assertIn("1 imports, 1 exports, 0 tls, 1 stubs", summary)
                     listing = self.read(".asm")
@@ -357,7 +359,8 @@ class AnnotateModuleTests(unittest.TestCase):
                     self.assertIn("; ===== export " + EXPORT_NAME, listing)
 
     def test_only_empty_executable_segments_fail_before_writing_reports(self):
-        self.assert_fails(build_module(code=b"", extra_code=b""), "no executable PT_LOAD segment with file-backed data")
+        self.assert_fails(build_module(code=b"", extra_code=b"", symbols=[DEFAULT_SYMBOLS[0]]),
+                          "no executable PT_LOAD segment with file-backed data")
         for suffix in (".asm", ".imports.txt", ".exports.txt"):
             self.assertFalse((self.root / ("out" + suffix)).exists())
 
