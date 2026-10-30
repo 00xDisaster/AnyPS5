@@ -137,10 +137,6 @@ int APS5_VABI sceSharePlayStopStreaming(void) {
 
 extern "C" {
 
-int APS5_VABI sceSharePlaySetShareScreenStatus() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI libSceSharePlayUnknown_6egMR0eB8RU_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
