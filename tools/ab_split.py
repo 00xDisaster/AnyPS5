@@ -80,6 +80,8 @@ def read_log(lines):
     for line in lines:
         text = line.rstrip("\r\n")
         if text.startswith("[ab] in-run A/B:"):
+            if config is not None or phases:
+                raise ValueError("multiple A/B runs in one log; split the captures before comparing phases")
             config = text
             continue
         match = PHASE.match(text)
