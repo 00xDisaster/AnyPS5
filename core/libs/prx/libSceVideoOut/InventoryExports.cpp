@@ -284,10 +284,6 @@ int APS5_VABI sceVideoOutSetBlankAfterResume() {
     NotImplemented_nid_no_patch(__func__);
 }
 
-int APS5_VABI sceVideoOutSetConfigurationMode() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI sceVideoOutSetContentType() {
     NotImplemented_nid_no_patch(__func__);
 }

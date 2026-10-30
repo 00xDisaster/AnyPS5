@@ -74,7 +74,6 @@ int APS5_VABI sceVideoOutRegisterStereoBuffers();
 int APS5_VABI sceVideoOutRemoveBuffer();
 int APS5_VABI sceVideoOutSetAlphaControl();
 int APS5_VABI sceVideoOutSetBlankAfterResume();
-int APS5_VABI sceVideoOutSetConfigurationMode();
 int APS5_VABI sceVideoOutSetContentType();
 int APS5_VABI sceVideoOutSetDisplayEventPosition();
 int APS5_VABI sceVideoOutSetGamutMetadata_();
