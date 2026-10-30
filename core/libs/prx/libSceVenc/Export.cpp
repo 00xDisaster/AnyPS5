@@ -82,18 +82,6 @@ int APS5_VABI sceVencStopEncode() {
 
 extern "C" {
 
-int APS5_VABI sceVencSetCodecConfig() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceVencSetImagePasteConfig() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceVencSetNormalPrivacyProtectionConfig() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI sceVencUnmapMemory() {
     NotImplemented_nid_no_patch(__func__);
 }
