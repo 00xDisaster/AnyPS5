@@ -1,6 +1,5 @@
 #pragma once
 
-#include "prx/libSceAgcDriver/include/LegacyPaDebugExports.hpp"
 
 #include "prx/libSceAgcDriver/Eq/include/Event.hpp"
 #include "prx/libSceAgcDriver/Eq/include/Query.hpp"
