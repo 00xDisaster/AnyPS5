@@ -35,7 +35,7 @@ RELA_SIZE = 24
 R_X86_64_NONE = 0
 
 LINE_ADDRESS = re.compile(r"^\s*([0-9a-f]+):")
-STUB = re.compile(r"^\s*([0-9a-f]+):\s+(?:\w+\s+)?jmpq?\s+\*(?:-?0x[0-9a-f]+)?\(%rip\)\s+# 0x([0-9a-f]+)")
+STUB = re.compile(r"^\s*([0-9a-f]+):\s+(?:\w+\s+)*jmpq?\s+\*(?:-?0x[0-9a-f]+)?\(%(?:rip|eip)\)\s+# 0x([0-9a-f]+)")
 BRANCH = re.compile(r"\b(?:call|jmp)q?\s+0x([0-9a-f]+)")
 REFERENCE = re.compile(r"# 0x([0-9a-f]+)")
 
@@ -243,12 +243,23 @@ def disassemble(code, vaddr):
     return result.stdout.splitlines()
 
 
+def referenced_address(line):
+    if "%fs:" in line or "%gs:" in line:
+        return None
+    reference = REFERENCE.search(line)
+    if reference is None:
+        return None
+    address = int(reference.group(1), 16)
+    return address & 0xFFFFFFFF if "(%eip)" in line else address
+
+
 def find_stubs(listing, slots, namer):
     stubs = {}
     for line in listing:
         match = STUB.match(line)
-        if match and int(match.group(2), 16) in slots:
-            stubs[int(match.group(1), 16)] = namer.resolve(slots[int(match.group(2), 16)])
+        target = referenced_address(line)
+        if match and target in slots:
+            stubs[int(match.group(1), 16)] = namer.resolve(slots[target])
     return stubs
 
 
@@ -257,9 +268,9 @@ def line_note(line, slots, stubs, namer):
     branch = BRANCH.search(line)
     if branch and int(branch.group(1), 16) in stubs:
         note = "   ; -> " + stubs[int(branch.group(1), 16)]
-    reference = REFERENCE.search(line)
-    if reference and int(reference.group(1), 16) in slots:
-        note = "   ; GOT " + namer.resolve(slots[int(reference.group(1), 16)])
+    reference = referenced_address(line)
+    if reference in slots:
+        note = "   ; GOT " + namer.resolve(slots[reference])
     return note
 
 
