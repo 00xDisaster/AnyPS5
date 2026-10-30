@@ -1096,6 +1096,22 @@ static void CheckMemoryPoolArguments() {
     Require(sceKernelReleaseDirectMemory(phys, page * 2) == 0);
 }
 
+static void CheckMapUnallocatedDirectMemory() {
+    constexpr std::size_t page = 0x4000;
+    constexpr int enomem = static_cast<int>(0x8002000cu);
+    std::int64_t phys = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 2, 0, 0, &phys) == 0);
+    Require(sceKernelReleaseDirectMemory(phys + static_cast<std::int64_t>(page), page) == 0);
+    void* mapped = nullptr;
+    Require(sceKernelMapDirectMemory(&mapped, page * 2, 3, 0, phys, 0) == enomem);
+    Require(mapped == nullptr);
+    Require(sceKernelMapDirectMemory(&mapped, page, 3, 0, phys + static_cast<std::int64_t>(page), 0) == enomem);
+    Require(mapped == nullptr);
+    Require(sceKernelMapDirectMemory(&mapped, page, 3, 0, phys, 0) == 0 && mapped != nullptr);
+    Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(mapped), page) == 0);
+    Require(sceKernelReleaseDirectMemory(phys, page) == 0);
+}
+
 static void CheckDirectMemoryGpuProtBits() {
     constexpr std::size_t page = 0x4000;
     std::int64_t phys = 0;
@@ -3914,6 +3930,7 @@ int main(int argc, char** argv) {
     CheckGetDirectMemoryType();
     CheckDirectMemoryQuery();
     CheckMtypeprotect();
+    CheckMapUnallocatedDirectMemory();
     CheckMemoryPoolArguments();
     CheckHeapAlignment();
     CheckHeapReallocWithinTheBlock();
