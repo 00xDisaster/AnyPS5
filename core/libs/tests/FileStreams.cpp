@@ -2,8 +2,6 @@
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
-#include <atomic>
-#include <exception>
 #include <barrier>
 #include <cerrno>
 #include <cstdarg>
@@ -19,6 +17,8 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <atomic>
+#include <exception>
 #include <fcntl.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
