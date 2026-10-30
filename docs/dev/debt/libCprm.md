@@ -44,7 +44,7 @@
 
 ### Unresolved data exports
 
-These older data exports remain undeclared. Their NIDs and sizes also appear in the later inventory, but their types, initialization and lifetime have not been established. Relocation counts refer to entries within each object in the older image; relocation-free does not establish safe semantics or ownership.
+These older data exports remain undeclared. Their NIDs and sizes also appear in the later inventory, but their types, initialization and lifetime have not been established. Both images contain the same relocation pattern within these objects: the first has five relative relocations; the second has four relative relocations and one symbol relocation. The file-backed bytes are zero before relocation. Object type, relocated targets, initialization and lifetime remain unverified.
 
 | NID | Size (bytes) | Relocations |
 | --- | ---: | ---: |
