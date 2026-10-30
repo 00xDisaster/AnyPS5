@@ -20,7 +20,7 @@
 
 ### Additional unidentified exports
 
-- Seven callable exports are declared as throwing placeholders. Their names, signatures and behavior are unverified. The same module and library identities occur in two version-labelled images; those labels are not authenticated.
+- Seven [callable exports](../../../core/libs/prx/libSceGLSlimVSH/Export.cpp) are declared as throwing placeholders. Their names, signatures and behavior are unverified. The same module and library identities occur in two version-labelled images; those labels are not authenticated.
 
 | Name | NID |
 | --- | --- |
