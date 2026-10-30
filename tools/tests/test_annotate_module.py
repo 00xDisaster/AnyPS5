@@ -93,7 +93,7 @@ def build_module(tags=DEFAULT_TAGS, values=None, symbols=DEFAULT_SYMBOLS, reloca
 
 
 def instruction(listing, mnemonic):
-    pattern = re.compile(r"^\s*[0-9a-f]+:\s+(?:\w+\s+)?%s\b" % mnemonic)
+    pattern = re.compile(r"^\s*[0-9a-f]+:\s+(?:\w+\s+)*%s\b" % mnemonic)
     return next(line for line in listing if pattern.search(line))
 
 
@@ -263,7 +263,7 @@ class AnnotateModuleTests(unittest.TestCase):
 
     def test_eip_relative_stubs_and_calls_use_wrapped_got_addresses(self):
         for address in (CODE_ADDRESS, 0xFFFFF000, 0x100001000):
-            for prefix in (b"\x67", b"\xf2\x67", b"\x3e\x67"):
+            for prefix in (b"\x67", b"\xf2\x67", b"\x3e\x67", b"\xf2\x3e\x67"):
                 with self.subTest(address=address, prefix=prefix):
                     length = len(prefix) + 6
                     code = prefix + b"\xff\x25" + struct.pack("<I", (SLOT - address - length) & 0xFFFFFFFF)
@@ -290,6 +290,15 @@ class AnnotateModuleTests(unittest.TestCase):
                 line = next(line for line in self.read(".asm").splitlines() if "(%eip)" in line)
                 self.assertTrue(line.endswith("; GOT " + IMPORT_NAME), line)
                 self.assertNotIn("; GOT " + SECOND_IMPORT_NAME, self.read(".asm"))
+
+    def test_segment_relative_operands_do_not_name_flat_import_slots(self):
+        for segment in (b"\x64", b"\x65"):
+            for address_prefix in (b"", b"\x67"):
+                with self.subTest(segment=segment, address_prefix=address_prefix):
+                    summary = self.annotate(build_module(code=code_bytes(segment + address_prefix)))
+                    self.assertIn("0 stubs", summary)
+                    self.assertNotIn("; GOT ", self.read(".asm"))
+                    self.assertNotIn("; -> ", self.read(".asm"))
 
     def test_none_relocation_does_not_annotate_a_stub_or_call(self):
         module = with_relocation(build_module(), 0x2280, 0, SLOT, 1, 0)

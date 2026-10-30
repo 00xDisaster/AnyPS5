@@ -35,7 +35,7 @@ RELA_SIZE = 24
 R_X86_64_NONE = 0
 
 LINE_ADDRESS = re.compile(r"^\s*([0-9a-f]+):")
-STUB = re.compile(r"^\s*([0-9a-f]+):\s+(?:\w+\s+)?jmpq?\s+\*(?:-?0x[0-9a-f]+)?\(%(?:rip|eip)\)\s+# 0x([0-9a-f]+)")
+STUB = re.compile(r"^\s*([0-9a-f]+):\s+(?:\w+\s+)*jmpq?\s+\*(?:-?0x[0-9a-f]+)?\(%(?:rip|eip)\)\s+# 0x([0-9a-f]+)")
 BRANCH = re.compile(r"\b(?:call|jmp)q?\s+0x([0-9a-f]+)")
 REFERENCE = re.compile(r"# 0x([0-9a-f]+)")
 
@@ -244,6 +244,8 @@ def disassemble(code, vaddr):
 
 
 def referenced_address(line):
+    if "%fs:" in line or "%gs:" in line:
+        return None
     reference = REFERENCE.search(line)
     if reference is None:
         return None
