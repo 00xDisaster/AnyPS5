@@ -264,7 +264,7 @@ if(BUILD_TESTING)
 
     add_test_executable(guest_allocating_strings_tests ${LIBS_INCLUDE_DIR}/tests/GuestAllocatingStrings.cpp)
     target_include_directories(guest_allocating_strings_tests PRIVATE ${LIBS_INCLUDE_DIR})
-    target_link_libraries(guest_allocating_strings_tests PRIVATE libc)
+    target_link_libraries(guest_allocating_strings_tests PRIVATE libc libkernel)
     configure_windows_unwind(guest_allocating_strings_tests)
     add_test(NAME guest_allocating_strings COMMAND guest_allocating_strings_tests)
     if(WIN32)
