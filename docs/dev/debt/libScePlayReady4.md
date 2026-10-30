@@ -24,3 +24,7 @@
 | `Unknown` | `asAQ9li6+mo` |
 | `Unknown` | `o2H2P7xoLec` |
 | `Unknown` | `sK0jAAnbbiI` |
+
+### Older callable exports
+
+- [Older callable exports](../../../core/libs/prx/libScePlayReady4/Export.cpp) - Thirty-eight additional older callable NIDs have unidentified names and are declared as throwing placeholders. Their prototypes and behavior are unverified. These NIDs do not appear in the later version-labelled module inventory; no cross-version identity or functional behavior is claimed. A separately shared initializer NID is excluded because it is already provided by another module and its structure differs across versions.
