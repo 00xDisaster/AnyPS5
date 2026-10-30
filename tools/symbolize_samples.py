@@ -308,6 +308,9 @@ def summarize(symbolizer, samples, top):
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser(description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("samples", help="collapsed-stack file or address file written by a Windows sampler")
     parser.add_argument("--libs", action="append", required=True, help="directory holding the modules that ran (repeatable)")
