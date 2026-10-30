@@ -194,7 +194,7 @@
 
 ### Additional callable exports
 
-- [Additional callable exports](../../../core/libs/prx/libSceLibcInternal/InventoryExports.cpp) - 308 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are declarations only; the later label does not authenticate a retail firmware version. Signatures and behavior are unverified; parameterless `int` declarations are placeholders. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names and five names that conflict with host or compiler declarations use literal NID aliases; the table records candidate names where known. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
+- [Additional callable exports](../../../core/libs/prx/libSceLibcInternal/InventoryExports.cpp) - 297 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are declarations only; the later label does not authenticate a retail firmware version. Signatures and behavior are unverified; parameterless `int` declarations are placeholders. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names and five names that conflict with host or compiler declarations use literal NID aliases; the table records candidate names where known. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
 
 | Name | NID |
 | --- | --- |
@@ -489,17 +489,6 @@
 | `devname_r` | `BIALMFTZ75I` |
 | `devname` | `fqLrWSWcGHw` |
 | `malloc_initialize` | `owT6zLJxrTs` |
-| `sceLibcHeapGetAddressRanges` | `Sj3fKG7MwMk` |
-| `sceLibcHeapMutexCalloc` | `HFtbbWvBO+U` |
-| `sceLibcHeapMutexFree` | `jJKMkpqQr7I` |
-| `sceLibcHeapSetAddressRangeCallback` | `4iOzclpv1M0` |
-| `sceLibcHeapSetTraceMarker` | `M6qiY0nhk54` |
-| `sceLibcHeapUnsetTraceMarker` | `RlhJVAYLSqU` |
-| `sceLibcInternalSetMallocCallback` | `LXqt47GvaRA` |
-| `sceLibcMspaceSetMallocCallback` | `+CbwGRMnlfU` |
-| `sceLibcPafMspaceCheckMemoryBounds` | `Pcq7UoYAcFE` |
-| `sceLibcPafMspaceReportMemoryBlocks` | `0FnzR6qum90` |
-| `sceLibcPafMspaceTrim` | `AUYdq63RG3U` |
 | `Unknown` | `GG6441JdYkA` |
 | `Unknown` | `QZ9YgTk+yrE` |
 | `Unknown` | `bGuDd3kWVKQ` |
