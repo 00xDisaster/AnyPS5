@@ -788,34 +788,6 @@ int APS5_VABI sceNpTrophySystemWrapRemoveUserData(void) {
 
 extern "C" {
 
-int APS5_VABI sceNpTrophySystemWrapGetGroupDataArray() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetGroupData() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetGroupDetailsArray() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetTitleData() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetTrophyDataArray() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetTrophyData() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceNpTrophySystemWrapGetTrophyDetails() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI libSceNpTrophyUnknown__plus_O9vU1CpGZA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
