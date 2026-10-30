@@ -1,6 +1,7 @@
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "tests/TemporaryFile.hpp"
 #include <array>
 #include <iterator>
 #include <algorithm>
@@ -513,7 +514,7 @@ int main(int argc, char** argv) {
     Require(fclose_nid_postfix(stream) == 0);
     ExpectException([] { fputs_nid_postfix("invalid stream", nullptr); });
     ExpectException([] { fopen_nid_postfix(nullptr, "r"); });
-    FileStream closed(std::tmpfile());
+    FileStream closed(TemporaryFile::Open());
     closed.Close();
     Require(fflush_nid_postfix(&closed) == -1 && errno == 9);
     Require(std::remove(argv[1]) == 0);
