@@ -33,6 +33,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include "ResidentPresent.hpp"
 #include "ImageTableAbi.hpp"
+#include "IntermediateRepresentation/include/IntermediateRepresentation/IrMetadata/BufferFormat.hpp"
 #include "HostImportLifetime.hpp"
 #include "ShaderCacheDirectory.hpp"
 #include "SampleLod_spv.h"
@@ -11675,11 +11676,11 @@ bool clearHandOverTests(const Device& device, Recorder& recorder, bool watched) 
     return true;
 }
 
-void denormalClearTests(const Device& device, Recorder& recorder) {
+bool denormalClearTests(const Device& device, Recorder& recorder) {
     const auto& base = device.GetContext();
     if (base.hostImportAlignment == 0) {
         std::cout << "host imports unavailable: denormal fill clears not tested\n";
-        return;
+        return false;
     }
     constexpr std::uint32_t side = 64;
     constexpr std::size_t bytes = 65536;
@@ -11709,7 +11710,7 @@ void denormalClearTests(const Device& device, Recorder& recorder) {
     } unregister{base, block, address};
     if (HostImportFor(base, address, bytes) == nullptr) {
         std::cout << "host import of the denormal clear block refused: denormal fill clears not tested\n";
-        return;
+        return false;
     }
     TextureDetiler detiler(base);
     auto context = base;
@@ -11765,8 +11766,17 @@ void denormalClearTests(const Device& device, Recorder& recorder) {
         const std::array<std::uint32_t, 4> nan{0x7e007e00u, 0x7e007e00u, 0x7e007e00u, 0x7e007e00u};
         refusal = nullptr;
         Require(!image->FillClear(nan, StorageTexture::WholeImage, refusal), "a NaN half pattern was cleared");
+        resource.format = static_cast<std::uint32_t>(ShaderRecompiler::IrBufferFormat::Format11_11_10Float);
+        image = StorageTexture::Create(context, detiler, resource, 0);
+        for (const auto texel : {0x01234567u, 0xffffffffu}) {
+            const std::array<std::uint32_t, 4> pattern{texel, texel, texel, texel};
+            refusal = nullptr;
+            Require(image->FillClear(pattern, StorageTexture::WholeImage, refusal), "a packed-float bit pattern was refused");
+            Require(holds(texel), "a packed-float fill clear stored other bits");
+        }
     }
     recorder.Sync();
+    return true;
 }
 
 class LibraryCreateFlags {
@@ -12386,6 +12396,9 @@ int main(int argc, char** argv) {
                 return 77;
             }
             return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--typed-fill-clear-only") {
+            return denormalClearTests(device, recorder) ? 0 : 77;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--integer-clear-only") {
             integerClearTests(device);
