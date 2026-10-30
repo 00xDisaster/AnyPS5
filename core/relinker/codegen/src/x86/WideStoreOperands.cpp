@@ -79,7 +79,7 @@ std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, co
     }
     const bool ripRelative = mod == ModRmModIndirect && rm == ModRmRmRipRelative;
     const bool absolute = mod == ModRmModIndirect && sib.has_value() && (*sib & SibBaseMask) == SibBaseDisp32;
-    const bool absoluteNoIndex = absolute && (*sib & SibIndexMask) == SibIndexNone;
+    const bool absoluteNoIndex = absolute && (*sib & SibIndexMask) == SibIndexNone && (inverted & 0x40) != 0;
     const std::size_t displacementSize = mod == ModRmModDisp8 ? Disp8Size : (mod == ModRmModDisp32 || ripRelative || absolute) ? Disp32Size : 0;
     if (cursor + displacementSize != length)
         return std::nullopt;

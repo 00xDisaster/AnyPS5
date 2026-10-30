@@ -846,6 +846,8 @@ void wideStoreSplit() {
     requireFailure([&] { (void)Codegen::DecodeVexWideStore(disp32.data(), disp32.size()); }, "A 32-bit base-relative 256-bit store whose upper half can wrap was split");
     const Bytes indexed32 = {0x67, 0xC5, 0xFC, 0x11, 0x04, 0x0D, 0xF8, 0xFF, 0xFF, 0x7F};
     requireFailure([&] { (void)Codegen::DecodeVexWideStore(indexed32.data(), indexed32.size()); }, "A 32-bit indexed 256-bit store whose upper half can wrap was split");
+    const Bytes extendedIndex32 = {0x67, 0xC4, 0xA1, 0x7C, 0x11, 0x04, 0x25, 0xF8, 0xFF, 0xFF, 0x7F};
+    requireFailure([&] { (void)Codegen::DecodeVexWideStore(extendedIndex32.data(), extendedIndex32.size()); }, "A 32-bit store indexed by an extended register through VEX.X was split as absolute");
     const Bytes absolute32Overflow = {0x67, 0xC5, 0xFC, 0x11, 0x04, 0x25, 0xF8, 0xFF, 0xFF, 0xFF};
     requireFailure([&] { (void)Codegen::DecodeVexWideStore(absolute32Overflow.data(), absolute32Overflow.size()); }, "A 32-bit absolute 256-bit store whose upper half crosses the address boundary was split");
     const Bytes absolute64 = {0xC5, 0xFC, 0x11, 0x04, 0x25, 0xF8, 0xFF, 0xFF, 0x7F};
