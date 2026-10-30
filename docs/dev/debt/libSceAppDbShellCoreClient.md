@@ -16,3 +16,5 @@
 | `Unknown` | `aqObO3I7PVk` |
 | `Unknown` | `gyhDBiNNvlg` |
 | `Unknown` | `s3XFdWNwYD8` |
+
+- [Older callable NIDs](../../../core/libs/prx/libSceAppDbShellCoreClient/Export.cpp): 18 unidentified exports have unverified names, signatures and behavior. These are throwing import-resolution placeholders; no functionality is implemented. No matching NIDs were found in the later module inventory.
