@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <random>
 #include <set>
 #include <string>
@@ -27,7 +26,6 @@ constexpr int SaveDataErrorNotMounted = -2137063420;
 constexpr int SaveDataErrorBusy = -2137063421;
 constexpr int SaveDataErrorNotFound = -2137063416;
 constexpr int SaveDataErrorMountFull = -2137063412;
-constexpr int SaveDataErrorInternal = -2137063413;
 
 int failures = 0;
 
@@ -324,6 +322,14 @@ void CheckHostMountFailures() {
     const auto root = previous / "mount-host-failures";
     std::filesystem::create_directories(root / "previous-alias");
     std::filesystem::current_path(root);
+    const auto writeFixture = [](const char* path, const char* text) {
+        auto* file = std::fopen(path, "wb");
+        Check(file != nullptr, std::string("open fixture ") + path);
+        if (file == nullptr) return;
+        const bool written = std::fputs(text, file) >= 0;
+        const bool closed = std::fclose(file) == 0;
+        Check(written && closed, std::string("write fixture ") + path);
+    };
     const auto checkFailure = [&](const char* name, std::uint32_t mode, std::uint64_t blocks, const std::string& label) {
         SceSaveDataDirName directory{};
         std::snprintf(directory.data, sizeof(directory.data), "%s", name);
@@ -338,7 +344,7 @@ void CheckHostMountFailures() {
         AddPathAlias_nid_no_patch("/savedata0", alias.c_str());
         const auto resolvedBefore = ResolvePath_nid_no_patch("/savedata0/probe");
         try {
-            Check(sceSaveDataMount3(&request, &result) == SaveDataErrorInternal, label + " returns INTERNAL");
+            Check(sceSaveDataMount3(&request, &result) == static_cast<int>(0x809F000B), label + " returns INTERNAL");
         } catch (const std::exception& error) {
             Check(false, label + " throws: " + error.what());
         }
@@ -352,21 +358,14 @@ void CheckHostMountFailures() {
         if (mounted == 0) sceSaveDataUmount2(0, &point);
         RemovePathAlias_nid_no_patch("/savedata0");
     };
-    {
-        std::ofstream file("_sd");
-        file << "not a directory";
-        Check(static_cast<bool>(file), "create the blocked save-root fixture");
-    }
+    writeFixture("_sd", "not a directory");
     for (const auto mode : {MountReadWrite | MountCreate, MountReadWrite | MountCreate2}) {
         checkFailure("blocked", mode, 96, "save-root file with mode " + std::to_string(mode));
         Check(std::filesystem::is_regular_file("_sd"), "a failed mount preserves the blocking file");
     }
     Check(std::filesystem::remove("_sd"), "remove the blocked save-root fixture");
     std::filesystem::create_directories("_sd/metadata.blocks");
-    {
-        std::ofstream file("_sd/metadata.blocks/keep");
-        file << "preserve this directory";
-    }
+    writeFixture("_sd/metadata.blocks/keep", "preserve this directory");
     checkFailure("metadata", MountReadWrite | MountCreate2, 96, "size metadata path is a directory");
     Check(!std::filesystem::exists("_sd/metadata"), "failed size persistence removes the newly created empty save");
     Check(std::filesystem::is_regular_file("_sd/metadata.blocks/keep"), "failed size persistence preserves the blocking directory");
