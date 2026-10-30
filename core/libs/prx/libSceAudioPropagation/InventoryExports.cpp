@@ -1,3 +1,4 @@
+#include "prx/libSceAudioPropagation/AudioPropagation.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/general/ExportMacros.hpp"
