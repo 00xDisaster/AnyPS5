@@ -683,6 +683,74 @@ static void CheckAllocateMainDirectMemory() {
     Require(sceKernelReleaseDirectMemory(physical, page * 2) == 0);
 }
 
+static void CheckAllocateDirectMemoryRejectsInvalidArguments() {
+    constexpr std::size_t page = 0x4000;
+    std::int64_t out = -1;
+
+    out = 0x1234;
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, 0, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, 1, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page - 1, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page + 1, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 0, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelAllocateMainDirectMemory(page, 0, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+
+    Require(sceKernelAllocateDirectMemory(-1, DIRECT_MEMORY_SIZE, page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(std::numeric_limits<std::int64_t>::min(), DIRECT_MEMORY_SIZE, page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, 0, page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, -1, page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(static_cast<std::int64_t>(page), static_cast<std::int64_t>(page), page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(static_cast<std::int64_t>(page * 2), static_cast<std::int64_t>(page), page, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 3, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 0x1000, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 0x2000, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, page - 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, page + 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, std::numeric_limits<std::size_t>::max(), 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+
+    Require(sceKernelAllocateMainDirectMemory(0, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateMainDirectMemory(page, 0x2000, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateMainDirectMemory(page, page - 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelAllocateMainDirectMemory(page, page + 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+
+    Require(sceKernelMemoryPoolExpand(0, DIRECT_MEMORY_SIZE, page, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelMemoryPoolExpand(0, DIRECT_MEMORY_SIZE, 0, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelMemoryPoolExpand(0, DIRECT_MEMORY_SIZE, 1, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelMemoryPoolExpand(-1, DIRECT_MEMORY_SIZE, page, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelMemoryPoolExpand(0, 0, page, 0, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelMemoryPoolExpand(0, DIRECT_MEMORY_SIZE, page, 0x2000, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+    Require(sceKernelMemoryPoolExpand(0, DIRECT_MEMORY_SIZE, page, page - 1, &out) == SCE_KERNEL_ERROR_EINVAL && out == 0x1234);
+
+    void* poolAddr = nullptr;
+    Require(sceKernelMemoryPoolReserve(nullptr, page, 0, 0, nullptr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelMemoryPoolReserve(nullptr, 0, 0, 0, &poolAddr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelMemoryPoolReserve(nullptr, 1, 0, 0, &poolAddr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelMemoryPoolReserve(nullptr, page, 0x2000, 0, &poolAddr) == SCE_KERNEL_ERROR_EINVAL);
+    Require(sceKernelMemoryPoolReserve(nullptr, page, page - 1, 0, &poolAddr) == SCE_KERNEL_ERROR_EINVAL);
+
+    std::int64_t validPhys = -1;
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, 0, 0, &validPhys) == 0);
+    Require(validPhys >= 0 && validPhys % static_cast<std::int64_t>(page) == 0);
+    Require(sceKernelReleaseDirectMemory(validPhys, page) == 0);
+
+    validPhys = -1;
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, page, 0, &validPhys) == 0);
+    Require(validPhys >= 0 && validPhys % static_cast<std::int64_t>(page) == 0);
+    Require(sceKernelReleaseDirectMemory(validPhys, page) == 0);
+
+    validPhys = -1;
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, page * 2, 0, &validPhys) == 0);
+    Require(validPhys >= 0 && validPhys % static_cast<std::int64_t>(page * 2) == 0);
+    Require(sceKernelReleaseDirectMemory(validPhys, page) == 0);
+
+    validPhys = -1;
+    Require(sceKernelAllocateDirectMemory(0, DIRECT_MEMORY_SIZE, page, page * 4, 0, &validPhys) == 0);
+    Require(validPhys >= 0 && validPhys % static_cast<std::int64_t>(page * 4) == 0);
+    Require(sceKernelReleaseDirectMemory(validPhys, page) == 0);
+}
+
 static void CheckReusedDirectMemorySections() {
 #ifdef _WIN32
     constexpr std::size_t page = 0x4000;
@@ -3766,6 +3834,7 @@ int main(int argc, char** argv) {
     CheckSavedDirectMemorySurvivesCachePressure();
     CheckReusedDirectMemorySections();
     CheckAllocateMainDirectMemory();
+    CheckAllocateDirectMemoryRejectsInvalidArguments();
     CheckReleaseDirectMemoryClearsMappings();
     CheckReleaseDirectMemoryRejectsInvalidRanges();
     CheckFixedMappingReplacesPartialOverlap();
