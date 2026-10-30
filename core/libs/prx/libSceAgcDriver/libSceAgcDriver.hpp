@@ -11,4 +11,3 @@
 #include "prx/libSceAgcDriver/Submit/include/Acb.hpp"
 #include "prx/libSceAgcDriver/Submit/include/CommandBuffer.hpp"
 #include "prx/libSceAgcDriver/Submit/include/Dcb.hpp"
-#include "prx/libSceAgcDriver/include/InventoryExports.hpp"
