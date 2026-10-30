@@ -637,6 +637,11 @@ void CheckAmmCommandWriters() {
 
     CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteUnmapToPrtCommand(dst, prt, 2 * page, size); }, Apr::AmmUnmapCommand{{Opcode::AmmUnmapToPrt, sizeof(Apr::AmmUnmapCommand)}, prt, 2 * page});
     CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteMapCommand2(dst, prt, page, 0, 0, 1, size); }, Apr::AmmUnmapCommand{{Opcode::AmmMapAsPrt, sizeof(Apr::AmmUnmapCommand)}, prt, page});
+    constexpr std::uint64_t top = std::uint64_t{0} - page;
+    CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteUnmapToPrtCommand(dst, top, page, size); }, Apr::AmmUnmapCommand{{Opcode::AmmUnmapToPrt, sizeof(Apr::AmmUnmapCommand)}, top & 0xFFFFFFFFFFFFull, page});
+    CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteMapCommand2(dst, top, page, 0, 0, 1, size); }, Apr::AmmUnmapCommand{{Opcode::AmmMapAsPrt, sizeof(Apr::AmmUnmapCommand)}, top & 0xFFFFFFFFFFFFull, page});
+    CheckRejectedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteUnmapToPrtCommand(dst, top - page, page, size); });
+    CheckRejectedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteMapCommand2(dst, top - page, page, 0, 0, 1, size); });
     for (const std::uint64_t wrapped : {std::uint64_t{0} - page, std::uint64_t{0} - 0x800000}) {
         CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteUnmapToPrtCommand(dst, prt, wrapped, size); }, Apr::AmmUnmapCommand{{Opcode::AmmUnmapToPrt, sizeof(Apr::AmmUnmapCommand)}, prt, wrapped & 0x1FFFFFFC000ull});
         CheckRecordedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteMapCommand2(dst, prt, wrapped, 0, 0, 1, size); }, Apr::AmmUnmapCommand{{Opcode::AmmMapAsPrt, sizeof(Apr::AmmUnmapCommand)}, prt, wrapped & 0x1FFFFFFC000ull});
