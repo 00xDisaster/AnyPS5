@@ -8,6 +8,8 @@
 
 - [sceDeviceServiceQueryDeviceInfo_](../../../core/libs/prx/libSceMbus/Export.cpp): the 112-byte device-info layout and the third argument's meaning remain unresolved. The second argument is a six-byte HID usage filter pointer, not an integer. Initialization takes an optional 16-byte parameter structure with an optional thread configuration; custom scheduling throws because the host has no event worker. `sceDeviceServiceGetEventState` takes a clear flag, not a device type.
 
+- [sceMbusDebugGetStringToShow](../../../core/libs/prx/libSceMbus/PendingExports.cpp) (logical `libSceMbusDebug`, NID `k6Ki9MjO9sI`) - signature and behavior are unknown. This parameterless `int` declaration is an import placeholder, not a verified ABI prototype; every call throws through `NotImplemented_nid_no_patch`. The binding is in the [13.60 inventory](https://github.com/xdCloudy/PS5-13.60-Function-Stub-Library/blob/bfec40deb4c47a17d7603ee2bc79aa6862c0c56b/data/firmware-13.60/libscembusdebug-82d8e50b8e.jsonl).
+
 - [sceMbus remaining declarations](../../../core/libs/prx/libSceMbus/PendingExports.cpp): SetDeviceFunctionState takes a 64-bit device identifier and a 180-byte aggregate by value on the stack. Its service-side fields and source alignment remain unresolved; the declaration preserves the observed stack ABI with opaque storage. AcquireControlList and Term return constants without reading incoming arguments, so their original parameter lists cannot be established from the callees.
 
 - [sceMbusAddHandleByDeviceId](../../../core/libs/prx/libSceMbus/PendingExports.cpp): the six-argument ABI is confirmed, including the 64-bit device ID. The meanings of the last three 32-bit fields require the device-service backend.
