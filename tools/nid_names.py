@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import base64
 import hashlib
 import json
 import os
@@ -8,6 +7,7 @@ import re
 import sys
 import tempfile
 import urllib.request
+from base64 import b64encode
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,7 +31,7 @@ ASM_FUNCTION_MACROS = {"APS5_ASM_FUNCTION", "APS5_SIGNAL_ASM_FUNCTION"}
 
 def compute_nid(symbol):
     digest = hashlib.sha1(symbol.encode() + SUFFIX).digest()
-    return base64.b64encode(digest[:8][::-1], altchars=b"+-").decode("ascii").rstrip("=")
+    return b64encode(digest[:8][::-1], altchars=b"+-").decode("ascii").rstrip("=")
 
 
 def strip_nid_postfix(name):

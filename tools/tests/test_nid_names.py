@@ -16,14 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import nid_names
 
 
-class NidEncodingTests(unittest.TestCase):
-    def test_fixed_nid_vectors(self):
-        for name, expected in (("ACProcessMain", "mFq1M6vw-JM"), ("sceAmprUnknown00", "6OkOa1SOKuY"),
-                               ("", "B4c6vzgC+Xc"), ("東京", "2GKwIE7lnRc")):
-            with self.subTest(name=name):
-                self.assertEqual(nid_names.compute_nid(name), expected)
-
-
 class DatabaseCacheTests(unittest.TestCase):
     @contextlib.contextmanager
     def database_server(self, payload):
@@ -681,6 +673,14 @@ class SourceLocationTests(unittest.TestCase):
             with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     nid_names.main(arguments)
+
+
+class NidEncodingTests(unittest.TestCase):
+    def test_fixed_nid_vectors(self):
+        for name, expected in (("ACProcessMain", "mFq1M6vw-JM"), ("sceAmprUnknown00", "6OkOa1SOKuY"),
+                               ("", "B4c6vzgC+Xc"), ("東京", "2GKwIE7lnRc")):
+            with self.subTest(name=name):
+                self.assertEqual(nid_names.compute_nid(name), expected)
 
 
 if __name__ == "__main__":
