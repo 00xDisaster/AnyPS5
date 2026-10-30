@@ -458,9 +458,9 @@ int main() {
     TestDeviceLevelDoesNotWaitForTheContext(false);
     TestDeviceLevelDoesNotWaitForTheContext(true);
     TestLevelWithoutADeviceUsesThePlaybackClock();
-    TestBlockingPushWaitsForRoomWithoutADevice();
     TestBlockingPushStaysBlockedUntilPlaybackFreesASlot();
     TestBlockingPushOnAFullQueueQueuesOnlyOnceASlotIsFree();
+    TestBlockingPushWaitsForRoomWithoutADevice();
     TestPrimingAfterRunningDry();
     TestLowLatencyCallsRejectBadArguments();
     TestLowLatencyReadsAtNextPush();
