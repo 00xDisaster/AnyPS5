@@ -194,6 +194,8 @@
 
 ### Additional callable exports
 
+- The [revision-pinned identity inventory](https://gist.github.com/kyon-eth/6bd58c3d7a0fa933dd4b524754c43265/7f0afd2b094b7241ed9728bca0c6796b9d0ba95f) records module, library, symbol type and NIDs for [InventoryExports.cpp](../../../core/libs/prx/libSceLibcInternal/InventoryExports.cpp); it is a metadata summary rather than independent verification. One entry belongs to the logical library `libSceLibcInternalExt` within this module.
+
 - [Additional callable exports](../../../core/libs/prx/libSceLibcInternal/InventoryExports.cpp) - 297 entries observed in the 3.20 export inventory and present in the later 13.60-labelled inventory are declarations only; the later label does not authenticate a retail firmware version. Signatures and behavior are unverified; parameterless `int` declarations are placeholders. Every entry throws through `NotImplemented_nid_no_patch`. Unidentified names and five names that conflict with host or compiler declarations use literal NID aliases; the table records candidate names where known. No runtime functionality is implemented. Data exports require separate layout and ownership analysis. Identified candidate names match their NIDs in the [public symbol database](https://github.com/zecoxao/sce_symbols/blob/2883963a0a514ba6e77407a08ef4730a65e88254/aerolib.csv) or [supplemental catalog](https://github.com/claimore22/ps5rs/blob/2304be5131221bae0dac24b9767cabffda33f747/data/nids.csv).
 
 | Name | NID |
