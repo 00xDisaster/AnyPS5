@@ -1054,3 +1054,42 @@ int APS5_VABI sceSlimglIPCSetup() {
 }
 
 }
+
+extern "C" {
+
+int APS5_VABI libSceGLSlimVSHInventory_9iW854bwvmc_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("9iW854bwvmc", libSceGLSlimVSHInventory_9iW854bwvmc_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_DVNKmWX1jOU_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("DVNKmWX1jOU", libSceGLSlimVSHInventory_DVNKmWX1jOU_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_JjyNMbSAgLk_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("JjyNMbSAgLk", libSceGLSlimVSHInventory_JjyNMbSAgLk_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_LLDLZ_minus_mQK_plus_Q_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("LLDLZ-mQK+Q", libSceGLSlimVSHInventory_LLDLZ_minus_mQK_plus_Q_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_Yf0LATiXPsg_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("Yf0LATiXPsg", libSceGLSlimVSHInventory_Yf0LATiXPsg_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_ZLvm5korFRA_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("ZLvm5korFRA", libSceGLSlimVSHInventory_ZLvm5korFRA_nid_no_patch);
+
+int APS5_VABI libSceGLSlimVSHInventory_qSuVNKHENqs_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("qSuVNKHENqs", libSceGLSlimVSHInventory_qSuVNKHENqs_nid_no_patch);
+
+}

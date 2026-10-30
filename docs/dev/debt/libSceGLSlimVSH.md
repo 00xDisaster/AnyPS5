@@ -17,3 +17,17 @@
 | `sceSlimglCompositorWaitPostEvent` | `HwBlC8TLKHQ` |
 | `sceSlimglIPCEnd` | `Fa0atOcWPaI` |
 | `sceSlimglIPCSetup` | `F4pQ5tsDo74` |
+
+### Additional unidentified exports
+
+- Seven callable exports are declared as throwing placeholders. Their names, signatures and behavior are unverified. The same module and library identities occur in two version-labelled images; those labels are not authenticated.
+
+| Name | NID |
+| --- | --- |
+| `Unknown` | `9iW854bwvmc` |
+| `Unknown` | `DVNKmWX1jOU` |
+| `Unknown` | `JjyNMbSAgLk` |
+| `Unknown` | `LLDLZ-mQK+Q` |
+| `Unknown` | `Yf0LATiXPsg` |
+| `Unknown` | `ZLvm5korFRA` |
+| `Unknown` | `qSuVNKHENqs` |
