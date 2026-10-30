@@ -1255,6 +1255,7 @@ int main(int argc, char** argv) {
                 device->WaitIdle();
             }, "recipe dispatch", missing);
         }
+        std::memset(block.data + colorBytes, 0, BlockBytes);
         CheckBufferLoad(*device, CompileBufferLoad(*device, block.Address() + colorBytes, output.Address()), output);
         CheckUniform(LoadSamples(*device, block), Ones, "after the native buffer access refusals and adjacent buffer control");
         std::cout << "native buffer controls: adjacent=passed deferred=" << (prepared != nullptr) << " recipe=" << recipeReused << std::endl;
