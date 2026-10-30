@@ -82,11 +82,6 @@ int APS5_VABI libSceMbusUnknown_2qdZlkIIFDU_nid_no_patch() {
 }
 APS5_EXPORT("2qdZlkIIFDU", libSceMbusUnknown_2qdZlkIIFDU_nid_no_patch);
 
-int APS5_VABI libSceMbusUnknown_H_plus_PkGBdkvUQ_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-}
-APS5_EXPORT("H+PkGBdkvUQ", libSceMbusUnknown_H_plus_PkGBdkvUQ_nid_no_patch);
-
 int APS5_VABI libSceMbusUnknown_RGJ3Rebmm2w_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
