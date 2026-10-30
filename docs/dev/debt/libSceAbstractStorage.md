@@ -17,3 +17,5 @@
 | `Unknown` | `jsjQnoZHra8` |
 | `Unknown` | `lMU9P5mJtNM` |
 | `Unknown` | `scAYh9JGyYI` |
+
+- [Older callable NIDs](../../../core/libs/prx/libSceAbstractStorage/Export.cpp): 14 unidentified exports have unverified names, signatures and behavior. These are throwing import-resolution placeholders; no functionality is implemented. No matching NIDs were found in the later module inventory.
