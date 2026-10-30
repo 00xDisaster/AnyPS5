@@ -72,30 +72,6 @@ std::int32_t APS5_VABI sceDeviceServiceGetGeneration(void) {
 
 extern "C" {
 
-int APS5_VABI sceMbusDebugGetStringToShow() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceMbusGetSimulatedBusUsableStatusByBusType2() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceMbusSetChatBalance() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceMbusSetHmd2SocialScreenAudioMode() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceMbusStartAudioOutScreenShare() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceMbusStopAudioOutScreenShare() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI libSceMbusUnknown_0mRAu1IWNEA_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
