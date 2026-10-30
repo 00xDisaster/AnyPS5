@@ -576,7 +576,7 @@ void TestJsonParser() {
     const std::string sixteen = objects(16);
     Require(ParseJson(&members, sixteen) == 0 && SameEvents({"1 0 0 - - -1", "2 0 0 - - -1"}), "16 nested objects in one call close");
     Require(ParseJson(&members, sixteen, {80, sixteen.size() - 80}) == 0 && SameEvents({"1 0 0 - - -1"}),
-        "a call that ends inside the 16th object loses the close, as on the console");
+        "a call that ends inside the 16th object loses the close, as in firmware 13.42");
     const std::string fifteen = objects(15);
     Require(ParseJson(&members, fifteen, {75, fifteen.size() - 75}) == 0 && SameEvents({"1 0 0 - - -1", "2 0 0 - - -1"}),
         "a call that ends inside the 15th object keeps the close");
