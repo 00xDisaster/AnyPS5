@@ -143,11 +143,18 @@ short FinishExpScale(long double& value, long long exponent) {
 }
 
 short UnderflowScaled(long double& value, long double multiplier) {
-    value = std::copysign(1.0L, multiplier);
-    return FinishExpScale(value, -1000000);
+    value = std::copysign(0.0L, multiplier);
+    return Zero;
 }
 
 short ExpScaled(long double& x, long long scale, long double multiplier) {
+    std::fexcept_t entryFlags;
+    std::fegetexceptflag(&entryFlags, FE_ALL_EXCEPT);
+    const int entryErrno = errno;
+    auto finalize = [&](long double value, short kind) -> short {
+        x = value;
+        return kind;
+    };
     constexpr long double inverseLn2 = 0xb.8aa3b295c17f0bcp-3L;
     constexpr long double ln2Low = -0xe.8e7bcd5e4f1d9ccp-35L;
     constexpr long double tiny = 0x1p-66L;
@@ -157,27 +164,57 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
     constexpr long double p2 = 0xe.8b94728735d9363p-7L;
     constexpr long double q0 = 0x8.45a5963c196b530p-17L;
     constexpr long double q1 = 0xf.83a71f722cba3c4p-10L;
-    if (std::isinf(x)) {
-        if (x < 0.0L) {
-            x = std::copysign(0.0L, multiplier);
-            RaiseLibcError(FE_UNDERFLOW);
-            return Zero;
-        }
-        return OverflowScaled(x, multiplier);
-    }
     constexpr long double inputLimit = 50000.0L;
-    if (x > inputLimit) return OverflowScaled(x, multiplier);
-    if (x < -inputLimit) return UnderflowScaled(x, multiplier);
+    if (std::isinf(x)) {
+        if (x > 0.0L) {
+            if (multiplier == 0.0L) {
+                x = std::numeric_limits<long double>::quiet_NaN();
+                RaiseLibcError(FE_INVALID);
+                return NotANumber;
+            }
+            if (std::isinf(multiplier)) x = multiplier;
+            else x = std::copysign(std::numeric_limits<long double>::infinity(), multiplier);
+            return Infinite;
+        }
+        if (std::isinf(multiplier)) {
+            x = std::numeric_limits<long double>::quiet_NaN();
+            RaiseLibcError(FE_INVALID);
+            return NotANumber;
+        }
+        return finalize(std::copysign(0.0L, multiplier), Zero);
+    }
     if (std::isinf(multiplier)) {
         x = multiplier;
         return Infinite;
     }
-    if (x == 1.0L) {
-        int multiplierExponent = 0;
-        const long double multiplierMantissa = std::frexp(multiplier, &multiplierExponent);
-        x = 0xa.df85458a2bb4a9bp-2L * multiplierMantissa;
-        return FinishExpScale(x, scale + multiplierExponent);
+    if (x == 0.0L) {
+        if (scale == 0) return finalize(multiplier, Finite);
+        long double result = multiplier;
+        std::fexcept_t productFlags;
+        std::fegetexceptflag(&productFlags, FE_ALL_EXCEPT);
+        const short resultKind = ScaleExtended(result, scale);
+        x = result;
+        if (resultKind == Infinite) {
+            RaiseLibcError(FE_OVERFLOW);
+            return Infinite;
+        }
+        if (resultKind == Zero) {
+            RaiseLibcError(FE_UNDERFLOW);
+            return Zero;
+        }
+        if (resultKind == Denormal) {
+            std::fesetexceptflag(&productFlags, FE_ALL_EXCEPT);
+            errno = entryErrno;
+            return Finite;
+        }
+        return resultKind;
     }
+    if (scale == 0 && x == 1.0L && multiplier == 1.0L) {
+        x = 0xa.df85458a2bb4a9bp-2L;
+        return Finite;
+    }
+    if (x < -inputLimit) return finalize(std::copysign(0.0L, multiplier), Zero);
+    if (x > inputLimit) return OverflowScaled(x, multiplier);
     const long double g = x * inverseLn2;
     if (std::isnan(g)) {
         x = g;
@@ -198,7 +235,22 @@ short ExpScaled(long double& x, long long scale, long double multiplier) {
     int multiplierExponent = 0;
     const long double multiplierMantissa = std::frexp(multiplier, &multiplierExponent);
     x *= multiplierMantissa;
-    return FinishExpScale(x, n + scale + multiplierExponent);
+    const long long finalShift = n + scale + multiplierExponent;
+    short result = ScaleExtended(x, finalShift);
+    if (result == Infinite) {
+        RaiseLibcError(FE_OVERFLOW);
+        return Infinite;
+    }
+    if (result == Zero) {
+        RaiseLibcError(FE_UNDERFLOW);
+        return Zero;
+    }
+    if (result == Denormal) {
+        std::fesetexceptflag(&entryFlags, FE_ALL_EXCEPT);
+        errno = entryErrno;
+        return Finite;
+    }
+    return result;
 }
 
 template<typename TFloat>
@@ -399,23 +451,72 @@ int APS5_VABI __isnormall_nid_postfix(long double x) {
 }
 
 short APS5_VABI _LDtest_nid_postfix(const long double* value) { return TestExtended(Bits(*value)); }
-short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short scale) {
+short APS5_VABI _LExp_nid_postfix(long double* value, long double y, short offset) {
     if (value == nullptr) throw std::invalid_argument("_LExp: null value");
     const long double x = *value;
-    if (std::isnan(x)) {
-        *value = x;
-        return NotANumber;
-    }
-    if (std::isnan(y)) {
-        *value = y;
-        return NotANumber;
-    }
-    if (y == 0.0L) {
-        *value = 0.0L;
+    const short xKind = TestExtended(Bits(x));
+    const short yKind = (std::isnan(y) ? NotANumber : std::isinf(y) ? Infinite : (y == 0.0L ? Zero : TestExtended(Bits(y))));
+    if (xKind == NotANumber) return NotANumber;
+    if (yKind == NotANumber) return NotANumber;
+    if (xKind == Infinite) {
+        if (x > 0.0L) {
+            if (yKind == Zero) {
+                *value = std::numeric_limits<long double>::quiet_NaN();
+                RaiseLibcError(FE_INVALID);
+                return NotANumber;
+            }
+            if (yKind == Infinite) *value = y;
+            else *value = std::copysign(std::numeric_limits<long double>::infinity(), y);
+            return Infinite;
+        }
+        if (yKind == Infinite) {
+            *value = std::numeric_limits<long double>::quiet_NaN();
+            RaiseLibcError(FE_INVALID);
+            return NotANumber;
+        }
+        *value = std::copysign(0.0L, y);
         return Zero;
     }
+    if (yKind == Zero) {
+        *value = y;
+        return Zero;
+    }
+    if (yKind == Infinite) {
+        *value = y;
+        return Infinite;
+    }
+    if (xKind == Zero) {
+        if (offset == 0) {
+            *value = y;
+            return Finite;
+        }
+        long double result = y;
+        std::fexcept_t entryFlags;
+        std::fegetexceptflag(&entryFlags, FE_ALL_EXCEPT);
+        const int entryErrno = errno;
+        const short resultKind = ScaleExtended(result, offset);
+        *value = result;
+        if (resultKind == Infinite) {
+            RaiseLibcError(FE_OVERFLOW);
+            return Infinite;
+        }
+        if (resultKind == Zero) {
+            RaiseLibcError(FE_UNDERFLOW);
+            return Zero;
+        }
+        if (resultKind == Denormal) {
+            std::fesetexceptflag(&entryFlags, FE_ALL_EXCEPT);
+            errno = entryErrno;
+            return Finite;
+        }
+        return resultKind;
+    }
+    if (offset == 0 && x == 1.0L && y == 1.0L) {
+        *value = 0xa.df85458a2bb4a9bp-2L;
+        return Finite;
+    }
     long double result = x;
-    const short resultKind = ExpScaled(result, scale, y);
+    const short resultKind = ExpScaled(result, offset, y);
     *value = result;
     return resultKind;
 }

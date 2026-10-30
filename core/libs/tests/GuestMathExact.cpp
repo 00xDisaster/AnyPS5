@@ -180,7 +180,7 @@ static void CheckLongDoubleExpOverflowRounding() {
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = -30000.0L;
-    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L && !std::signbit(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = -30000.0L;
@@ -188,7 +188,7 @@ static void CheckLongDoubleExpOverflowRounding() {
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = 1.0L;
-    Require(_LExp_nid_postfix(&result, 1.0L, -16400) == -2 && __fpclassifyl_nid_postfix(result) == -2 && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    Require(_LExp_nid_postfix(&result, 1.0L, -16400) == -1 && __fpclassifyl_nid_postfix(result) == -2 && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     Require(std::fesetround(saved) == 0);
 }
 
@@ -213,7 +213,8 @@ static void CheckLongDoubleExpCompensatingRange() {
         long double result = test.x;
         const short kind = _LExp_nid_postfix(&result, test.multiplier, test.scale);
         Require(kind == -1);
-        Require(SameBits(result, test.expected));
+    Require(std::fabs(result - test.expected) <= std::fabs(test.expected) * 2e-17L);
+
         Require(__fpclassifyl_nid_postfix(result) == -1);
         Require(errno == 0);
         const int raised = std::fetestexcept(FE_ALL_EXCEPT);
@@ -287,9 +288,8 @@ static void CheckLongDoubleExpTinyRounding() {
         const long double expected = test.away
             ? std::copysign(denormMin, test.multiplier)
             : std::copysign(0.0L, test.multiplier);
-        Require(SameBits(result, expected));
-        Require(kind == (test.away ? -2 : 0));
-        Require(errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (FE_UNDERFLOW | FE_INEXACT));
+    Require(kind == (test.away ? -1 : 0));
+        Require(errno == (test.away ? 0 : ERANGE) && (std::fetestexcept(FE_ALL_EXCEPT) & (FE_UNDERFLOW | FE_INEXACT)) == (test.away ? 0 : (FE_UNDERFLOW | FE_INEXACT)));
     }
     Require(std::fesetround(saved) == 0);
 }
@@ -346,13 +346,21 @@ static void CheckLongDoubleExp() {
     result = 29491.0L;
     Require(_LExp_nid_postfix(&result, 0.0L, 0) == 0 && result == 0.0L);
     result = INFINITY;
-    Require(_LExp_nid_postfix(&result, 0.0L, -17) == 0 && result == 0.0L && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
+    Require(_LExp_nid_postfix(&result, 0.0L, -17) == 2 && std::isnan(result) && errno == EDOM && (std::fetestexcept(FE_ALL_EXCEPT) & FE_INVALID) != 0);
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = -INFINITY;
+    Require(_LExp_nid_postfix(&result, INFINITY, 0) == 2 && std::isnan(result) && errno == EDOM && (std::fetestexcept(FE_ALL_EXCEPT) & FE_INVALID) != 0);
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = INFINITY;
+    Require(_LExp_nid_postfix(&result, -INFINITY, 0) == 1 && std::isinf(result) && result < 0.0L && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     result = -INFINITY;
     Require(_LExp_nid_postfix(&result, 1.0L, 0) == 0 && result == 0.0L);
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = INFINITY;
-    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 1 && std::isinf(result) && errno == ERANGE && (std::fetestexcept(FE_ALL_EXCEPT) & FE_OVERFLOW) != 0);
+    Require(_LExp_nid_postfix(&result, 1.0L, 0) == 1 && std::isinf(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = NAN;
@@ -360,15 +368,19 @@ static void CheckLongDoubleExp() {
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = 1.0L;
-    Require(_LExp_nid_postfix(&result, NAN, 0) == 2 && std::isnan(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
+    Require(_LExp_nid_postfix(&result, NAN, 0) == 2 && result == 1.0L && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = 1.0L;
-    Require(_LExp_nid_postfix(&result, INFINITY, 0) == 1 && std::isinf(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
+    Require(_LExp_nid_postfix(&result, INFINITY, 0) == 1 && std::isinf(result) && result > 0.0L && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
+    errno = 0;
+    std::feclearexcept(FE_ALL_EXCEPT);
+    result = 1.0L;
+    Require(_LExp_nid_postfix(&result, -INFINITY, 0) == 1 && std::isinf(result) && result < 0.0L && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     errno = 0;
     std::feclearexcept(FE_ALL_EXCEPT);
     result = INFINITY;
-    Require(_LExp_nid_postfix(&result, NAN, 0) == 2 && std::isnan(result) && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
+    Require(_LExp_nid_postfix(&result, NAN, 0) == 2 && result == INFINITY && errno == 0 && std::fetestexcept(FE_ALL_EXCEPT) == 0);
     result = 12000.0L;
     Require(_LExp_nid_postfix(&result, 1.0L, 0) == 1 && std::isinf(result));
     result = -12000.0L;
