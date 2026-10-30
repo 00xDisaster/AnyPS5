@@ -1076,6 +1076,25 @@ class ReleaseMainTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
             self.assertIn("not a directory", stderr.getvalue())
 
+    def test_main_reports_symbolic_link_loop_on_output_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            docs.mkdir()
+            (docs / "guide.md").write_text("# Guide", encoding="utf-8")
+            output = root / "assets"
+            try:
+                output.symlink_to("assets")
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(str(error))
+            result = subprocess.run([sys.executable, str(Path(package_release.__file__)),
+                                     "--docs", str(docs), "--output", str(output)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("symbolic link loop", result.stderr)
+            self.assertFalse((root / "assets.md").exists())
+
     def test_main_reconfigures_streams(self):
         class Stream:
             def __init__(self):
