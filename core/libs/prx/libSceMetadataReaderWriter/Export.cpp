@@ -1,3 +1,4 @@
+#include "prx/libSceMetadataReaderWriter/include/LegacyExports.hpp"
 #include "prx/libc/include/general/ExportMacros.hpp"
 #include "prx/libSceMetadataReaderWriter/include/InventoryExports.hpp"
 #include "prx/libSceMetadataReaderWriter/include/Api.hpp"
@@ -236,5 +237,19 @@ int APS5_VABI libSceMetadataReaderWriterUnknown_ckVz4iaNj4E_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
 APS5_EXPORT("ckVz4iaNj4E", libSceMetadataReaderWriterUnknown_ckVz4iaNj4E_nid_no_patch);
+
+}
+
+extern "C" {
+
+int APS5_VABI metadataReaderLegacyUnknown_2n7W08UL4yA_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("2n7W08UL4yA", metadataReaderLegacyUnknown_2n7W08UL4yA_nid_no_patch);
+
+int APS5_VABI metadataReaderLegacyUnknown_4SkB_plus_X3N5F0_nid_no_patch() {
+    NotImplemented_nid_no_patch(__func__);
+}
+APS5_EXPORT("4SkB+X3N5F0", metadataReaderLegacyUnknown_4SkB_plus_X3N5F0_nid_no_patch);
 
 }

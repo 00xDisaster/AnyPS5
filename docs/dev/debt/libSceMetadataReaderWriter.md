@@ -27,3 +27,5 @@
 | `Unknown` | `Ly4V1dsyKCA` |
 | `Unknown` | `YeIbFGmyUVM` |
 | `Unknown` | `ckVz4iaNj4E` |
+
+- [Older callable NIDs](../../../core/libs/prx/libSceMetadataReaderWriter/Export.cpp): 2 unidentified exports have unverified names, signatures and behavior. These are throwing import-resolution placeholders; no functionality is implemented. No matching NIDs were found in the later module inventory.
