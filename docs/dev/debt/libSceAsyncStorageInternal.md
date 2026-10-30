@@ -19,3 +19,5 @@
 | `Unknown` | `mvZ-UdW+Z-Q` |
 | `Unknown` | `q4KNqhT5ibk` |
 | `Unknown` | `r299OxwCYsY` |
+
+- [Older callable NIDs](../../../core/libs/prx/libSceAsyncStorageInternal/Export.cpp): 9 unidentified exports have unverified names, signatures and behavior. These are throwing import-resolution placeholders; no functionality is implemented. No matching NIDs were found in the later module inventory. Five use the primary library qualifier and four use the auxiliary qualifier; qualified guest import resolution is unverified.
