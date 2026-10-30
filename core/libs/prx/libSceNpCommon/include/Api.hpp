@@ -71,6 +71,9 @@ struct NpTitleIdObject {
 
 extern "C" {
 
+int APS5_VABI sceNpGetSandboxMode();
+int APS5_VABI sceNpUtilGetSandboxMode();
+
 int APS5_VABI sceNpCmpOnlineId(const NpOnlineId* onlineId1, const NpOnlineId* onlineId2);
 int APS5_VABI sceNpCmpNpIdInOrder(const NpIdFull* npId1, const NpIdFull* npId2, std::int32_t* order);
 int APS5_VABI sceNpGetPlatformType(const NpIdFull* npId);
