@@ -759,6 +759,27 @@ void TestStreamHelpers() {
         "Write makes a single stream call");
 }
 
+void TestRefObjects() {
+    NpRefObject object {};
+    std::memset(&object, 0x77, sizeof(object));
+    _ZN3sce2np9RefObjectC1Ev(&object);
+    Require(object.vtable != nullptr && object.refCount == 0, "a new reference-counted object has no references");
+    Require(_ZN3sce2np9RefObject6AddRefEv(&object) == 1 && _ZN3sce2np9RefObject6AddRefEv(&object) == 2 && object.refCount == 2,
+        "AddRef returns the new count");
+    Require(_ZN3sce2np9RefObject7ReleaseEv(&object) == 1 && object.refCount == 1, "Release returns the new count");
+    _ZN3sce2np9RefObjectD2Ev(&object);
+    Require(object.refCount == 1, "the destructor leaves the count alone");
+
+    AllocatorRecord record {};
+    NpAllocator allocator {RecordAllocate, nullptr, RecordRelease, &record};
+    auto* owned = static_cast<NpRefObject*>(_ZN3sce2np6ObjectnwEmR14SceNpAllocator(sizeof(NpRefObject), &allocator));
+    _ZN3sce2np9RefObjectC2Ev(owned);
+    Require(_ZN3sce2np9RefObject6AddRefEv(owned) == 1 && _ZN3sce2np9RefObject6AddRefEv(owned) == 2, "an allocated object takes references");
+    Require(_ZN3sce2np9RefObject7ReleaseEv(owned) == 1 && record.released == nullptr, "releasing a reference that is not the last keeps the object");
+    Require(_ZN3sce2np9RefObject7ReleaseEv(owned) == 0 && record.released == record.block.data(),
+        "releasing the last reference deletes the object through the stored allocator");
+}
+
 int main() {
     TestAtomics();
     TestSemaphoresAndFlags();
@@ -770,6 +791,7 @@ int main() {
     TestMemoryStreams();
     TestTitleIdObjects();
     TestStreamHelpers();
+    TestRefObjects();
     TestBase64();
     TestNumbers();
     TestHexAndCopies();
