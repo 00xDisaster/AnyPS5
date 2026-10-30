@@ -677,6 +677,28 @@ void CheckAmmCommandWriters() {
     CheckRejectedCommand([&](void* dst, std::uint64_t* size) { return sceKernelWriteEventQueueOnCompletionCommand(dst, (std::uint64_t{1} << 48u) + 1, 1, 2, size); });
 }
 
+void CheckAmmWrittenWaitsRun() {
+    alignas(8) static std::uint64_t ready = 5;
+    alignas(8) static std::uint64_t done = 0;
+    std::array<std::uint8_t, 256> commands{};
+    std::uint64_t used = 0;
+    const auto append = [&](auto write) {
+        std::uint64_t bytes = 0;
+        Require(write(commands.data() + used, &bytes) == 0);
+        used += bytes;
+    };
+    append([&](void* dst, std::uint64_t* size) { return sceKernelWriteWriteCounterCommand(dst, 3, 9, size); });
+    append([&](void* dst, std::uint64_t* size) { return sceKernelWriteWaitOnCounterCommand(dst, 3, 9, 0, 0, size); });
+    append([&](void* dst, std::uint64_t* size) { return sceKernelWriteWaitOnAddressCommand(dst, reinterpret_cast<std::uint64_t>(&ready), 5, 0, 0, size); });
+    append([&](void* dst, std::uint64_t* size) { return sceKernelWriteWaitOnAddressCommand(dst, reinterpret_cast<std::uint64_t>(&ready), 5, -4, 0, size); });
+    append([&](void* dst, std::uint64_t* size) { return sceKernelWriteWriteAddressCommand(dst, reinterpret_cast<std::uint64_t>(&done), 0x1234, size); });
+    Require(used <= commands.size());
+    std::uint32_t id = 0;
+    Require(sceAmprAmmSubmitCommandBuffer3(commands.data(), static_cast<std::uint32_t>(used), 0, &id) == 0 && id != 0);
+    Require(sceKernelWaitCommandBufferCompletion(id) == 0);
+    Require(std::atomic_ref<std::uint64_t>(done).load(std::memory_order_acquire) == 0x1234);
+}
+
 void CheckAmmWaitConcurrentSubmits() {
     constexpr int submitters = 4;
     constexpr int submissions = 4000;
@@ -1052,6 +1074,7 @@ int main() {
     CheckAmmWriteCommands();
     CheckAmmWaitCompletion();
     CheckAmmCommandWriters();
+    CheckAmmWrittenWaitsRun();
     CheckAmmWaitConcurrentSubmits();
     CheckSchedSetscheduler();
     CheckSigreturn();
