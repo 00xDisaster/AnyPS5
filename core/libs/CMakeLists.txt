@@ -121,6 +121,7 @@ endif()
 set(UNPATCHED_DIR ${CMAKE_CURRENT_BINARY_DIR}/libs/unpatched)
 set(PATCHED_DIR ${CMAKE_CURRENT_BINARY_DIR}/libs)
 set(IMPLIB_DIR ${PATCHED_DIR}/implib)
+set(RELEASE_IMPLIBS "libc=$<TARGET_LINKER_FILE:libc>\n")
 
 set_target_properties(libc PROPERTIES
         PREFIX ""
@@ -210,8 +211,13 @@ foreach(LIB_DIR ${LIBS_DIRS})
         )
 
         list(APPEND PATCHED_OUTPUTS ${PATCHED_FILE})
+        string(APPEND RELEASE_IMPLIBS "${LIB_NAME}=$<TARGET_LINKER_FILE:${LIB_NAME}>\n")
     endif()
 endforeach()
+
+if(WIN32)
+    file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/release-implibs.txt CONTENT "${RELEASE_IMPLIBS}")
+endif()
 
 target_link_libraries(libSceUsbStorageDialog PRIVATE libSceUserService)
 

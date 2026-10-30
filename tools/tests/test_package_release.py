@@ -43,14 +43,77 @@ class ReleasePackageTests(unittest.TestCase):
         libraries.mkdir(parents=True)
         self.library = libraries / "libc.prx"
         self.library.write_bytes(b"library bytes")
+        (libraries / "unpatched").mkdir()
+        self.unpatched = libraries / "unpatched/libc.prx"
+        self.unpatched.write_bytes(b"original exports")
+        (libraries / "implib").mkdir()
+        self.implib = libraries / "implib/libc.dll.a"
+        self.implib.write_bytes(b"import archive")
+        self.manifest = self.build / "core/libs/release-implibs.txt"
+        self.manifest.write_text("libc=" + self.implib.as_posix() + "\n", encoding="utf-8")
         binary = self.build / "core/relinker/relinker"
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b"relinker bytes")
         self.addCleanup(patch.stopall)
         patch.object(package_release, "ROOT", self.source, create=True).start()
 
+    def test_unpatched_archives_preserve_originals_and_exclude_stale_files(self):
+        (self.unpatched.parent / "libRemoved.prx").write_bytes(b"obsolete")
+        before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (self.library, self.unpatched, self.implib)}
+        package_release.package("linux", self.build, self.output, "v1")
+        with zipfile.ZipFile(self.output / "prx-linux-unpatched-v1.zip") as archive:
+            self.assertEqual(archive.namelist(), ["libs/libc.prx"])
+            self.assertEqual(archive.read("libs/libc.prx"), b"original exports")
+        with tarfile.open(self.output / "prx-linux-unpatched-v1.tar.gz") as archive:
+            self.assertEqual(archive.getnames(), ["libs/libc.prx"])
+            self.assertEqual(archive.extractfile("libs/libc.prx").read(), b"original exports")
+        for path, (content, timestamp) in before.items():
+            self.assertEqual(path.read_bytes(), content)
+            self.assertEqual(path.stat().st_mtime_ns, timestamp)
+
+    def test_invalid_windows_import_inputs_preserve_existing_output(self):
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        for name in ("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll"):
+            (runtime / name).write_bytes(b"runtime")
+        for name in ("mimalloc.dll", "mimalloc-redirect.dll"):
+            (self.library.parent / name).write_bytes(b"allocator")
+        (self.build / "core/relinker/relinker.exe").write_bytes(b"executable")
+        self.output.mkdir()
+        previous = self.output / "prx-windows-v1.zip"
+        previous.write_bytes(b"existing archive")
+        valid = self.manifest.read_text(encoding="utf-8")
+        for manifest in ("", valid + valid, "libc=" + (self.root / "outside.a").as_posix() + "\n", "invalid"):
+            with self.subTest(manifest=manifest), patch.object(package_release, "windows_runtime", return_value=runtime):
+                self.manifest.write_text(manifest, encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "[Ii]mport library"):
+                    package_release.package("windows", self.build, self.output, "v1")
+                self.assertEqual(list(self.output.iterdir()), [previous])
+                self.assertEqual(previous.read_bytes(), b"existing archive")
+        self.manifest.write_text(valid, encoding="utf-8")
+        self.implib.unlink()
+        with patch.object(package_release, "windows_runtime", return_value=runtime), self.assertRaisesRegex(RuntimeError, "Missing or empty release file"):
+            package_release.package("windows", self.build, self.output, "v1")
+        self.assertEqual(previous.read_bytes(), b"existing archive")
+
+    def test_missing_unpatched_input_preserves_existing_outputs(self):
+        for content in (None, b""):
+            with self.subTest(content=content):
+                if content is None:
+                    self.unpatched.unlink()
+                else:
+                    self.unpatched.write_bytes(content)
+                self.output.mkdir(exist_ok=True)
+                previous = self.output / "prx-linux-v1.zip"
+                previous.write_bytes(b"previous release")
+                with self.assertRaisesRegex(RuntimeError, "Missing or empty release file"):
+                    package_release.package("linux", self.build, self.output, "v1")
+                self.assertEqual(list(self.output.iterdir()), [previous])
+                self.assertEqual(previous.read_bytes(), b"previous release")
+
     def test_ajm_vibration_decoder_license_in_archives(self):
         (self.source / "core/libs/prx/libSceAjm.native").mkdir()
+        (self.unpatched.parent / "libSceAjm.native.prx").write_bytes(b"unpatched library")
         (self.build / "core/libs/libs/libSceAjm.native.prx").write_bytes(b"ajm")
         license_file = self.source / "3rdparty/vgmstream/COPYING"
         license_file.parent.mkdir(parents=True)
@@ -63,6 +126,7 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_vorbis_decoder_licenses_in_archives(self):
         (self.source / "core/libs/prx/libSceVorbisDec").mkdir()
+        (self.unpatched.parent / "libSceVorbisDec.prx").write_bytes(b"unpatched library")
         (self.build / "core/libs/libs/libSceVorbisDec.prx").write_bytes(b"vorbis")
         for name in ("ogg", "vorbis"):
             license_file = self.source / f"3rdparty/{name}/COPYING"
@@ -97,9 +161,17 @@ class ReleasePackageTests(unittest.TestCase):
             for name in names + allocator:
                 self.assertEqual(archive.extractfile("libs/" + name).read(), name.encode())
         self.assertEqual((self.output / "relinker-v1.exe").read_bytes(), b"Windows executable")
+        with zipfile.ZipFile(self.output / "prx-windows-unpatched-v1.zip") as archive:
+            self.assertEqual(archive.read("libs/libc.prx"), b"original exports")
+            self.assertEqual(archive.read("libs/implib/libc.dll.a"), b"import archive")
+            self.assertEqual(set(archive.namelist()), {"libs/libc.prx", "libs/implib/libc.dll.a", *("libs/" + name for name in names + allocator)})
+        with tarfile.open(self.output / "prx-windows-unpatched-v1.tar.gz") as archive:
+            self.assertEqual(archive.extractfile("libs/libc.prx").read(), b"original exports")
+            self.assertEqual(archive.extractfile("libs/implib/libc.dll.a").read(), b"import archive")
 
     def test_opus_library_archives_include_the_bundled_license(self):
         (self.source / "core/libs/prx/libSceOpusDec").mkdir()
+        (self.unpatched.parent / "libSceOpusDec.prx").write_bytes(b"unpatched library")
         (self.library.parent / "libSceOpusDec.prx").write_bytes(b"Opus library bytes")
         license_file = self.source / "3rdparty/opus/COPYING"
         license_file.parent.mkdir(parents=True)
@@ -112,6 +184,7 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_opus_release_without_its_license_is_rejected(self):
         (self.source / "core/libs/prx/libSceOpusCeltDec").mkdir()
+        (self.unpatched.parent / "libSceOpusCeltDec.prx").write_bytes(b"unpatched library")
         (self.library.parent / "libSceOpusCeltDec.prx").write_bytes(b"CELT library bytes")
         with self.assertRaisesRegex(RuntimeError, "COPYING"):
             package_release.package("linux", self.build, self.output, "v1")
@@ -240,7 +313,7 @@ class ReleasePackageTests(unittest.TestCase):
             package_release.package("linux", self.build, self.output, "v1.0")
 
     def test_directory_destination_preserves_every_existing_asset(self):
-        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "relinker-v1"]
+        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "prx-linux-unpatched-v1.zip", "prx-linux-unpatched-v1.tar.gz", "relinker-v1"]
         for blocked in names:
             with self.subTest(blocked=blocked), tempfile.TemporaryDirectory() as tmp:
                 output = Path(tmp)
@@ -265,7 +338,7 @@ class ReleasePackageTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows read-only replacement semantics")
     def test_readonly_destinations_preserve_all_existing_assets(self):
-        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "relinker-v1"]
+        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "prx-linux-unpatched-v1.zip", "prx-linux-unpatched-v1.tar.gz", "relinker-v1"]
         for index, blocked in enumerate(names):
             with self.subTest(blocked=blocked):
                 output = self.output / str(index)
@@ -300,7 +373,7 @@ class ReleasePackageTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows directory junction replacement semantics")
     def test_dangling_directory_junction_preserves_all_existing_assets(self):
-        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "relinker-v1"]
+        names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "prx-linux-unpatched-v1.zip", "prx-linux-unpatched-v1.tar.gz", "relinker-v1"]
         for index, blocked in enumerate(names):
             with self.subTest(blocked=blocked):
                 output = self.output / str(index)
@@ -544,11 +617,13 @@ class ReleaseAssetsTests(unittest.TestCase):
             build = root / "build"
             (build / "core/libs/libs").mkdir(parents=True)
             (build / "core/libs/libs/libc.prx").write_bytes(b"new library")
+            (build / "core/libs/libs/unpatched").mkdir()
+            (build / "core/libs/libs/unpatched/libc.prx").write_bytes(b"original library")
             (build / "core/relinker").mkdir(parents=True)
             (build / "core/relinker/relinker").write_bytes(b"new executable")
             output = root / "assets"
             output.mkdir()
-            names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "relinker-v1"]
+            names = ["prx-linux-v1.zip", "prx-linux-v1.tar.gz", "prx-linux-unpatched-v1.zip", "prx-linux-unpatched-v1.tar.gz", "relinker-v1"]
             for name in names:
                 (output / name).write_bytes(b"old " + name.encode())
             with working_directory(source), patch.object(package_release, "ROOT", source), \
