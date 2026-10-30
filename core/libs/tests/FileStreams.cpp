@@ -2,6 +2,8 @@
 #include "prx/libc/include/FileStream.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
+#include <atomic>
+#include <exception>
 #include <barrier>
 #include <cerrno>
 #include <cstdarg>
@@ -122,7 +124,53 @@ static int APS5_VABI ScanShortCharacterList(FileStream* stream, const char* form
     return result;
 }
 
+static void CheckShortCharacterScanLocking() {
+    constexpr std::size_t bytes = 1u << 20;
+    using Scanner = int (APS5_VABI*)(FileStream*, const char*, ...);
+    for (const Scanner scan : {fscanf_s_nid_postfix, ScanShortCharacterList}) {
+        auto* native = std::tmpfile();
+        Require(native != nullptr);
+        const std::vector<char> input(bytes, 'a');
+        Require(std::fwrite(input.data(), 1, input.size(), native) == input.size());
+        std::rewind(native);
+        FileStream stream(native);
+        std::vector<char> output(bytes + 1, 'Z');
+        int result = -1, consumed = -1;
+        std::exception_ptr failure;
+        std::atomic<bool> finished{false};
+        std::barrier start(2);
+        std::thread reader([&] {
+            start.arrive_and_wait();
+            try {
+                result = scan(&stream, "%1048576c%n", output.data(), output.size(), &consumed);
+            } catch (...) {
+                failure = std::current_exception();
+            }
+            finished.store(true);
+        });
+        start.arrive_and_wait();
+        bool releasedDuringField = false;
+        while (!finished.load()) {
+            if (ftrylockfile_nid_postfix(&stream) == 0) {
+                const auto position = ftell_nid_postfix(&stream);
+                releasedDuringField = releasedDuringField || (position > 0 && position < static_cast<long>(bytes));
+                funlockfile_nid_postfix(&stream);
+            }
+            std::this_thread::yield();
+        }
+        reader.join();
+        if (failure) std::rethrow_exception(failure);
+        Require(ftrylockfile_nid_postfix(&stream) == 0, "Short stream character scan retained its file lock after returning");
+        funlockfile_nid_postfix(&stream);
+        Require(std::fclose(native) == 0);
+        Require(!releasedDuringField, "Short stream character scan released its file lock during a field");
+        Require(result == 1 && consumed == static_cast<int>(bytes) && output.back() == 'Z');
+        Require(std::memcmp(output.data(), input.data(), bytes) == 0);
+    }
+}
+
 static void CheckShortCharacterScans() {
+    CheckShortCharacterScanLocking();
     using Scanner = int (APS5_VABI*)(FileStream*, const char*, ...);
     for (const Scanner scan : {fscanf_s_nid_postfix, ScanShortCharacterList}) {
         for (const std::string input : {std::string(), std::string("a"), std::string("ab"), std::string("a\0b", 3), std::string("a b")}) {

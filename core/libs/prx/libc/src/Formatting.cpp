@@ -390,6 +390,11 @@ template <typename NextPointer, typename NextCapacity>
 int ScanGuestStream(FileStream* stream, const char* format, NextPointer nextPointer, NextCapacity nextCapacity) {
     if (stream == nullptr || format == nullptr) return EOF;
     if (!stream->IsOpen()) { errno = 9; return EOF; }
+    flockfile_nid_postfix(stream);
+    struct Unlock {
+        FileStream* stream;
+        ~Unlock() { funlockfile_nid_postfix(stream); }
+    } unlock{stream};
     auto* native = GetNativeStream(stream);
     if (!stream->SwitchToReading()) return EOF;
 #ifndef _WIN32
