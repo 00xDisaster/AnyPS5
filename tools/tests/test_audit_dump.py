@@ -189,6 +189,31 @@ class AuditDumpTests(unittest.TestCase):
                     self.assertEqual(marker.read_bytes(), b"keep")
                     prepare.assert_not_called()
                     convert.assert_not_called()
+
+    def test_work_cleanup_refuses_outward_input_links(self):
+        for generated in ("source", "output"):
+            for kind in ("relinker", "libs"):
+                with self.subTest(generated=generated, kind=kind), tempfile.TemporaryDirectory() as directory:
+                    work = Path(directory)
+                    nested = work / generated / "nested"
+                    nested.mkdir(parents=True)
+                    outside = self.relinker if kind == "relinker" else self.root
+                    link = nested / "input-link"
+                    try:
+                        os.symlink(outside, link, target_is_directory=kind == "libs")
+                    except OSError:
+                        self.skipTest("symbolic links unavailable")
+                    relinker = link if kind == "relinker" else self.relinker
+                    libs = link if kind == "libs" else self.root
+                    with mock.patch.object(audit_dump, "prepare") as prepare, \
+                            mock.patch.object(audit_dump, "convert") as convert, \
+                            self.assertRaises(SystemExit) as error:
+                        self.run_main(self.dump, "--relinker", relinker, "--libs", libs, "--work", work)
+                    self.assertEqual(error.exception.code, 2)
+                    self.assertTrue(link.is_symlink())
+                    prepare.assert_not_called()
+                    convert.assert_not_called()
+
     def test_symbolic_link_loops_are_usage_errors_before_input_is_removed(self):
         loop = self.root / "loop"
         try:

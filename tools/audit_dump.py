@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -143,12 +144,14 @@ def main(argv=None):
                 parser.error(f"{generated}: cannot check work directory against the input dump: {error}")
             if dump_path.is_relative_to(generated_path) or generated_path.is_relative_to(dump_path):
                 parser.error(f"{generated}: work directory overlaps the input dump")
-            for input_path in (relinker, *(Path(library) for library in args.libs)):
+            for input_path in (Path(args.relinker), *(Path(library) for library in args.libs)):
                 try:
                     resolved = comparison_path(input_path)
                 except (OSError, RuntimeError) as error:
                     parser.error(f"{input_path}: cannot check work directory against input: {error}")
-                if resolved.is_relative_to(generated_path):
+                supplied = Path(os.path.abspath(input_path))
+                generated_spelling = Path(os.path.abspath(generated))
+                if supplied.is_relative_to(generated_spelling) or resolved.is_relative_to(generated_path):
                     parser.error(f"{generated}: work directory contains input {input_path}")
         for generated in (source, output):
             try:
