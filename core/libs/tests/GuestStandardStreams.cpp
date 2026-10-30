@@ -90,7 +90,7 @@ static bool CheckFileBytes(const std::string& filename, const std::string& expec
 }
 
 static void CheckGetcPutc() {
-    FileStream stream(std::tmpfile());
+    FileStream stream(TemporaryFile::Open());
     Require(putc_nid_postfix('A', &stream) == 'A');
     Require(putc_nid_postfix(0x141, &stream) == 0x41);
     Require(putc_nid_postfix(-1, &stream) == 0xff);
@@ -336,7 +336,7 @@ static void CheckSupplementaryWideCharacters() {
 }
 
 static void CheckUngetcEndOfFile() {
-    FileStream stream(std::tmpfile());
+    FileStream stream(TemporaryFile::Open());
     Require(fwrite_nid_postfix("ab", 1, 2, &stream) == 2);
     rewind_nid_postfix(&stream);
     Require(ungetc_nid_postfix(EOF, &stream) == EOF);

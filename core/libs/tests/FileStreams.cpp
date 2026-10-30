@@ -131,7 +131,7 @@ static void CheckShortCharacterScanLocking() {
     constexpr std::size_t bytes = 1u << 20;
     using Scanner = int (APS5_VABI*)(FileStream*, const char*, ...);
     for (const Scanner scan : {fscanf_s_nid_postfix, ScanShortCharacterList}) {
-        auto* native = std::tmpfile();
+        auto* native = TemporaryFile::Open();
         Require(native != nullptr);
         const std::vector<char> input(bytes, 'a');
         Require(std::fwrite(input.data(), 1, input.size(), native) == input.size());
@@ -180,7 +180,7 @@ static void CheckShortCharacterScans() {
             for (const unsigned width : {1u, 2u, 8u}) {
                 const auto taken = std::min<std::size_t>(input.size(), width);
                 for (const bool suppress : {false, true}) {
-                    auto* native = std::tmpfile();
+                    auto* native = TemporaryFile::Open();
                     Require(native != nullptr && std::fwrite(input.data(), 1, input.size(), native) == input.size());
                     std::rewind(native);
                     FileStream stream(native);
