@@ -1696,6 +1696,15 @@ class ImportAuditTests(unittest.TestCase):
         self.assertEqual(set(stubs), {stub, guarded})
         self.assertEqual(partial, {guarded})
 
+    def test_relevant_helper_at_the_variant_limit_remains_a_stub(self):
+        blocks = "".join(f"#ifdef HOST_{index}\n    value += {index};\n#endif\n" for index in range(8))
+        source = self.work.source
+        write_source(source, "libHosts",
+                     f"void Fail(int value) {{\n{blocks}    NotImplemented_nid_no_patch(__func__);\n}}\n"
+                     "int APS5_VABI sceStub(int value) { Fail(value); return value; }\n")
+        stub = ("libHosts.prx", nid_names.compute_nid("sceStub"))
+        self.assertEqual(import_audit.source_stub_classes(source), ({stub: "sceStub"}, set()))
+
     def test_relevant_helper_host_branches_keep_the_variant_limit(self):
         blocks = "".join(f"#ifdef HOST_{index}\n    value += {index};\n#endif\n" for index in range(9))
         source = self.work.source
