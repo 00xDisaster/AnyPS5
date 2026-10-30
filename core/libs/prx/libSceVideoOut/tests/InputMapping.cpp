@@ -179,6 +179,8 @@ void padStatusConflicts() {
     useConfig("ShowPadStatus = KEY:F4\nTogglePerformanceOverlay = KEY:F9\n");
     const auto swapped = Pad::LoadInputMapping();
     require(padStatusBindingsOn(swapped, SDL_SCANCODE_F4) == 1 && padStatusBindingsOn(swapped, SDL_SCANCODE_F9) == 0, "moving the pad status key off F9 keeps it off");
+}
+
 void volumeUpAction() {
     useConfig("volumeup = KEY:F2\nVolumeUp = KEY:F3\n");
     const auto keys = keysFor(Pad::InputControl::VolumeUp);
