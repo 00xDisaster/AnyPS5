@@ -167,8 +167,8 @@ jobs:
           done
           python tools/package_release.py --docs docs/user --output dist
           python tools/package_release.py --platform headers --version "$RELEASE_TAG" --output dist
-          test -s "dist/headers-$RELEASE_TAG.zip"
-          test -s "dist/headers-$RELEASE_TAG.tar.gz"
+          test -s "dist/prx-headers-$RELEASE_TAG.zip"
+          test -s "dist/prx-headers-$RELEASE_TAG.tar.gz"
           chmod +x "dist/relinker-$RELEASE_TAG"
       - name: Prepare release notes
         shell: bash

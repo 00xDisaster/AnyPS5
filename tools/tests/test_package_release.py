@@ -52,15 +52,15 @@ class PublicHeaderPackageTests(unittest.TestCase):
         expected = {"include/anyps5/" + path.relative_to(self.libs).as_posix(): path.read_bytes() for path in (self.umbrella, self.api, self.umbrella.with_name("Windows.hpp"), self.libs / "Common.hpp")}
         expected["LICENSE"] = (self.source / "LICENSE").read_bytes()
         package_headers.package(self.source, self.output, "v1")
-        with zipfile.ZipFile(self.output / "headers-v1.zip") as archive:
+        with zipfile.ZipFile(self.output / "prx-headers-v1.zip") as archive:
             self.assertEqual({name: archive.read(name) for name in archive.namelist()}, expected)
             self.assertEqual(len(archive.namelist()), len(expected))
-        with tarfile.open(self.output / "headers-v1.tar.gz") as archive:
+        with tarfile.open(self.output / "prx-headers-v1.tar.gz") as archive:
             self.assertEqual({name: archive.extractfile(name).read() for name in archive.getnames()}, expected)
 
     def test_forbidden_or_missing_dependencies_preserve_existing_archives(self):
         self.output.mkdir()
-        previous = self.output / "headers-v1.zip"
+        previous = self.output / "prx-headers-v1.zip"
         previous.write_bytes(b"previous")
         for directive in ('#include "Missing.hpp"', '#include <vendor.h>', '#include "../../../3rdparty/vendor.hpp"', '#include MACRO_HEADER'):
             with self.subTest(directive=directive):
@@ -101,7 +101,7 @@ class PublicHeaderPackageTests(unittest.TestCase):
     def test_header_command_needs_no_build_directory(self):
         with patch.object(package_release, "ROOT", self.source):
             self.assertEqual(package_release.main(["--platform", "headers", "--version", "v1", "--output", str(self.output)]), 0)
-        self.assertTrue((self.output / "headers-v1.zip").is_file())
+        self.assertTrue((self.output / "prx-headers-v1.zip").is_file())
 
 
 class ReleasePackageTests(unittest.TestCase):

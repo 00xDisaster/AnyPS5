@@ -70,7 +70,7 @@ def package(root, output, version):
         raise RuntimeError("Missing project license")
     entries = [(path, "include/anyps5/" + path.relative_to(libs).as_posix()) for path in headers]
     entries.append((license_file, "LICENSE"))
-    names = [f"headers-{version}.zip", f"headers-{version}.tar.gz"]
+    names = [f"prx-headers-{version}.zip", f"prx-headers-{version}.tar.gz"]
     for name in names:
         path = output / name
         if path.exists() and not path.is_file():
