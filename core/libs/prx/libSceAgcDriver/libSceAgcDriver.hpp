@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "prx/libSceAgcDriver/Eq/include/Event.hpp"
 #include "prx/libSceAgcDriver/Eq/include/Query.hpp"
 #include "prx/libSceAgcDriver/include/AgcDriver.hpp"
