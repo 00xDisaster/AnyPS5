@@ -120,7 +120,7 @@ static int APS5_VABI ScanList(FileStream* stream, const char* format, ...) {
     return result;
 }
 
-static void CheckScanInputFailureErrno() {
+static void CheckScanInputFailureErrno(const std::string& path) {
     const int savedError = errno;
     for (const bool variadicList : {false, true}) {
         for (const int seed : {0, 22, 97}) {
@@ -140,6 +140,20 @@ static void CheckScanInputFailureErrno() {
                 }
             }
         }
+#if defined(__GLIBC__)
+        auto* errorNative = std::tmpfile();
+        Require(errorNative != nullptr);
+        const int writeOnly = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        Require(writeOnly >= 0);
+        Require(::dup2(writeOnly, ::fileno(errorNative)) >= 0 && ::close(writeOnly) == 0);
+        FileStream readError(errorNative);
+        int unchanged = 123;
+        errno = 97;
+        const int failed = variadicList ? ScanList(&readError, "%d", &unchanged) : fscanf_nid_postfix(&readError, "%d", &unchanged);
+        Require(failed == EOF && errno != 97, "Stream scan lost its read error");
+        Require(unchanged == 123 && ferror_nid_postfix(&readError) != 0, "Stream scan did not keep its read error indicator");
+        Require(std::fclose(errorNative) == 0 && std::remove(path.c_str()) == 0);
+#endif
         auto* native = std::tmpfile();
         Require(native != nullptr && std::fputs("1e99999", native) >= 0);
         std::rewind(native);
@@ -175,7 +189,7 @@ static void CheckReadAfterWrite(const std::string& path, const char* mode, const
 }
 
 static void CheckUpdateStreamReadsAfterWrites(const std::string& base) {
-    CheckScanInputFailureErrno();
+    CheckScanInputFailureErrno(base + ".scan-error");
     const std::string path = base + ".update";
     constexpr char overwritten[] = "AB23456789";
     CheckReadAfterWrite(path, "r+b", overwritten, [](FileStream* stream) {
