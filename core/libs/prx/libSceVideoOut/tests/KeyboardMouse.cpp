@@ -501,6 +501,8 @@ void testShowPadStatus() {
     Pad::KeyboardMouse conflicting(shared);
     const auto both = conflicting.HandleEvent(KeyEvent(SDL_SCANCODE_F10, true), now);
     check(both.showPadStatus && both.togglePerformanceOverlay, "a key shared with the overlay does not do both");
+}
+
 void testVolumeUpRequest() {
     auto configuration = defaults();
     configuration.bindings.push_back(Pad::InputBinding{SDL_SCANCODE_F5, Pad::MouseButton::None, Pad::InputControl::VolumeUp});
