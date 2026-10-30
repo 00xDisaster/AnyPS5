@@ -37,14 +37,6 @@ int APS5_VABI sceSystemLogger2Terminate() {
 
 extern "C" {
 
-int APS5_VABI sceSystemLogger2SetRnpsEventAsync() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
-int APS5_VABI sceSystemLogger2TerminateWithResourceRelease() {
-    NotImplemented_nid_no_patch(__func__);
-}
-
 int APS5_VABI libSceSystemLogger2Unknown_PcjxaaFQATU_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }
