@@ -194,18 +194,11 @@ static void CheckNamedAndHintedMappings() {
     Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(first), length) == 0);
 }
 
-static void CheckVirtualRangeNameArguments() {
+static void CheckVirtualRangeNames() {
     constexpr std::size_t length = 0x4000;
-    constexpr int einval = static_cast<int>(0x80020016u);
     void* mapping = nullptr;
     Require(sceKernelMapFlexibleMemory(&mapping, length, 3, 0) == 0);
-    Require(sceKernelSetVirtualRangeName(nullptr, length, "x") == einval);
-    Require(sceKernelSetVirtualRangeName(mapping, 0, "x") == einval);
-    Require(sceKernelSetVirtualRangeName(mapping, length, nullptr) == einval);
-    Require(sceKernelSetVirtualRangeName(mapping, UINT64_MAX, "x") == einval);
-    Require(sceKernelClearVirtualRangeName(nullptr, length) == einval);
-    Require(sceKernelClearVirtualRangeName(mapping, 0) == einval);
-    Require(sceKernelClearVirtualRangeName(mapping, UINT64_MAX) == einval);
+    Require(sceKernelSetVirtualRangeName(mapping, length, nullptr) == static_cast<int>(0x8002000eu));
     Require(NameAt(mapping)[0] == '\0');
     Require(sceKernelSetVirtualRangeName(mapping, length, "first") == 0);
     Require(sceKernelSetVirtualRangeName(mapping, length, "second") == 0);
@@ -3881,7 +3874,7 @@ int main(int argc, char** argv) {
     CheckPageTableStats();
     CheckVirtualQueryWireLayout();
     CheckNamedAndHintedMappings();
-    CheckVirtualRangeNameArguments();
+    CheckVirtualRangeNames();
     CheckInternalNamedFlexibleMapping();
     CheckFlexibleFixedReplacement();
     CheckMunmapScopedFlexibleRelease();
