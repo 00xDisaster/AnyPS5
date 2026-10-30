@@ -407,6 +407,9 @@ public:
 
 #ifndef _WIN32
     void ReleaseHostRegion(const void* pointer, std::size_t bytes) {
+#ifdef __EMSCRIPTEN__
+        throw std::runtime_error("guest arena: host region release is unsupported in WebAssembly");
+#else
         Release(pointer, bytes);
         std::lock_guard lock(_lock);
         const auto start = reinterpret_cast<std::uintptr_t>(pointer);
@@ -422,6 +425,7 @@ public:
         }
         _hostRegions = std::move(kept);
         static_cast<void>(ReserveNoReplace(start, bytes));
+#endif
     }
 #endif
 };
