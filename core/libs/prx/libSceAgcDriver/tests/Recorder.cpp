@@ -253,6 +253,113 @@ bool hintMappingHistoryTests() {
 #endif
 }
 
+bool hintPartialBlockStoreTests() {
+#ifdef _WIN32
+    constexpr std::size_t bytes = 131072;
+    constexpr std::size_t page = 4096;
+    auto* memory = static_cast<std::uint8_t*>(AllocateWatched(bytes, 65536));
+    if (memory == nullptr) return false;
+    GuestAllocations::Mutation().Add(memory, bytes, true, true, false);
+    struct Cleanup {
+        std::uint8_t* memory;
+        ~Cleanup() {
+            GuestAllocations::Mutation().Remove(memory);
+            ReleaseWatched(memory, bytes);
+        }
+    } cleanup{memory};
+    const auto address = reinterpret_cast<std::uint64_t>(memory);
+    std::memset(memory, 0x11, bytes);
+    AgcDriver::GuestMemory::BumpCollectEpoch();
+    const auto before = AgcDriver::GuestMemory::CollectWrites(address + 8 * page, page);
+    Require(before != 0, "the watched page has no collected write history");
+    AgcDriver::GuestMemory::Unwatch(address, 6 * page);
+    Require(!AgcDriver::GuestMemory::Watched(address, 6 * page) && AgcDriver::GuestMemory::Watched(address + 6 * page, 10 * page), "the partial-block import did not exclude only its own pages");
+    memory[8 * page] = 0x22;
+    AgcDriver::GuestMemory::BumpCollectEpoch();
+    Require(AgcDriver::GuestMemory::UntrackedHint(address + 4 * page, 6 * page) != 0, "a range across the import's end has no untracked hint");
+    Require(AgcDriver::GuestMemory::CollectWrites(address + 8 * page, page) != 0, "the watched page past the import stopped collecting CPU writes");
+    Require(!AgcDriver::GuestMemory::UnchangedSince(address + 8 * page, page, before), "a hint walk across a partial-block import consumed a CPU store to a watched page");
+    Require(memory[8 * page] == 0x22, "the hint walk changed guest bytes");
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool sharedBlockRewatchTests() {
+#ifdef _WIN32
+    constexpr std::size_t bytes = 131072;
+    constexpr std::size_t page = 4096;
+    auto* memory = static_cast<std::uint8_t*>(AllocateWatched(bytes, 65536));
+    if (memory == nullptr) return false;
+    GuestAllocations::Mutation().Add(memory, bytes, true, true, false);
+    struct Cleanup {
+        std::uint8_t* memory;
+        ~Cleanup() {
+            GuestAllocations::Mutation().Remove(memory);
+            ReleaseWatched(memory, bytes);
+        }
+    } cleanup{memory};
+    const auto address = reinterpret_cast<std::uint64_t>(memory);
+    std::memset(memory, 0x11, bytes);
+    AgcDriver::GuestMemory::BumpCollectEpoch();
+    AgcDriver::GuestMemory::Unwatch(address, 6 * page);
+    AgcDriver::GuestMemory::Unwatch(address + 8 * page, 4 * page);
+    Require(!AgcDriver::GuestMemory::Watched(address, 6 * page) && !AgcDriver::GuestMemory::Watched(address + 8 * page, 4 * page), "two imports in one block were not both excluded");
+    Require(AgcDriver::GuestMemory::Watched(address + 6 * page, 2 * page) && AgcDriver::GuestMemory::Watched(address + 12 * page, 4 * page), "two imports in one block excluded pages outside both");
+    const auto before = AgcDriver::GuestMemory::CollectWrites(address + 6 * page, page);
+    Require(before != 0, "the page between the imports has no collected write history");
+    const std::array<std::pair<std::uint64_t, std::uint64_t>, 1> first{{{address, address + 6 * page}}};
+    AgcDriver::GuestMemory::Rewatch(first);
+    Require(AgcDriver::GuestMemory::Watched(address, 8 * page), "settling the first import did not return its pages to the write watch");
+    for (std::size_t index = 8; index < 12; ++index) Require(!AgcDriver::GuestMemory::Watched(address + index * page, page), "settling the first import returned a page of the second import in its block to the write watch");
+    Require(!AgcDriver::GuestMemory::Watched(address, 16 * page), "settling one import proved its whole shared block watched");
+    memory[6 * page] = 0x22;
+    AgcDriver::GuestMemory::BumpCollectEpoch();
+    Require(AgcDriver::GuestMemory::CollectWrites(address + 6 * page, page) != 0 && !AgcDriver::GuestMemory::UnchangedSince(address + 6 * page, page, before), "a CPU store between the imports was lost after the first import settled");
+    const std::array<std::pair<std::uint64_t, std::uint64_t>, 1> second{{{address + 8 * page, address + 12 * page}}};
+    AgcDriver::GuestMemory::Rewatch(second);
+    Require(AgcDriver::GuestMemory::Watched(address, 16 * page), "settling both imports did not return their shared block to the write watch");
+    Require(memory[6 * page] == 0x22, "rewatching changed guest bytes");
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool interiorWatchedDriverWriteTests(bool complete) {
+#ifdef _WIN32
+    constexpr std::size_t bytes = 131072;
+    constexpr std::size_t page = 4096;
+    auto* memory = static_cast<std::uint8_t*>(AllocateWatched(bytes, 65536));
+    if (memory == nullptr) return false;
+    GuestAllocations::Mutation().Add(memory, bytes, true, true, false);
+    struct Cleanup {
+        std::uint8_t* memory;
+        ~Cleanup() {
+            GuestAllocations::Mutation().Remove(memory);
+            ReleaseWatched(memory, bytes);
+        }
+    } cleanup{memory};
+    const auto address = reinterpret_cast<std::uint64_t>(memory);
+    std::memset(memory, 0x11, bytes);
+    AgcDriver::GuestMemory::BumpCollectEpoch();
+    AgcDriver::GuestMemory::Unwatch(address, 6 * page);
+    AgcDriver::GuestMemory::Unwatch(address + 12 * page, 4 * page);
+    Require(!AgcDriver::GuestMemory::Watched(address, 6 * page) && !AgcDriver::GuestMemory::Watched(address + 12 * page, 4 * page), "both ends of the block were not excluded");
+    Require(AgcDriver::GuestMemory::Watched(address + 6 * page, 6 * page), "the pages between the excluded ends are not watched");
+    const auto before = AgcDriver::GuestMemory::CollectWrites(address + 8 * page, page);
+    Require(before != 0, "the watched interior page has no collected write history");
+    if (complete) AgcDriver::GuestMemory::MarkWritten(address, 16 * page);
+    else AgcDriver::GuestMemory::MarkPossiblyWritten(address, 16 * page);
+    Require(!AgcDriver::GuestMemory::UnchangedSince(address + 8 * page, page, before), complete ? "a complete driver write across a block with both ends excluded was not recorded on its watched interior page" : "a possible driver write across a block with both ends excluded was not recorded on its watched interior page");
+    return true;
+#else
+    (void)complete;
+    return false;
+#endif
+}
+
 void gpuTimingKeyTests() {
     constexpr std::uint64_t variant = 0x2;
     const auto key = Recorder::DrawTimingKey(variant);
@@ -303,6 +410,8 @@ public:
     explicit Device(bool settleOnOtherFamily = false) {
 #ifdef _WIN32
         library = SDL_LoadObject("vulkan-1.dll");
+#elif defined(__APPLE__)
+        library = SDL_LoadObject("libvulkan.1.dylib");
 #else
         library = SDL_LoadObject("libvulkan.so.1");
 #endif
@@ -314,6 +423,12 @@ public:
             application.apiVersion = VK_API_VERSION_1_1;
             VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
             info.pApplicationInfo = &application;
+#ifdef __APPLE__
+            const char* portability = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+            info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+            info.enabledExtensionCount = 1;
+            info.ppEnabledExtensionNames = &portability;
+#endif
             Check(function<PFN_vkCreateInstance>("vkCreateInstance")(&info, nullptr, &instance), "vkCreateInstance");
             std::uint32_t count = 0;
             const auto enumerate = function<PFN_vkEnumeratePhysicalDevices>("vkEnumeratePhysicalDevices");
@@ -583,6 +698,15 @@ private:
 };
 
 using Kind = Recorder::ReadKind;
+
+template <typename TDescribe>
+void WaitUntilSignaled(TDescribe describe, const char* what) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    for (auto info = describe(); !(info.has_value() && info->signaled); info = describe()) {
+        Require(info.has_value() && std::chrono::steady_clock::now() < deadline, what);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
 
 void copiedDirectOrderingTests(const Device& device, Recorder& recorder) {
     auto context = device.GetContext();
@@ -866,6 +990,7 @@ void readTrackingTests(const Device& device, Recorder& recorder) {
     // An empty batch completes at once: once its fence signaled, its read is no reader any more,
     // although the batch stays in flight until it is reaped.
     device.WaitQueue();
+    WaitUntilSignaled([&] { return recorder.DescribePendingRead(0x10000, 4); }, "the read's batch did not signal after the queue went idle");
     Require(!recorder.PendingReadOverlaps(0x10000, 4), "a signaled batch's read still refuses");
     Require(!recorder.Idle(), "an overlap query reaped the batch");
     const auto signaled = recorder.DescribePendingRead(0x10000, 4);
@@ -1226,6 +1351,7 @@ void writeSettledTests(const Device& device, Recorder& recorder) {
     Require(recorder.PendingWriteOverlaps(0x50000, 0x100) && !recorder.PendingWriteSettled(0x50000, 0x100) && recorder.PendingWriteSettled(0x50100, 0x100), "an open batch's write counts as settled");
     recorder.Submit();
     device.WaitQueue();
+    WaitUntilSignaled([&] { return recorder.DescribePendingWrite(0x50000, 0x100); }, "the write's batch did not signal after the queue went idle");
     Require(recorder.PendingWriteOverlaps(0x50000, 0x100) && recorder.PendingWriteSettled(0x50000, 0x100), "a signaled batch's write is not settled");
     recorder.NotePendingWrite(0x50080, 0x10);
     Require(!recorder.PendingWriteSettled(0x50000, 0x100) && recorder.PendingWriteSettled(0x50000, 0x80), "a later open write over the range still counts as settled");
@@ -2753,7 +2879,8 @@ bool settleInitialDccTests(const Device& device) {
                 gpu.lock();
                 HostImportFor(context, address, importBytes);
             }
-            Require(!Watched(address, importBytes), "(m) a deferred settle returned an import that is not a whole number of 64 KiB blocks to the write watch");
+            if (kind == Case::PartialBlock) Require(Watched(address, importBytes), "(m) a deferred settle did not return an import of whole and partial 64 KiB blocks to the write watch" + describe(ExistingHostImportFor(context, address, importBytes), address, importBytes));
+            else Require(!Watched(address, importBytes), "(m) a deferred settle returned an import that shares its last 64 KiB block with a compared import to the write watch");
         }
         const auto before = HostImportSettles();
         Require(!fmaskAlone || before.submitted == quiet.submitted, "(m) a settle read was submitted between the FMASK's import and the target's first use");
@@ -2775,7 +2902,8 @@ bool settleInitialDccTests(const Device& device) {
         }
         Require(refusal.empty(), std::string("(m) an initial multisampled DCC import over ") + name + " was refused: " + refusal);
         Require(!fmaskAlone || (after.submitted - before.submitted == 1 && after.rewatched - before.rewatched == 1), "(m) the first use over a pending FMASK settle alone submitted " + std::to_string(after.submitted - before.submitted) + " settle reads, not the FMASK's alone");
-        Require(after.submitted > before.submitted && after.rewatched > before.rewatched && Watched(address, importBytes) && settled != nullptr && !settled->unwatched, std::string("(m) the initial DCC import over ") + name + " did not settle the import and return it to the write watch");
+        const bool settledBefore = kind == Case::PartialBlock;
+        Require((settledBefore ? after.submitted == before.submitted : after.submitted > before.submitted && after.rewatched > before.rewatched) && Watched(address, importBytes) && settled != nullptr && !settled->unwatched, std::string("(m) the initial DCC import over ") + name + " did not settle the import and return it to the write watch");
         if (fmask != nullptr) {
             const auto* settledFmask = ExistingHostImportFor(context, target.fmaskAddress, fmaskBytes);
             Require(Watched(target.fmaskAddress, fmaskBytes) && settledFmask != nullptr && !settledFmask->unwatched, "(m) the FMASK's import did not settle back into the write watch" + describe(settledFmask, target.fmaskAddress, fmaskBytes));
@@ -3676,6 +3804,7 @@ void resourceReadTests(const Device& device, Recorder& recorder) {
         Require(info.has_value() && info->kind == Kind::DispatchElement && info->open, "the build's read has the wrong kind");
         recorder.Submit();
         device.WaitQueue();
+        WaitUntilSignaled([&] { return recorder.DescribePendingRead(element, 16); }, "the build's read batch did not signal after the queue went idle");
         Require(!recorder.PendingReadOverlaps(element, 16), "the build's read refuses after its batch ran");
         recorder.Sync();
     }
@@ -11114,6 +11243,40 @@ int pipelineCacheFileTests(const Device& device) {
         Require(holds(reloaded.Handle(), 1), "an invalid cache file was not replaced by the saving object's pipelines");
     }
     {
+        PipelineCache restoring(context, properties);
+        Require(holds(restoring.Handle(), 1), "the valid cache file lost a pipeline");
+        {
+            std::ofstream corrupt(path, std::ios::binary | std::ios::trunc);
+            corrupt << "corrupted pipeline cache header with 24 bytes";
+        }
+        PipelineCache invalidHeader(context, properties, false);
+        Require(!PipelineCacheTestAccess::HasHeader(invalidHeader), "an invalid cache header was accepted as present");
+        restoring.SaveNow();
+    }
+    {
+        PipelineCache reloaded(context, properties);
+        Require(holds(reloaded.Handle(), 1), "an invalid cache header was not replaced by the unchanged cache object");
+    }
+    {
+#ifdef _WIN32
+        _putenv_s("ANYPS5_NO_SHADER_CACHE", "1");
+#else
+        setenv("ANYPS5_NO_SHADER_CACHE", "1", 1);
+#endif
+        PipelineCache emptyPath(context, properties);
+        build(emptyPath.Handle(), 0);
+        StderrCapture capture;
+        emptyPath.SaveNow();
+        const auto output = capture.Finish();
+        Require(output.find("cannot write") == std::string::npos, "an empty cache path attempted to write to disk");
+        Require(holds(emptyPath.Handle(), 0), "an empty cache path failed to retain in-memory pipelines");
+#ifdef _WIN32
+        _putenv_s("ANYPS5_NO_SHADER_CACHE", "0");
+#else
+        setenv("ANYPS5_NO_SHADER_CACHE", "0", 1);
+#endif
+    }
+    {
         PipelineCache busy(context, properties);
         build(busy.Handle(), 0);
         std::promise<void> held;
@@ -11989,6 +12152,23 @@ int main(int argc, char** argv) {
         if (argc == 2 && std::string_view(argv[1]) == "--hint-mapping-history-only") {
             if (!hintMappingHistoryTests()) return 77;
             std::cout << "hint mapping history tests passed\n";
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--hint-partial-block-store-only") {
+            if (!hintPartialBlockStoreTests()) return 77;
+            std::cout << "hint partial-block store tests passed\n";
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--shared-block-rewatch-only") {
+            if (!sharedBlockRewatchTests()) return 77;
+            std::cout << "shared-block rewatch tests passed\n";
+            return 0;
+        }
+        if (argc == 3 && std::string_view(argv[1]) == "--interior-watched-driver-write-only") {
+            const std::string_view kind = argv[2];
+            if (kind != "complete" && kind != "possible") return 2;
+            if (!interiorWatchedDriverWriteTests(kind == "complete")) return 77;
+            std::cout << "interior watched driver write tests passed\n";
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--partial-watch-restoration-only") {
