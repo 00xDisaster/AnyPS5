@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <bit>
 #include <utility>
 #include <stdexcept>
 
@@ -75,9 +76,32 @@ static int APS5_VABI UpdatePeer(Ngs2UserFxProcessContext* context) {
                 break;
             }
             case Update::Over: {
-                CommonControl(state, SCE_NGS2_VOICE_PARAM_PORT_VOLUME, 33.0f);
-                Ngs2VoicePortInfo info{};
-                Require(sceNgs2VoiceGetPortInfo(state.voice, 0, &info, sizeof(info)) == SCE_NGS2_OK && info.volume == 32.0f);
+                const auto volume = [&] {
+                    Ngs2VoicePortInfo info{};
+                    Require(sceNgs2VoiceGetPortInfo(state.voice, 0, &info, sizeof(info)) == SCE_NGS2_OK);
+                    return info.volume;
+                };
+                const auto send = [&](float level, std::uint8_t type) {
+                    if (!state.commands) return CommonControl(state, SCE_NGS2_VOICE_PARAM_PORT_VOLUME, level);
+                    Ngs2VoiceCommand command{};
+                    command.id = 6;
+                    command.type = type;
+                    command.count = 1;
+                    command.value.f = level;
+                    Require(sceNgs2VoiceRunCommands(state.voice, &command, 1) == SCE_NGS2_OK);
+                };
+                if (state.commands) {
+                    send(2.0f, 3);
+                    Require(volume() == 2.0f);
+                }
+                send(-1.0f, 1);
+                Require(std::bit_cast<std::uint32_t>(volume()) == 0);
+                send(std::bit_cast<float>(0x7fc00000u), 1);
+                Require(std::bit_cast<std::uint32_t>(volume()) == 0x7fc00000u);
+                send(-0.0f, 1);
+                Require(std::bit_cast<std::uint32_t>(volume()) == 0x80000000u);
+                send(33.0f, 1);
+                Require(volume() == 32.0f);
                 break;
             }
             case Update::Shift:
