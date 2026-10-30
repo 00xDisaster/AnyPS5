@@ -46,6 +46,29 @@ class Tests(unittest.TestCase):
         path.write_text("[]",encoding="utf-8")
         self.assertEqual(json.loads(self.run_tool(path).stdout),{"entries":0,"units":[]})
 
+    def test_optional_outputs_distinguish_identical_compile_actions(self):
+        path = self.root / "compile_commands.json"
+        arguments = ["missing-compiler", "-c", "a.c"]
+        common = {"directory": "dir", "file": "a.c"}
+        items = [{**common, "arguments": arguments, "command": "ignored command", "output": "a.o"},
+                 {**common, "arguments": arguments, "output": "b.o"},
+                 {**common, "command": "missing-compiler a.c", "output": "命令.o"},
+                 {**common, "arguments": arguments},
+                 {**common, "arguments": arguments, "output": ""}]
+        path.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+        before = path.read_bytes(), path.stat().st_mtime_ns
+        result = self.run_tool(path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"entries": 5, "units": [
+            {"directory": "dir", "file": "a.c", "variants": 5, "records": [
+                {"arguments": arguments, "output": "a.o"},
+                {"arguments": arguments, "output": "b.o"},
+                {"command": "missing-compiler a.c", "output": "命令.o"},
+                {"arguments": arguments},
+                {"arguments": arguments, "output": ""}]}]})
+        self.assertEqual((path.read_bytes(), path.stat().st_mtime_ns), before)
+        self.assertEqual(list(self.root.iterdir()), [path])
+
 
 if __name__ == "__main__":
     unittest.main()

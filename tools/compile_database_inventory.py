@@ -17,8 +17,10 @@ def main(argv=None):
         entries = compilation_database(args.database.read_text(encoding="utf-8-sig"), args.database)
         units = {}
         for item in entries:
-            units.setdefault((item["directory"], item["file"]), []).append(
-                {"arguments": item["arguments"]} if "arguments" in item else {"command": item["command"]})
+            record = {"arguments": item["arguments"]} if "arguments" in item else {"command": item["command"]}
+            if "output" in item:
+                record["output"] = item["output"]
+            units.setdefault((item["directory"], item["file"]), []).append(record)
     except (OSError, ValueError, RecursionError) as error:
         parser.error(str(error))
     print(json.dumps({"entries": len(entries), "units": [
