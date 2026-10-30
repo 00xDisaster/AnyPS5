@@ -947,7 +947,7 @@ static void* StartNativeThread(void* opaque) {
         }
     } guard{self};
     std::jmp_buf exitJump;
-    if (setjmp(exitJump) == 0) {
+    if (_setjmp(exitJump) == 0) {
         threadExitJump = &exitJump;
         RunThread(std::unique_ptr<ThreadArgs>(guest));
     }
@@ -1162,7 +1162,7 @@ void APS5_VABI scePthreadExit(void* retval) {
     _endthreadex(0);
 #else
     if (threadExitJump)
-        std::longjmp(*threadExitJump, 1);
+        _longjmp(*threadExitJump, 1);
     pthread_exit(retval);
 #endif
     throw std::runtime_error("Native thread exit returned");
