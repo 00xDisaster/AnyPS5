@@ -126,11 +126,19 @@ static int CheckNoPlayGoFile(const char* root) {
     Require(scePlayGoSetLanguageMask(handle, ~0ull) == 0);
     Require(scePlayGoGetLanguageMask(handle, &mask) == 0 && mask == ~0ull);
 
+    std::uint32_t requiredDisc = 0;
     for (const auto getOptionalChunk : {scePlayGoGetSupportedOptionalChunk, scePlayGoGetOptionalChunk}) {
         PlayGoOptionalChunk option{};
         Require(getOptionalChunk(handle + 1, 0, &option) == badHandle);
         Require(getOptionalChunk(handle, 0, nullptr) == badPointer);
         Require(getOptionalChunk(handle, 0, &option) == 0 && option.bitmask == ~0ull);
+        Require(getOptionalChunk(handle, 1, &option) == 0 && option.bitmask == 0x1F);
+        Require(getOptionalChunk(handle, 2, &option) == 0 && option.bitmask == ~0ull);
+        for (const std::uint32_t type : {0u, 1u, 2u}) {
+            Require(getOptionalChunk(handle, type, &option) == 0);
+            Require(scePlayGoRequestOptionalChunk(handle, type, &option) == 0);
+            Require(scePlayGoGetRequiredDisc(handle, type, &option, &requiredDisc) == 0);
+        }
         Require(getOptionalChunk(handle, 3, &option) == static_cast<int>(0x80B20024));
         Require(getOptionalChunk(handle, 0xFFFFFFFF, &option) == static_cast<int>(0x80B20024));
         Require(getOptionalChunk(handle, 3, nullptr) == badPointer);

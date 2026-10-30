@@ -139,6 +139,10 @@ static int ValidateChunks(const uint16_t* chunk_ids, uint32_t number_of_entries)
     return 0;
 }
 
+static uint64_t SupportedOptionalChunkMask(uint32_t type) {
+    return type == PLAYGO_OPTIONAL_CHUNK_TYPE_SCENARIO ? PLAYGO_SCENARIO_MASK_ALL : PLAYGO_OPTIONAL_CHUNK_MASK_ALL;
+}
+
 static int ValidateOptionalChunkRequest(uint32_t type, const PlayGoOptionalChunk* option) {
     if (!option) return SCE_PLAYGO_ERROR_BAD_POINTER;
     if (type > PLAYGO_OPTIONAL_CHUNK_TYPE_LAST) return SCE_PLAYGO_ERROR_BAD_OPTIONAL_TYPE;
@@ -210,7 +214,7 @@ int APS5_VABI scePlayGoGetOptionalChunk(int handle, std::uint32_t type, PlayGoOp
     if (handle != PLAYGO_HANDLE) return SCE_PLAYGO_ERROR_BAD_HANDLE;
     if (!option) return SCE_PLAYGO_ERROR_BAD_POINTER;
     if (type > PLAYGO_OPTIONAL_CHUNK_TYPE_LAST) return SCE_PLAYGO_ERROR_BAD_OPTIONAL_TYPE;
-    option->bitmask = PLAYGO_OPTIONAL_CHUNK_MASK_ALL;
+    option->bitmask = SupportedOptionalChunkMask(type);
     return 0;
 }
 
@@ -235,7 +239,7 @@ int APS5_VABI scePlayGoGetSupportedOptionalChunk(int handle, std::uint32_t type,
     if (handle != PLAYGO_HANDLE) return SCE_PLAYGO_ERROR_BAD_HANDLE;
     if (!option) return SCE_PLAYGO_ERROR_BAD_POINTER;
     if (type > PLAYGO_OPTIONAL_CHUNK_TYPE_LAST) return SCE_PLAYGO_ERROR_BAD_OPTIONAL_TYPE;
-    option->bitmask = PLAYGO_OPTIONAL_CHUNK_MASK_ALL;
+    option->bitmask = SupportedOptionalChunkMask(type);
     return 0;
 }
 
