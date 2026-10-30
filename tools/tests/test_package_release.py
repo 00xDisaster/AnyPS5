@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import package_release
+import package_headers
 import prepare_release_notes
 
 
@@ -27,6 +28,80 @@ def working_directory(path):
         yield
     finally:
         os.chdir(previous)
+
+
+class PublicHeaderPackageTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.source = self.root / "source"
+        self.libs = self.source / "core/libs"
+        self.output = self.root / "output"
+        self.umbrella = self.libs / "prx/libExample/libExample.hpp"
+        self.umbrella.parent.mkdir(parents=True)
+        (self.source / "LICENSE").write_text("project license", encoding="utf-8")
+        self.umbrella.write_text('#include "Api.hpp"\n#include <Common.hpp>\n', encoding="utf-8")
+        self.api = self.umbrella.with_name("Api.hpp")
+        self.api.write_text('#include "libExample.hpp"\n#include <vector>\n#if defined(_WIN32)\n#include "Windows.hpp"\n#endif\n', encoding="utf-8")
+        self.umbrella.with_name("Windows.hpp").write_text('#include <io.h>\n', encoding="utf-8")
+        (self.libs / "Common.hpp").write_text('struct Common {};\n', encoding="utf-8")
+        self.umbrella.with_name("Private.hpp").write_text('#include <vendor.h>\n', encoding="utf-8")
+
+    def test_recursive_headers_keep_paths_and_bytes_without_private_files(self):
+        expected = {"include/anyps5/" + path.relative_to(self.libs).as_posix(): path.read_bytes() for path in (self.umbrella, self.api, self.umbrella.with_name("Windows.hpp"), self.libs / "Common.hpp")}
+        expected["LICENSE"] = (self.source / "LICENSE").read_bytes()
+        package_headers.package(self.source, self.output, "v1")
+        with zipfile.ZipFile(self.output / "headers-v1.zip") as archive:
+            self.assertEqual({name: archive.read(name) for name in archive.namelist()}, expected)
+            self.assertEqual(len(archive.namelist()), len(expected))
+        with tarfile.open(self.output / "headers-v1.tar.gz") as archive:
+            self.assertEqual({name: archive.extractfile(name).read() for name in archive.getnames()}, expected)
+
+    def test_forbidden_or_missing_dependencies_preserve_existing_archives(self):
+        self.output.mkdir()
+        previous = self.output / "headers-v1.zip"
+        previous.write_bytes(b"previous")
+        for directive in ('#include "Missing.hpp"', '#include <vendor.h>', '#include "../../../3rdparty/vendor.hpp"', '#include MACRO_HEADER'):
+            with self.subTest(directive=directive):
+                self.api.write_text(directive + "\n", encoding="utf-8")
+                with self.assertRaises(RuntimeError):
+                    package_headers.package(self.source, self.output, "v1")
+                self.assertEqual(list(self.output.iterdir()), [previous])
+                self.assertEqual(previous.read_bytes(), b"previous")
+
+    def test_ambiguous_quoted_include_is_rejected(self):
+        (self.libs / "Api.hpp").write_text("", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous"):
+            package_headers.package(self.source, self.output, "v1")
+        self.assertFalse(self.output.exists())
+
+    def test_missing_umbrella_is_rejected(self):
+        self.umbrella.unlink()
+        with self.assertRaisesRegex(RuntimeError, "Missing public header"):
+            package_headers.package(self.source, self.output, "v1")
+        self.assertFalse(self.output.exists())
+
+    def test_comments_and_raw_strings_do_not_add_dependencies(self):
+        self.api.write_text('/*\n#include "Missing.hpp"\n*/\nconst char* text = R"test(\n#include "AlsoMissing.hpp"\n)test";\n', encoding="utf-8")
+        self.assertEqual(len(package_headers.public_headers(self.source)), 3)
+
+    def test_external_symlink_is_rejected(self):
+        external = self.root / "external.hpp"
+        external.write_text("", encoding="utf-8")
+        link = self.umbrella.with_name("Linked.hpp")
+        try:
+            link.symlink_to(external)
+        except OSError as error:
+            self.skipTest(str(error))
+        self.api.write_text('#include "Linked.hpp"\n', encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "outside core/libs"):
+            package_headers.package(self.source, self.output, "v1")
+
+    def test_header_command_needs_no_build_directory(self):
+        with patch.object(package_release, "ROOT", self.source):
+            self.assertEqual(package_release.main(["--platform", "headers", "--version", "v1", "--output", str(self.output)]), 0)
+        self.assertTrue((self.output / "headers-v1.zip").is_file())
 
 
 class ReleasePackageTests(unittest.TestCase):

@@ -10,6 +10,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import package_headers
+
 ROOT = Path(__file__).resolve().parent.parent
 WEB_FILES = ("index.html", "app.css", "app.mjs", "archive.mjs", "batch.mjs", "failure-report.mjs", "output-directory.mjs", "worker.mjs",
              "native/relinker_wasm.mjs", "native/relinker_wasm.wasm")
@@ -168,7 +170,7 @@ def main(argv=None):
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--platform", choices=("linux", "windows", "web"))
+    parser.add_argument("--platform", choices=("linux", "windows", "web", "headers"))
     parser.add_argument("--build", type=Path)
     parser.add_argument("--version")
     parser.add_argument("--revision")
@@ -180,6 +182,10 @@ def main(argv=None):
             if args.platform is not None or args.build is not None or args.version is not None or args.revision is not None:
                 parser.error("--docs cannot be combined with --platform, --build, --version or --revision")
             collect_docs(args.docs, args.output)
+        elif args.platform == "headers":
+            if args.version is None or args.build is not None or args.revision is not None:
+                parser.error("--platform headers requires --version and does not accept --build or --revision")
+            package_headers.package(ROOT, args.output, args.version)
         else:
             if args.platform is None or args.build is None or args.version is None:
                 parser.error("--platform, --build and --version are required when --docs is not specified")
