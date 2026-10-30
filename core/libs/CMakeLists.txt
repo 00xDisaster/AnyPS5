@@ -743,6 +743,17 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceNpCommon>")
     endif()
 
+    add_test_executable(guest_xml_value_types_tests tests/GuestXmlValueTypes.cpp)
+    target_include_directories(guest_xml_value_types_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(guest_xml_value_types_tests PRIVATE libSceXml libkernel libc)
+    configure_windows_unwind(guest_xml_value_types_tests)
+    add_test(NAME guest_xml_value_types COMMAND guest_xml_value_types_tests)
+    set_tests_properties(guest_xml_value_types PROPERTIES TIMEOUT 20)
+    if(WIN32)
+        set_tests_properties(guest_xml_value_types PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceXml>")
+    endif()
+
     add_test_executable(guest_offline_imports_tests tests/GuestOfflineImports.cpp)
     target_include_directories(guest_offline_imports_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(guest_offline_imports_tests PRIVATE libSceHttp libSceNpEntitlementAccess libSceRudp libSceVideoRecordingP libc)
