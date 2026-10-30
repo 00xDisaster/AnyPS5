@@ -58,7 +58,7 @@ void* Address(std::uint64_t value) {
 }
 
 void TestHandles() {
-    using Constructor = void (*)(XmlHandle*);
+    using Constructor = void (APS5_VABI *)(XmlHandle*);
     const Constructor constructors[] = {
         _ZN3sce3Xml4AttrC1Ev, _ZN3sce3Xml4AttrC2Ev, _ZN3sce3Xml13AttributeListC1Ev, _ZN3sce3Xml13AttributeListC2Ev,
         _ZN3sce3Xml3Dom8DocumentC1Ev, _ZN3sce3Xml3Dom8DocumentC2Ev, _ZN3sce3Xml3Dom15DocumentBuilderC1Ev,
@@ -74,10 +74,10 @@ void TestHandles() {
 
 void TestStrings() {
     static const char text[] = "hello, xml";
-    using Default = void (*)(XmlString*);
-    using Counted = void (*)(XmlString*, const char*, std::size_t);
-    using Terminated = void (*)(XmlString*, const char*);
-    using Copy = void (*)(XmlString*, const XmlString*);
+    using Default = void (APS5_VABI *)(XmlString*);
+    using Counted = void (APS5_VABI *)(XmlString*, const char*, std::size_t);
+    using Terminated = void (APS5_VABI *)(XmlString*, const char*);
+    using Copy = void (APS5_VABI *)(XmlString*, const XmlString*);
     for (Default construct : {_ZN3sce3Xml6StringC1Ev, _ZN3sce3Xml6StringC2Ev}) {
         Guarded<16> string;
         construct(string.As<XmlString>());
@@ -110,8 +110,8 @@ void TestStrings() {
     Require(_ZN3sce3Xml6StringaSERKS1_(assigned.As<XmlString>(), &source) == assigned.As<XmlString>(), "String::operator= returns this");
     Require(assigned.As<XmlString>()->buffer == text + 1 && assigned.As<XmlString>()->size == 7 && assigned.GuardsIntact(), "String::operator= copies");
 
-    using SimpleDefault = void (*)(XmlSimpleData*);
-    using SimpleCounted = void (*)(XmlSimpleData*, const char*, std::size_t);
+    using SimpleDefault = void (APS5_VABI *)(XmlSimpleData*);
+    using SimpleCounted = void (APS5_VABI *)(XmlSimpleData*, const char*, std::size_t);
     for (SimpleDefault construct : {_ZN3sce3Xml10SimpleDataC1Ev, _ZN3sce3Xml10SimpleDataC2Ev}) {
         Guarded<16> data;
         construct(data.As<XmlSimpleData>());
@@ -125,13 +125,13 @@ void TestStrings() {
 }
 
 void TestSerializeParameterAndAllocator() {
-    using Default = void (*)(XmlSerializeParameter*);
+    using Default = void (APS5_VABI *)(XmlSerializeParameter*);
     for (Default construct : {_ZN3sce3Xml18SerializeParameterC1Ev, _ZN3sce3Xml18SerializeParameterC2Ev}) {
         Guarded<24> parameter;
         construct(parameter.As<XmlSerializeParameter>());
         Require(parameter.Bytes(0, 20, 0) && parameter.Bytes(20, 24, FILL) && parameter.GuardsIntact(), "SerializeParameter clears 20 bytes");
     }
-    using Destructor = void (*)(void*);
+    using Destructor = void (APS5_VABI *)(void*);
     for (Destructor destroy : {_ZN3sce3Xml12MemAllocatorD1Ev, _ZN3sce3Xml12MemAllocatorD2Ev}) {
         Guarded<16> allocator;
         destroy(allocator.object.data());
@@ -149,8 +149,8 @@ XmlNodeId NodeIdValue(std::uint64_t first, std::uint64_t second, std::uint8_t fl
 }
 
 void TestNodeId() {
-    using Default = void (*)(XmlNodeId*);
-    using Fields = void (*)(XmlNodeId*, void*, void*, std::uint8_t);
+    using Default = void (APS5_VABI *)(XmlNodeId*);
+    using Fields = void (APS5_VABI *)(XmlNodeId*, void*, void*, std::uint8_t);
     for (Default construct : {_ZN3sce3Xml3Dom6NodeIdC1Ev, _ZN3sce3Xml3Dom6NodeIdC2Ev}) {
         Guarded<24> id;
         construct(id.As<XmlNodeId>());
@@ -191,7 +191,7 @@ void TestNode() {
         return std::memcmp(node.object.data(), pattern.data(), 17) == 0 && node.Bytes(17, 24, FILL) &&
                std::memcmp(node.object.data() + 24, pattern.data() + 24, 40) == 0 && node.GuardsIntact();
     };
-    using Copy = void (*)(XmlNode*, const XmlNode*);
+    using Copy = void (APS5_VABI *)(XmlNode*, const XmlNode*);
     for (Copy copy : {_ZN3sce3Xml3Dom4NodeC1ERKS2_, _ZN3sce3Xml3Dom4NodeC2ERKS2_}) {
         Guarded<64> node;
         copy(node.As<XmlNode>(), source);
