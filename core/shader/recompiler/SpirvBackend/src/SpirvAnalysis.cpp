@@ -314,9 +314,9 @@ std::optional<LaneAffine> LaneAffineOf(const IrValue* value, std::uint32_t depth
 
 }
 
-std::unordered_map<const IrValue*, std::uint32_t> FunctionLdsLaneAddresses(const IrProgram& program) {
+std::unordered_map<const IrValue*, std::uint32_t> FunctionLdsLaneAddresses(const IrProgram& program, std::uint32_t dwords) {
     std::unordered_map<const IrValue*, std::uint32_t> addresses;
-    if (FunctionLdsDwords(program) >= FunctionLdsDwordLimit) return {};
+    if (dwords >= FunctionLdsDwordLimit) return {};
     std::optional<std::uint64_t> stride;
     for (const IrBlock* block : program.BlockOrder()) {
         for (const IrValue* inst : block->Instructions()) {
@@ -473,7 +473,7 @@ SpirvRequirements AnalyzeProgramRequirements(const IrProgram& program) {
     }
     if (requirements.functionLds) {
         requirements.functionLdsDwords = FunctionLdsDwords(program);
-        requirements.functionLdsAddresses = FunctionLdsLaneAddresses(program);
+        requirements.functionLdsAddresses = FunctionLdsLaneAddresses(program, requirements.functionLdsDwords);
         if (!requirements.functionLdsAddresses.empty()) {
             std::uint64_t needed = 0;
             for (const auto& [inst, address] : requirements.functionLdsAddresses) {
