@@ -1,11 +1,13 @@
 #include "prx/libSceSaveData/include/Api.hpp"
 #include "prx/libSceSaveData.native/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libc/include/General.hpp"
 #include "SceTypes.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <set>
 #include <string>
@@ -25,6 +27,7 @@ constexpr int SaveDataErrorNotMounted = -2137063420;
 constexpr int SaveDataErrorBusy = -2137063421;
 constexpr int SaveDataErrorNotFound = -2137063416;
 constexpr int SaveDataErrorMountFull = -2137063412;
+constexpr int SaveDataErrorInternal = -2137063413;
 
 int failures = 0;
 
@@ -316,6 +319,63 @@ void CheckMountCapacityAndLifecycle() {
     for (const auto& mount : mounted) Check(sceSaveDataUmount2(0, &mount.mount_point) == 0, "capacity unmount succeeds");
 }
 
+void CheckHostMountFailures() {
+    const auto previous = std::filesystem::current_path();
+    const auto root = previous / "mount-host-failures";
+    std::filesystem::create_directories(root / "previous-alias");
+    std::filesystem::current_path(root);
+    const auto checkFailure = [&](const char* name, std::uint32_t mode, std::uint64_t blocks, const std::string& label) {
+        SceSaveDataDirName directory{};
+        std::snprintf(directory.data, sizeof(directory.data), "%s", name);
+        SaveDataMount3 request{};
+        request.dir_name = &directory;
+        request.mount_mode = mode;
+        request.blocks = blocks;
+        SaveDataMountResult result;
+        std::memset(&result, 0xCD, sizeof(result));
+        const auto before = result;
+        const auto alias = std::filesystem::absolute("previous-alias").string();
+        AddPathAlias_nid_no_patch("/savedata0", alias.c_str());
+        const auto resolvedBefore = ResolvePath_nid_no_patch("/savedata0/probe");
+        try {
+            Check(sceSaveDataMount3(&request, &result) == SaveDataErrorInternal, label + " returns INTERNAL");
+        } catch (const std::exception& error) {
+            Check(false, label + " throws: " + error.what());
+        }
+        Check(std::memcmp(&result, &before, sizeof(result)) == 0, label + " preserves the mount result");
+        Check(ResolvePath_nid_no_patch("/savedata0/probe") == resolvedBefore, label + " preserves the path alias");
+        SaveDataMountPoint point{};
+        std::memcpy(point.data, "/savedata0", sizeof("/savedata0"));
+        SaveDataMountInfo info{};
+        const auto mounted = sceSaveDataGetMountInfo(&point, &info);
+        Check(mounted == SaveDataErrorNotMounted, label + " consumes no mount slot");
+        if (mounted == 0) sceSaveDataUmount2(0, &point);
+        RemovePathAlias_nid_no_patch("/savedata0");
+    };
+    {
+        std::ofstream file("_sd");
+        file << "not a directory";
+        Check(static_cast<bool>(file), "create the blocked save-root fixture");
+    }
+    for (const auto mode : {MountReadWrite | MountCreate, MountReadWrite | MountCreate2}) {
+        checkFailure("blocked", mode, 96, "save-root file with mode " + std::to_string(mode));
+        Check(std::filesystem::is_regular_file("_sd"), "a failed mount preserves the blocking file");
+    }
+    Check(std::filesystem::remove("_sd"), "remove the blocked save-root fixture");
+    std::filesystem::create_directories("_sd/metadata.blocks");
+    {
+        std::ofstream file("_sd/metadata.blocks/keep");
+        file << "preserve this directory";
+    }
+    checkFailure("metadata", MountReadWrite | MountCreate2, 96, "size metadata path is a directory");
+    Check(!std::filesystem::exists("_sd/metadata"), "failed size persistence removes the newly created empty save");
+    Check(std::filesystem::is_regular_file("_sd/metadata.blocks/keep"), "failed size persistence preserves the blocking directory");
+    std::filesystem::remove_all("_sd/metadata.blocks");
+    MountAndCheck("metadata", MountReadWrite | MountCreate2, 1u, "mount after repairing host storage");
+    std::filesystem::current_path(previous);
+    std::filesystem::remove_all(root);
+}
+
 }
 
 int main() {
@@ -328,6 +388,7 @@ int main() {
     CheckUnmountedCalls();
     Check(sceSaveDataSyncSaveDataMemory(nullptr) == static_cast<int>(0x809F0000), "null param rejected in memory sync");
     Check(sceSaveDataInitialize3(nullptr) == 0, "SaveData initializes");
+    CheckHostMountFailures();
     CheckMountCapacityAndLifecycle();
     MountAndCheck("fresh", MountReadWrite | MountCreate2, 1u, "CREATE2 of a missing save");
     MountAndCheck("fresh", MountReadWrite | MountCreate2, 0u, "CREATE2 of an existing save");
