@@ -506,7 +506,7 @@ def top_level_statements(body):
 
 def function_exit(body):
     for _, statement in top_level_statements(body):
-        depth, end, callable_scope = 0, 0, False
+        depth, end, capture_depth, callable_scope = 0, 0, 0, False
         for match in FLOW_TOKEN.finditer(statement):
             if match.start() < end:
                 continue
@@ -516,11 +516,14 @@ def function_exit(body):
                 if not depth and not statement.startswith("[[", match.start()) and (
                         not before or before[-1] in "=({,:;?!~&|+-*/%^<>" or before.endswith("]]")
                         or re.search(r"\b(?:co_await|co_yield|throw)$", before)):
-                    callable_scope = True
+                    capture_depth = depth + 1
                 depth += 1
             elif token == "(":
                 depth += 1
             elif token in (")", "]"):
+                if token == "]" and depth == capture_depth:
+                    callable_scope = True
+                    capture_depth = 0
                 depth -= 1
             elif token == "{":
                 end = progress.body_end(statement, match.start()) + 1
