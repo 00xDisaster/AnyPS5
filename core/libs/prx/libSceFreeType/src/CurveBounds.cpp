@@ -1,3 +1,9 @@
+// Derived from FreeType src/base/ftbbox.c (FreeType 2.13.3, commit 42608f77f20749dd6ddc9e0536788eaad70ea4b5).
+// Copyright (C) 1996-2024 by David Turner, Robert Wilhelm, and Werner Lemberg.
+// This file is part of the FreeType project, and may only be used, modified, and distributed
+// under the terms of the FreeType project license, LICENSE.TXT. By continuing to use, modify,
+// or distribute this file you indicate that you have read the license and understand and accept it fully.
+
 #include "prx/libSceFreeType/include/Api.hpp"
 #include "prx/libSceFreeType/include/GuestFreeType.hpp"
 
