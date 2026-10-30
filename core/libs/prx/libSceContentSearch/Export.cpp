@@ -1,6 +1,5 @@
 #include "prx/libc/include/general/ExportMacros.hpp"
 #include "prx/libSceContentSearch/include/InventoryExports.hpp"
-#include "prx/libSceContentSearch/include/InventoryExports.hpp"
 #include "prx/libSceContentSearch/include/Api.hpp"
 #include <cstdint>
 #include <cstddef>
