@@ -79,6 +79,7 @@ std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, co
     }
     const bool ripRelative = mod == ModRmModIndirect && rm == ModRmRmRipRelative;
     const bool absolute = mod == ModRmModIndirect && sib.has_value() && (*sib & SibBaseMask) == SibBaseDisp32;
+    const bool absoluteNoIndex = absolute && (*sib & SibIndexMask) == SibIndexNone;
     const std::size_t displacementSize = mod == ModRmModDisp8 ? Disp8Size : (mod == ModRmModDisp32 || ripRelative || absolute) ? Disp32Size : 0;
     if (cursor + displacementSize != length)
         return std::nullopt;
@@ -113,8 +114,16 @@ std::optional<WideStoreOperands> DecodeVexWideStore(const std::uint8_t* data, co
             highDisplacementSize = highMod == ModRmModDisp8 ? Disp8Size : Disp32Size;
         }
     }
-    if (!ripRelative && !addressSize32 && highDisplacement > std::numeric_limits<std::int32_t>::max())
-        throw CodegenException("256-bit store displacement leaves no room for its upper half");
+    const bool address32Absolute = addressSize32 && absoluteNoIndex;
+    const auto unsignedHighDisplacement = static_cast<std::uint64_t>(static_cast<std::uint32_t>(displacement)) + kHalfBytes;
+    if (!ripRelative) {
+        if (address32Absolute) {
+            if (unsignedHighDisplacement > std::numeric_limits<std::uint32_t>::max())
+                throw CodegenException("256-bit store displacement leaves no room for its upper half");
+        } else if (highDisplacement > std::numeric_limits<std::int32_t>::max()) {
+            throw CodegenException("256-bit store displacement leaves no room for its upper half");
+        }
+    }
     high.push_back(static_cast<std::uint8_t>((highMod << ModRmModShift) | reg | rm));
     if (sib)
         high.push_back(*sib);
