@@ -62,6 +62,7 @@ build-wasm/
 venv/
 env/
 ENV/
+/.local/
 
 __pycache__/
 *.pyo
