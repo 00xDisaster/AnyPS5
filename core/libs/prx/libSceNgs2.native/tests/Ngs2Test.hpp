@@ -3,6 +3,7 @@
 
 #include "prx/libSceNgs2.native/include/Api.hpp"
 #include "prx/libSceNgs2.native/include/Ngs2Types.hpp"
+#include "prx/libSceNgs2/include/Api.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -11,12 +12,7 @@
 #include <vector>
 
 extern "C" {
-int APS5_VABI sceNgs2ParseWaveformData(const void*, size_t, Ngs2WaveformInfo*);
 int APS5_VABI sceNgs2ParseWaveformFile(const char*, uint32_t, Ngs2WaveformInfo*);
-int APS5_VABI sceNgs2ParseWaveformUser(std::uintptr_t, std::uintptr_t, Ngs2WaveformInfo*);
-int APS5_VABI sceNgs2FftQuerySize(std::uint32_t, std::uint32_t, std::uint64_t*);
-int APS5_VABI sceNgs2SystemEnumHandles(std::uintptr_t*, std::uint32_t);
-int APS5_VABI sceNgs2SystemEnumRackHandles(std::uintptr_t, std::uintptr_t*, std::uint32_t);
 int APS5_VABI sceNgs2CalcWaveformBlock(const Ngs2WaveformFormat*, uint32_t, uint32_t, Ngs2WaveformBlock*);
 int APS5_VABI sceNgs2GetWaveformFrameInfo(const Ngs2WaveformFormat*, uint32_t*, uint32_t*, uint32_t*, uint32_t*);
 int APS5_VABI sceNgs2SystemResetOption(Ngs2SystemOption*);
