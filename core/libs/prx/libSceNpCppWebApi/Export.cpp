@@ -339,8 +339,8 @@ int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api12submitTicketEiRKNS4_23Pa
     return SCE_NP_WEBAPI_ERROR_NOT_SIGNED_IN;
 }
 
-int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api19ParameterToGetOffer10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context) {
-    return InitializeParameter(self, context, true);
+int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api19ParameterToGetOffer10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context, const char* id) {
+    return InitializeParameter(self, context, id != nullptr);
 }
 
 int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api19ParameterToGetOffer9terminateEv(void* self) {
@@ -357,13 +357,12 @@ int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api19ParameterToGetOfferD1Ev(
     return 0;
 }
 
-int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context) {
-    return InitializeParameter(self, context, true);
+int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context, const char* id) {
+    return InitializeParameter(self, context, id != nullptr);
 }
 
-int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket7setviewEPKc(void* self) {
-    (void)self;
-    return 0;
+int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket7setviewEPKc(void* self, const char* view) {
+    return SetParameterText(self, view);
 }
 
 int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket9terminateEv(void* self) {
@@ -380,8 +379,8 @@ int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicketD1Ev
     return 0;
 }
 
-int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicket10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context) {
-    return InitializeParameter(self, context, true);
+int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicket10initializeEPNS1_6Common10LibContextEPKc(void* self, const std::uint64_t* context, const char* id) {
+    return InitializeParameter(self, context, id != nullptr);
 }
 
 int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicket9terminateEv(void* self) {
@@ -398,8 +397,8 @@ int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicketD
     return 0;
 }
 
-int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket10initializeEPNS1_6Common10LibContextENS6_12IntrusivePtrINS3_23SubmitTicketRequestBodyEEE(void* self, const std::uint64_t* context) {
-    return InitializeParameter(self, context, true);
+int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket10initializeEPNS1_6Common10LibContextENS6_12IntrusivePtrINS3_23SubmitTicketRequestBodyEEE(void* self, const std::uint64_t* context, const IntrusivePtr* body) {
+    return InitializeParameterWithBody(self, context, true, body);
 }
 
 int APS5_VABI _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket9terminateEv(void* self) {

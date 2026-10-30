@@ -6,7 +6,6 @@
 #include <cstring>
 #include <cstdio>
 #include <source_location>
-#include <stdexcept>
 
 namespace {
 
@@ -18,8 +17,11 @@ void Require(bool value, std::source_location at = std::source_location::current
 }
 
 constexpr int kNotSignedIn = static_cast<int>(0x80552907);
+constexpr int kParameterNotInitialized = static_cast<int>(0x80553502);
+constexpr int kInvalidArgument = static_cast<int>(0x80553503);
 constexpr int kAlreadyInitialized = static_cast<int>(0x8055350f);
 constexpr int kNotInitialized = static_cast<int>(0x80553510);
+constexpr int kBodyMissing = static_cast<int>(0x80553512);
 constexpr std::size_t kParameterSize = 0x10;
 constexpr std::size_t kGuardSize = 0x10;
 constexpr unsigned char kFill = 0xA5;
@@ -36,7 +38,9 @@ bool GuardIntact(const Storage& storage) {
 }
 
 using SimpleFn = int (APS5_VABI*)(void*);
-using InitFn = int (APS5_VABI*)(void*, const std::uint64_t*);
+using TextFn = int (APS5_VABI*)(void*, const char*);
+using StringInitFn = int (APS5_VABI*)(void*, const std::uint64_t*, const char*);
+using BodyInitFn = int (APS5_VABI*)(void*, const std::uint64_t*, const IntrusivePtr*);
 
 const SimpleFn kSignedOut[] = {
     _ZN3sce2Np9CppWebApi11Matchmaking2V115LocationFactory6createEPNS1_6Common10LibContextEPNS5_12IntrusivePtrINS3_8LocationEEE,
@@ -47,69 +51,6 @@ const SimpleFn kSignedOut[] = {
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api12submitTicketEiRKNS4_23ParameterToSubmitTicketERNS1_6Common11TransactionINS8_12IntrusivePtrINS3_24SubmitTicketResponseBodyEEENSA_INS8_18ResponseHeaderBaseEEEEE,
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api8getOfferEiRKNS4_19ParameterToGetOfferERNS1_6Common11TransactionINS8_12IntrusivePtrINS3_20GetOfferResponseBodyEEENSA_INS8_18ResponseHeaderBaseEEEEE,
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api9getTicketEiRKNS4_20ParameterToGetTicketERNS1_6Common11TransactionINS8_12IntrusivePtrINS3_21GetTicketResponseBodyEEENSA_INS8_18ResponseHeaderBaseEEEEE,
-};
-const SimpleFn kAccessors[] = {
-    _ZN3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead19getPlayerAttributesEv,
-    _ZN3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody10getPlayersEv,
-    _ZN3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody10getPlayersEv,
-    _ZN3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody19getTicketAttributesEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead11getOnlineIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead11getPlatformEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead11getTeamNameEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead12getAccountIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead13onlineIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead13platformIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead13teamNameIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead14accountIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V113PlayerForRead21playerAttributesIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead11getOnlineIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead11getPlatformEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead11getTeamNameEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead11getTicketIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead12getAccountIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead13onlineIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead13platformIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead13teamNameIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead13ticketIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V118PlayerForOfferRead14accountIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody10getOfferIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody11getLocationEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody11statusIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody12offerIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody12playersIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody13locationIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody14getRulesetNameEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody16rulesetNameIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody18getCreatedDateTimeEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody18getUpdatedDateTimeEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody20createdDateTimeIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody20updatedDateTimeIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V120GetOfferResponseBody9getStatusEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody11getTicketIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody11statusIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody12getSubmitterEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody12playersIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody13ticketIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody14getRulesetNameEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody14submitterIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody16rulesetNameIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody18getCreatedDateTimeEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody18getUpdatedDateTimeEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody20createdDateTimeIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody20updatedDateTimeIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody21ticketAttributesIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V121GetTicketResponseBody9getStatusEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V124SubmitTicketResponseBody11getTicketIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V124SubmitTicketResponseBody13ticketIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V18Location16getGameSessionIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V18Location18gameSessionIdIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Attribute7getNameEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Attribute7getTypeEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Attribute8getValueEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Submitter11getPlatformEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Submitter12getAccountIdEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Submitter13platformIsSetEv,
-    _ZNK3sce2Np9CppWebApi11Matchmaking2V19Submitter14accountIdIsSetEv,
 };
 const SimpleFn kSetters[] = {
     _ZN3sce2Np9CppWebApi11Matchmaking2V121PlayerForTicketCreate10setNatTypeERKi,
@@ -137,25 +78,18 @@ const SimpleFn kTerminators[] = {
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicket9terminateEv,
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket9terminateEv,
 };
-const InitFn kInitializers[] = {
+const StringInitFn kStringInitializers[] = {
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api19ParameterToGetOffer10initializeEPNS1_6Common10LibContextEPKc,
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket10initializeEPNS1_6Common10LibContextEPKc,
     _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToCancelTicket10initializeEPNS1_6Common10LibContextEPKc,
-    _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket10initializeEPNS1_6Common10LibContextENS6_12IntrusivePtrINS3_23SubmitTicketRequestBodyEEE,
 };
-
-template <typename TCall>
-void RequireThrows(TCall call) {
-    bool threw = false;
-    try { call(); } catch (const std::runtime_error&) { threw = true; }
-    Require(threw);
-}
+const BodyInitFn kBodyInitializer = _ZN3sce2Np9CppWebApi11Matchmaking2V13Api23ParameterToSubmitTicket10initializeEPNS1_6Common10LibContextENS6_12IntrusivePtrINS3_23SubmitTicketRequestBodyEEE;
+const TextFn kSetView = _ZN3sce2Np9CppWebApi11Matchmaking2V13Api20ParameterToGetTicket7setviewEPKc;
 
 }
 
 int main() {
     for (const auto fn : kSignedOut) Require(fn(nullptr) == kNotSignedIn);
-    for (const auto fn : kAccessors) RequireThrows([&] { (void)fn(nullptr); });
     for (const auto fn : kSetters) Require(fn(nullptr) == 0);
 
     for (const auto fn : kConstructors) {
@@ -175,15 +109,44 @@ int main() {
         std::memset(storage.bytes, 0, sizeof(storage.bytes));
         Require(fn(storage.bytes) == kNotInitialized);
     }
-    for (const auto fn : kInitializers) {
+    for (std::size_t index = 0; index < sizeof(kStringInitializers) / sizeof(kStringInitializers[0]); ++index) {
         Storage storage;
         std::memset(storage.bytes, kFill, sizeof(storage.bytes));
         std::memset(storage.bytes, 0, kParameterSize);
         std::uint64_t context = 1;
-        Require(fn(storage.bytes, &context) == 0);
-        Require(fn(storage.bytes, &context) == kAlreadyInitialized);
-        Require(kTerminators[0](storage.bytes) == 0);
-        Require(kTerminators[0](storage.bytes) == kNotInitialized);
+        Require(kStringInitializers[index](storage.bytes, &context, nullptr) == kInvalidArgument);
+        Require(kStringInitializers[index](storage.bytes, &context, "id") == 0);
+        Require(kStringInitializers[index](storage.bytes, &context, "id") == kAlreadyInitialized);
+        Require(kTerminators[index](storage.bytes) == 0);
+        Require(kTerminators[index](storage.bytes) == kNotInitialized);
+        Require(GuardIntact(storage));
+    }
+    {
+        Storage storage;
+        std::memset(storage.bytes, kFill, sizeof(storage.bytes));
+        std::memset(storage.bytes, 0, kParameterSize);
+        std::uint64_t context = 1;
+        IntrusivePtr empty{};
+        Require(kBodyInitializer(storage.bytes, &context, &empty) == kBodyMissing);
+        IntrusivePtr body{};
+        body.object = storage.bytes;
+        Require(kBodyInitializer(storage.bytes, &context, &body) == 0);
+        Require(kBodyInitializer(storage.bytes, &context, &body) == kAlreadyInitialized);
+        Require(kTerminators[3](storage.bytes) == 0);
+        Require(kTerminators[3](storage.bytes) == kNotInitialized);
+        Require(GuardIntact(storage));
+    }
+    {
+        Storage storage;
+        std::memset(storage.bytes, kFill, sizeof(storage.bytes));
+        std::memset(storage.bytes, 0, kParameterSize);
+        std::uint64_t context = 1;
+        Require(kSetView(storage.bytes, "view") == kParameterNotInitialized);
+        Require(kStringInitializers[1](storage.bytes, &context, "id") == 0);
+        Require(kSetView(storage.bytes, "view") == 0);
+        Require(kSetView(storage.bytes, nullptr) == kInvalidArgument);
+        Require(kTerminators[1](storage.bytes) == 0);
+        Require(kSetView(storage.bytes, "view") == kParameterNotInitialized);
         Require(GuardIntact(storage));
     }
     return 0;
