@@ -100,6 +100,11 @@ constexpr int NP_ERROR_TITLE_ID_BUFFER_TOO_SMALL = static_cast<int>(0x80559E0D);
 constexpr std::size_t NP_TITLE_ID_CODE_LENGTH = 9;
 constexpr std::size_t NP_TITLE_ID_LENGTH = 12;
 
+void* const NpRefObjectVtable[] = {
+    nullptr, nullptr,
+    reinterpret_cast<void*>(&_ZN3sce2np9RefObjectD1Ev), reinterpret_cast<void*>(&_ZN3sce2np9RefObjectD0Ev),
+};
+
 void* const NpTitleIdVtable[] = {
     nullptr, nullptr,
     reinterpret_cast<void*>(&_ZN3sce2np9NpTitleIdD1Ev), reinterpret_cast<void*>(&_ZN3sce2np9NpTitleIdD0Ev),
@@ -1215,6 +1220,34 @@ int APS5_VABI _ZN3sce2np12StreamWriter9WriteDataEPNS0_6HandleEPKvmPm(NpStreamWri
 
 int APS5_VABI _ZN3sce2np12StreamWriter9WriteDataEPNS0_6HandleEPNS0_9StreamCtxEPKvmPm(NpStreamWriter* self, void* handle, NpStreamCtx* ctx, const void* data, std::size_t size, std::size_t* written) {
     return WriteData(self, handle, ctx, data, size, written);
+}
+
+void APS5_VABI _ZN3sce2np9RefObjectC1Ev(NpRefObject* self) {
+    self->vtable = &NpRefObjectVtable[2];
+    self->refCount = 0;
+}
+
+void APS5_VABI _ZN3sce2np9RefObjectC2Ev(NpRefObject* self) {
+    _ZN3sce2np9RefObjectC1Ev(self);
+}
+
+void APS5_VABI _ZN3sce2np9RefObjectD1Ev(NpRefObject*) {}
+
+void APS5_VABI _ZN3sce2np9RefObjectD2Ev(NpRefObject*) {}
+
+void APS5_VABI _ZN3sce2np9RefObjectD0Ev(NpRefObject* self) {
+    _ZN3sce2np6ObjectdlEPv(self);
+}
+
+int APS5_VABI _ZN3sce2np9RefObject6AddRefEv(NpRefObject* self) {
+    return static_cast<int>(static_cast<std::uint32_t>(sceNpAtomicInc32(&self->refCount)) + 1);
+}
+
+int APS5_VABI _ZN3sce2np9RefObject7ReleaseEv(NpRefObject* self) {
+    using Destroy = void(APS5_VABI*)(NpRefObject*);
+    const int count = static_cast<int>(static_cast<std::uint32_t>(sceNpAtomicDec32(&self->refCount)) - 1);
+    if (count == 0) reinterpret_cast<Destroy>(self->vtable[1])(self);
+    return count;
 }
 
 }

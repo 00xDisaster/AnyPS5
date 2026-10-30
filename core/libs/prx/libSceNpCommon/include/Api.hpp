@@ -90,6 +90,11 @@ struct NpStreamCtx {
     const void* const* vtable;
 };
 
+struct NpRefObject {
+    const void* const* vtable;
+    std::int32_t refCount;
+};
+
 struct NpTitleIdObject {
     const void* const* vtable;
     NpTitleId titleId;
@@ -328,7 +333,6 @@ int APS5_VABI _ZN3sce2np7RingBuf14CheckinForReadEm(void);
 int APS5_VABI _ZN3sce2np6ThreadD1Ev(void);
 int APS5_VABI _ZN3sce2npeqERK12SceNpTitleIdRKNS0_9NpTitleIdE(void);
 int APS5_VABI _ZN3sce2np9EventFlag3SetEm(void);
-int APS5_VABI _ZN3sce2np9RefObjectC1Ev(void);
 int APS5_VABI _ZNK3sce2np7RingBuf6IsFullEv(void);
 int APS5_VABI _ZN3sce2npneERKNS0_13NpTitleSecretERK16SceNpTitleSecret(void);
 int APS5_VABI _ZN3sce2np9LocalFileD0Ev(void);
@@ -360,7 +364,6 @@ int APS5_VABI _ZN3sce2np3ipc17ServiceIpmiClient15RegisterServiceEPKNS1_17Service
 int APS5_VABI _ZN3sce2np8WorkItemD0Ev(void);
 int APS5_VABI _ZN3sce2np9SemaphoreD2Ev(void);
 int APS5_VABI _ZN3sce2np9EventFlagD2Ev(void);
-int APS5_VABI _ZN3sce2np9RefObjectD1Ev(void);
 int APS5_VABI _sceNpAllocatorMalloc(void);
 int APS5_VABI _ZN3sce2npneERK10SceRtcTickRKNS0_4TimeE(void);
 int APS5_VABI _ZN3sce2np13RingBufMemory6IsInitEv(void);
@@ -373,7 +376,6 @@ int APS5_VABI _ZN3sce2np8JsonBool5ClearEv(void);
 int APS5_VABI _ZN3sce2np9LocalFile8TruncateEl(void);
 int APS5_VABI _ZNK3sce2np10JsonNumber6GetNumEPcm(void);
 int APS5_VABI _ZN3sce2np13RingBufMemory7DestroyEv(void);
-int APS5_VABI _ZN3sce2np9RefObject7ReleaseEv(void);
 int APS5_VABI _ZN3sce2np9LocalFileC1Ev(void);
 int APS5_VABI _ZN3sce2np7RingBufD2Ev(void);
 int APS5_VABI _ZN3sce2np4PathD2Ev(void);
@@ -444,6 +446,13 @@ int APS5_VABI _ZN3sce2np12StreamWriter15WriteFilledDataEPNS0_6HandleEPNS0_9Strea
 int APS5_VABI _ZN3sce2np12StreamWriter5WriteEPNS0_6HandleEPNS0_9StreamCtxEPKvmPm(NpStreamWriter* self, void* handle, NpStreamCtx* ctx, const void* data, std::size_t size, std::size_t* written);
 int APS5_VABI _ZN3sce2np12StreamWriter9WriteDataEPNS0_6HandleEPKvmPm(NpStreamWriter* self, void* handle, const void* data, std::size_t size, std::size_t* written);
 int APS5_VABI _ZN3sce2np12StreamWriter9WriteDataEPNS0_6HandleEPNS0_9StreamCtxEPKvmPm(NpStreamWriter* self, void* handle, NpStreamCtx* ctx, const void* data, std::size_t size, std::size_t* written);
+void APS5_VABI _ZN3sce2np9RefObjectC1Ev(NpRefObject* self);
+void APS5_VABI _ZN3sce2np9RefObjectC2Ev(NpRefObject* self);
+void APS5_VABI _ZN3sce2np9RefObjectD1Ev(NpRefObject* self);
+void APS5_VABI _ZN3sce2np9RefObjectD2Ev(NpRefObject* self);
+void APS5_VABI _ZN3sce2np9RefObjectD0Ev(NpRefObject* self);
+int APS5_VABI _ZN3sce2np9RefObject6AddRefEv(NpRefObject* self);
+int APS5_VABI _ZN3sce2np9RefObject7ReleaseEv(NpRefObject* self);
 [[noreturn]] void APS5_VABI sceNpPanic(void);
 
 }
