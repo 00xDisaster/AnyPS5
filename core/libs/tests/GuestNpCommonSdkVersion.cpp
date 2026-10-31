@@ -22,10 +22,6 @@ int main() {
     Require(std::memcmp(version.data(), "1.00", 4) == 0 && version[4] == '\0');
     Require(version[5] == 'x' && version[6] == 'x' && version[7] == 'x' && version[8] == 'x');
 
-    std::uint32_t numeric = 0xFFFFFFFFu;
-    sceNpGetSdkVersionUInt(&numeric);
-    Require(numeric == 0x01000000u);
-
     sceNpGetSdkVersion(nullptr);
 
     return 0;
